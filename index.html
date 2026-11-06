@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VODA Fleet</title>
+<meta name="description" content="Oil changes and truckmount service for the VODA trucks.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="VODA Fleet">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#edf0f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1319" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+:root {
+  /* Layout: one column of truck cards (inputs on top, results below); a needs-attention panel above them; dialogs for logging service and editing a truck. */
+  --bg: #edf0f3;
+  --surface: #ffffff;
+  --ink: #16202b;
+  --muted: #586678;
+  --line: #d3dae2;
+  --accent: #1f4fbf;
+  --accent-ink: #ffffff;
+  --ok: #17803d;
+  --ok-bg: #e2f3e7;
+  --soon: #94580a;
+  --soon-bg: #fcefd3;
+  --due: #b42318;
+  --due-bg: #fde6e3;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319;
+    --surface: #17202a;
+    --ink: #e6ebf1;
+    --muted: #9aa7b6;
+    --line: #2b3643;
+    --accent: #7aa4ff;
+    --accent-ink: #0b1320;
+    --ok: #52c47c;
+    --ok-bg: #133022;
+    --soon: #f0b44c;
+    --soon-bg: #382a10;
+    --due: #ff7f70;
+    --due-bg: #3e1814;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319;
+  --surface: #17202a;
+  --ink: #e6ebf1;
+  --muted: #9aa7b6;
+  --line: #2b3643;
+  --accent: #7aa4ff;
+  --accent-ink: #0b1320;
+  --ok: #52c47c;
+  --ok-bg: #133022;
+  --soon: #f0b44c;
+  --soon-bg: #382a10;
+  --due: #ff7f70;
+  --due-bg: #3e1814;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 780px; margin: 0 auto; padding: 20px 16px 64px; display: grid; gap: 16px; }
+h1, h2, h3, h4 { text-wrap: balance; }
+
+.top { display: grid; gap: 10px; }
+.top-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.top h1 {
+  font-family: var(--font-display); font-weight: 700; font-size: 2.1rem;
+  text-transform: uppercase; letter-spacing: .02em; line-height: 1; margin: 0;
+}
+.top p { margin: 0; color: var(--muted); max-width: 60ch; }
+.tally { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+  border-radius: 999px; font-weight: 600; font-size: .85rem; background: var(--bg);
+  color: var(--muted); border: 1px solid var(--line); font-variant-numeric: tabular-nums;
+}
+.chip.due { background: var(--due-bg); color: var(--due); border-color: transparent; }
+.chip.soon { background: var(--soon-bg); color: var(--soon); border-color: transparent; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+
+.banner { border-radius: 12px; padding: 12px 14px; font-weight: 500; background: var(--soon-bg); color: var(--ink); border: 1px solid var(--line); }
+.banner:empty { display: none; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; }
+.panel h2 { margin: 0; font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; letter-spacing: .03em; }
+.attn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.attn-btn {
+  font: inherit; color: inherit; background: none; border: 0; text-align: left; cursor: pointer;
+  display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 6px 8px; border-radius: 8px;
+}
+.attn-btn:hover { background: var(--bg); }
+.attn-btn strong { font-weight: 700; white-space: nowrap; }
+.attn-btn span { font-variant-numeric: tabular-nums; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; align-self: center; }
+.dot.due { background: var(--due); }
+.dot.soon { background: var(--soon); }
+.dot.ok { background: var(--ok); }
+details.paperwork summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: 4px 0; }
+.empty-ok { margin: 0; color: var(--ok); font-weight: 600; }
+
+.list { display: grid; gap: 14px; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--line);
+  border-radius: 12px; padding: 16px; display: grid; gap: 12px; scroll-margin-top: 12px;
+}
+.card[data-status="due"] { border-left-color: var(--due); }
+.card[data-status="soon"] { border-left-color: var(--soon); }
+.card[data-status="ok"] { border-left-color: var(--ok); }
+.card.flash { box-shadow: 0 0 0 3px var(--accent); }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.unit { font-family: var(--font-display); font-size: 1.65rem; font-weight: 700; margin: 0; line-height: 1; text-transform: uppercase; letter-spacing: .02em; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: .95rem; }
+.tm-tag { display: inline-block; margin-top: 6px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); }
+.pill { padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; background: var(--bg); color: var(--muted); }
+.pill.due { background: var(--due-bg); color: var(--due); }
+.pill.soon { background: var(--soon-bg); color: var(--soon); }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+
+.inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; }
+.field label { font-weight: 600; font-size: .85rem; color: var(--muted); }
+.field input, .field select, .field textarea {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+  border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 12px;
+}
+.inputs .field input { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; padding: 10px 12px; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.field .hint { font-size: .8rem; color: var(--muted); }
+.warn { margin: 0; color: var(--soon); font-weight: 600; font-size: .9rem; }
+.warn:empty { display: none; }
+
+.results { display: grid; gap: 8px; }
+.row { display: grid; gap: 5px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+.row-main { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
+.row-label { font-weight: 700; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+.row-value { font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.row.due .row-value { color: var(--due); }
+.row.soon .row-value { color: var(--soon); }
+.row.ok .row-value { color: var(--ok); }
+.row-detail { margin: 0; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
+.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--ok); }
+.row.soon .meter > span { background: var(--soon); }
+.row.due .meter > span { background: var(--due); }
+details.tasks summary { cursor: pointer; font-weight: 600; color: var(--accent); font-size: .92rem; }
+details.tasks h4 { margin: 10px 0 4px; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+details.tasks ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; font-size: .93rem; }
+.no-reading { margin: 0; color: var(--muted); }
+
+.paper { display: flex; flex-wrap: wrap; gap: 6px; }
+.paper:empty { display: none; }
+
+.card-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.meta { margin: 0; color: var(--muted); font-size: .85rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  font: inherit; font-weight: 600; font-size: .95rem; padding: 9px 14px; border-radius: 10px;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--accent); }
+.btn.danger { color: var(--due); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:focus-visible, .attn-btn:focus-visible, summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+
+.how { color: var(--muted); font-size: .9rem; }
+.how h2 { color: var(--ink); }
+.how ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+dialog {
+  border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(580px, calc(100% - 24px));
+  max-height: calc(100% - 24px); overflow: auto; background: var(--surface); color: var(--ink);
+}
+dialog::backdrop { background: rgba(8, 12, 18, .55); }
+.dlg { padding: 18px; display: grid; gap: 14px; }
+.dlg h3 { margin: 0; font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .02em; }
+.dlg p { margin: 0; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; }
+legend { font-weight: 700; font-size: .85rem; color: var(--muted); padding: 0 4px; }
+.check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.check input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+.check small { display: block; color: var(--muted); }
+.dlg-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.dlg-foot .right { display: flex; gap: 8px; margin-left: auto; }
+.dlg-err { margin: 0; color: var(--due); font-weight: 600; }
+.dlg-err:empty { display: none; }
+.history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .9rem; }
+.history li { padding: 6px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.history small { color: var(--muted); }
+textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9rem; padding: 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 50;
+  background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 10px; font-weight: 600;
+  box-shadow: 0 6px 24px rgba(0,0,0,.25); max-width: calc(100% - 32px);
+}
+.toast[hidden] { display: none; }
+.loading { color: var(--muted); padding: 24px 4px; }
+
+@media (max-width: 420px) {
+  .top h1 { font-size: 1.8rem; }
+  .card { padding: 14px; }
+  .actions { width: 100%; }
+  .actions .btn { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card { transition: box-shadow .3s ease; }
+}
+/* ---- app additions ---- */
+.syncbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--muted); font-size: .88rem; }
+.syncbar .btn { padding: 6px 12px; font-size: .88rem; }
+.syncbar .who-me { margin-left: auto; }
+.syncbar.offline { color: var(--soon); font-weight: 600; }
+.installbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 12px; padding: 12px 14px; }
+.installbar[hidden] { display: none; }
+.installbar p { margin: 0; flex: 1 1 220px; }
+.installbar .actions { flex: none; }
+.gate { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: grid; gap: 14px; max-width: 460px; }
+.gate h2 { margin: 0; font-family: var(--font-display); font-size: 1.6rem; text-transform: uppercase; letter-spacing: .02em; }
+.gate p { margin: 0; color: var(--muted); }
+.gate .field input { font-size: 1.2rem; font-weight: 600; }
+.gate code { font-size: .9em; background: var(--bg); padding: 1px 5px; border-radius: 5px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div class="top-row">
+      <div>
+        <h1>VODA Fleet Maintenance</h1>
+        <p id="lede">Type <strong>Miles now</strong> and <strong>TM hrs now</strong> for each truck, then tap <strong>Save reading</strong>.</p>
+      </div>
+      <div class="actions" id="topActions" hidden>
+        <button class="btn" type="button" id="shareReport">Share report</button>
+        <button class="btn" type="button" id="addTruck">Add truck</button>
+      </div>
+    </div>
+    <div class="syncbar" id="syncbar" hidden>
+      <span id="syncText">Loading…</span>
+      <button class="btn" type="button" id="refreshBtn">Refresh</button>
+      <button class="btn ghost who-me" type="button" id="meBtn"></button>
+    </div>
+    <div class="tally" id="tally"></div>
+  </header>
+
+  <div class="installbar" id="installbar" hidden>
+    <p id="installText"></p>
+    <div class="actions">
+      <button class="btn primary" type="button" id="installBtn" hidden>Install app</button>
+      <button class="btn ghost" type="button" id="installDismiss">Not now</button>
+    </div>
+  </div>
+
+  <div class="banner" id="banner" role="status"></div>
+
+  <section class="gate" id="gate" hidden></section>
+
+  <section class="panel" id="attention" aria-labelledby="attnTitle" hidden>
+    <h2 id="attnTitle">Needs attention</h2>
+    <div id="attnBody"></div>
+  </section>
+
+  <section class="list" id="list" aria-label="Trucks"></section>
+
+  <section class="panel how" id="how" aria-labelledby="howTitle" hidden>
+    <h2 id="howTitle">How the numbers work</h2>
+    <ul>
+      <li><strong>Truck oil:</strong> oil interval minus miles driven since the last oil change. Yellow under 500 mi, red when it hits 0.</li>
+      <li><strong>CDS trucks:</strong> the CDS runs off the van engine, so each TM hour since the oil change counts as 15 miles.</li>
+      <li><strong>Legend GT and Apex 570:</strong> the truckmount has its own engine, so its oil is tracked in TM hours (every 100 hrs).</li>
+      <li><strong>TM service:</strong> from the 100 / 400 / 500 / 1000 / 2000-hr charts. Yellow within 20 hrs. A bigger service includes the smaller service's items. If two services land within 20 hrs of each other, they're done together.</li>
+      <li>After an oil change or service, tap <strong>Log oil change / service</strong> so the countdown restarts from that day's miles and hours.</li>
+      <li>Everything is saved in your Google Sheet (Trucks and Log tabs).</li>
+    </ul>
+  </section>
+</main>
+
+<dialog id="dlg" aria-labelledby="dlgTitle"></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+"use strict";
+// <logic>
+const SOON_MILES = 500;   // from the sheet: yellow when under 500 mi left
+const SOON_HRS = 20;      // from the sheet: yellow within 20 TM hrs of the next service
+const COMBINE_HRS = 20;   // services due within 20 hrs of each other are done together
+const DEFAULT_CDS_MILES_PER_HR = 15;
+const DEFAULT_TM_OIL_HRS = 100;
+
+const PROGRAMS = {
+  cds: { name: "CDS 4.6 / 4.8", selfPowered: false, tiers: [
+    { h: 100, oil: "truck", tasks: [
+      "Engine oil – change",
+      "Engine air cleaner – inspect",
+      "Battery terminals – clean as needed" ] },
+    { h: 400, tasks: [
+      "Blower oil – change",
+      "Pump oil – change",
+      "Vehicle fuel lines – check for chafing or wear",
+      "CDS wiring harness – check for chafing or wear",
+      "Vehicle wiring harness – check for chafing or wear",
+      "CDS fasteners – check blower, drive shaft, front end",
+      "Drive shaft – grease spline (if so equipped)",
+      "Bearings / power pack pillow block – grease",
+      "Chemical pump – inspect",
+      "Chemical pump diaphragm – check for wear",
+      "Chemical pump valves – check for wear",
+      "Water box float valve – remove stem and lubricate" ] },
+    { h: 1000, tasks: [
+      "Vehicle – complete service",
+      "Cooling system – flush",
+      "Transmission fluid – change",
+      "Drive shaft – grease U-joints and splines" ] } ] },
+  legend: { name: "Legend GT", selfPowered: true, tiers: [
+    { h: 100, oil: "tm", tasks: [
+      "Vacuum relief valve – check, adjust up to 13″ Hg if needed",
+      "O-rings – lubricate (o-ring lubricant only, Legend Brands P/N 13-003)",
+      "Belts – check for wear, re-tension, check pulley alignment",
+      "Battery terminals – clean",
+      "Spark plugs – check (OEM only)",
+      "Engine oil and filter – change" ] },
+    { h: 500, tasks: [
+      "Water pump – change crankcase oil",
+      "Engine – replace in-line fuel filter",
+      "Pulleys and hubs – check for proper torque",
+      "Chemical pump – change diaphragm and check valves, inspect disc",
+      "Vacuum pump – grease bearings on pulley end" ] },
+    { h: 1000, tasks: [
+      "Spark plugs – replace (OEM only)",
+      "Engine air filter element – replace" ] },
+    { h: 2000, tasks: [
+      "All belts – replace",
+      "Vacuum pump – drain, flush and replace gear end oil" ] } ] },
+  apex: { name: "Apex 570", selfPowered: true, tiers: [
+    { h: 100, oil: "tm", tasks: [
+      "Vacuum relief valve – check, adjust up to 13″ Hg if needed",
+      "Pressure regulator – lubricate o-rings (Sapphire Scientific P/N 13-003)",
+      "Belts – re-tension all belts",
+      "Battery terminals – clean",
+      "Spark plugs – check (OEM only)",
+      "Engine oil and filter – change" ] },
+    { h: 500, tasks: [
+      "Pressure pump – change crankcase oil",
+      "Engine – replace in-line fuel filter",
+      "Pulleys and hubs – check for proper torque",
+      "Chemical pump – change diaphragm and check valves, inspect disc" ] },
+    { h: 1000, tasks: [
+      "Vacuum pump – drain, flush and replace oil",
+      "Spark plugs – replace (OEM only)",
+      "Engine air filter element – replace",
+      "Engine valves – adjust to .0057–.0073 in." ] },
+    { h: 2000, tasks: [
+      "All belts – replace" ] } ] }
+};
+
+const RANK = { ok: 0, soon: 1, due: 2 };
+const isNum = v => typeof v === "number" && Number.isFinite(v);
+const stMiles = left => left <= 0 ? "due" : left < SOON_MILES ? "soon" : "ok";
+const stHrs = left => left <= 0 ? "due" : left <= SOON_HRS ? "soon" : "ok";
+const worstOf = list => list.reduce((w, s) => RANK[s] > RANK[w] ? s : w, "ok");
+
+function compute(t, miles, hrs) {
+  const r = { oil: null, tmOil: null, service: null, worst: "ok", empty: true };
+  const prog = PROGRAMS[t.tm] || null;
+
+  if (isNum(miles) && isNum(t.milesAtOil) && isNum(t.oilInterval)) {
+    const driven = miles - t.milesAtOil;
+    let tmHrs = null, tmMiles = 0;
+    const factor = isNum(t.cdsMilesPerHr) ? t.cdsMilesPerHr : DEFAULT_CDS_MILES_PER_HR;
+    if (t.tm === "cds" && isNum(hrs) && isNum(t.hrsAtOil)) {
+      tmHrs = hrs - t.hrsAtOil;
+      tmMiles = tmHrs * factor;
+    }
+    const used = driven + tmMiles;
+    const left = t.oilInterval - used;
+    r.oil = { driven, tmHrs, tmMiles, factor, used, left, interval: t.oilInterval, status: stMiles(left) };
+  }
+
+  if (prog && isNum(hrs)) {
+    if (prog.selfPowered && isNum(t.tmOilHrs)) {
+      const iv = isNum(t.tmOilInterval) ? t.tmOilInterval : DEFAULT_TM_OIL_HRS;
+      const dueAt = t.tmOilHrs + iv;
+      const left = dueAt - hrs;
+      r.tmOil = { dueAt, left, since: hrs - t.tmOilHrs, interval: iv, status: stHrs(left) };
+    }
+    const tiers = prog.tiers.map(tr => {
+      const saved = t.tiers ? t.tiers[String(tr.h)] : undefined;
+      const last = isNum(saved) ? saved : Math.floor(hrs / tr.h) * tr.h;
+      return { h: tr.h, oil: tr.oil || null, tasks: tr.tasks, last, dueAt: last + tr.h };
+    });
+    const soonest = Math.min(...tiers.map(x => x.dueAt));
+    const level = Math.max(...tiers.filter(x => x.dueAt <= soonest + COMBINE_HRS).map(x => x.h));
+    const doNow = tiers.filter(x => x.h <= level);
+    const laterMap = new Map();
+    for (const x of tiers.filter(x => x.h > level)) {
+      laterMap.set(x.dueAt, Math.max(laterMap.get(x.dueAt) || 0, x.h));
+    }
+    const later = [...laterMap.entries()].sort((a, b) => a[0] - b[0]).map(([at, lv]) => ({ at, level: lv }));
+    const left = soonest - hrs;
+    r.service = { dueAt: soonest, left, level, doNow, later, status: stHrs(left) };
+  }
+
+  const parts = [r.oil, r.tmOil, r.service].filter(Boolean);
+  r.empty = parts.length === 0;
+  r.worst = worstOf(parts.map(x => x.status));
+  return r;
+}
+
+function parseDay(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+function endOfMonth(s) {
+  const m = /^(\d{4})-(\d{2})$/.exec(s || "");
+  return m ? new Date(+m[1], +m[2], 0) : null;
+}
+function paperwork(t, today) {
+  const out = [];
+  const add = (label, date, shown) => {
+    if (!date) return;
+    const days = Math.round((date - today) / 864e5);
+    out.push({ label, shown, days, status: days < 0 ? "due" : days <= 30 ? "soon" : "ok" });
+  };
+  add("Safety inspection", parseDay(t.inspectionDue), fmtDay(t.inspectionDue));
+  add("Registration", endOfMonth(t.registrationDue), fmtMonth(t.registrationDue));
+  add("Insurance", parseDay(t.insuranceUntil), fmtDay(t.insuranceUntil));
+  return out;
+}
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function fmtDay(s) { const d = parseDay(s); return d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : ""; }
+function fmtMonth(s) { const d = endOfMonth(s); return d ? `${MONTHS[d.getMonth()]} ${d.getFullYear()}` : ""; }
+function fmt(n) { return isNum(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "–"; }
+// </logic>
+
+/* ---------- config, storage ---------- */
+const CFG = window.VODA_CONFIG || {};
+const API_URL = String(CFG.scriptUrl || "").trim();
+const CONFIGURED = /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(API_URL);
+const store = {
+  get(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+const K_SESSION = "voda.session", K_CACHE = "voda.cache", K_DRAFTS = "voda.drafts", K_INSTALL = "voda.installDismissed";
+
+/* ---------- state ---------- */
+let session = store.get(K_SESSION);           // { code, name }
+let trucks = [];
+let loaded = false;
+let lastSync = null;
+let offline = false;
+let refreshing = false;
+const drafts = store.get(K_DRAFTS) || {};     // id -> { miles, hrs } typed but not saved
+const today = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
+
+/* ---------- helpers ---------- */
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k === "text") el.textContent = v;
+      else if (k === "value") el.value = v;
+      else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
+      else if (v === true) el.setAttribute(k, "");
+      else el.setAttribute(k, String(v));
+    }
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false) continue;
+    el.append(kid instanceof Node ? kid : String(kid));
+  }
+  return el;
+}
+const $ = id => document.getElementById(id);
+function parseNum(s) {
+  if (s == null) return null;
+  const t = String(s).replace(/[,\s]/g, "");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
+const byId = id => trucks.find(t => t.id === id);
+const progOf = t => PROGRAMS[t.tm] || null;
+function plain(t) { const o = JSON.parse(JSON.stringify(t)); delete o.id; delete o.updatedAt; return o; }
+function fmtWhen(iso) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d)) return "";
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+function fmtTime(d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
+function statusWord(s) { return s === "due" ? "Overdue" : s === "soon" ? "Due soon" : "OK"; }
+const safeNum = n => isNum(n) ? n : null;
+function sortTrucks(list) {
+  return list.slice().sort((a, b) => (a.order ?? 99) - (b.order ?? 99) || String(a.unit).localeCompare(String(b.unit)));
+}
+let toastTimer = null;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3800);
+}
+function setBanner(msg) { $("banner").textContent = msg || ""; }
+function saveDrafts() { store.set(K_DRAFTS, drafts); }
+
+function currentValues(t) {
+  const d = drafts[t.id] || {};
+  const milesStr = d.miles != null ? d.miles : (isNum(t.milesNow) ? String(t.milesNow) : "");
+  const hrsStr = d.hrs != null ? d.hrs : (isNum(t.hrsNow) ? String(t.hrsNow) : "");
+  return { milesStr, hrsStr, miles: parseNum(milesStr), hrs: progOf(t) ? parseNum(hrsStr) : null };
+}
+
+/* ---------- talking to the Google Sheet ---------- */
+async function api(action, data) {
+  if (!navigator.onLine) throw { error: "offline" };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(Object.assign({ action, code: session ? session.code : "", by: session ? session.name : "" }, data || {})),
+      signal: ctrl.signal
+    });
+    let out;
+    try { out = await res.json(); } catch (e) { throw { error: "network" }; }
+    if (!out || !out.ok) throw out || { error: "network" };
+    return out;
+  } catch (e) {
+    if (e && e.error) throw e;
+    throw { error: "network" };
+  } finally { clearTimeout(timer); }
+}
+function errText(e, what) {
+  const code = e && e.error;
+  if (code === "offline") return `No connection. ${what || "Your numbers"} stay on this phone. Try again when you're back online.`;
+  if (code === "bad_code") return "The access code was changed. Enter the new code from the Setup tab.";
+  if (code === "not_set_up") return "The Google Sheet isn't set up yet. Run setup in Apps Script first.";
+  if (code === "server") return "The Google Sheet had a problem: " + (e.message || "unknown error") + ".";
+  return "Couldn't reach the Google Sheet. Check the connection and try again.";
+}
+
+async function refresh(quiet) {
+  if (refreshing || !session) return;
+  refreshing = true;
+  $("syncText").textContent = "Updating…";
+  try {
+    const out = await api("list");
+    trucks = sortTrucks(out.trucks || []);
+    for (const k of Object.keys(drafts)) if (!byId(k)) delete drafts[k];
+    saveDrafts();
+    lastSync = new Date();
+    offline = false;
+    loaded = true;
+    store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
+    setBanner("");
+  } catch (e) {
+    if (e && e.error === "bad_code") { signOut("The access code was changed. Enter the new code from the Setup tab."); refreshing = false; return; }
+    offline = true;
+    if (!loaded) {
+      const cache = store.get(K_CACHE);
+      if (cache && Array.isArray(cache.trucks)) { trucks = sortTrucks(cache.trucks); lastSync = new Date(cache.at); loaded = true; }
+    }
+    if (!quiet || !loaded) setBanner(loaded ? errText(e, "Your numbers") + " Showing the last saved data." : errText(e));
+  } finally {
+    refreshing = false;
+    renderSync();
+    renderAll();
+  }
+}
+function renderSync() {
+  const bar = $("syncbar");
+  bar.classList.toggle("offline", offline);
+  $("syncText").textContent = offline
+    ? (lastSync ? `Offline · data from ${fmtWhen(lastSync.toISOString())} ${fmtTime(lastSync)}` : "Offline")
+    : (lastSync ? `Updated ${fmtTime(lastSync)}` : "");
+  $("meBtn").textContent = session ? `${session.name || "Me"} · Settings` : "";
+}
+
+function replaceTruck(t) {
+  const i = trucks.findIndex(x => x.id === t.id);
+  if (i === -1) trucks.push(t); else trucks[i] = t;
+  trucks = sortTrucks(trucks);
+  store.set(K_CACHE, { at: (lastSync || new Date()).toISOString(), trucks });
+}
+async function saveTruck(t, body, log) {
+  try {
+    const out = await api("saveTruck", { id: t.id, base: t.updatedAt || null, truck: body, log });
+    replaceTruck(out.truck);
+    return out.truck;
+  } catch (e) {
+    if (e && e.error === "conflict" && e.truck) {
+      replaceTruck(e.truck);
+      renderAll();
+      throw { error: "conflict_shown", message: `Someone else just updated ${label(e.truck)}. The latest numbers are loaded. Check them and save again.` };
+    }
+    if (e && e.error === "gone") { refresh(true); throw { error: "gone_shown", message: "This truck was deleted on another phone." }; }
+    throw e;
+  }
+}
+function failText(e, what) { return e && e.message && /_shown$/.test(e.error) ? e.message : errText(e, what); }
+
+/* ---------- text for each result ---------- */
+function oilText(o) {
+  return o.left > 0 ? `${fmt(o.left)} mi left` : o.left === 0 ? "Due now" : `Overdue by ${fmt(-o.left)} mi`;
+}
+function hrsLeftText(left) {
+  return left > 0 ? `${fmt(left)} hrs left` : left === 0 ? "Due now" : `Overdue by ${fmt(-left)} hrs`;
+}
+function serviceText(s) {
+  return s.left > 0 ? `${s.level}-hr service in ${fmt(s.left)} hrs`
+       : s.left === 0 ? `${s.level}-hr service due now`
+       : `${s.level}-hr service overdue by ${fmt(-s.left)} hrs`;
+}
+function issueLines(t, r) {
+  const out = [];
+  if (r.oil && r.oil.status !== "ok") out.push({ status: r.oil.status, text: r.oil.left > 0 ? `truck oil change in ${fmt(r.oil.left)} mi` : r.oil.left === 0 ? "truck oil change due now" : `truck oil change overdue by ${fmt(-r.oil.left)} mi` });
+  if (r.tmOil && r.tmOil.status !== "ok") out.push({ status: r.tmOil.status, text: r.tmOil.left > 0 ? `TM engine oil in ${fmt(r.tmOil.left)} hrs` : r.tmOil.left === 0 ? "TM engine oil due now" : `TM engine oil overdue by ${fmt(-r.tmOil.left)} hrs` });
+  if (r.service && r.service.status !== "ok") out.push({ status: r.service.status, text: `TM ${serviceText(r.service)} (at ${fmt(r.service.dueAt)} hrs)` });
+  return out;
+}
+function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "Truck"; }
+
+/* ---------- screens ---------- */
+function showApp(on) {
+  for (const id of ["topActions", "syncbar", "attention", "how"]) $(id).hidden = !on;
+  $("lede").hidden = !on;
+  $("gate").hidden = on;
+  if (!on) { $("list").replaceChildren(); $("tally").replaceChildren(); }
+}
+
+function showNotConfigured() {
+  showApp(false);
+  $("gate").replaceChildren(
+    h("h2", { text: "Finish setup" }),
+    h("p", null, "This app isn't connected to your Google Sheet yet. Open ", h("code", { text: "config.js" }),
+      " and paste the Apps Script web app URL (it ends in ", h("code", { text: "/exec" }), "). Then upload the file again."));
+}
+
+function showSignIn(message) {
+  showApp(false);
+  const err = h("p", { class: "dlg-err", role: "alert", text: message || "" });
+  const btn = h("button", { class: "btn primary", type: "submit", id: "gateGo", text: "Connect" });
+  const form = h("form", { style: "display:grid;gap:14px", onsubmit: async e => {
+    e.preventDefault();
+    const code = $("gateCode").value.trim();
+    const name = $("gateName").value.trim();
+    if (!code) { err.textContent = "Enter the access code."; return; }
+    if (!name) { err.textContent = "Enter your name. It shows next to the readings you save."; return; }
+    btn.disabled = true; btn.textContent = "Connecting…"; err.textContent = "";
+    session = { code, name: name.slice(0, 40) };
+    try {
+      const out = await api("list");
+      store.set(K_SESSION, session);
+      trucks = sortTrucks(out.trucks || []); loaded = true; lastSync = new Date(); offline = false;
+      store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
+      startApp();
+    } catch (ex) {
+      session = null;
+      err.textContent = ex && ex.error === "bad_code"
+        ? "That code doesn't match. Check the Setup tab in the Google Sheet."
+        : ex && ex.error === "offline" ? "No connection. Connect to the internet and try again."
+        : ex && ex.error === "not_set_up" ? errText(ex)
+        : "Couldn't reach the Google Sheet. Check the connection. During first setup, also check that the web app deployment has access set to Anyone.";
+      btn.disabled = false; btn.textContent = "Connect";
+    }
+  } },
+    h("div", { class: "field" }, h("label", { for: "gateCode", text: "Access code" }),
+      h("input", { id: "gateCode", type: "text", autocomplete: "off", autocapitalize: "characters", spellcheck: "false", placeholder: "ABCD-1234" })),
+    h("div", { class: "field" }, h("label", { for: "gateName", text: "Your name" }),
+      h("input", { id: "gateName", type: "text", autocomplete: "name", placeholder: "Mike", value: (store.get("voda.lastName") || "") })),
+    err, h("div", null, btn));
+  $("gate").replaceChildren(
+    h("h2", { text: "Connect this phone" }),
+    h("p", { text: "Enter the access code from the Setup tab of the VODA Fleet Google Sheet. You only do this once on each phone." }),
+    form);
+  setTimeout(() => { const el = $("gateCode"); if (el) el.focus(); }, 50);
+}
+
+function signOut(message) {
+  if (session && session.name) store.set("voda.lastName", session.name);
+  session = null; store.del(K_SESSION); loaded = false; trucks = [];
+  showSignIn(message);
+}
+
+function startApp() {
+  showApp(true);
+  setBanner("");
+  renderSync();
+  renderAll();
+  refresh(true);
+}
+
+/* ---------- rendering ---------- */
+function renderAll() {
+  if (!session) return;
+  const list = $("list");
+  const focused = document.activeElement && document.activeElement.id;
+  list.replaceChildren();
+  if (!loaded) { list.append(h("p", { class: "loading", text: "Loading fleet…" })); return; }
+  if (trucks.length === 0) list.append(h("div", { class: "panel" }, h("p", { text: "No trucks yet. Tap Add truck to start." })));
+  for (const t of trucks) list.append(renderCard(t));
+  for (const t of trucks) updateCard(t.id);
+  renderSummary();
+  if (focused) { const el = $(focused); if (el && list.contains(el)) el.focus(); }
+}
+
+function inputField(labelText, id, value, mode, truckId) {
+  return h("div", { class: "field" },
+    h("label", { for: id, text: labelText }),
+    h("input", { id, type: "text", inputmode: mode, autocomplete: "off", enterkeyhint: "done", value,
+      oninput: () => onType(truckId),
+      onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); saveReading(truckId); } } }));
+}
+
+function renderCard(t) {
+  const prog = progOf(t);
+  const v = currentValues(t);
+  return h("article", { class: "card", id: "card-" + t.id, "data-status": "none" },
+    h("div", { class: "card-head" },
+      h("div", null,
+        h("h2", { class: "unit", text: label(t) }),
+        h("p", { class: "sub", text: [t.vehicle, t.year, t.plate].filter(Boolean).join(" · ") }),
+        prog ? h("span", { class: "tm-tag", text: "Truckmount: " + prog.name }) : null),
+      h("span", { class: "pill", id: "pill-" + t.id, text: "No reading" })),
+    h("div", { class: "inputs" },
+      inputField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id),
+      prog ? inputField("TM hrs now", "h-" + t.id, v.hrsStr, "decimal", t.id) : null),
+    h("p", { class: "warn", id: "warn-" + t.id, "aria-live": "polite" }),
+    h("div", { class: "results", id: "res-" + t.id }),
+    h("div", { class: "paper", id: "paper-" + t.id }),
+    h("div", { class: "card-foot" },
+      h("p", { class: "meta", id: "meta-" + t.id }),
+      h("div", { class: "actions" },
+        h("button", { class: "btn primary", type: "button", id: "save-" + t.id, onclick: () => saveReading(t.id), text: "Save reading" }),
+        h("button", { class: "btn", type: "button", id: "svc-" + t.id, onclick: () => openService(t.id), text: "Log oil change / service" }),
+        h("button", { class: "btn ghost", type: "button", id: "edit-" + t.id, onclick: () => openEdit(t.id), text: "Edit" }))));
+}
+
+function onType(id) {
+  const t = byId(id); if (!t) return;
+  const m = $("m-" + id);
+  const hr = $("h-" + id);
+  drafts[id] = { miles: m ? m.value : null, hrs: hr ? hr.value : null };
+  saveDrafts();
+  updateCard(id);
+  renderSummary();
+}
+
+function meter(fraction) {
+  const pct = Math.max(0, Math.min(1, fraction)) * 100;
+  return h("div", { class: "meter", "aria-hidden": "true" }, h("span", { style: `width:${pct.toFixed(1)}%` }));
+}
+
+function updateCard(id) {
+  const t = byId(id); if (!t) return;
+  const prog = progOf(t);
+  const v = currentValues(t);
+  const card = $("card-" + id);
+  if (!card) return;
+  const res = $("res-" + id), warn = $("warn-" + id), pill = $("pill-" + id), save = $("save-" + id);
+
+  const warns = [];
+  if (Number.isNaN(v.miles) || Number.isNaN(v.hrs)) warns.push("Enter numbers only.");
+  if (isNum(v.miles) && isNum(t.milesNow) && v.miles < t.milesNow) warns.push(`Miles are lower than the last reading (${fmt(t.milesNow)}). Check for a typo.`);
+  if (isNum(v.miles) && isNum(t.milesNow) && v.miles - t.milesNow > 5000) warns.push(`That's ${fmt(v.miles - t.milesNow)} mi since the last reading. Double-check the number.`);
+  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs < t.hrsNow) warns.push(`TM hrs are lower than the last reading (${fmt(t.hrsNow)}). Check for a typo.`);
+  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs - t.hrsNow > 200) warns.push(`That's ${fmt(v.hrs - t.hrsNow)} TM hrs since the last reading. Double-check the number.`);
+  warn.textContent = warns.join(" ");
+
+  const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
+  res.replaceChildren();
+  if (r.empty) res.append(h("p", { class: "no-reading", text: "Enter the readings to see what's due." }));
+  if (r.oil) {
+    const o = r.oil;
+    const detail = t.tm === "cds" && o.tmHrs != null
+      ? `${fmt(o.driven)} mi driven + ${fmt(o.tmHrs)} TM hrs × ${fmt(o.factor)} = ${fmt(o.used)} of ${fmt(o.interval)} mi`
+      : `${fmt(o.driven)} of ${fmt(o.interval)} mi driven since the change at ${fmt(t.milesAtOil)}`;
+    res.append(h("div", { class: "row " + o.status },
+      h("div", { class: "row-main" },
+        h("span", { class: "row-label", text: t.tm === "cds" ? "Truck oil (miles + TM hrs)" : "Truck oil" }),
+        h("span", { class: "row-value", text: oilText(o) })),
+      meter(o.used / o.interval),
+      h("p", { class: "row-detail", text: detail })));
+  }
+  if (r.tmOil) {
+    const o = r.tmOil;
+    res.append(h("div", { class: "row " + o.status },
+      h("div", { class: "row-main" },
+        h("span", { class: "row-label", text: "TM engine oil" }),
+        h("span", { class: "row-value", text: hrsLeftText(o.left) })),
+      meter(o.since / o.interval),
+      h("p", { class: "row-detail", text: `${fmt(o.since)} of ${fmt(o.interval)} hrs since the change at ${fmt(t.tmOilHrs)} · due at ${fmt(o.dueAt)} hrs` })));
+  }
+  if (r.service) {
+    const s = r.service;
+    const laterTxt = s.later.length ? " · Then " + s.later.map(x => `${x.level}-hr at ${fmt(x.at)}`).join(", ") : "";
+    const count = s.doNow.reduce((n, x) => n + x.tasks.length, 0);
+    const openIds = window.__openTasks || (window.__openTasks = new Set());
+    const tasks = h("details", { class: "tasks", open: openIds.has(id), ontoggle: e => { e.target.open ? openIds.add(id) : openIds.delete(id); } },
+      h("summary", { text: `What to do at ${fmt(s.dueAt)} hrs (${count} items)` }),
+      s.doNow.slice().reverse().map(x => [
+        h("h4", { text: `${x.h}-hr items` }),
+        h("ul", null, x.tasks.map(task => h("li", { text: task })))]));
+    res.append(h("div", { class: "row " + s.status },
+      h("div", { class: "row-main" },
+        h("span", { class: "row-label", text: "Next TM service" }),
+        h("span", { class: "row-value", text: serviceText(s) })),
+      h("p", { class: "row-detail", text: `Due at ${fmt(s.dueAt)} hrs${laterTxt}` }),
+      tasks));
+  }
+
+  $("paper-" + id).replaceChildren(...paperwork(t, today).map(p => {
+    const when = p.status === "due" ? "past due" : p.status === "soon" ? `in ${p.days} days` : "";
+    return h("span", { class: "chip " + (p.status === "ok" ? "" : p.status), text: `${p.label} ${p.shown}${when ? " · " + when : ""}` });
+  }));
+
+  card.dataset.status = r.empty ? "none" : r.worst;
+  pill.className = "pill " + (r.empty ? "" : r.worst);
+  pill.textContent = r.empty ? "No reading" : statusWord(r.worst);
+
+  const changed = (isNum(v.miles) && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
+  const invalid = Number.isNaN(v.miles) || Number.isNaN(v.hrs);
+  if (save.textContent !== "Saving…") save.disabled = !changed || invalid;
+
+  const meta = $("meta-" + id);
+  meta.textContent = t.readingAt
+    ? `Last saved reading: ${fmtWhen(t.readingAt)}${t.readingBy ? " by " + t.readingBy : ""}${drafts[id] && changed ? " · not saved yet" : ""}`
+    : "No saved reading yet";
+}
+
+function renderSummary() {
+  if (!loaded) return;
+  const items = [], paper = [];
+  let nDue = 0, nSoon = 0, nOk = 0;
+  for (const t of trucks) {
+    const v = currentValues(t);
+    const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
+    if (!r.empty) { if (r.worst === "due") nDue++; else if (r.worst === "soon") nSoon++; else nOk++; }
+    for (const line of issueLines(t, r)) items.push({ t, ...line });
+    for (const p of paperwork(t, today)) if (p.status !== "ok") paper.push({ t, ...p });
+  }
+  items.sort((a, b) => RANK[b.status] - RANK[a.status]);
+  $("tally").replaceChildren(
+    h("span", { class: "chip due", text: `${nDue} overdue` }),
+    h("span", { class: "chip soon", text: `${nSoon} due soon` }),
+    h("span", { class: "chip ok", text: `${nOk} OK` }),
+    paper.length ? h("span", { class: "chip", text: `${paper.length} paperwork dates to check` }) : null);
+
+  const jump = id => () => {
+    const card = $("card-" + id);
+    if (!card) return;
+    card.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1200);
+  };
+  $("attnBody").replaceChildren(
+    items.length
+      ? h("ul", { class: "attn-list" }, items.map(it => h("li", null,
+          h("button", { class: "attn-btn", type: "button", onclick: jump(it.t.id) },
+            h("span", { class: "dot " + it.status, "aria-label": statusWord(it.status) }),
+            h("strong", { text: label(it.t) }),
+            h("span", { text: it.text })))))
+      : h("p", { class: "empty-ok", text: trucks.length ? "Nothing due on oil or TM service." : "No trucks yet." }),
+    paper.length
+      ? h("details", { class: "paperwork" },
+          h("summary", { text: `Paperwork: ${paper.filter(p => p.status === "due").length} past due, ${paper.filter(p => p.status === "soon").length} due within 30 days` }),
+          h("ul", { class: "attn-list" }, paper.map(p => h("li", null,
+            h("button", { class: "attn-btn", type: "button", onclick: jump(p.t.id) },
+              h("span", { class: "dot " + p.status, "aria-label": statusWord(p.status) }),
+              h("strong", { text: label(p.t) }),
+              h("span", { text: `${p.label} ${p.shown}${p.status === "due" ? " (past due)" : ` (in ${p.days} days)`}` }))))))
+      : null);
+}
+
+/* ---------- saving a reading ---------- */
+async function saveReading(id) {
+  const t = byId(id); if (!t) return;
+  const v = currentValues(t);
+  const prog = progOf(t);
+  if (Number.isNaN(v.miles) || Number.isNaN(v.hrs) || !isNum(v.miles)) return;
+  const changed = v.miles !== t.milesNow || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
+  if (!changed) return;
+  const body = plain(t);
+  body.milesNow = v.miles;
+  if (prog && isNum(v.hrs)) body.hrsNow = v.hrs;
+  body.readingAt = new Date().toISOString();
+  body.readingBy = session ? session.name : "";
+  const btn = $("save-" + id);
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  try {
+    await saveTruck(t, body, { kind: "reading", miles: v.miles, hrs: prog && isNum(v.hrs) ? v.hrs : null, items: [] });
+    delete drafts[id]; saveDrafts();
+    toast(`Saved ${label(t)}`);
+  } catch (e) {
+    toast(failText(e, "Your numbers"));
+  } finally {
+    const b = $("save-" + id);
+    if (b) b.textContent = "Save reading";
+    renderAll();
+  }
+}
+
+/* ---------- dialogs ---------- */
+const dlg = $("dlg");
+function openDialog(...content) {
+  dlg.replaceChildren(h("form", { class: "dlg", method: "dialog", onsubmit: e => e.preventDefault() }, ...content));
+  if (!dlg.open) { try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); } }
+}
+function closeDialog() { if (dlg.open) dlg.close(); dlg.replaceChildren(); }
+dlg.addEventListener("cancel", () => dlg.replaceChildren());
+
+function numField(labelText, id, value, hint, mode) {
+  return h("div", { class: "field" },
+    h("label", { for: id, text: labelText }),
+    h("input", { id, type: "text", inputmode: mode || "numeric", autocomplete: "off", value: value == null ? "" : String(value) }),
+    hint ? h("span", { class: "hint", text: hint }) : null);
+}
+function textField(labelText, id, value, type, hint, placeholder) {
+  return h("div", { class: "field" },
+    h("label", { for: id, text: labelText }),
+    h("input", { id, type: type || "text", autocomplete: "off", value: value || "", placeholder: placeholder || null }),
+    hint ? h("span", { class: "hint", text: hint }) : null);
+}
+const val = id => { const el = $(id); return el ? el.value.trim() : ""; };
+
+function openService(id) {
+  const t = byId(id); if (!t) return;
+  const prog = progOf(t);
+  const v = currentValues(t);
+  const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
+  const err = h("p", { class: "dlg-err", role: "alert" });
+
+  const truckOil = h("input", { type: "checkbox", id: "sv-oil", checked: !!(r.oil && r.oil.status !== "ok") });
+  const tmOil = prog && prog.selfPowered ? h("input", { type: "checkbox", id: "sv-tmoil", checked: !!(r.tmOil && r.tmOil.status !== "ok") }) : null;
+  const preLevel = r.service && r.service.status !== "ok" ? r.service.level : 0;
+  const chosenLevel = () => Number((dlg.querySelector('input[name="sv-level"]:checked') || {}).value || 0);
+  const syncOil = () => {
+    const chosen = chosenLevel();
+    if (!prog || !chosen) return;
+    const includesOil = prog.tiers.filter(x => x.h <= chosen).map(x => x.oil).filter(Boolean);
+    if (includesOil.includes("truck")) truckOil.checked = true;
+    if (includesOil.includes("tm") && tmOil) tmOil.checked = true;
+  };
+  const tierRadios = prog ? h("fieldset", null,
+    h("legend", { text: "TM service done" }),
+    h("label", { class: "check" }, h("input", { type: "radio", name: "sv-level", value: "0", checked: preLevel === 0, onchange: syncOil }), h("span", { text: "None" })),
+    prog.tiers.map((x, i) => h("label", { class: "check" },
+      h("input", { type: "radio", name: "sv-level", value: String(x.h), checked: preLevel === x.h, onchange: syncOil }),
+      h("span", null, `${x.h}-hr service`, i > 0 ? h("small", { text: `Includes the ${prog.tiers.slice(0, i).map(y => y.h + "-hr").join(" and ")} items` }) : null)))) : null;
+
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `Log oil change / service · ${label(t)}` }),
+    h("p", { text: "Tick what was done. The countdowns restart from the miles and hours below." }),
+    h("div", { class: "grid2" },
+      numField("Miles at service", "sv-miles", isNum(v.miles) ? v.miles : t.milesNow),
+      prog ? numField("TM hrs at service", "sv-hrs", isNum(v.hrs) ? v.hrs : t.hrsNow, null, "decimal") : null),
+    h("fieldset", null,
+      h("legend", { text: "Oil" }),
+      h("label", { class: "check" }, truckOil, h("span", null, "Truck oil changed", h("small", { text: `Restarts the ${fmt(t.oilInterval)} mi countdown${t.tm === "cds" ? " (miles and TM hrs)" : ""}` }))),
+      tmOil ? h("label", { class: "check" }, tmOil, h("span", null, "TM engine oil changed", h("small", { text: `Restarts the ${fmt(isNum(t.tmOilInterval) ? t.tmOilInterval : DEFAULT_TM_OIL_HRS)} hr countdown` }))) : null),
+    tierRadios,
+    h("div", { class: "field" }, h("label", { for: "sv-note", text: "Note (optional)" }), h("textarea", { id: "sv-note", rows: "2", placeholder: "Shop, cost, anything else" })),
+    err,
+    h("div", { class: "dlg-foot" },
+      h("div", { class: "right" },
+        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+        h("button", { class: "btn primary", type: "button", id: "sv-save", text: "Save", onclick: async () => {
+          const miles = parseNum(val("sv-miles"));
+          const hrs = prog ? parseNum(val("sv-hrs")) : null;
+          const level = prog ? chosenLevel() : 0;
+          const doOil = truckOil.checked, doTm = tmOil ? tmOil.checked : false;
+          if (!isNum(miles)) { err.textContent = "Enter the miles at service."; return; }
+          if (prog && (doTm || level || (doOil && t.tm === "cds")) && !isNum(hrs)) { err.textContent = "Enter the TM hrs at service."; return; }
+          if (!doOil && !doTm && !level) { err.textContent = "Tick at least one thing that was done."; return; }
+          const body = plain(t);
+          const done = [];
+          if (doOil) { body.milesAtOil = miles; if (t.tm === "cds") body.hrsAtOil = hrs; done.push("Truck oil change"); }
+          if (doTm) { body.tmOilHrs = hrs; done.push("TM engine oil change"); }
+          if (level) {
+            body.tiers = Object.assign({}, body.tiers || {});
+            for (const x of prog.tiers) if (x.h <= level) body.tiers[String(x.h)] = hrs;
+            done.push(`TM ${level}-hr service`);
+          }
+          if (!isNum(body.milesNow) || miles >= body.milesNow) body.milesNow = miles;
+          if (prog && isNum(hrs) && (!isNum(body.hrsNow) || hrs >= body.hrsNow)) body.hrsNow = hrs;
+          body.readingAt = new Date().toISOString();
+          body.readingBy = session ? session.name : "";
+          const btn = $("sv-save"); btn.disabled = true; btn.textContent = "Saving…";
+          try {
+            await saveTruck(t, body, { kind: "service", miles, hrs: prog ? hrs : null, items: done, note: val("sv-note").slice(0, 500) });
+            delete drafts[t.id]; saveDrafts();
+            closeDialog();
+            renderAll();
+            toast(`Logged for ${label(t)}: ${done.join(", ")}`);
+          } catch (e) { err.textContent = failText(e, "Nothing"); btn.disabled = false; btn.textContent = "Save"; }
+        } }))));
+}
+
+function openEdit(id) {
+  const isNew = !id;
+  const t = isNew
+    ? { id: null, unit: "", driver: "", vehicle: "", year: "", plate: "", oilInterval: 5000, milesAtOil: null, milesNow: null, tm: "none",
+        cdsMilesPerHr: DEFAULT_CDS_MILES_PER_HR, hrsAtOil: null, tmOilInterval: DEFAULT_TM_OIL_HRS, tmOilHrs: null, hrsNow: null, tiers: {},
+        inspectionDue: "", registrationDue: "", insuranceUntil: "", notes: "", order: (trucks.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1) }
+    : byId(id);
+  if (!t) return;
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const tmBox = h("div", { style: "display:grid;gap:12px" });
+
+  const drawTm = () => {
+    const kind = val("ed-tm") || "none";
+    const prog = PROGRAMS[kind];
+    tmBox.replaceChildren();
+    if (!prog) return;
+    if (kind === "cds") {
+      tmBox.append(h("div", { class: "grid2" },
+        numField("TM hrs at last truck oil change", "ed-hrsAtOil", t.hrsAtOil, null, "decimal"),
+        numField("Miles counted per TM hr", "ed-factor", isNum(t.cdsMilesPerHr) ? t.cdsMilesPerHr : DEFAULT_CDS_MILES_PER_HR, "Your sheet uses 15", "decimal")));
+    } else {
+      tmBox.append(h("div", { class: "grid2" },
+        numField("TM hrs at last TM oil change", "ed-tmOilHrs", t.tmOilHrs, null, "decimal"),
+        numField("TM oil every (hrs)", "ed-tmOilIv", isNum(t.tmOilInterval) ? t.tmOilInterval : DEFAULT_TM_OIL_HRS)));
+    }
+    tmBox.append(h("fieldset", null,
+      h("legend", { text: "Last TM service done at (hrs)" }),
+      h("p", { class: "hint", text: "Leave blank if unknown: the app assumes it was done at the last round number." }),
+      h("div", { class: "grid2" }, prog.tiers.map(x => numField(`${x.h}-hr service`, "ed-tier-" + x.h, t.tiers ? t.tiers[String(x.h)] : null, null, "decimal")))));
+  };
+
+  const tmSelect = h("select", { id: "ed-tm", onchange: drawTm },
+    h("option", { value: "none", text: "No truckmount" }),
+    Object.entries(PROGRAMS).map(([k, p]) => h("option", { value: k, text: p.name })));
+  tmSelect.value = t.tm && PROGRAMS[t.tm] ? t.tm : "none";
+
+  const history = h("ul", { class: "history" }, h("li", null, h("small", { text: isNew ? "No history yet." : "Loading history…" })));
+  let armedDelete = false;
+
+  openDialog(
+    h("h3", { id: "dlgTitle", text: isNew ? "Add truck" : `Edit ${label(t)}` }),
+    h("div", { class: "grid2" },
+      textField("Unit", "ed-unit", t.unit, "text", null, "VODA 15"),
+      textField("Driver", "ed-driver", t.driver),
+      textField("Vehicle", "ed-vehicle", t.vehicle, "text", null, "Ford Transit 250"),
+      textField("Year", "ed-year", t.year),
+      textField("Plate", "ed-plate", t.plate)),
+    h("fieldset", null,
+      h("legend", { text: "Truck oil" }),
+      h("div", { class: "grid2" },
+        numField("Oil change every (mi)", "ed-oilIv", t.oilInterval),
+        numField("Miles at last oil change", "ed-milesAtOil", t.milesAtOil))),
+    h("fieldset", null,
+      h("legend", { text: "Truckmount" }),
+      h("div", { class: "field" }, h("label", { for: "ed-tm", text: "Type" }), tmSelect),
+      tmBox),
+    h("fieldset", null,
+      h("legend", { text: "Paperwork" }),
+      h("div", { class: "grid2" },
+        textField("Safety inspection due", "ed-insp", t.inspectionDue, "date"),
+        textField("Registration due (month)", "ed-reg", t.registrationDue, "month", "Format 2026-02 if no picker shows", "2026-02"),
+        textField("Insurance until", "ed-ins", t.insuranceUntil, "date"))),
+    h("div", { class: "field" }, h("label", { for: "ed-notes", text: "Notes" }), h("textarea", { id: "ed-notes", rows: "2", value: t.notes || "" })),
+    isNew ? null : h("fieldset", null, h("legend", { text: "Recent history" }), history),
+    err,
+    h("div", { class: "dlg-foot" },
+      isNew ? null : h("button", { class: "btn ghost danger", type: "button", id: "ed-del", text: "Delete truck", onclick: async () => {
+        const b = $("ed-del");
+        if (!armedDelete) { armedDelete = true; b.textContent = "Tap again to delete"; return; }
+        b.disabled = true;
+        try {
+          await api("deleteTruck", { id: t.id, base: t.updatedAt || null });
+          trucks = trucks.filter(x => x.id !== t.id); delete drafts[t.id]; saveDrafts();
+          store.set(K_CACHE, { at: (lastSync || new Date()).toISOString(), trucks });
+          closeDialog(); renderAll(); toast(`Deleted ${label(t)}`);
+        } catch (e) {
+          if (e && e.error === "conflict" && e.truck) { replaceTruck(e.truck); renderAll(); err.textContent = `Someone else just changed ${label(e.truck)}. Close this and check it before deleting.`; }
+          else err.textContent = failText(e, "Nothing");
+          b.disabled = false;
+        }
+      } }),
+      h("div", { class: "right" },
+        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+        h("button", { class: "btn primary", type: "button", id: "ed-save", text: "Save", onclick: async () => {
+          const kind = val("ed-tm") || "none";
+          const prog = PROGRAMS[kind];
+          const nums = {};
+          const need = [["ed-oilIv", "Oil change every (mi)"], ["ed-milesAtOil", "Miles at last oil change"]];
+          for (const [fid, name] of need) {
+            const n = parseNum(val(fid));
+            if (!isNum(n)) { err.textContent = `Enter a number for "${name}".`; return; }
+            nums[fid] = n;
+          }
+          if (nums["ed-oilIv"] <= 0) { err.textContent = "Oil interval must be more than 0."; return; }
+          const opt = fid => { const n = parseNum(val(fid)); if (Number.isNaN(n)) throw new Error(fid); return n; };
+          const body = isNew ? {} : plain(t);
+          try {
+            Object.assign(body, {
+              unit: val("ed-unit").slice(0, 60), driver: val("ed-driver").slice(0, 60), vehicle: val("ed-vehicle").slice(0, 80),
+              year: val("ed-year").slice(0, 10), plate: val("ed-plate").slice(0, 20),
+              oilInterval: nums["ed-oilIv"], milesAtOil: nums["ed-milesAtOil"], tm: prog ? kind : "none",
+              inspectionDue: val("ed-insp"), registrationDue: val("ed-reg"), insuranceUntil: val("ed-ins"),
+              notes: val("ed-notes").slice(0, 1000), order: isNum(t.order) ? t.order : 99
+            });
+            if (!body.unit) { err.textContent = "Give the truck a unit name."; return; }
+            if (body.registrationDue && !/^\d{4}-\d{2}$/.test(body.registrationDue)) { err.textContent = "Registration month should look like 2026-02."; return; }
+            if (kind === "cds") {
+              body.hrsAtOil = opt("ed-hrsAtOil");
+              const f = opt("ed-factor"); body.cdsMilesPerHr = isNum(f) ? f : DEFAULT_CDS_MILES_PER_HR;
+            } else if (prog) {
+              body.tmOilHrs = opt("ed-tmOilHrs");
+              const iv = opt("ed-tmOilIv"); body.tmOilInterval = isNum(iv) && iv > 0 ? iv : DEFAULT_TM_OIL_HRS;
+            }
+            body.tiers = {};
+            if (prog) for (const x of prog.tiers) { const n = opt("ed-tier-" + x.h); if (isNum(n)) body.tiers[String(x.h)] = n; }
+          } catch (e) { err.textContent = "Some fields have something other than a number. Fix them and try again."; return; }
+          if (!("milesNow" in body)) body.milesNow = null;
+          if (!("hrsNow" in body)) body.hrsNow = null;
+          const target = isNew
+            ? { id: (body.unit.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "truck") + "-" + Math.random().toString(36).slice(2, 6), updatedAt: null }
+            : t;
+          const btn = $("ed-save"); btn.disabled = true; btn.textContent = "Saving…";
+          try {
+            await saveTruck(target, body, isNew ? { kind: "added", items: ["Truck added"] } : { kind: "edited", items: ["Truck details edited"] });
+            closeDialog(); renderAll(); toast(isNew ? `Added ${label(body)}` : `Saved ${label(body)}`);
+          } catch (e) { err.textContent = failText(e, "Nothing"); btn.disabled = false; btn.textContent = "Save"; }
+        } }))));
+  drawTm();
+
+  if (!isNew) {
+    api("history", { id: t.id }).then(out => {
+      const rows = out.entries || [];
+      history.replaceChildren(...(rows.length ? rows.map(x => {
+        const what = x.kind === "reading" ? "Reading" : (Array.isArray(x.items) && x.items.length ? x.items.join(", ") : x.kind);
+        const nums = [isNum(x.miles) ? `${fmt(x.miles)} mi` : null, isNum(x.hrs) ? `${fmt(x.hrs)} TM hrs` : null].filter(Boolean).join(" · ");
+        return h("li", null, h("strong", { text: what }), nums ? ` · ${nums}` : "", h("br"),
+          h("small", { text: [x.at, x.by ? "by " + x.by : "", x.note ? "“" + x.note + "”" : ""].filter(Boolean).join(" · ") }));
+      }) : [h("li", null, h("small", { text: "No history yet. It starts with the next saved reading." }))]));
+    }).catch(() => { history.replaceChildren(h("li", null, h("small", { text: "History couldn't load right now." }))); });
+  }
+}
+
+function openSettings() {
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Settings" }),
+    h("div", { class: "field" }, h("label", { for: "st-name", text: "Your name (shows next to readings you save)" }),
+      h("input", { id: "st-name", type: "text", autocomplete: "name", value: session ? session.name : "" })),
+    h("p", { text: "Disconnect removes the access code from this phone. You'll need the code to connect again." }),
+    h("div", { class: "dlg-foot" },
+      h("button", { class: "btn ghost danger", type: "button", text: "Disconnect this phone", onclick: () => { closeDialog(); signOut(""); } }),
+      h("div", { class: "right" },
+        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+        h("button", { class: "btn primary", type: "button", text: "Save", onclick: () => {
+          const n = val("st-name");
+          if (n && session) { session.name = n.slice(0, 40); store.set(K_SESSION, session); }
+          closeDialog(); renderSync();
+        } }))));
+}
+
+/* ---------- report ---------- */
+function buildReport() {
+  const d = new Date();
+  const lines = [`VODA fleet maintenance · ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`];
+  const groups = { due: [], soon: [] };
+  const paper = [];
+  for (const t of trucks) {
+    const v = currentValues(t);
+    const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
+    for (const line of issueLines(t, r)) groups[line.status].push(`• ${label(t)}: ${line.text}`);
+    for (const p of paperwork(t, today)) if (p.status !== "ok") paper.push(`• ${label(t)}: ${p.label} ${p.shown}${p.status === "due" ? " (past due)" : ` (in ${p.days} days)`}`);
+  }
+  lines.push("", "OVERDUE", ...(groups.due.length ? groups.due : ["• none"]));
+  lines.push("", "DUE SOON", ...(groups.soon.length ? groups.soon : ["• none"]));
+  if (paper.length) lines.push("", "PAPERWORK", ...paper);
+  return lines.join("\n");
+}
+$("shareReport").addEventListener("click", async () => {
+  const text = buildReport();
+  if (navigator.share) {
+    try { await navigator.share({ title: "VODA fleet maintenance", text }); return; }
+    catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(text); toast("Report copied. Paste it into a text or email."); }
+  catch (e) {
+    openDialog(
+      h("h3", { id: "dlgTitle", text: "Fleet report" }),
+      h("p", { text: "Select the text below and copy it." }),
+      h("textarea", { class: "report", readonly: true, value: text }),
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn primary", type: "button", onclick: closeDialog, text: "Done" }))));
+  }
+});
+$("addTruck").addEventListener("click", () => openEdit(null));
+$("refreshBtn").addEventListener("click", () => refresh(false));
+$("meBtn").addEventListener("click", openSettings);
+
+/* ---------- install as an app ---------- */
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+let installEvt = null;
+function renderInstall() {
+  const bar = $("installbar");
+  if (isStandalone() || store.get(K_INSTALL)) { bar.hidden = true; return; }
+  if (installEvt) {
+    $("installText").textContent = "Install VODA Fleet on this phone so it opens like an app.";
+    $("installBtn").hidden = false; bar.hidden = false;
+  } else if (isIOS) {
+    $("installText").textContent = "To install on iPhone: tap the Share button (square with an arrow), then Add to Home Screen.";
+    $("installBtn").hidden = true; $("installDismiss").textContent = "Got it"; bar.hidden = false;
+  } else bar.hidden = true;
+}
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; renderInstall(); });
+window.addEventListener("appinstalled", () => { installEvt = null; $("installbar").hidden = true; toast("VODA Fleet installed. Open it from your home screen."); });
+$("installBtn").addEventListener("click", async () => {
+  if (!installEvt) return;
+  installEvt.prompt();
+  try { await installEvt.userChoice; } catch (e) {}
+  installEvt = null; renderInstall();
+});
+$("installDismiss").addEventListener("click", () => { store.set(K_INSTALL, true); $("installbar").hidden = true; });
+
+/* ---------- start ---------- */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && session && CONFIGURED) refresh(true); });
+window.addEventListener("online", () => { if (session && CONFIGURED) refresh(true); });
+setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true); }, 90000);
+
+renderInstall();
+if (!CONFIGURED) showNotConfigured();
+else if (!session) showSignIn("");
+else {
+  const cache = store.get(K_CACHE);
+  if (cache && Array.isArray(cache.trucks)) { trucks = sortTrucks(cache.trucks); lastSync = new Date(cache.at); loaded = true; }
+  startApp();
+}
+</script>
+</body>
+</html>
