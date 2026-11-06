@@ -408,13 +408,15 @@ function gpsSetup() {
   devices.forEach(function (d) { live[d.id] = true; });
   Object.keys(prev).forEach(function (k) { if (prev[k].truck && live[k]) taken[prev[k].truck] = true; });   // devices gone from One Step GPS free their truck
   const auto = {};
-  devices.forEach(function (d) {
-    if (prev[d.id] || !d.info.vin) return;
+  const newestFirst = devices.slice().sort(function (a, b) { return String(b.info.at).localeCompare(String(a.info.at)); });
+  // Old trackers often still report the VIN of the truck they came out of, so only ones still reporting count, newest first.
+  newestFirst.forEach(function (d) {
+    if (prev[d.id] || !d.info.vin || gpsQuietDays_(d.info.at) !== null) return;
     const m = trucks.filter(function (t) { return t.vin === d.info.vin; })[0];
     if (m && !taken[m.unit]) { auto[d.id] = m.unit; taken[m.unit] = true; }
   });
   [true, false].forEach(function (vodaPass) {
-    devices.forEach(function (d) {
+    newestFirst.forEach(function (d) {
       if (prev[d.id] || auto[d.id] || (!d.odo.vehicle && !d.odo.tracker)) return;
       const hasVoda = /voda\s*-?\s*\d+/i.test(d.name);
       if (vodaPass !== hasVoda) return;
@@ -533,7 +535,7 @@ function gpsSync() {
       out[6] = gpsYmmText_(ex.ymm);
       out[7] = info.plate;
       out[8] = info.groups.join(", ");
-      out[9] = info.check.state === "on" ? "ON" + (info.check.codes.length ? ": " + info.check.codes.join(", ") : "") : info.check.state === "off" ? "Off" : "";
+      out[9] = info.check.state === "on" ? "ON" + (info.check.codes.length ? ": " + info.check.codes.join(", ") : "") : info.check.state === "off" ? "Off" : info.check.state === "none" ? "None reported" : "";
       out[10] = info.fuel === null ? "" : info.fuel;
       out[11] = info.drive;
       out[12] = ex.address;
@@ -544,15 +546,15 @@ function gpsSync() {
       const unit = String(row[2] || "");
       const found = unit ? all.filter(function (x) { return x.truck.unit === unit; })[0] : null;
       const adjust = num_(row[4]) || 0;
+      const quietDays = gpsQuietDays_(info.at);
       if (!found) {
         const any = d.odo.vehicle || d.odo.tracker;
+        const owner = info.vin ? all.filter(function (x) { return x.truck.vin === info.vin; })[0] : null;
         out[0] = any ? Math.round(gpsMiles_(d.odo.vehicle || d.odo.tracker, null) + adjust) : "";
         out[1] = "";
         out[3] = any ? "Not used. Pick a truck in column C to use this device." : "No odometer from this device.";
-        if (info.vin) {
-          const owner = all.filter(function (x) { return x.truck.vin === info.vin; })[0];
-          if (owner) out[3] = "Reports the VIN of " + owner.truck.unit + ". Pick " + owner.truck.unit + " in column C if this tracker is in that truck.";
-        }
+        if (quietDays !== null) out[3] = "Old or unplugged tracker: no report for " + quietDays + " days." + (owner ? " It reports " + owner.truck.unit + "'s VIN, so it was in that truck before." : "");
+        else if (owner) out[3] = "Reports the VIN of " + owner.truck.unit + ". Pick " + owner.truck.unit + " in column C if this tracker is in that truck.";
         return;
       }
       const t = found.truck;
@@ -612,6 +614,7 @@ function gpsSync() {
       }
       if (ticked && source && gm !== null) claimed[t.id] = true;
       if (notes.length) out[3] = (out[3] === "OK" ? "OK. " : out[3] + " ") + notes.join(" ");
+      if (quietDays !== null) out[3] = "Tracker hasn't reported for " + quietDays + " days. Check it's plugged in." + (out[3] === "OK" ? "" : " " + out[3]);
       if (changed) sheet_("Trucks").getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([toRow_(t)]);
     });
     // Only columns F to U are written back, so edits to Truck, Use GPS miles and Adjust are never overwritten.
@@ -657,6 +660,16 @@ function gpsInspect() {
       "  |  plate " + (i.plate || "-") + "  |  groups " + (i.groups.join("/") || "-") +
       "  |  engine hrs " + (i.engineHrs === null ? "-" : i.engineHrs));
   });
+  // Engine-hour counters and fault-code fields per device, raw, to check against what One Step GPS shows.
+  (gpsList_(json) || []).forEach(function (raw) {
+    const pt = raw.latest_device_point || {}, st = pt.device_state || {}, dt = pt.device_point_detail || {};
+    const counters = (Array.isArray(st.counter_list) ? st.counter_list : []).filter(function (c) { return c && /^eh/.test(String(c.key)); })
+      .map(function (c) { return c.key + " " + (typeof c.val === "number" ? Math.round(c.val * 10) / 10 : c.val) + (c.offset ? " (+" + c.offset + ")" : ""); });
+    const dtc = ["dtc_list", "vbus_dtc_count", "vbus_calamp_indicators_0", "vbus_calamp_indicators_1", "change_oil_lamp_on", "oil_pressure_lamp_on"]
+      .filter(function (k) { return dt[k] !== undefined && dt[k] !== null; }).map(function (k) { return k + "=" + JSON.stringify(dt[k]).slice(0, 40); });
+    Logger.log("  " + String(raw.display_name || raw.device_id) + "  |  activated " + String(raw.activated_at || raw.created_at || "?").slice(0, 10) +
+      "  |  " + (counters.join(", ") || "no engine-hour counters") + "  |  " + (dtc.join(", ") || "no fault-code fields"));
+  });
   const vinDevice = devices.filter(function (d) { return d.info.vin; })[0];
   if (vinDevice) {
     const y = gpsDecodeVin_(vinDevice.info.vin, { vin: 1, address: 0 });
@@ -678,7 +691,7 @@ function gpsInspect() {
   for (let k = 0; k < keys.length; k += 6) {
     Logger.log(keys.slice(k, k + 6).map(function (key) {
       const s = seen[key].sample;
-      const show = /lat|lng|vin/i.test(key) ? "" : "=" + String(Array.isArray(s) ? "[" + s.length + "]" : typeof s === "object" ? "{}" : s).slice(0, 18);
+      const show = /(^|[._])(lat|lng)$/i.test(key) ? "" : "=" + String(Array.isArray(s) ? "[" + s.length + "]" : typeof s === "object" ? "{}" : s).slice(0, 18);
       return key + " (" + seen[key].n + ")" + show;
     }).join("   "));
   }
@@ -870,13 +883,16 @@ function gpsInfo_(d) {
   } else if (Array.isArray(state.counter_list)) {
     ["eh", "eh_lt", "eh_acc"].some(function (k) {
       const c = state.counter_list.filter(function (x) { return x && x.key === k && typeof x.val === "number"; })[0];
-      if (c) engineHrs = c.val + (typeof c.offset === "number" ? c.offset : 0);
-      return !!c;
+      if (!c) return false;
+      engineHrs = c.val + (typeof c.offset === "number" ? c.offset : 0);   // same number One Step GPS shows as "Current engine hours"
+      return true;
     });
   }
   if (engineHrs !== null && !(engineHrs > 0 && engineHrs < 200000)) engineHrs = null;
   const drive = String(state.drive_status || "").toLowerCase();
-  const driveText = !drive ? "" : /driv|mov/.test(drive) ? "Driving" : /idl/.test(drive) ? "Idling" : /off|stop|park/.test(drive) ? "Parked" : drive.charAt(0).toUpperCase() + drive.slice(1);
+  const driveText = !drive ? "" : /driv|mov/.test(drive) ? "Driving" : /idl/.test(drive) ? "Idling" : /off|stop|park/.test(drive) ? "Parked"
+    : (drive.charAt(0).toUpperCase() + drive.slice(1)).replace(/_/g, " ");
+  const vbus = gpsMeasure_(detail.vbus_odometer, "vbus_odometer");
 
   let lat = num_(point.lat), lng = num_(point.lng);
   if ((lat === null || lng === null) && detail.lat_lng) { lat = num_(detail.lat_lng.lat); lng = num_(detail.lat_lng.lng); }
@@ -898,7 +914,8 @@ function gpsInfo_(d) {
     plate: plateP ? String(plateP.value).trim().toUpperCase().slice(0, 20) : "",
     ymm: { year: yearP ? String(Math.round(Number(yearP.value))) : "", make: makeP ? gpsTitle_(makeP.value) : "", model: modelP ? String(modelP.value).trim() : "" },
     groupIds: groupIds, groups: names, division: gpsDivision_(names),
-    check: { state: on ? "on" : known ? "off" : "", codes: codes.slice(0, 8) },
+    // "none" = the tracker reads the truck's computer but sends no fault codes; "" = no link to the truck's computer.
+    check: { state: on ? "on" : known ? "off" : vbus && vbus.n > 0 ? "none" : "", codes: codes.slice(0, 8) },
     fuel: fuelP ? Math.round(gpsMeasure_(fuelP.value, fuelP.key).n) : null,
     drive: driveText,
     since: state.drive_status_begin_time ? String(state.drive_status_begin_time) : "",
@@ -907,6 +924,12 @@ function gpsInfo_(d) {
     at: at ? at.toISOString() : "",
     online: typeof d.online === "boolean" ? d.online : null
   };
+}
+
+/** Whole days since the last report, or null if it reported within GPS_OFFLINE_HRS. */
+function gpsQuietDays_(at) {
+  const ms = at ? Date.now() - new Date(at).getTime() : NaN;
+  return isFinite(ms) && ms > GPS_OFFLINE_HRS * 36e5 ? Math.floor(ms / 864e5) : null;
 }
 
 function gpsCodeText_(el) {
@@ -1128,7 +1151,7 @@ function gpsForApp_(trucks) {
       vin: vin,
       vinMismatch: !!(vin && t.vin && vin !== t.vin),
       ymm: String(r[11] || ""),
-      check: /^ON/.test(check) ? "on" : check === "Off" ? "off" : "",
+      check: /^ON/.test(check) ? "on" : check === "Off" ? "off" : check === "None reported" ? "none" : "",
       codes: /^ON: /.test(check) ? check.slice(4).split(", ") : [],
       fuel: num_(r[15]),
       status: String(r[16] || ""),
