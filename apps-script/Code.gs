@@ -35,6 +35,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "oilInterval", "milesAtOil", "milesNow", "tm", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
   "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color"];
+const API_VERSION = 6;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color); older sheets get them automatically
 const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
@@ -352,6 +353,7 @@ function withLock_(fn) {
   try { return fn(); } finally { lock.releaseLock(); }
 }
 function json_(obj) {
+  if (obj && typeof obj === "object") obj.api = API_VERSION;
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
