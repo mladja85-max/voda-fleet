@@ -1424,7 +1424,7 @@ function gpsSection(t) {
   if (g.check === "on") items.push(row("Check engine", h("span", { class: "bad", text: "ON" }),
     g.codes.length ? [" · ", g.codes.map((c, i) => [i ? ", " : "", h("a", { class: "code-link", href: `https://www.google.com/search?q=${encodeURIComponent(c + " code " + (t.vehicle || ""))}`, target: "_blank", rel: "noopener", text: c })])] : null,
     h("small", { text: "Codes from the truck's computer. Tap a code to look it up." })));
-  else items.push(row("Check engine", g.check === "off" ? "Off" : "No data from this truck"));
+  else items.push(row("Check engine", g.check === "off" ? "Off" : g.check === "none" ? "No fault codes reported" : "No data from this truck"));
   if (isNum(g.engineHrs)) items.push(row("Van engine hrs", `${fmt(g.engineHrs)} hrs`, h("small", { text: "For reference only. TM hours are still the ones you type in." })));
   const vin = t.vin || g.vin;
   if (vin) items.push(row("VIN", vin, g.vinMismatch ? h("small", { class: "warnc", text: `The tracker now reports ${g.vin}. It may have moved to another truck, so its miles aren't being copied. If this truck's VIN is wrong, fix it in Edit truck.` }) : null));
@@ -1850,7 +1850,7 @@ function buildCsv() {
       e.pwBad.map(p => `${p.label} ${p.status === "due" ? "past due" : "due soon"}`).join("; "),
       t.readingAt ? fmtWhen(t.readingAt) : "",
       t.vin || (t.gps ? t.gps.vin : "") || "",
-      t.gps ? (t.gps.check === "on" ? "ON" + (t.gps.codes.length ? ": " + t.gps.codes.join(" ") : "") : t.gps.check === "off" ? "Off" : "") : "",
+      t.gps ? (t.gps.check === "on" ? "ON" + (t.gps.codes.length ? ": " + t.gps.codes.join(" ") : "") : t.gps.check === "off" ? "Off" : t.gps.check === "none" ? "None reported" : "") : "",
       t.gps && isNum(t.gps.fuel) ? t.gps.fuel : "",
       t.gps ? (t.gps.offline ? "Offline" : t.gps.status) : "",
       t.gps && t.gps.at ? `${fmtWhen(t.gps.at)} ${fmtTime(new Date(t.gps.at))}` : "",
