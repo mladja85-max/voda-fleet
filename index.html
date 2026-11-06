@@ -622,6 +622,11 @@ let lastSync = null;
 let offline = false;
 let refreshing = false;
 let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
+const NEEDS_API = 6;                           // the Google script version this app expects
+const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
+  "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
+  "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
+const scriptOld = out => !(out && out.api >= NEEDS_API);
 const drafts = store.get(K_DRAFTS) || {};     // id -> { miles, hrs } typed but not saved
 const today = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
@@ -728,7 +733,7 @@ async function refresh(quiet) {
     offline = false;
     loaded = true;
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
-    setBanner("");
+    setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && e.error === "bad_code") { signOut("The access code was changed. Enter the new code from the Setup tab."); refreshing = false; return; }
     offline = true;
@@ -894,7 +899,7 @@ function colorPicker(id, value, onpick) {
   wrap.append(sw("No color", ""), ...PALETTE.map(([n, c]) => sw(n, c)), more);
   if (value && !PALETTE.some(p => p[1] === value)) { more.classList.add("on"); more.style.background = value; }
   return h("div", { class: "field" }, h("label", { text: "Truck color" }), wrap, hidden,
-    h("span", { class: "hint", text: "Shows on the truck's name and down the edge of its tile." }));
+    h("span", { class: "hint", text: "Shows on the truck's name and down the edge of its tile. Tap Save to keep it." }));
 }
 function divisionField(id, value) {
   const sel = h("select", { id }, h("option", { value: "", text: "Choose…" }), DIVISIONS.map(d => h("option", { value: d, text: d })));
@@ -950,6 +955,7 @@ function showSignIn(message) {
       const out = await api("list");
       store.set(K_SESSION, session);
       trucks = sortTrucks(out.trucks || []); gpsHealth = out.gps || null; loaded = true; lastSync = new Date(); offline = false;
+      if (scriptOld(out)) setTimeout(() => setBanner(SCRIPT_OLD), 0);
       store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
       startApp();
     } catch (ex) {
@@ -1231,7 +1237,18 @@ function renderAside() {
 
 /* ---------- details panel ---------- */
 const drawer = $("drawer");
-drawer.addEventListener("close", () => { openId = null; renameDraft = null; });
+drawer.addEventListener("close", () => {
+  if (renameDraft) previewColor(renameDraft.id, (byId(renameDraft.id) || {}).color);
+  openId = null; renameDraft = null;
+});
+/** Shows a color on the tile (and the open panel) right away, before it's saved. */
+function previewColor(id, color) {
+  const theme = truckTheme(color);
+  const tile = $("tile-" + id);
+  if (tile) { tile.classList.toggle("colored", !!theme); if (theme) tile.setAttribute("style", theme); else tile.removeAttribute("style"); }
+  const head = openId === id ? drawer.querySelector(".dr-head") : null;
+  if (head) { head.classList.toggle("colored", !!theme); if (theme) head.setAttribute("style", theme); else head.removeAttribute("style"); }
+}
 drawer.addEventListener("click", e => { if (e.target === drawer) drawer.close(); });
 
 function openDetails(id) {
@@ -1268,9 +1285,9 @@ function renameForm(t) {
   const division = h("select", { id: "rn-division", onchange: e => { renameDraft.division = e.target.value; } },
     h("option", { value: "", text: "Choose…" }), DIVISIONS.map(d => h("option", { value: d, text: d })));
   division.value = DIVISIONS.includes(renameDraft.division) ? renameDraft.division : "";
-  const color = colorPicker("rn-color", renameDraft.color, v => { renameDraft.color = v; });
+  const color = colorPicker("rn-color", renameDraft.color, v => { renameDraft.color = v; previewColor(id, v); });
   const save = h("button", { class: "btn primary small", type: "submit", id: "rn-save", text: "Save" });
-  const cancel = () => { renameDraft = null; renderDrawer(id); };
+  const cancel = () => { renameDraft = null; previewColor(id, t.color); renderDrawer(id); };
   return h("form", { class: "titles rename", onsubmit: async e => {
       e.preventDefault();
       const newUnit = renameDraft.unit.trim().replace(/\s+/g, " ");
@@ -1468,6 +1485,7 @@ saveTruck = async function (t, body, log) {
   }
   delete historyCache[t.id];
   if (openId === t.id && drawer.open) setTimeout(() => loadHistory(t.id), 0);
+  if (body && body.color && out && out.color === undefined) setBanner(SCRIPT_OLD);   // an old script drops the color
   return out;
 };
 
@@ -1650,7 +1668,7 @@ function openEdit(id) {
       textField("Vehicle", "ed-vehicle", t.vehicle, "text", null, "Ford Transit 250"),
       textField("Year", "ed-year", t.year),
       textField("VIN", "ed-vin", t.vin, "text", "17 letters and numbers. One Step GPS fills it in when it can.")),
-    colorPicker("ed-color", t.color),
+    colorPicker("ed-color", t.color, isNew ? null : v => previewColor(t.id, v)),
     h("fieldset", null,
       h("legend", { text: "Truck oil" }),
       h("div", { class: "grid2" },
@@ -1736,6 +1754,8 @@ function openEdit(id) {
           } catch (e) { err.textContent = failText(e, "Nothing"); btn.disabled = false; btn.textContent = "Save"; }
         } }))));
   drawTm();
+  // Leaving without saving puts the previewed color back.
+  if (!isNew) dlg.addEventListener("close", () => { const now = byId(t.id); if (now) previewColor(t.id, now.color); }, { once: true });
 
   if (!isNew) {
     api("history", { id: t.id }).then(out => {
