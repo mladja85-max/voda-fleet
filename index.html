@@ -12,196 +12,246 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="VODA Fleet">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#edf0f3" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0e1319" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121a23" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <script src="config.js"></script>
 <style>
 :root {
-  /* Layout: one column of truck cards (inputs on top, results below); a needs-attention panel above them; dialogs for logging service and editing a truck. */
-  --bg: #edf0f3;
+  /* Layout: sticky top bar; summary tiles that filter; toolbar; a responsive grid of truck tiles (inline entry);
+     an attention sidebar on wide screens; a details panel that slides in from the right. */
+  --bg: #eef1f5;
   --surface: #ffffff;
-  --ink: #16202b;
-  --muted: #586678;
-  --line: #d3dae2;
+  --surface-2: #f6f8fa;
+  --ink: #111a24;
+  --muted: #5a6879;
+  --line: #e0e6ed;
   --accent: #1f4fbf;
   --accent-ink: #ffffff;
+  --accent-soft: #e7eefc;
   --ok: #17803d;
   --ok-bg: #e2f3e7;
-  --soon: #94580a;
+  --soon: #985a05;
   --soon-bg: #fcefd3;
-  --due: #b42318;
+  --due: #c0281a;
   --due-bg: #fde6e3;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 2px 10px rgba(16, 24, 40, .06);
+  --radius: 14px;
   --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1319;
-    --surface: #17202a;
-    --ink: #e6ebf1;
-    --muted: #9aa7b6;
-    --line: #2b3643;
-    --accent: #7aa4ff;
-    --accent-ink: #0b1320;
-    --ok: #52c47c;
-    --ok-bg: #133022;
-    --soon: #f0b44c;
-    --soon-bg: #382a10;
-    --due: #ff7f70;
-    --due-bg: #3e1814;
+    --bg: #0c1117; --surface: #151d27; --surface-2: #19222d; --ink: #e7ecf2; --muted: #9babbc; --line: #273241;
+    --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45;
+    --ok: #55c57f; --ok-bg: #12301f; --soon: #f0b54d; --soon-bg: #372a10; --due: #ff8072; --due-bg: #3d1814;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e1319;
-  --surface: #17202a;
-  --ink: #e6ebf1;
-  --muted: #9aa7b6;
-  --line: #2b3643;
-  --accent: #7aa4ff;
-  --accent-ink: #0b1320;
-  --ok: #52c47c;
-  --ok-bg: #133022;
-  --soon: #f0b44c;
-  --soon-bg: #382a10;
-  --due: #ff7f70;
-  --due-bg: #3e1814;
+  --bg: #0c1117; --surface: #151d27; --surface-2: #19222d; --ink: #e7ecf2; --muted: #9babbc; --line: #273241;
+  --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45;
+  --ok: #55c57f; --ok-bg: #12301f; --soon: #f0b54d; --soon-bg: #372a10; --due: #ff8072; --due-bg: #3d1814;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.45;
-  -webkit-text-size-adjust: 100%;
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.4; -webkit-text-size-adjust: 100%; }
+h1, h2, h3, h4 { text-wrap: balance; margin: 0; }
+button { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+/* ---- top bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 30; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
+  padding: 10px 24px; background: var(--surface); border-bottom: 1px solid var(--line);
 }
-.wrap { max-width: 780px; margin: 0 auto; padding: 20px 16px 64px; display: grid; gap: 16px; }
-h1, h2, h3, h4 { text-wrap: balance; }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.brand svg { width: 30px; height: 30px; flex: none; }
+.brand h1 { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.sync { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
+.sync.offline { color: var(--soon); font-weight: 600; }
+.top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-.top { display: grid; gap: 10px; }
-.top-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
-.top h1 {
-  font-family: var(--font-display); font-weight: 700; font-size: 2.1rem;
-  text-transform: uppercase; letter-spacing: .02em; line-height: 1; margin: 0;
-}
-.top p { margin: 0; color: var(--muted); max-width: 60ch; }
-.tally { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
-  border-radius: 999px; font-weight: 600; font-size: .85rem; background: var(--bg);
-  color: var(--muted); border: 1px solid var(--line); font-variant-numeric: tabular-nums;
-}
-.chip.due { background: var(--due-bg); color: var(--due); border-color: transparent; }
-.chip.soon { background: var(--soon-bg); color: var(--soon); border-color: transparent; }
-.chip.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
-
-.banner { border-radius: 12px; padding: 12px 14px; font-weight: 500; background: var(--soon-bg); color: var(--ink); border: 1px solid var(--line); }
-.banner:empty { display: none; }
-
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; }
-.panel h2 { margin: 0; font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; letter-spacing: .03em; }
-.attn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.attn-btn {
-  font: inherit; color: inherit; background: none; border: 0; text-align: left; cursor: pointer;
-  display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 6px 8px; border-radius: 8px;
-}
-.attn-btn:hover { background: var(--bg); }
-.attn-btn strong { font-weight: 700; white-space: nowrap; }
-.attn-btn span { font-variant-numeric: tabular-nums; }
-.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; align-self: center; }
-.dot.due { background: var(--due); }
-.dot.soon { background: var(--soon); }
-.dot.ok { background: var(--ok); }
-details.paperwork summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: 4px 0; }
-.empty-ok { margin: 0; color: var(--ok); font-weight: 600; }
-
-.list { display: grid; gap: 14px; }
-.card {
-  background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--line);
-  border-radius: 12px; padding: 16px; display: grid; gap: 12px; scroll-margin-top: 12px;
-}
-.card[data-status="due"] { border-left-color: var(--due); }
-.card[data-status="soon"] { border-left-color: var(--soon); }
-.card[data-status="ok"] { border-left-color: var(--ok); }
-.card.flash { box-shadow: 0 0 0 3px var(--accent); }
-.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.unit { font-family: var(--font-display); font-size: 1.65rem; font-weight: 700; margin: 0; line-height: 1; text-transform: uppercase; letter-spacing: .02em; }
-.sub { margin: 4px 0 0; color: var(--muted); font-size: .95rem; }
-.tm-tag { display: inline-block; margin-top: 6px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); }
-.pill { padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; background: var(--bg); color: var(--muted); }
-.pill.due { background: var(--due-bg); color: var(--due); }
-.pill.soon { background: var(--soon-bg); color: var(--soon); }
-.pill.ok { background: var(--ok-bg); color: var(--ok); }
-
-.inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.field { display: grid; gap: 4px; }
-.field label { font-weight: 600; font-size: .85rem; color: var(--muted); }
-.field input, .field select, .field textarea {
-  width: 100%; font: inherit; color: var(--ink); background: var(--bg);
-  border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 12px;
-}
-.inputs .field input { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; padding: 10px 12px; }
-.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-.field .hint { font-size: .8rem; color: var(--muted); }
-.warn { margin: 0; color: var(--soon); font-weight: 600; font-size: .9rem; }
-.warn:empty { display: none; }
-
-.results { display: grid; gap: 8px; }
-.row { display: grid; gap: 5px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
-.row-main { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
-.row-label { font-weight: 700; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
-.row-value { font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-.row.due .row-value { color: var(--due); }
-.row.soon .row-value { color: var(--soon); }
-.row.ok .row-value { color: var(--ok); }
-.row-detail { margin: 0; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
-.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
-.meter > span { display: block; height: 100%; background: var(--ok); }
-.row.soon .meter > span { background: var(--soon); }
-.row.due .meter > span { background: var(--due); }
-details.tasks summary { cursor: pointer; font-weight: 600; color: var(--accent); font-size: .92rem; }
-details.tasks h4 { margin: 10px 0 4px; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-details.tasks ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; font-size: .93rem; }
-.no-reading { margin: 0; color: var(--muted); }
-
-.paper { display: flex; flex-wrap: wrap; gap: 6px; }
-.paper:empty { display: none; }
-
-.card-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
-.meta { margin: 0; color: var(--muted); font-size: .85rem; }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn {
-  font: inherit; font-weight: 600; font-size: .95rem; padding: 9px 14px; border-radius: 10px;
-  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: .92rem;
+  padding: 8px 13px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--accent); }
 .btn.danger { color: var(--due); }
+.btn.small { padding: 6px 10px; font-size: .85rem; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn:focus-visible, .attn-btn:focus-visible, summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
-
-.how { color: var(--muted); font-size: .9rem; }
-.how h2 { color: var(--ink); }
-.how ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
-
-dialog {
-  border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(580px, calc(100% - 24px));
-  max-height: calc(100% - 24px); overflow: auto; background: var(--surface); color: var(--ink);
+.btn svg, .icon-btn svg { width: 17px; height: 17px; flex: none; }
+.icon-btn { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; color: var(--ink); }
+.icon-btn:hover { border-color: var(--accent); }
+.btn:focus-visible, .icon-btn:focus-visible, .kpi:focus-visible, .tile-head:focus-visible, .chip-btn:focus-visible, .attn-btn:focus-visible, summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px;
 }
-dialog::backdrop { background: rgba(8, 12, 18, .55); }
+.spin svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- page ---- */
+.page { padding: 18px 24px 48px; display: grid; gap: 16px; }
+.banner { border-radius: 12px; padding: 11px 14px; font-weight: 500; background: var(--soon-bg); border: 1px solid var(--line); }
+.banner:empty { display: none; }
+.installbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 12px; padding: 10px 14px; }
+.installbar p { margin: 0; flex: 1 1 240px; }
+
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.kpi {
+  text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 12px 16px; display: grid; gap: 2px; cursor: pointer; position: relative; overflow: hidden;
+}
+.kpi::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--line); }
+.kpi.due::after { background: var(--due); }
+.kpi.soon::after { background: var(--soon); }
+.kpi.ok::after { background: var(--ok); }
+.kpi.paper::after { background: var(--muted); }
+.kpi.all::after { background: var(--accent); }
+.kpi .num { font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi.due .num { color: var(--due); }
+.kpi.soon .num { color: var(--soon); }
+.kpi.ok .num { color: var(--ok); }
+.kpi .lbl { color: var(--muted); font-weight: 700; font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; }
+.kpi .lbl .short { display: none; }
+@media (max-width: 760px) { .kpi .lbl .short { display: inline; } }
+.kpi[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.search { position: relative; flex: 1 1 260px; max-width: 420px; }
+.search svg { position: absolute; left: 11px; top: 50%; width: 17px; height: 17px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search input { width: 100%; font: inherit; padding: 9px 12px 9px 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.chip-btn { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: .88rem; cursor: pointer; }
+.chip-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.sortsel { font: inherit; font-weight: 600; font-size: .88rem; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.toolbar .count { color: var(--muted); font-size: .88rem; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1280px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 320px; }
+  .aside { position: sticky; top: 74px; max-height: calc(100vh - 90px); overflow: auto; }
+  .how-bottom { display: none; }
+}
+@media (max-width: 1279px) { .aside { display: none; } }
+
+/* ---- truck tiles ---- */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(275px, 1fr)); gap: 14px; align-items: start; }
+.tile {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; overflow: hidden; position: relative; scroll-margin-top: 80px;
+}
+.tile::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--line); }
+.tile[data-status="due"]::before { background: var(--due); }
+.tile[data-status="soon"]::before { background: var(--soon); }
+.tile[data-status="ok"]::before { background: var(--ok); }
+.tile.flash { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
+.tile-head { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 14px 14px 0; cursor: pointer; }
+.tile-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.unit { font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; text-transform: uppercase; letter-spacing: .02em; line-height: 1.05; }
+.driver { color: var(--muted); font-weight: 600; }
+.tile-sub { margin: 3px 0 0; padding: 0 14px; color: var(--muted); font-size: .84rem; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tag { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 6px; }
+.pill { padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; background: var(--surface-2); color: var(--muted); }
+.pill.due { background: var(--due-bg); color: var(--due); }
+.pill.soon { background: var(--soon-bg); color: var(--soon); }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.metrics { padding: 12px 14px; display: grid; gap: 10px; flex: 1; align-content: start; }
+.metric { display: grid; gap: 4px; }
+.metric-line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.metric-label { font-size: .74rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.metric-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+.metric.due .metric-value { color: var(--due); }
+.metric.soon .metric-value { color: var(--soon); }
+.metric.ok .metric-value { color: var(--ok); }
+.meter { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--ok); border-radius: 3px; }
+.metric.soon .meter > span, .drow.soon .meter > span { background: var(--soon); }
+.metric.due .meter > span, .drow.due .meter > span { background: var(--due); }
+.no-reading { margin: 0; color: var(--muted); }
+.quick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--surface-2); align-items: end; }
+.quick.no-tm { grid-template-columns: minmax(0, 1fr) auto; }
+.qf label { display: block; font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+.qf input, .df input {
+  width: 100%; font: inherit; font-weight: 700; font-size: 1.05rem; padding: 7px 9px; border-radius: 9px; border: 1.5px solid var(--line);
+  background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.qf input:focus, .df input:focus, .field input:focus, .field select:focus, .field textarea:focus, .search input:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.qf .gps { font-size: .66rem; color: var(--accent); margin-left: 4px; }
+.warn { margin: 0; padding: 0 14px 8px; background: var(--surface-2); color: var(--soon); font-weight: 600; font-size: .82rem; }
+.warn:empty { display: none; }
+.tile-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 8px; padding: 0 14px 10px; font-size: .8rem; color: var(--muted); background: var(--surface-2); }
+.tile-foot .left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.paper-badge { font-weight: 700; color: var(--due); background: var(--due-bg); padding: 1px 7px; border-radius: 999px; }
+.paper-badge.soon { color: var(--soon); background: var(--soon-bg); }
+.link { all: unset; cursor: pointer; color: var(--accent); font-weight: 700; }
+.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.empty-grid { grid-column: 1 / -1; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--muted); }
+
+/* ---- sidebar ---- */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; display: grid; gap: 8px; }
+.panel + .panel { margin-top: 14px; }
+.panel h2 { font-family: var(--font-display); font-size: 1.15rem; text-transform: uppercase; letter-spacing: .04em; }
+.attn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.attn-btn { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 10px 1fr; gap: 2px 10px; width: 100%; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+.attn-btn:hover { background: var(--surface-2); }
+.attn-btn strong { font-weight: 700; }
+.attn-btn span.txt { grid-column: 2; color: var(--muted); font-size: .86rem; font-variant-numeric: tabular-nums; }
+.dot { width: 10px; height: 10px; border-radius: 50%; align-self: center; }
+.dot.due { background: var(--due); } .dot.soon { background: var(--soon); } .dot.ok { background: var(--ok); }
+details.paperwork summary, details.how summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+.how ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: .88rem; }
+.empty-ok { margin: 0; color: var(--ok); font-weight: 600; }
+
+/* ---- details panel ---- */
+dialog.drawer {
+  margin: 0 0 0 auto; width: min(560px, 100vw); height: 100dvh; max-height: 100dvh; max-width: 100vw; border: none; border-left: 1px solid var(--line);
+  border-radius: 0; padding: 0; background: var(--surface); color: var(--ink); overflow: auto;
+}
+dialog.drawer::backdrop { background: rgba(8, 12, 18, .45); }
+.dr-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.dr-head .titles { flex: 1; min-width: 0; }
+.dr-head .unit { font-size: 1.8rem; }
+.dr-body { padding: 16px 18px 28px; display: grid; gap: 14px; }
+.dfields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.df label { display: block; font-size: .78rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.df input { font-size: 1.3rem; padding: 10px 12px; }
+.drow { display: grid; gap: 5px; padding: 11px 13px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--line); }
+.drow .metric-value { font-size: 1.08rem; }
+.drow.due .metric-value { color: var(--due); } .drow.soon .metric-value { color: var(--soon); } .drow.ok .metric-value { color: var(--ok); }
+.drow-detail { margin: 0; color: var(--muted); font-size: .86rem; font-variant-numeric: tabular-nums; }
+details.tasks summary { cursor: pointer; font-weight: 700; color: var(--accent); font-size: .9rem; }
+details.tasks h4 { margin: 10px 0 4px; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+details.tasks ul { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: .92rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips:empty { display: none; }
+.chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: .82rem; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.chip.due { background: var(--due-bg); color: var(--due); border-color: transparent; }
+.chip.soon { background: var(--soon-bg); color: var(--soon); border-color: transparent; }
+.dr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dr-section h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+.meta { margin: 0; color: var(--muted); font-size: .86rem; }
+
+/* ---- forms and dialogs (log service, edit, settings) ---- */
+dialog#dlg { border: 1px solid var(--line); border-radius: 16px; padding: 0; width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; background: var(--surface); color: var(--ink); }
+dialog#dlg::backdrop { background: rgba(8, 12, 18, .55); }
 .dlg { padding: 18px; display: grid; gap: 14px; }
-.dlg h3 { margin: 0; font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .02em; }
+.dlg h3 { font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .02em; }
 .dlg p { margin: 0; color: var(--muted); }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; }
+.field label { font-weight: 600; font-size: .85rem; color: var(--muted); }
+.field input, .field select, .field textarea { width: 100%; font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.field .hint, .hint { font-size: .8rem; color: var(--muted); }
 fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; }
 legend { font-weight: 700; font-size: .85rem; color: var(--muted); padding: 0 4px; }
 .check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
@@ -214,96 +264,131 @@ legend { font-weight: 700; font-size: .85rem; color: var(--muted); padding: 0 4p
 .history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .9rem; }
 .history li { padding: 6px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .history small { color: var(--muted); }
-textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9rem; padding: 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
+textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9rem; padding: 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); }
 
-.toast {
-  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 50;
-  background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 10px; font-weight: 600;
-  box-shadow: 0 6px 24px rgba(0,0,0,.25); max-width: calc(100% - 32px);
-}
-.toast[hidden] { display: none; }
-.loading { color: var(--muted); padding: 24px 4px; }
-
-@media (max-width: 420px) {
-  .top h1 { font-size: 1.8rem; }
-  .card { padding: 14px; }
-  .actions { width: 100%; }
-  .actions .btn { flex: 1 1 auto; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .card { transition: box-shadow .3s ease; }
-}
-/* ---- app additions ---- */
-.syncbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--muted); font-size: .88rem; }
-.syncbar .btn { padding: 6px 12px; font-size: .88rem; }
-.syncbar .who-me { margin-left: auto; }
-.syncbar.offline { color: var(--soon); font-weight: 600; }
-.installbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 12px; padding: 12px 14px; }
-.installbar[hidden] { display: none; }
-.installbar p { margin: 0; flex: 1 1 220px; }
-.installbar .actions { flex: none; }
-.gate { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: grid; gap: 14px; max-width: 460px; }
-.gate h2 { margin: 0; font-family: var(--font-display); font-size: 1.6rem; text-transform: uppercase; letter-spacing: .02em; }
+/* ---- sign-in ---- */
+.gate { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 22px; display: grid; gap: 14px; width: min(460px, 100%); margin: 40px auto; }
+.gate h2 { font-family: var(--font-display); font-size: 1.6rem; text-transform: uppercase; letter-spacing: .02em; }
 .gate p { margin: 0; color: var(--muted); }
 .gate .field input { font-size: 1.2rem; font-weight: 600; }
-.gate code { font-size: .9em; background: var(--bg); padding: 1px 5px; border-radius: 5px; }
-[hidden] { display: none !important; }
+.gate code { font-size: .9em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.loading { color: var(--muted); padding: 24px 4px; }
+
+.toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 10px; font-weight: 600; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); max-width: calc(100% - 32px); }
+
+/* ---- small screens ---- */
+@media (max-width: 760px) {
+  .topbar { padding: 10px 14px; }
+  .page { padding: 14px 14px 40px; }
+  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .kpi.all { display: none; }
+  .kpi { padding: 9px 10px; }
+  .kpi .num { font-size: 1.55rem; }
+  .kpi .lbl { font-size: .64rem; letter-spacing: .03em; }
+  .kpi .lbl .long { display: none; }
+  .top-actions .btn .txt { display: none; }
+  .top-actions .btn { padding: 8px 10px; }
+  .search { max-width: none; }
+  .toolbar .count { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .spin svg { animation: none; } }
+
+/* ---- report menu + printable report ---- */
+.report-opts { display: grid; gap: 10px; }
+.report-opt { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 40px 1fr; gap: 2px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; background: var(--surface-2); }
+.report-opt:hover { border-color: var(--accent); }
+.report-opt:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.report-opt .ico { grid-row: span 2; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.report-opt .ico svg { width: 20px; height: 20px; }
+.report-opt strong { font-weight: 700; }
+.report-opt span.sub { color: var(--muted); font-size: .86rem; }
+#printReport { display: none; }
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  body { background: #fff; color: #000; font-size: 10.5pt; }
+  body > *:not(#printReport) { display: none !important; }
+  #printReport { display: block; }
+  #printReport h1 { font-family: var(--font-display); font-size: 20pt; text-transform: uppercase; letter-spacing: .03em; margin: 0 0 2pt; }
+  #printReport .pr-sub { color: #444; margin: 0 0 8pt; }
+  #printReport .pr-sum { display: flex; gap: 14pt; margin: 0 0 8pt; font-weight: 700; }
+  #printReport table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  #printReport th, #printReport td { border-bottom: 1px solid #ccc; padding: 4pt 5pt; text-align: left; vertical-align: top; }
+  #printReport th { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; color: #333; border-bottom: 1.5px solid #000; }
+  #printReport td.num { text-align: right; }
+  #printReport td.nw, #printReport th { white-space: nowrap; }
+  #printReport table { font-size: 9.5pt; }
+  #printReport .st-due { color: #b42318; font-weight: 700; }
+  #printReport .st-soon { color: #8a5300; font-weight: 700; }
+  #printReport .st-ok { color: #17803d; font-weight: 700; }
+  #printReport tr { break-inside: avoid; }
+  #printReport h2 { font-size: 12pt; margin: 12pt 0 4pt; }
+  #printReport ul { margin: 0; padding-left: 14pt; }
+}
 </style>
 </head>
 <body>
-<main class="wrap">
-  <header class="top">
-    <div class="top-row">
-      <div>
-        <h1>VODA Fleet Maintenance</h1>
-        <p id="lede">Type <strong>Miles now</strong> and <strong>TM hrs now</strong> for each truck, then tap <strong>Save reading</strong>.</p>
-      </div>
-      <div class="actions" id="topActions" hidden>
-        <button class="btn" type="button" id="shareReport">Share report</button>
-        <button class="btn" type="button" id="addTruck">Add truck</button>
-      </div>
-    </div>
-    <div class="syncbar" id="syncbar" hidden>
-      <span id="syncText">Loading…</span>
-      <button class="btn" type="button" id="refreshBtn">Refresh</button>
-      <button class="btn ghost who-me" type="button" id="meBtn"></button>
-    </div>
-    <div class="tally" id="tally"></div>
-  </header>
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#16202b"/><path d="M32 9 C38 20 46 28 46 38 a14 14 0 0 1 -28 0 C18 28 26 20 32 9Z" fill="#4078f0"/><path d="M24 40 a8 8 0 0 1 16 0" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M32 40 L37 34" stroke="#f0b44c" stroke-width="3" stroke-linecap="round"/></svg>
+    <h1>VODA Fleet</h1>
+  </div>
+  <div class="sync" id="syncbar" hidden>
+    <span id="syncText">Loading…</span>
+    <button class="icon-btn" type="button" id="refreshBtn" aria-label="Refresh" title="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
+    </button>
+  </div>
+  <div class="top-actions" id="topActions" hidden>
+    <button class="btn" type="button" id="reportBtn" title="Report">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg><span class="txt">Report</span>
+    </button>
+    <button type="button" id="shareReport" hidden>Share report</button>
+    <button class="btn primary" type="button" id="addTruck" title="Add truck">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="txt">Add truck</span>
+    </button>
+    <button class="btn ghost" type="button" id="meBtn"></button>
+  </div>
+</header>
 
+<main class="page">
   <div class="installbar" id="installbar" hidden>
     <p id="installText"></p>
-    <div class="actions">
+    <div class="top-actions">
       <button class="btn primary" type="button" id="installBtn" hidden>Install app</button>
       <button class="btn ghost" type="button" id="installDismiss">Not now</button>
     </div>
   </div>
-
   <div class="banner" id="banner" role="status"></div>
-
   <section class="gate" id="gate" hidden></section>
 
-  <section class="panel" id="attention" aria-labelledby="attnTitle" hidden>
-    <h2 id="attnTitle">Needs attention</h2>
-    <div id="attnBody"></div>
-  </section>
-
-  <section class="list" id="list" aria-label="Trucks"></section>
-
-  <section class="panel how" id="how" aria-labelledby="howTitle" hidden>
-    <h2 id="howTitle">How the numbers work</h2>
-    <ul>
-      <li><strong>Truck oil:</strong> oil interval minus miles driven since the last oil change. Yellow under 500 mi, red when it hits 0.</li>
-      <li><strong>CDS trucks:</strong> the CDS runs off the van engine, so each TM hour since the oil change counts as 15 miles.</li>
-      <li><strong>Legend GT and Apex 570:</strong> the truckmount has its own engine, so its oil is tracked in TM hours (every 100 hrs).</li>
-      <li><strong>TM service:</strong> from the 100 / 400 / 500 / 1000 / 2000-hr charts. Yellow within 20 hrs. A bigger service includes the smaller service's items. If two services land within 20 hrs of each other, they're done together.</li>
-      <li>After an oil change or service, tap <strong>Log oil change / service</strong> so the countdown restarts from that day's miles and hours.</li>
-      <li>Everything is saved in your Google Sheet (Trucks and Log tabs).</li>
-    </ul>
-  </section>
+  <div id="app" hidden>
+    <section class="kpis" id="kpis" aria-label="Fleet summary"></section>
+    <div class="toolbar">
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Search unit or driver" autocomplete="off" aria-label="Search unit or driver">
+      </label>
+      <button class="chip-btn" type="button" id="tmOnly" aria-pressed="false">Truckmounts only</button>
+      <select class="sortsel" id="sortSel" aria-label="Sort trucks">
+        <option value="urgent">Most urgent first</option>
+        <option value="unit">Fleet order</option>
+      </select>
+      <span class="count" id="countText"></span>
+    </div>
+    <div class="layout">
+      <section class="grid" id="grid" aria-label="Trucks"></section>
+      <aside class="aside" id="aside" aria-label="Needs attention"></aside>
+    </div>
+    <details class="panel how how-bottom">
+      <summary>How the numbers work</summary>
+      <div id="howBody"></div>
+    </details>
+  </div>
 </main>
 
+<dialog class="drawer" id="drawer" aria-labelledby="drTitle"></dialog>
 <dialog id="dlg" aria-labelledby="dlgTitle"></dialog>
+<section id="printReport" aria-hidden="true"></section>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
@@ -651,12 +736,31 @@ function issueLines(t, r) {
 }
 function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "Truck"; }
 
+
+
+/* ---------- view (filters, search, sort) ---------- */
+const K_VIEW = "voda.view";
+const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false }, store.get(K_VIEW) || {});
+function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly }); }
+let openId = null;            // truck shown in the details panel
+const historyCache = {};      // truck id -> history rows (loaded when the panel opens)
+const openTasks = new Set();  // trucks whose checklist is expanded in the panel
+
+const HOW = [
+  ["Truck oil", "oil interval minus miles driven since the last oil change. Yellow under 500 mi, red at 0."],
+  ["CDS trucks", "the CDS runs off the van engine, so each TM hour since the oil change counts as 15 miles."],
+  ["Legend GT and Apex 570", "the truckmount has its own engine, so its oil is tracked in TM hours (every 100 hrs)."],
+  ["TM service", "from the 100 / 400 / 500 / 1000 / 2000-hr charts. Yellow within 20 hrs. A bigger service includes the smaller one's items."],
+  ["Miles", "come from One Step GPS every 15 minutes for trucks set up in the GPS tab."],
+  ["After an oil change or service", "open the truck and tap Log oil change / service so the countdown restarts."]
+];
+function howList() { return h("ul", null, HOW.map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))); }
+
 /* ---------- screens ---------- */
 function showApp(on) {
-  for (const id of ["topActions", "syncbar", "attention", "how"]) $(id).hidden = !on;
-  $("lede").hidden = !on;
+  for (const id of ["topActions", "syncbar", "app"]) $(id).hidden = !on;
   $("gate").hidden = on;
-  if (!on) { $("list").replaceChildren(); $("tally").replaceChildren(); }
+  if (!on) { $("grid").replaceChildren(); $("kpis").replaceChildren(); $("aside").replaceChildren(); }
 }
 
 function showNotConfigured() {
@@ -710,197 +814,359 @@ function showSignIn(message) {
 function signOut(message) {
   if (session && session.name) store.set("voda.lastName", session.name);
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
+  if (drawer.open) drawer.close();
   showSignIn(message);
 }
 
 function startApp() {
   showApp(true);
   setBanner("");
+  $("howBody").replaceChildren(howList());
+  $("q").value = view.q;
+  $("sortSel").value = view.sort;
+  $("tmOnly").setAttribute("aria-pressed", String(!!view.tmOnly));
   renderSync();
   renderAll();
   refresh(true);
 }
 
 /* ---------- rendering ---------- */
-function renderAll() {
-  if (!session) return;
-  const list = $("list");
-  const focused = document.activeElement && document.activeElement.id;
-  list.replaceChildren();
-  if (!loaded) { list.append(h("p", { class: "loading", text: "Loading fleet…" })); return; }
-  if (trucks.length === 0) list.append(h("div", { class: "panel" }, h("p", { text: "No trucks yet. Tap Add truck to start." })));
-  for (const t of trucks) list.append(renderCard(t));
-  for (const t of trucks) updateCard(t.id);
-  renderSummary();
-  if (focused) { const el = $(focused); if (el && list.contains(el)) el.focus(); }
+function evalTruck(t) {
+  const v = currentValues(t);
+  const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
+  const pw = paperwork(t, today);
+  return { v, r, pw, pwBad: pw.filter(p => p.status !== "ok") };
+}
+function urgency(r) {
+  const parts = [];
+  if (r.oil) parts.push(r.oil.left / Math.max(1, r.oil.interval));
+  if (r.tmOil) parts.push(r.tmOil.left / Math.max(1, r.tmOil.interval));
+  if (r.service) parts.push(r.service.left / 100);
+  return parts.length ? Math.min(...parts) : 9;
+}
+function visibleTrucks() {
+  const q = view.q.trim().toLowerCase();
+  let list = trucks.map(t => ({ t, e: evalTruck(t) }));
+  if (q) list = list.filter(x => [x.t.unit, x.t.driver, x.t.vehicle, x.t.plate, x.t.year].join(" ").toLowerCase().includes(q));
+  if (view.tmOnly) list = list.filter(x => progOf(x.t));
+  if (view.filter === "due" || view.filter === "soon" || view.filter === "ok") list = list.filter(x => !x.e.r.empty && x.e.r.worst === view.filter);
+  if (view.filter === "paper") list = list.filter(x => x.e.pwBad.length);
+  if (view.sort === "urgent") list.sort((a, b) => (RANK[b.e.r.worst] - RANK[a.e.r.worst]) || (urgency(a.e.r) - urgency(b.e.r)) || ((a.t.order ?? 99) - (b.t.order ?? 99)));
+  return list;
 }
 
-function inputField(labelText, id, value, mode, truckId) {
-  return h("div", { class: "field" },
-    h("label", { for: id, text: labelText }),
+function renderAll() {
+  if (!session) return;
+  const focused = document.activeElement && document.activeElement.id;
+  const caret = (() => { try { return document.activeElement.selectionStart; } catch (e) { return null; } })();
+  renderKpis();
+  renderGrid();
+  renderAside();
+  if (openId && drawer.open) renderDrawer(openId);
+  if (focused) {
+    const el = $(focused);
+    if (el && el !== document.activeElement) { el.focus(); try { if (caret != null) el.setSelectionRange(caret, caret); } catch (e) {} }
+  }
+}
+
+function renderKpis() {
+  if (!loaded) { $("kpis").replaceChildren(); return; }
+  let nDue = 0, nSoon = 0, nOk = 0, nPaper = 0;
+  for (const t of trucks) {
+    const e = evalTruck(t);
+    if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; else nOk++; }
+    if (e.pwBad.length) nPaper++;
+  }
+  const kpi = (key, cls, num, lbl, short) => h("button", { class: "kpi " + cls, type: "button", "aria-pressed": String(view.filter === key),
+    onclick: () => { view.filter = view.filter === key && key !== "all" ? "all" : key; saveView(); renderAll(); } },
+    h("span", { class: "num", text: String(num) }),
+    h("span", { class: "lbl" }, h("span", { class: "long", text: lbl }), h("span", { class: "short", text: short || lbl })));
+  $("kpis").replaceChildren(
+    kpi("all", "all", trucks.length, "All trucks"),
+    kpi("due", "due", nDue, "Overdue"),
+    kpi("soon", "soon", nSoon, "Due soon"),
+    kpi("ok", "ok", nOk, "OK"),
+    kpi("paper", "paper", nPaper, "Paperwork to check", "Paperwork"));
+}
+
+function renderGrid() {
+  const grid = $("grid");
+  if (!loaded) { grid.replaceChildren(h("p", { class: "loading", text: "Loading fleet…" })); return; }
+  const list = visibleTrucks();
+  grid.replaceChildren(...list.map(x => tileEl(x.t)));
+  if (!list.length) {
+    grid.append(h("div", { class: "empty-grid" },
+      trucks.length ? "No trucks match. " : "No trucks yet. ",
+      trucks.length ? h("button", { class: "link", type: "button", text: "Show all trucks", onclick: () => { view.filter = "all"; view.q = ""; view.tmOnly = false; $("q").value = ""; $("tmOnly").setAttribute("aria-pressed", "false"); saveView(); renderAll(); } })
+                    : h("button", { class: "link", type: "button", text: "Add truck", onclick: () => openEdit(null) })));
+  }
+  for (const x of list) updateTile(x.t.id);
+  $("countText").textContent = `${list.length} of ${trucks.length} trucks`;
+}
+
+function quickField(labelText, id, value, mode, truckId, gps) {
+  return h("div", { class: "qf" },
+    h("label", { for: id }, labelText, gps ? h("span", { class: "gps", text: "· GPS" }) : null),
     h("input", { id, type: "text", inputmode: mode, autocomplete: "off", enterkeyhint: "done", value,
-      oninput: () => onType(truckId),
+      oninput: () => onType(truckId, ""),
       onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); saveReading(truckId); } } }));
 }
 
-function renderCard(t) {
+function tileEl(t) {
   const prog = progOf(t);
   const v = currentValues(t);
-  return h("article", { class: "card", id: "card-" + t.id, "data-status": "none" },
-    h("div", { class: "card-head" },
-      h("div", null,
-        h("h2", { class: "unit", text: label(t) }),
-        h("p", { class: "sub", text: [t.vehicle, t.year, t.plate].filter(Boolean).join(" · ") }),
-        prog ? h("span", { class: "tm-tag", text: "Truckmount: " + prog.name }) : null),
+  const sub = [t.vehicle, t.year].filter(Boolean).join(" · ");
+  return h("article", { class: "tile", id: "tile-" + t.id, "data-status": "none" },
+    h("button", { class: "tile-head", type: "button", onclick: () => openDetails(t.id), title: "Open details" },
+      h("span", { class: "tile-title" }, h("span", { class: "unit", text: t.unit || "Truck" }), t.driver ? h("span", { class: "driver", text: t.driver }) : null),
       h("span", { class: "pill", id: "pill-" + t.id, text: "No reading" })),
-    h("div", { class: "inputs" },
-      inputField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id),
-      prog ? inputField("TM hrs now", "h-" + t.id, v.hrsStr, "decimal", t.id) : null),
+    h("p", { class: "tile-sub" }, sub ? h("span", { text: sub }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null),
+    h("div", { class: "metrics", id: "met-" + t.id }),
+    h("div", { class: "quick" + (prog ? "" : " no-tm") },
+      quickField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id, t.readingBy === "GPS"),
+      prog ? quickField("TM hrs now", "h-" + t.id, v.hrsStr, "decimal", t.id, false) : null,
+      h("button", { class: "btn primary small", type: "button", id: "save-" + t.id, onclick: () => saveReading(t.id), text: "Save" })),
     h("p", { class: "warn", id: "warn-" + t.id, "aria-live": "polite" }),
-    h("div", { class: "results", id: "res-" + t.id }),
-    h("div", { class: "paper", id: "paper-" + t.id }),
-    h("div", { class: "card-foot" },
-      h("p", { class: "meta", id: "meta-" + t.id }),
-      h("div", { class: "actions" },
-        h("button", { class: "btn primary", type: "button", id: "save-" + t.id, onclick: () => saveReading(t.id), text: "Save reading" }),
-        h("button", { class: "btn", type: "button", id: "svc-" + t.id, onclick: () => openService(t.id), text: "Log oil change / service" }),
-        h("button", { class: "btn ghost", type: "button", id: "edit-" + t.id, onclick: () => openEdit(t.id), text: "Edit" }))));
+    h("div", { class: "tile-foot" },
+      h("span", { class: "left", id: "meta-" + t.id }),
+      h("button", { class: "link", type: "button", onclick: () => openDetails(t.id), text: "Details ›" })));
 }
 
-function onType(id) {
+function onType(id, prefix) {
   const t = byId(id); if (!t) return;
-  const m = $("m-" + id);
-  const hr = $("h-" + id);
+  const m = $(prefix + "m-" + id), hr = $(prefix + "h-" + id);
   drafts[id] = { miles: m ? m.value : null, hrs: hr ? hr.value : null };
   saveDrafts();
-  updateCard(id);
-  renderSummary();
+  // mirror into the other copy of the inputs (tile <-> details panel)
+  const other = prefix ? "" : "d";
+  const om = $(other + "m-" + id), oh = $(other + "h-" + id);
+  if (om && om !== document.activeElement) om.value = drafts[id].miles ?? "";
+  if (oh && oh !== document.activeElement) oh.value = drafts[id].hrs ?? "";
+  updateTile(id);
+  if (openId === id && drawer.open) updateDrawer(id);
+  renderKpis();
+  renderAside();
 }
 
 function meter(fraction) {
   const pct = Math.max(0, Math.min(1, fraction)) * 100;
   return h("div", { class: "meter", "aria-hidden": "true" }, h("span", { style: `width:${pct.toFixed(1)}%` }));
 }
-
-function updateCard(id) {
-  const t = byId(id); if (!t) return;
+function metric(labelText, valueText, status, fraction) {
+  return h("div", { class: "metric " + status },
+    h("div", { class: "metric-line" }, h("span", { class: "metric-label", text: labelText }), h("span", { class: "metric-value", text: valueText })),
+    fraction == null ? null : meter(fraction));
+}
+function shortService(s) {
+  return s.left > 0 ? `${s.level}-hr in ${fmt(s.left)} hrs` : s.left === 0 ? `${s.level}-hr due now` : `${s.level}-hr over by ${fmt(-s.left)} hrs`;
+}
+function readingWarnings(t, v) {
   const prog = progOf(t);
-  const v = currentValues(t);
-  const card = $("card-" + id);
-  if (!card) return;
-  const res = $("res-" + id), warn = $("warn-" + id), pill = $("pill-" + id), save = $("save-" + id);
-
   const warns = [];
   if (Number.isNaN(v.miles) || Number.isNaN(v.hrs)) warns.push("Enter numbers only.");
-  if (isNum(v.miles) && isNum(t.milesNow) && v.miles < t.milesNow) warns.push(`Miles are lower than the last reading (${fmt(t.milesNow)}). Check for a typo.`);
-  if (isNum(v.miles) && isNum(t.milesNow) && v.miles - t.milesNow > 5000) warns.push(`That's ${fmt(v.miles - t.milesNow)} mi since the last reading. Double-check the number.`);
-  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs < t.hrsNow) warns.push(`TM hrs are lower than the last reading (${fmt(t.hrsNow)}). Check for a typo.`);
-  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs - t.hrsNow > 200) warns.push(`That's ${fmt(v.hrs - t.hrsNow)} TM hrs since the last reading. Double-check the number.`);
-  warn.textContent = warns.join(" ");
+  if (isNum(v.miles) && isNum(t.milesNow) && v.miles < t.milesNow) warns.push(`Miles are lower than the last reading (${fmt(t.milesNow)}).`);
+  if (isNum(v.miles) && isNum(t.milesNow) && v.miles - t.milesNow > 5000) warns.push(`That's ${fmt(v.miles - t.milesNow)} mi since the last reading.`);
+  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs < t.hrsNow) warns.push(`TM hrs are lower than the last reading (${fmt(t.hrsNow)}).`);
+  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs - t.hrsNow > 200) warns.push(`That's ${fmt(v.hrs - t.hrsNow)} TM hrs since the last reading.`);
+  return warns.join(" ");
+}
+function saveState(t, v) {
+  const prog = progOf(t);
+  const changed = (isNum(v.miles) && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
+  const invalid = Number.isNaN(v.miles) || Number.isNaN(v.hrs);
+  return { changed, invalid };
+}
+function metaBits(t, changed) {
+  const bits = [];
+  if (t.readingAt) bits.push(h("span", { text: `${fmtWhen(t.readingAt)}${t.readingBy ? " · " + t.readingBy : ""}` }));
+  else bits.push(h("span", { text: "No saved reading" }));
+  if (changed && drafts[t.id]) bits.push(h("span", { text: "· not saved" }));
+  return bits;
+}
 
-  const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
-  res.replaceChildren();
-  if (r.empty) res.append(h("p", { class: "no-reading", text: "Enter the readings to see what's due." }));
+function updateTile(id) {
+  const t = byId(id);
+  const tile = $("tile-" + id);
+  if (!t || !tile) return;
+  const e = evalTruck(t);
+  const { r, v } = e;
+  const parts = [];
+  if (r.empty) parts.push(h("p", { class: "no-reading", text: "Enter the readings to see what's due." }));
+  if (r.oil) parts.push(metric(t.tm === "cds" ? "Truck oil · CDS" : "Truck oil", oilText(r.oil), r.oil.status, r.oil.used / r.oil.interval));
+  if (r.tmOil) parts.push(metric("TM oil", hrsLeftText(r.tmOil.left), r.tmOil.status, r.tmOil.since / r.tmOil.interval));
+  if (r.service) parts.push(metric("TM service", shortService(r.service), r.service.status, 1 - r.service.left / 100));
+  $("met-" + id).replaceChildren(...parts);
+  tile.dataset.status = r.empty ? "none" : r.worst;
+  const pill = $("pill-" + id);
+  pill.className = "pill " + (r.empty ? "" : r.worst);
+  pill.textContent = r.empty ? "No reading" : statusWord(r.worst);
+  $("warn-" + id).textContent = readingWarnings(t, v);
+  const st = saveState(t, v);
+  const save = $("save-" + id);
+  if (save.textContent !== "Saving…") save.disabled = !st.changed || st.invalid;
+  const meta = $("meta-" + id);
+  const bits = metaBits(t, st.changed);
+  if (e.pwBad.length) {
+    const due = e.pwBad.some(p => p.status === "due");
+    bits.push(h("span", { class: "paper-badge" + (due ? "" : " soon"), title: e.pwBad.map(p => `${p.label} ${p.shown}`).join(", "),
+      text: `${e.pwBad.length} paperwork` }));
+  }
+  meta.replaceChildren(...bits);
+}
+
+function renderAside() {
+  const aside = $("aside");
+  if (!loaded) { aside.replaceChildren(); return; }
+  const items = [], paper = [];
+  for (const t of trucks) {
+    const e = evalTruck(t);
+    for (const line of issueLines(t, e.r)) items.push({ t, ...line });
+    for (const p of e.pwBad) paper.push({ t, ...p });
+  }
+  items.sort((a, b) => RANK[b.status] - RANK[a.status]);
+  const btn = (t, status, text) => h("li", null, h("button", { class: "attn-btn", type: "button", onclick: () => openDetails(t.id) },
+    h("span", { class: "dot " + status, "aria-label": statusWord(status) }), h("strong", { text: label(t) }), h("span", { class: "txt", text })));
+  aside.replaceChildren(
+    h("section", { class: "panel" },
+      h("h2", { text: "Needs attention" }),
+      items.length ? h("ul", { class: "attn-list" }, items.map(it => btn(it.t, it.status, it.text)))
+                   : h("p", { class: "empty-ok", text: "Nothing due on oil or TM service." }),
+      paper.length ? h("details", { class: "paperwork" },
+        h("summary", { text: `Paperwork: ${paper.filter(p => p.status === "due").length} past due, ${paper.filter(p => p.status === "soon").length} due soon` }),
+        h("ul", { class: "attn-list" }, paper.map(p => btn(p.t, p.status, `${p.label} ${p.shown}${p.status === "due" ? " (past due)" : ` (in ${p.days} days)`}`)))) : null),
+    h("details", { class: "panel how" }, h("summary", { text: "How the numbers work" }), howList()));
+}
+
+/* ---------- details panel ---------- */
+const drawer = $("drawer");
+drawer.addEventListener("close", () => { openId = null; });
+drawer.addEventListener("click", e => { if (e.target === drawer) drawer.close(); });
+
+function openDetails(id) {
+  const t = byId(id); if (!t) return;
+  openId = id;
+  renderDrawer(id);
+  if (!drawer.open) { try { drawer.showModal(); } catch (e) { drawer.setAttribute("open", ""); } }
+  if (!historyCache[id]) loadHistory(id);
+}
+
+function detailField(labelText, id, value, mode, truckId) {
+  return h("div", { class: "df" },
+    h("label", { for: id, text: labelText }),
+    h("input", { id, type: "text", inputmode: mode, autocomplete: "off", enterkeyhint: "done", value,
+      oninput: () => onType(truckId, "d"),
+      onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); saveReading(truckId); } } }));
+}
+
+function renderDrawer(id) {
+  const t = byId(id);
+  if (!t) { if (drawer.open) drawer.close(); return; }
+  const prog = progOf(t);
+  const v = currentValues(t);
+  drawer.replaceChildren(
+    h("div", { class: "dr-head" },
+      h("div", { class: "titles" },
+        h("h2", { class: "unit", id: "drTitle", text: label(t) }),
+        h("p", { class: "tile-sub", style: "padding:0;margin-top:4px" },
+          h("span", { text: [t.vehicle, t.year, t.plate].filter(Boolean).join(" · ") }), prog ? h("span", { class: "tag", text: prog.name }) : null)),
+      h("span", { class: "pill", id: "d-pill" }),
+      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => drawer.close() },
+        h("span", { text: "✕", style: "font-size:15px;line-height:1" }))),
+    h("div", { class: "dr-body" },
+      h("div", { class: "dfields" },
+        detailField("Miles now", "dm-" + id, v.milesStr, "numeric", id),
+        prog ? detailField("TM hrs now", "dh-" + id, v.hrsStr, "decimal", id) : null),
+      h("p", { class: "warn", id: "d-warn", style: "padding:0;background:none" }),
+      h("div", { class: "dr-actions" },
+        h("button", { class: "btn primary", type: "button", id: "dsave-" + id, onclick: () => saveReading(id), text: "Save reading" }),
+        h("button", { class: "btn", type: "button", onclick: () => openService(id), text: "Log oil change / service" }),
+        h("button", { class: "btn ghost", type: "button", onclick: () => openEdit(id), text: "Edit truck" })),
+      h("div", { id: "d-res", style: "display:grid;gap:10px" }),
+      h("div", { class: "chips", id: "d-paper" }),
+      h("p", { class: "meta", id: "d-meta" }),
+      h("div", { class: "dr-section" }, h("h3", { text: "Recent history" }), h("ul", { class: "history", id: "d-hist" }))));
+  updateDrawer(id);
+  renderHistory(id);
+}
+
+function updateDrawer(id) {
+  const t = byId(id); if (!t || !$("d-res")) return;
+  const e = evalTruck(t);
+  const { r, v } = e;
+  const res = $("d-res");
+  const out = [];
+  if (r.empty) out.push(h("p", { class: "no-reading", text: "Enter the readings to see what's due." }));
   if (r.oil) {
     const o = r.oil;
     const detail = t.tm === "cds" && o.tmHrs != null
       ? `${fmt(o.driven)} mi driven + ${fmt(o.tmHrs)} TM hrs × ${fmt(o.factor)} = ${fmt(o.used)} of ${fmt(o.interval)} mi`
       : `${fmt(o.driven)} of ${fmt(o.interval)} mi driven since the change at ${fmt(t.milesAtOil)}`;
-    res.append(h("div", { class: "row " + o.status },
-      h("div", { class: "row-main" },
-        h("span", { class: "row-label", text: t.tm === "cds" ? "Truck oil (miles + TM hrs)" : "Truck oil" }),
-        h("span", { class: "row-value", text: oilText(o) })),
-      meter(o.used / o.interval),
-      h("p", { class: "row-detail", text: detail })));
+    out.push(h("div", { class: "drow " + o.status },
+      h("div", { class: "metric-line" }, h("span", { class: "metric-label", text: t.tm === "cds" ? "Truck oil (miles + TM hrs)" : "Truck oil" }), h("span", { class: "metric-value", text: oilText(o) })),
+      meter(o.used / o.interval), h("p", { class: "drow-detail", text: detail })));
   }
   if (r.tmOil) {
     const o = r.tmOil;
-    res.append(h("div", { class: "row " + o.status },
-      h("div", { class: "row-main" },
-        h("span", { class: "row-label", text: "TM engine oil" }),
-        h("span", { class: "row-value", text: hrsLeftText(o.left) })),
+    out.push(h("div", { class: "drow " + o.status },
+      h("div", { class: "metric-line" }, h("span", { class: "metric-label", text: "TM engine oil" }), h("span", { class: "metric-value", text: hrsLeftText(o.left) })),
       meter(o.since / o.interval),
-      h("p", { class: "row-detail", text: `${fmt(o.since)} of ${fmt(o.interval)} hrs since the change at ${fmt(t.tmOilHrs)} · due at ${fmt(o.dueAt)} hrs` })));
+      h("p", { class: "drow-detail", text: `${fmt(o.since)} of ${fmt(o.interval)} hrs since the change at ${fmt(t.tmOilHrs)} · due at ${fmt(o.dueAt)} hrs` })));
   }
   if (r.service) {
     const s = r.service;
     const laterTxt = s.later.length ? " · Then " + s.later.map(x => `${x.level}-hr at ${fmt(x.at)}`).join(", ") : "";
     const count = s.doNow.reduce((n, x) => n + x.tasks.length, 0);
-    const openIds = window.__openTasks || (window.__openTasks = new Set());
-    const tasks = h("details", { class: "tasks", open: openIds.has(id), ontoggle: e => { e.target.open ? openIds.add(id) : openIds.delete(id); } },
-      h("summary", { text: `What to do at ${fmt(s.dueAt)} hrs (${count} items)` }),
-      s.doNow.slice().reverse().map(x => [
-        h("h4", { text: `${x.h}-hr items` }),
-        h("ul", null, x.tasks.map(task => h("li", { text: task })))]));
-    res.append(h("div", { class: "row " + s.status },
-      h("div", { class: "row-main" },
-        h("span", { class: "row-label", text: "Next TM service" }),
-        h("span", { class: "row-value", text: serviceText(s) })),
-      h("p", { class: "row-detail", text: `Due at ${fmt(s.dueAt)} hrs${laterTxt}` }),
-      tasks));
+    out.push(h("div", { class: "drow " + s.status },
+      h("div", { class: "metric-line" }, h("span", { class: "metric-label", text: "Next TM service" }), h("span", { class: "metric-value", text: serviceText(s) })),
+      h("p", { class: "drow-detail", text: `Due at ${fmt(s.dueAt)} hrs${laterTxt}` }),
+      h("details", { class: "tasks", open: openTasks.has(id) || s.status !== "ok", ontoggle: ev => { ev.target.open ? openTasks.add(id) : openTasks.delete(id); } },
+        h("summary", { text: `What to do at ${fmt(s.dueAt)} hrs (${count} items)` }),
+        s.doNow.slice().reverse().map(x => [h("h4", { text: `${x.h}-hr items` }), h("ul", null, x.tasks.map(task => h("li", { text: task })))]))));
   }
-
-  $("paper-" + id).replaceChildren(...paperwork(t, today).map(p => {
+  res.replaceChildren(...out);
+  $("d-paper").replaceChildren(...e.pw.map(p => {
     const when = p.status === "due" ? "past due" : p.status === "soon" ? `in ${p.days} days` : "";
     return h("span", { class: "chip " + (p.status === "ok" ? "" : p.status), text: `${p.label} ${p.shown}${when ? " · " + when : ""}` });
   }));
-
-  card.dataset.status = r.empty ? "none" : r.worst;
+  const pill = $("d-pill");
   pill.className = "pill " + (r.empty ? "" : r.worst);
   pill.textContent = r.empty ? "No reading" : statusWord(r.worst);
-
-  const changed = (isNum(v.miles) && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
-  const invalid = Number.isNaN(v.miles) || Number.isNaN(v.hrs);
-  if (save.textContent !== "Saving…") save.disabled = !changed || invalid;
-
-  const meta = $("meta-" + id);
-  meta.textContent = t.readingAt
-    ? `Last saved reading: ${fmtWhen(t.readingAt)}${t.readingBy ? " by " + t.readingBy : ""}${drafts[id] && changed ? " · not saved yet" : ""}`
+  $("d-warn").textContent = readingWarnings(t, v);
+  const st = saveState(t, v);
+  const save = $("dsave-" + id);
+  if (save && save.textContent !== "Saving…") save.disabled = !st.changed || st.invalid;
+  $("d-meta").textContent = t.readingAt
+    ? `Last saved reading: ${fmtWhen(t.readingAt)}${t.readingBy ? " by " + t.readingBy : ""}${drafts[id] && st.changed ? " · not saved yet" : ""}`
     : "No saved reading yet";
 }
 
-function renderSummary() {
-  if (!loaded) return;
-  const items = [], paper = [];
-  let nDue = 0, nSoon = 0, nOk = 0;
-  for (const t of trucks) {
-    const v = currentValues(t);
-    const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
-    if (!r.empty) { if (r.worst === "due") nDue++; else if (r.worst === "soon") nSoon++; else nOk++; }
-    for (const line of issueLines(t, r)) items.push({ t, ...line });
-    for (const p of paperwork(t, today)) if (p.status !== "ok") paper.push({ t, ...p });
-  }
-  items.sort((a, b) => RANK[b.status] - RANK[a.status]);
-  $("tally").replaceChildren(
-    h("span", { class: "chip due", text: `${nDue} overdue` }),
-    h("span", { class: "chip soon", text: `${nSoon} due soon` }),
-    h("span", { class: "chip ok", text: `${nOk} OK` }),
-    paper.length ? h("span", { class: "chip", text: `${paper.length} paperwork dates to check` }) : null);
-
-  const jump = id => () => {
-    const card = $("card-" + id);
-    if (!card) return;
-    card.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-    card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1200);
-  };
-  $("attnBody").replaceChildren(
-    items.length
-      ? h("ul", { class: "attn-list" }, items.map(it => h("li", null,
-          h("button", { class: "attn-btn", type: "button", onclick: jump(it.t.id) },
-            h("span", { class: "dot " + it.status, "aria-label": statusWord(it.status) }),
-            h("strong", { text: label(it.t) }),
-            h("span", { text: it.text })))))
-      : h("p", { class: "empty-ok", text: trucks.length ? "Nothing due on oil or TM service." : "No trucks yet." }),
-    paper.length
-      ? h("details", { class: "paperwork" },
-          h("summary", { text: `Paperwork: ${paper.filter(p => p.status === "due").length} past due, ${paper.filter(p => p.status === "soon").length} due within 30 days` }),
-          h("ul", { class: "attn-list" }, paper.map(p => h("li", null,
-            h("button", { class: "attn-btn", type: "button", onclick: jump(p.t.id) },
-              h("span", { class: "dot " + p.status, "aria-label": statusWord(p.status) }),
-              h("strong", { text: label(p.t) }),
-              h("span", { text: `${p.label} ${p.shown}${p.status === "due" ? " (past due)" : ` (in ${p.days} days)`}` }))))))
-      : null);
+function loadHistory(id) {
+  historyCache[id] = { loading: true, rows: [] };
+  renderHistory(id);
+  api("history", { id }).then(out => { historyCache[id] = { rows: out.entries || [] }; renderHistory(id); })
+    .catch(() => { historyCache[id] = { error: true, rows: [] }; renderHistory(id); });
 }
+function renderHistory(id) {
+  const ul = $("d-hist"); if (!ul || openId !== id) return;
+  const c = historyCache[id];
+  if (!c || c.loading) { ul.replaceChildren(h("li", null, h("small", { text: "Loading history…" }))); return; }
+  if (c.error) { ul.replaceChildren(h("li", null, h("small", { text: "History couldn't load right now." }))); return; }
+  if (!c.rows.length) { ul.replaceChildren(h("li", null, h("small", { text: "No history yet." }))); return; }
+  ul.replaceChildren(...c.rows.slice(0, 10).map(x => {
+    const what = x.kind === "reading" ? "Reading" : (Array.isArray(x.items) && x.items.length ? x.items.join(", ") : x.kind);
+    const nums = [isNum(x.miles) ? `${fmt(x.miles)} mi` : null, isNum(x.hrs) ? `${fmt(x.hrs)} TM hrs` : null].filter(Boolean).join(" · ");
+    return h("li", null, h("strong", { text: what }), nums ? ` · ${nums}` : "", h("br"),
+      h("small", { text: [x.at, x.by ? "by " + x.by : "", x.note ? "“" + x.note + "”" : ""].filter(Boolean).join(" · ") }));
+  }));
+}
+
+const _saveTruck = saveTruck;
+saveTruck = async function (t, body, log) {
+  const out = await _saveTruck(t, body, log);
+  delete historyCache[t.id];
+  if (openId === t.id && drawer.open) setTimeout(() => loadHistory(t.id), 0);
+  return out;
+};
 
 /* ---------- saving a reading ---------- */
 async function saveReading(id) {
@@ -915,8 +1181,8 @@ async function saveReading(id) {
   if (prog && isNum(v.hrs)) body.hrsNow = v.hrs;
   body.readingAt = new Date().toISOString();
   body.readingBy = session ? session.name : "";
-  const btn = $("save-" + id);
-  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  const btns = [$("save-" + id), $("dsave-" + id)].filter(Boolean);
+  btns.forEach(b => { b.disabled = true; b.dataset.label = b.textContent; b.textContent = "Saving…"; });
   try {
     await saveTruck(t, body, { kind: "reading", miles: v.miles, hrs: prog && isNum(v.hrs) ? v.hrs : null, items: [] });
     delete drafts[id]; saveDrafts();
@@ -924,11 +1190,16 @@ async function saveReading(id) {
   } catch (e) {
     toast(failText(e, "Your numbers"));
   } finally {
-    const b = $("save-" + id);
-    if (b) b.textContent = "Save reading";
+    [$("save-" + id), $("dsave-" + id)].filter(Boolean).forEach(b => { b.textContent = b.dataset.label || (b.id.startsWith("d") ? "Save reading" : "Save"); });
     renderAll();
   }
 }
+
+/* ---------- toolbar ---------- */
+let qTimer = null;
+$("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { view.q = $("q").value; renderGrid(); }, 120); });
+$("sortSel").addEventListener("change", () => { view.sort = $("sortSel").value; saveView(); renderGrid(); });
+$("tmOnly").addEventListener("click", () => { view.tmOnly = !view.tmOnly; $("tmOnly").setAttribute("aria-pressed", String(view.tmOnly)); saveView(); renderGrid(); });
 
 /* ---------- dialogs ---------- */
 const dlg = $("dlg");
@@ -1221,6 +1492,124 @@ $("addTruck").addEventListener("click", () => openEdit(null));
 $("refreshBtn").addEventListener("click", () => refresh(false));
 $("meBtn").addEventListener("click", openSettings);
 
+
+
+/* ---------- report: download for Excel, print or PDF, share text ---------- */
+function reportRows() {
+  return trucks.map(t => ({ t, e: evalTruck(t) }))
+    .sort((a, b) => (RANK[b.e.r.worst] - RANK[a.e.r.worst]) || (urgency(a.e.r) - urgency(b.e.r)) || ((a.t.order ?? 99) - (b.t.order ?? 99)));
+}
+function reportStamp() {
+  const d = new Date();
+  return { d, iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    text: `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${fmtTime(d)}` };
+}
+function csvCell(v) {
+  const s = v == null ? "" : String(v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function buildCsv() {
+  const head = ["Unit", "Driver", "Vehicle", "Year", "Status", "Miles now", "Miles saved by", "Oil change every (mi)", "Miles since oil change",
+    "Truck oil miles left", "Truckmount", "TM hrs now", "TM oil hrs left", "Next TM service", "TM service due at (hrs)", "TM service hrs left",
+    "Safety inspection due", "Registration due", "Insurance until", "Paperwork issues", "Last reading"];
+  const lines = [head];
+  for (const { t, e } of reportRows()) {
+    const { r, pw } = e;
+    const prog = progOf(t);
+    const get = lbl => { const p = pw.find(x => x.label === lbl); return p ? p.shown : ""; };
+    lines.push([
+      t.unit, t.driver, t.vehicle, t.year, r.empty ? "No reading" : statusWord(r.worst),
+      isNum(e.v.miles) ? e.v.miles : "", t.readingBy || "",
+      t.oilInterval, r.oil ? Math.round(r.oil.used) : "", r.oil ? Math.round(r.oil.left) : "",
+      prog ? prog.name : "", prog && isNum(e.v.hrs) ? e.v.hrs : "",
+      r.tmOil ? Math.round(r.tmOil.left) : "",
+      r.service ? `${r.service.level}-hr` : "", r.service ? r.service.dueAt : "", r.service ? Math.round(r.service.left) : "",
+      get("Safety inspection"), get("Registration"), get("Insurance"),
+      e.pwBad.map(p => `${p.label} ${p.status === "due" ? "past due" : "due soon"}`).join("; "),
+      t.readingAt ? fmtWhen(t.readingAt) : ""
+    ]);
+  }
+  return "\ufeff" + lines.map(row => row.map(csvCell).join(",")).join("\r\n");
+}
+function downloadFile(name, text, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = h("a", { href: url, download: name, style: "display:none" });
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+function downloadCsv() {
+  const st = reportStamp();
+  downloadFile(`VODA-Fleet-Report-${st.iso}.csv`, buildCsv(), "text/csv;charset=utf-8");
+  toast("Report downloaded. Open it in Excel or Google Sheets.");
+}
+function buildPrintReport() {
+  const st = reportStamp();
+  const rows = reportRows();
+  let nDue = 0, nSoon = 0, nOk = 0;
+  rows.forEach(({ e }) => { if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; else nOk++; } });
+  const issues = [], paper = [];
+  rows.forEach(({ t, e }) => {
+    issueLines(t, e.r).forEach(l => issues.push(`${label(t)}: ${l.text}`));
+    e.pwBad.forEach(p => paper.push(`${label(t)}: ${p.label} ${p.shown}${p.status === "due" ? " (past due)" : ` (in ${p.days} days)`}`));
+  });
+  const td = (v, cls) => h("td", { class: cls || null, text: v == null ? "" : String(v) });
+  $("printReport").replaceChildren(
+    h("h1", { text: "VODA Fleet Maintenance" }),
+    h("p", { class: "pr-sub", text: `Report · ${st.text} · ${trucks.length} trucks` }),
+    h("div", { class: "pr-sum" }, h("span", { text: `${nDue} overdue` }), h("span", { text: `${nSoon} due soon` }), h("span", { text: `${nOk} OK` })),
+    h("table", null,
+      h("thead", null, h("tr", null, ["Truck", "Status", "Miles now", "Truck oil", "TM hrs", "TM oil", "Next TM service", "Paperwork", "Last reading"].map(x => h("th", { text: x })))),
+      h("tbody", null, rows.map(({ t, e }) => {
+        const { r } = e;
+        const prog = progOf(t);
+        return h("tr", null,
+          h("td", null, h("strong", { text: t.unit || "Truck" }), t.driver ? ` · ${t.driver}` : "", prog ? h("div", { text: prog.name }) : null),
+          td(r.empty ? "No reading" : statusWord(r.worst), "nw st-" + (r.empty ? "" : r.worst)),
+          td(isNum(e.v.miles) ? fmt(e.v.miles) : "", "num nw"),
+          td(r.oil ? oilText(r.oil) : "", "nw"),
+          td(prog && isNum(e.v.hrs) ? fmt(e.v.hrs) : "", "num nw"),
+          td(r.tmOil ? hrsLeftText(r.tmOil.left) : "", "nw"),
+          td(r.service ? `${serviceText(r.service)} (at ${fmt(r.service.dueAt)})` : ""),
+          td(e.pwBad.map(p => `${p.label} ${p.status === "due" ? "past due" : "soon"}`).join(", ")),
+          td(t.readingAt ? `${fmtWhen(t.readingAt)}${t.readingBy ? " · " + t.readingBy : ""}` : ""));
+      }))),
+    h("h2", { text: "Needs attention" }),
+    issues.length ? h("ul", null, issues.map(x => h("li", { text: x }))) : h("p", { text: "Nothing due on oil or TM service." }),
+    paper.length ? h("h2", { text: "Paperwork" }) : null,
+    paper.length ? h("ul", null, paper.map(x => h("li", { text: x }))) : null);
+}
+function printReport() {
+  buildPrintReport();
+  closeDialog();
+  setTimeout(() => {
+    try { window.print(); }
+    catch (e) { toast("Printing isn't available here. Use Download for Excel instead."); }
+  }, 60);
+}
+const ICONS = {
+  csv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>',
+  pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>'
+};
+function reportOpt(icon, title, sub, onclick, id) {
+  const ico = h("span", { class: "ico" });
+  ico.innerHTML = ICONS[icon];
+  return h("button", { class: "report-opt", type: "button", id, onclick }, ico, h("strong", { text: title }), h("span", { class: "sub", text: sub }));
+}
+function openReportMenu() {
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Fleet report" }),
+    h("p", { text: `All ${trucks.length} trucks, most urgent first, with the numbers on screen right now.` }),
+    h("div", { class: "report-opts" },
+      reportOpt("csv", "Download for Excel (CSV)", "Every truck with miles, oil, TM service and paperwork. Opens in Excel or Google Sheets.", () => { downloadCsv(); closeDialog(); }, "rep-csv"),
+      reportOpt("pdf", "Print or save as PDF", "A one-page fleet table. Choose Save as PDF in the print window.", printReport, "rep-pdf"),
+      reportOpt("share", "Share or copy as text", "A short list of what's overdue and due soon, for a text or email.", () => { closeDialog(); $("shareReport").click(); }, "rep-share")),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
+}
+$("reportBtn").addEventListener("click", openReportMenu);
+
 /* ---------- install as an app ---------- */
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -1262,6 +1651,7 @@ else {
   if (cache && Array.isArray(cache.trucks)) { trucks = sortTrucks(cache.trucks); lastSync = new Date(cache.at); loaded = true; }
   startApp();
 }
+
 </script>
 </body>
 </html>
