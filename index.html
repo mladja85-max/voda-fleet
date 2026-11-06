@@ -79,6 +79,8 @@ button { font: inherit; color: inherit; }
 .brand h1 { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .sync { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
 .sync.offline { color: var(--soon); font-weight: 600; }
+.gps-warn { all: unset; cursor: pointer; font-weight: 700; font-size: .82rem; color: var(--soon); background: var(--soon-bg); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.gps-warn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .btn {
@@ -107,7 +109,7 @@ button { font: inherit; color: inherit; }
 .installbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 12px; padding: 10px 14px; }
 .installbar p { margin: 0; flex: 1 1 240px; }
 
-.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(var(--kpis, 5), minmax(0, 1fr)); gap: 12px; }
 .kpi {
   text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 12px 16px; display: grid; gap: 2px; cursor: pointer; position: relative; overflow: hidden;
@@ -118,6 +120,8 @@ button { font: inherit; color: inherit; }
 .kpi.ok::after { background: var(--ok); }
 .kpi.paper::after { background: var(--muted); }
 .kpi.all::after { background: var(--accent); }
+.kpi.engine::after { background: var(--due); }
+.kpi.engine .num { color: var(--due); }
 .kpi .num { font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .kpi.due .num { color: var(--due); }
 .kpi.soon .num { color: var(--soon); }
@@ -147,7 +151,7 @@ button { font: inherit; color: inherit; }
 /* ---- truck tiles ---- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(275px, 1fr)); gap: 14px; align-items: start; }
 .tile {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
   display: flex; flex-direction: column; overflow: hidden; position: relative; scroll-margin-top: 80px;
 }
 .tile::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--line); }
@@ -202,6 +206,18 @@ button { font: inherit; color: inherit; }
 .paper-badge.soon { color: var(--soon); background: var(--soon-bg); }
 .link { all: unset; cursor: pointer; color: var(--accent); font-weight: 700; }
 .link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* GPS line on a tile: alerts, then status · place · fuel */
+.tile-gps { margin: 0; padding: 0 14px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .8rem; color: var(--muted); }
+.tile-gps:empty { display: none; }
+.gps-txt { min-width: 0; flex: 1 1 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flag { font-weight: 700; font-size: .72rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.flag.due { background: var(--due-bg); color: var(--due); }
+.flag.soon { background: var(--soon-bg); color: var(--soon); }
+/* A truck's own color: its name in that color and a stripe down the left edge. The tile stays white. */
+.tile.colored::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--truck); pointer-events: none; }
+.colored .unit { color: var(--truck-text); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .colored .unit { color: var(--truck-text-dark); } }
+:root[data-theme="dark"] .colored .unit { color: var(--truck-text-dark); }
 .empty-grid { grid-column: 1 / -1; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--muted); }
 
 /* ---- sidebar ---- */
@@ -257,6 +273,25 @@ details.tasks ul { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-
 .dr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .dr-section h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
 .meta { margin: 0; color: var(--muted); font-size: .86rem; }
+.dr-head.colored { border-top: 6px solid var(--truck); }
+.gps-list { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; padding: 11px 13px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--line); font-size: .92rem; }
+.gps-list dt { color: var(--muted); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; padding-top: 2px; }
+.gps-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.gps-list .bad { color: var(--due); font-weight: 700; }
+.gps-list .warnc { color: var(--soon); font-weight: 700; }
+.gps-list small { display: block; color: var(--muted); }
+.code-link { color: var(--due); font-weight: 700; }
+/* color picker */
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.sw { all: unset; box-sizing: border-box; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0, 0, 0, .14); position: relative; display: grid; place-items: center; }
+.sw.none { background: var(--surface); border: 2px dashed var(--muted); }
+.sw.none::after { content: ""; width: 70%; height: 2px; background: var(--muted); transform: rotate(-45deg); }
+.sw[aria-checked="true"], .sw-more.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.sw:focus-visible, .sw-more:focus-within { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 3px; }
+.sw-more { background: conic-gradient(#e11d48, #f59e0b, #84cc16, #06b6d4, #3b82f6, #a855f7, #e11d48); }
+.sw-more input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.sw-more span { font-weight: 800; font-size: 1.1rem; color: #fff; text-shadow: 0 0 3px #000; pointer-events: none; }
+.rn-color { grid-column: 1 / -1; }
 
 /* ---- forms and dialogs (log service, edit, settings) ---- */
 dialog#dlg { border: 1px solid var(--line); border-radius: 16px; padding: 0; width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; background: var(--surface); color: var(--ink); }
@@ -297,7 +332,7 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 @media (max-width: 760px) {
   .topbar { padding: 10px 14px; }
   .page { padding: 14px 14px 40px; }
-  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .kpis { grid-template-columns: repeat(var(--kpis-phone, 4), minmax(0, 1fr)); gap: 8px; }
   .kpi.all { display: none; }
   .kpi { padding: 9px 10px; }
   .kpi .num { font-size: 1.55rem; }
@@ -351,6 +386,7 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   </div>
   <div class="sync" id="syncbar" hidden>
     <span id="syncText">Loading…</span>
+    <button class="gps-warn" type="button" id="gpsWarn" hidden>GPS sync problem</button>
     <button class="icon-btn" type="button" id="refreshBtn" aria-label="Refresh" title="Refresh">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
     </button>
@@ -383,7 +419,7 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
     <div class="toolbar">
       <label class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Search name, plate or driver" autocomplete="off" aria-label="Search name, plate or driver">
+        <input id="q" type="search" placeholder="Search name, plate, driver or VIN" autocomplete="off" aria-label="Search name, plate, driver or VIN">
       </label>
       <select class="sortsel" id="divSel" aria-label="Filter by unit">
         <option value="">All units</option>
@@ -585,6 +621,7 @@ let loaded = false;
 let lastSync = null;
 let offline = false;
 let refreshing = false;
+let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
 const drafts = store.get(K_DRAFTS) || {};     // id -> { miles, hrs } typed but not saved
 const today = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
@@ -618,7 +655,7 @@ function parseNum(s) {
 }
 const byId = id => trucks.find(t => t.id === id);
 const progOf = t => PROGRAMS[t.tm] || null;
-function plain(t) { const o = JSON.parse(JSON.stringify(t)); delete o.id; delete o.updatedAt; return o; }
+function plain(t) { const o = JSON.parse(JSON.stringify(t)); delete o.id; delete o.updatedAt; delete o.gps; return o; }
 function fmtWhen(iso) {
   const d = iso ? new Date(iso) : null;
   if (!d || isNaN(d)) return "";
@@ -684,6 +721,7 @@ async function refresh(quiet) {
   try {
     const out = await api("list");
     trucks = sortTrucks(out.trucks || []);
+    gpsHealth = out.gps || null;
     for (const k of Object.keys(drafts)) if (!byId(k)) delete drafts[k];
     saveDrafts();
     lastSync = new Date();
@@ -711,11 +749,20 @@ function renderSync() {
   $("syncText").textContent = offline
     ? (lastSync ? `Offline · data from ${fmtWhen(lastSync.toISOString())} ${fmtTime(lastSync)}` : "Offline")
     : (lastSync ? `Updated ${fmtTime(lastSync)}` : "");
+  $("gpsWarn").hidden = offline || !gpsProblem();
   $("meBtn").textContent = session ? `${session.name || "Me"} · Settings` : "";
+}
+/** One Step GPS sync failed, or hasn't worked for 6 hours. */
+function gpsProblem() {
+  if (!gpsHealth) return false;
+  if (gpsHealth.error) return true;
+  const ok = gpsHealth.lastOk ? new Date(gpsHealth.lastOk).getTime() : NaN;
+  return Number.isFinite(ok) && Date.now() - ok > 6 * 36e5;
 }
 
 function replaceTruck(t) {
   const i = trucks.findIndex(x => x.id === t.id);
+  if (i !== -1 && trucks[i].gps && !t.gps) t.gps = trucks[i].gps;   // saves don't carry the GPS details; keep the ones we have
   if (i === -1) trucks.push(t); else trucks[i] = t;
   trucks = sortTrucks(trucks);
   store.set(K_CACHE, { at: (lastSync || new Date()).toISOString(), trucks });
@@ -754,7 +801,32 @@ function issueLines(t, r) {
   if (r.oil && r.oil.status !== "ok") out.push({ status: r.oil.status, text: r.oil.left > 0 ? `truck oil change in ${fmt(r.oil.left)} mi` : r.oil.left === 0 ? "truck oil change due now" : `truck oil change overdue by ${fmt(-r.oil.left)} mi` });
   if (r.tmOil && r.tmOil.status !== "ok") out.push({ status: r.tmOil.status, text: r.tmOil.left > 0 ? `TM engine oil in ${fmt(r.tmOil.left)} hrs` : r.tmOil.left === 0 ? "TM engine oil due now" : `TM engine oil overdue by ${fmt(-r.tmOil.left)} hrs` });
   if (r.service && r.service.status !== "ok") out.push({ status: r.service.status, text: `TM ${serviceText(r.service)} (at ${fmt(r.service.dueAt)} hrs)` });
+  return out.concat(gpsAlerts(t));
+}
+/** Alerts read from One Step GPS. They don't change the maintenance status; they sort the truck up and show in Needs attention. */
+function gpsAlerts(t) {
+  const g = t.gps, out = [];
+  if (!g) return out;
+  if (g.check === "on") out.push({ status: "due", kind: "gps", short: "Check engine", text: `check engine light on${g.codes && g.codes.length ? ": " + g.codes.join(", ") : ""}` });
+  if (g.vinMismatch) out.push({ status: "soon", kind: "gps", short: "VIN mismatch", text: "GPS tracker reports a different VIN (moved to another truck?)" });
+  if (g.offline) out.push({ status: "soon", kind: "gps", short: "GPS offline", text: `GPS hasn't reported since ${fmtWhen(g.at)}` });
   return out;
+}
+const alertRank = t => gpsAlerts(t).reduce((m, a) => Math.max(m, RANK[a.status]), 0);
+function agoText(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "";
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return m <= 1 ? "just now" : `${m} min ago`;
+  const hrs = Math.round(m / 60);
+  if (hrs < 48) return `${hrs} h ago`;
+  return `${Math.round(hrs / 24)} days ago`;
+}
+function sinceText(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const m = Math.round(ms / 60000);
+  return m < 60 ? `${m} min` : m < 48 * 60 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} days`;
 }
 function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "Truck"; }
 
@@ -775,6 +847,55 @@ function idBits(t, titleId) {
     h("span", { class: "div-chip " + divClass(t.division), text: t.division || "No unit" })];
 }
 function subLine(t) { return [t.driver, t.vehicle, t.year].filter(Boolean).join(" · "); }
+
+/* ---------- truck colors ---------- */
+const PALETTE = [["Blue", "#2563eb"], ["Sky", "#0ea5e9"], ["Teal", "#0d9488"], ["Green", "#16a34a"], ["Lime", "#84cc16"], ["Yellow", "#facc15"],
+  ["Orange", "#f97316"], ["Red", "#dc2626"], ["Pink", "#db2777"], ["Purple", "#7c3aed"], ["Brown", "#92400e"], ["Slate", "#475569"]];
+const isColor = c => /^#[0-9a-f]{6}$/i.test(String(c || ""));
+function rgbOf(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function luminance([r, g, b]) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function contrast(a, b) { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+/** The truck's color, nudged darker (on white) or lighter (in dark mode) only as much as needed to read as text. */
+function readableOn(hex, bg) {
+  const rgb = rgbOf(hex), b = rgbOf(bg);
+  const target = luminance(b) > 0.5 ? [0, 0, 0] : [255, 255, 255];
+  for (let i = 0; i <= 20; i++) {
+    const c = rgb.map((v, k) => Math.round(v + (target[k] - v) * i / 20));
+    if (contrast(c, b) >= 3) return `rgb(${c.join(",")})`;
+  }
+  return `rgb(${target.join(",")})`;
+}
+/** CSS variables for a truck's color: the edge uses it as is; the name uses a readable shade of it. */
+function truckTheme(hex) {
+  if (!isColor(hex)) return "";
+  return `--truck:${hex};--truck-text:${readableOn(hex, "#ffffff")};--truck-text-dark:${readableOn(hex, "#151d27")}`;
+}
+/** Swatches + "custom" color input. The chosen value sits in a hidden input with this id. */
+function colorPicker(id, value, onpick) {
+  value = isColor(value) ? value.toLowerCase() : "";
+  const hidden = h("input", { type: "hidden", id, value });
+  const wrap = h("div", { class: "swatches", role: "radiogroup", "aria-label": "Truck color" });
+  const custom = h("input", { type: "color", "aria-label": "Custom color", value: value || "#2563eb" });
+  const more = h("label", { class: "sw-more sw", title: "Custom color" }, custom, h("span", { text: "+", "aria-hidden": "true" }));
+  const set = v => {
+    hidden.value = v;
+    for (const b of wrap.querySelectorAll("button.sw")) b.setAttribute("aria-checked", String(b.dataset.c === v));
+    const isCustom = !!v && !PALETTE.some(p => p[1] === v);
+    more.classList.toggle("on", isCustom);
+    more.style.background = isCustom ? v : "";
+    if (onpick) onpick(v);
+  };
+  const sw = (name, c) => h("button", { type: "button", class: "sw" + (c ? "" : " none"), role: "radio", "data-c": c, "aria-label": name, title: name,
+    "aria-checked": String(value === c), style: c ? `background:${c}` : null, onclick: () => set(c) });
+  custom.addEventListener("input", () => set(custom.value.toLowerCase()));
+  wrap.append(sw("No color", ""), ...PALETTE.map(([n, c]) => sw(n, c)), more);
+  if (value && !PALETTE.some(p => p[1] === value)) { more.classList.add("on"); more.style.background = value; }
+  return h("div", { class: "field" }, h("label", { text: "Truck color" }), wrap, hidden,
+    h("span", { class: "hint", text: "Shows on the truck's name and down the edge of its tile." }));
+}
 function divisionField(id, value) {
   const sel = h("select", { id }, h("option", { value: "", text: "Choose…" }), DIVISIONS.map(d => h("option", { value: d, text: d })));
   sel.value = DIVISIONS.includes(value) ? value : "";
@@ -792,6 +913,8 @@ const HOW = [
   ["Legend GT and Apex 570", "the truckmount has its own engine, so its oil is tracked in TM hours (every 100 hrs)."],
   ["TM service", "from the 100 / 400 / 500 / 1000 / 2000-hr charts. Yellow within 20 hrs. A bigger service includes the smaller one's items."],
   ["Miles", "come from One Step GPS every 15 minutes for trucks set up in the GPS tab."],
+  ["Check engine and GPS offline", "also come from One Step GPS. They move a truck up the list but don't change its oil or service countdowns."],
+  ["Van engine hours", "from One Step GPS are shown for reference only. TM hours are always the ones you type in."],
   ["After an oil change or service", "open the truck and tap Log oil change / service so the countdown restarts."]
 ];
 function howList() { return h("ul", null, HOW.map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))); }
@@ -826,7 +949,7 @@ function showSignIn(message) {
     try {
       const out = await api("list");
       store.set(K_SESSION, session);
-      trucks = sortTrucks(out.trucks || []); loaded = true; lastSync = new Date(); offline = false;
+      trucks = sortTrucks(out.trucks || []); gpsHealth = out.gps || null; loaded = true; lastSync = new Date(); offline = false;
       store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
       startApp();
     } catch (ex) {
@@ -888,13 +1011,18 @@ function urgency(r) {
 function visibleTrucks() {
   const q = view.q.trim().toLowerCase();
   let list = scoped().map(t => ({ t, e: evalTruck(t) }));
-  if (q) list = list.filter(x => [x.t.unit, x.t.driver, x.t.vehicle, x.t.plate, x.t.year, x.t.division].join(" ").toLowerCase().includes(q));
+  if (q) list = list.filter(x => [x.t.unit, x.t.driver, x.t.vehicle, x.t.plate, x.t.year, x.t.division, x.t.vin].join(" ").toLowerCase().includes(q));
   if (view.tmOnly) list = list.filter(x => progOf(x.t));
   if (view.filter === "due" || view.filter === "soon" || view.filter === "ok") list = list.filter(x => !x.e.r.empty && x.e.r.worst === view.filter);
   if (view.filter === "paper") list = list.filter(x => x.e.pwBad.length);
-  if (view.sort === "urgent") list.sort((a, b) => (RANK[b.e.r.worst] - RANK[a.e.r.worst]) || (urgency(a.e.r) - urgency(b.e.r)) || ((a.t.order ?? 99) - (b.t.order ?? 99)));
+  if (view.filter === "engine") list = list.filter(x => x.t.gps && x.t.gps.check === "on");
+  if (view.sort === "urgent") list.sort(byUrgency);
   return list;
 }
+/** Most urgent first: the worse of maintenance status and GPS alerts, then how close the next job is. */
+const effRank = x => Math.max(RANK[x.e.r.worst] || 0, alertRank(x.t));
+const byUrgency = (a, b) => (effRank(b) - effRank(a)) || (RANK[b.e.r.worst] - RANK[a.e.r.worst]) || (urgency(a.e.r) - urgency(b.e.r)) || ((a.t.order ?? 99) - (b.t.order ?? 99));
+const gpsOn = () => !!gpsHealth || trucks.some(t => t.gps);
 
 function renderAll() {
   if (!session) return;
@@ -912,13 +1040,18 @@ function renderAll() {
 
 function renderKpis() {
   if (!loaded) { $("kpis").replaceChildren(); return; }
-  let nDue = 0, nSoon = 0, nOk = 0, nPaper = 0;
+  let nDue = 0, nSoon = 0, nOk = 0, nPaper = 0, nEngine = 0;
   const inUnit = scoped();
   for (const t of inUnit) {
     const e = evalTruck(t);
     if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; else nOk++; }
     if (e.pwBad.length) nPaper++;
+    if (t.gps && t.gps.check === "on") nEngine++;
   }
+  const showEngine = gpsOn();
+  if (!showEngine && view.filter === "engine") view.filter = "all";
+  $("kpis").style.setProperty("--kpis", showEngine ? 6 : 5);
+  $("kpis").style.setProperty("--kpis-phone", showEngine ? 5 : 4);
   const kpi = (key, cls, num, lbl, short) => h("button", { class: "kpi " + cls, type: "button", "aria-pressed": String(view.filter === key),
     onclick: () => { view.filter = view.filter === key && key !== "all" ? "all" : key; saveView(); renderAll(); } },
     h("span", { class: "num", text: String(num) }),
@@ -928,7 +1061,8 @@ function renderKpis() {
     kpi("due", "due", nDue, "Overdue"),
     kpi("soon", "soon", nSoon, "Due soon"),
     kpi("ok", "ok", nOk, "OK"),
-    kpi("paper", "paper", nPaper, "Paperwork to check", "Paperwork"));
+    kpi("paper", "paper", nPaper, "Paperwork to check", showEngine ? "Papers" : "Paperwork"),
+    showEngine ? kpi("engine", "engine", nEngine, "Check engine", "Engine") : null);
 }
 
 function renderGrid() {
@@ -958,12 +1092,14 @@ function tileEl(t) {
   const prog = progOf(t);
   const v = currentValues(t);
   const sub = subLine(t);
-  return h("article", { class: "tile", id: "tile-" + t.id, "data-status": "none" },
+  const theme = truckTheme(t.color);
+  return h("article", { class: "tile" + (theme ? " colored" : ""), id: "tile-" + t.id, "data-status": "none", style: theme || null },
     h("button", { class: "tile-head", type: "button", onclick: () => openDetails(t.id), title: "Open details" },
       h("span", { class: "tile-title" }, idBits(t)),
       h("span", { class: "pill", id: "pill-" + t.id, text: "No reading" })),
     h("p", { class: "tile-sub" }, sub ? h("span", { text: sub }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null),
     h("div", { class: "metrics", id: "met-" + t.id }),
+    h("p", { class: "tile-gps", id: "gps-" + t.id }),
     h("div", { class: "quick" + (prog ? "" : " no-tm") },
       quickField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id, t.readingBy === "GPS"),
       prog ? quickField("TM hrs now", "h-" + t.id, v.hrsStr, "decimal", t.id, false) : null,
@@ -1054,6 +1190,20 @@ function updateTile(id) {
       text: `${e.pwBad.length} paperwork` }));
   }
   meta.replaceChildren(...bits);
+  $("gps-" + id).replaceChildren(...gpsLine(t));
+}
+/** Alerts first, then a short "Parked 3 h · 12 Main St · Fuel 62%". */
+function gpsLine(t) {
+  const g = t.gps;
+  if (!g) return [];
+  const flags = gpsAlerts(t).map(a => h("span", { class: "flag " + a.status, title: a.text, text: a.short }));
+  const bits = [];
+  if (g.offline) bits.push(`Last report ${agoText(g.at)}`);
+  else if (g.status) bits.push(g.status + (g.status !== "Driving" && g.since ? " " + sinceText(g.since) : ""));
+  if (!g.offline && g.address) bits.push(g.address.split(",")[0]);
+  if (isNum(g.fuel)) bits.push(`Fuel ${g.fuel}%`);
+  const txt = bits.join(" · ");
+  return flags.concat(txt ? [h("span", { class: "gps-txt", title: [g.status, g.address].filter(Boolean).join(" · "), text: txt })] : []);
 }
 
 function renderAside() {
@@ -1118,7 +1268,8 @@ function renameForm(t) {
   const division = h("select", { id: "rn-division", onchange: e => { renameDraft.division = e.target.value; } },
     h("option", { value: "", text: "Choose…" }), DIVISIONS.map(d => h("option", { value: d, text: d })));
   division.value = DIVISIONS.includes(renameDraft.division) ? renameDraft.division : "";
-  const save = h("button", { class: "btn primary small", type: "submit", id: "rn-save", text: "Save name" });
+  const color = colorPicker("rn-color", renameDraft.color, v => { renameDraft.color = v; });
+  const save = h("button", { class: "btn primary small", type: "submit", id: "rn-save", text: "Save" });
   const cancel = () => { renameDraft = null; renderDrawer(id); };
   return h("form", { class: "titles rename", onsubmit: async e => {
       e.preventDefault();
@@ -1126,8 +1277,9 @@ function renameForm(t) {
       const newDriver = renameDraft.driver.trim().replace(/\s+/g, " ");
       const newPlate = renameDraft.plate.trim().replace(/\s+/g, " ").toUpperCase();
       const newDiv = DIVISIONS.includes(renameDraft.division) ? renameDraft.division : "";
+      const newColor = isColor(renameDraft.color) ? renameDraft.color.toLowerCase() : "";
       if (!newUnit) { err.textContent = "Give the truck a name."; return; }
-      if (newUnit === (t.unit || "") && newDriver === (t.driver || "") && newPlate === (t.plate || "") && newDiv === (t.division || "")) { cancel(); return; }
+      if (newUnit === (t.unit || "") && newDriver === (t.driver || "") && newPlate === (t.plate || "") && newDiv === (t.division || "") && newColor === (t.color || "")) { cancel(); return; }
       const clash = trucks.find(x => x.id !== id && unitKey(x.unit) === unitKey(newUnit));
       if (clash) { err.textContent = `"${clash.unit}" is already used by another truck. Pick a different name.`; return; }
       const body = plain(t);
@@ -1135,11 +1287,13 @@ function renameForm(t) {
       body.driver = newDriver.slice(0, 60);
       body.plate = newPlate.slice(0, 20);
       body.division = newDiv;
+      body.color = newColor;
       const items = [];
       if (newUnit !== (t.unit || "")) items.push(`Renamed from ${t.unit || "(no name)"} to ${newUnit}`);
       if (newPlate !== (t.plate || "")) items.push(`Plate set to ${newPlate || "(none)"}`);
       if (newDiv !== (t.division || "")) items.push(`Unit set to ${newDiv || "(none)"}`);
       if (newDriver !== (t.driver || "")) items.push(`Driver changed from ${t.driver || "(none)"} to ${newDriver || "(none)"}`);
+      if (newColor !== (t.color || "")) items.push(newColor ? "Color changed" : "Color removed");
       save.disabled = true; save.textContent = "Saving…";
       try {
         await saveTruck(t, body, { kind: "edited", items });
@@ -1148,7 +1302,7 @@ function renameForm(t) {
         renderAll();
       } catch (ex) {
         err.textContent = failText(ex, "Nothing");
-        save.disabled = false; save.textContent = "Save name";
+        save.disabled = false; save.textContent = "Save";
       }
     },
     onkeydown: e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); } } },
@@ -1156,7 +1310,8 @@ function renameForm(t) {
       h("div", null, h("label", { for: "rn-unit", text: "Name" }), unit),
       h("div", null, h("label", { for: "rn-plate", text: "Plate" }), plate),
       h("div", null, h("label", { for: "rn-division", text: "Unit" }), division),
-      h("div", null, h("label", { for: "rn-driver", text: "Driver" }), driver)),
+      h("div", null, h("label", { for: "rn-driver", text: "Driver" }), driver),
+      h("div", { class: "rn-color" }, color)),
     err,
     h("div", { class: "rn-actions" }, save, h("button", { class: "btn small", type: "button", text: "Cancel", onclick: cancel })));
 }
@@ -1166,13 +1321,14 @@ function renderDrawer(id) {
   if (!t) { if (drawer.open) drawer.close(); return; }
   const prog = progOf(t);
   const v = currentValues(t);
+  const theme = truckTheme(t.color) || null;
   drawer.replaceChildren(
-    h("div", { class: "dr-head" },
+    h("div", { class: "dr-head" + (theme ? " colored" : ""), style: theme },
       renameDraft && renameDraft.id === id ? renameForm(t) : h("div", { class: "titles" },
         h("div", { class: "title-row", style: "flex-wrap:wrap" },
           h("h2", { class: "tile-title", style: "font-size:inherit" }, idBits(t, "drTitle")),
-          h("button", { class: "icon-btn sm", type: "button", id: "d-rename", "aria-label": "Edit name, plate and unit", title: "Edit name, plate and unit",
-            onclick: () => { renameDraft = { id, unit: t.unit || "", plate: t.plate || "", division: t.division || "", driver: t.driver || "" }; renderDrawer(id); const u = $("rn-unit"); if (u) { u.focus(); u.select(); } } }, pencilIcon())),
+          h("button", { class: "icon-btn sm", type: "button", id: "d-rename", "aria-label": "Edit name, plate, unit and color", title: "Edit name, plate, unit and color",
+            onclick: () => { renameDraft = { id, unit: t.unit || "", plate: t.plate || "", division: t.division || "", driver: t.driver || "", color: t.color || "" }; renderDrawer(id); const u = $("rn-unit"); if (u) { u.focus(); u.select(); } } }, pencilIcon())),
         h("p", { class: "tile-sub", style: "padding:0;margin-top:4px" },
           subLine(t) ? h("span", { text: subLine(t) }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null)),
       h("span", { class: "pill", id: "d-pill" }),
@@ -1190,6 +1346,7 @@ function renderDrawer(id) {
       h("div", { id: "d-res", style: "display:grid;gap:10px" }),
       h("div", { class: "chips", id: "d-paper" }),
       h("p", { class: "meta", id: "d-meta" }),
+      gpsSection(t),
       h("div", { class: "dr-section" }, h("h3", { text: "Recent history" }), h("ul", { class: "history", id: "d-hist" }))));
   updateDrawer(id);
   renderHistory(id);
@@ -1244,6 +1401,37 @@ function updateDrawer(id) {
   $("d-meta").textContent = t.readingAt
     ? `Last saved reading: ${fmtWhen(t.readingAt)}${t.readingBy ? " by " + t.readingBy : ""}${drafts[id] && st.changed ? " · not saved yet" : ""}`
     : "No saved reading yet";
+}
+
+/** The truck's One Step GPS details. Shown only; nothing here changes the oil or TM numbers. */
+function gpsSection(t) {
+  if (!gpsOn()) return null;
+  const g = t.gps;
+  const head = h("h3", { text: "One Step GPS" });
+  if (!g) return h("div", { class: "dr-section", id: "d-gps" }, head,
+    h("p", { class: "meta", text: "Not linked to a GPS tracker. To link it, pick this truck in column C of the GPS tab in the Google Sheet." }));
+  const row = (k, ...v) => [h("dt", { text: k }), h("dd", null, ...v)];
+  const when = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "";
+  const items = [];
+  if (g.offline) items.push(row("Status", h("span", { class: "warnc", text: "GPS offline" }), h("small", { text: `Last report ${when(g.at)} (${agoText(g.at)}). Check the tracker's power and wiring.` })));
+  else items.push(row("Status", (g.status || "Unknown") + (g.since && g.status !== "Driving" ? ` since ${when(g.since)}` : ""), g.at ? h("small", { text: `Last report ${agoText(g.at)}` }) : null));
+  if (isNum(g.lat) && isNum(g.lng)) {
+    const url = `https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`;
+    items.push(row("Location", g.address || `${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}`, " · ",
+      h("a", { href: url, target: "_blank", rel: "noopener", class: "link", id: "d-map", text: "Open map" })));
+  }
+  if (isNum(g.fuel)) items.push(row("Fuel", `${g.fuel}%`));
+  if (g.check === "on") items.push(row("Check engine", h("span", { class: "bad", text: "ON" }),
+    g.codes.length ? [" · ", g.codes.map((c, i) => [i ? ", " : "", h("a", { class: "code-link", href: `https://www.google.com/search?q=${encodeURIComponent(c + " code " + (t.vehicle || ""))}`, target: "_blank", rel: "noopener", text: c })])] : null,
+    h("small", { text: "Codes from the truck's computer. Tap a code to look it up." })));
+  else items.push(row("Check engine", g.check === "off" ? "Off" : "No data from this truck"));
+  if (isNum(g.engineHrs)) items.push(row("Van engine hrs", `${fmt(g.engineHrs)} hrs`, h("small", { text: "For reference only. TM hours are still the ones you type in." })));
+  const vin = t.vin || g.vin;
+  if (vin) items.push(row("VIN", vin, g.vinMismatch ? h("small", { class: "warnc", text: `The tracker now reports ${g.vin}. It may have moved to another truck, so its miles aren't being copied. If this truck's VIN is wrong, fix it in Edit truck.` }) : null));
+  if (g.ymm) items.push(row("From VIN", g.ymm));
+  items.push(row("Tracker", g.device || "GPS device", h("small", { text: g.syncing ? "Miles come from this tracker." : "Miles are not synced from this tracker." })));
+  if (g.note && !/^OK/.test(g.note)) items.push(row("Note", h("small", { text: g.note, style: "color:inherit" })));
+  return h("div", { class: "dr-section", id: "d-gps" }, head, h("dl", { class: "gps-list" }, items));
 }
 
 function loadHistory(id) {
@@ -1418,7 +1606,7 @@ function openEdit(id) {
   const t = isNew
     ? { id: null, unit: "", driver: "", vehicle: "", year: "", plate: "", oilInterval: 5000, milesAtOil: null, milesNow: null, tm: "none",
         cdsMilesPerHr: DEFAULT_CDS_MILES_PER_HR, hrsAtOil: null, tmOilInterval: DEFAULT_TM_OIL_HRS, tmOilHrs: null, hrsNow: null, tiers: {},
-        inspectionDue: "", registrationDue: "", insuranceUntil: "", notes: "", division: view.division || "", order: (trucks.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1) }
+        inspectionDue: "", registrationDue: "", insuranceUntil: "", notes: "", division: view.division || "", vin: "", color: "", order: (trucks.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1) }
     : byId(id);
   if (!t) return;
   const err = h("p", { class: "dlg-err", role: "alert" });
@@ -1460,7 +1648,9 @@ function openEdit(id) {
       divisionField("ed-division", t.division),
       textField("Driver", "ed-driver", t.driver),
       textField("Vehicle", "ed-vehicle", t.vehicle, "text", null, "Ford Transit 250"),
-      textField("Year", "ed-year", t.year)),
+      textField("Year", "ed-year", t.year),
+      textField("VIN", "ed-vin", t.vin, "text", "17 letters and numbers. One Step GPS fills it in when it can.")),
+    colorPicker("ed-color", t.color),
     h("fieldset", null,
       h("legend", { text: "Truck oil" }),
       h("div", { class: "grid2" },
@@ -1518,7 +1708,11 @@ function openEdit(id) {
               inspectionDue: val("ed-insp"), registrationDue: val("ed-reg"), insuranceUntil: val("ed-ins"),
               notes: val("ed-notes").slice(0, 1000), order: isNum(t.order) ? t.order : 99
             });
-            if (!body.unit) { err.textContent = "Give the truck a name."; return; }
+            const vin = val("ed-vin").toUpperCase().replace(/[^A-Z0-9]/g, "");
+          if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { err.textContent = "A VIN has 17 letters and numbers (never I, O or Q). Check it, or leave it blank."; return; }
+          body.vin = vin;
+          body.color = isColor(val("ed-color")) ? val("ed-color").toLowerCase() : "";
+          if (!body.unit) { err.textContent = "Give the truck a name."; return; }
             if (body.registrationDue && !/^\d{4}-\d{2}$/.test(body.registrationDue)) { err.textContent = "Registration month should look like 2026-02."; return; }
             if (kind === "cds") {
               body.hrsAtOil = opt("ed-hrsAtOil");
@@ -1577,16 +1771,17 @@ function openSettings() {
 function buildReport() {
   const d = new Date();
   const lines = [`VODA fleet maintenance · ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`];
-  const groups = { due: [], soon: [] };
+  const groups = { due: [], soon: [], gps: [] };
   const paper = [];
-  for (const t of trucks) {
+  for (const t of scoped()) {
     const v = currentValues(t);
     const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
-    for (const line of issueLines(t, r)) groups[line.status].push(`• ${label(t)}: ${line.text}`);
+    for (const line of issueLines(t, r)) groups[line.kind === "gps" ? "gps" : line.status].push(`• ${label(t)}: ${line.text}`);
     for (const p of paperwork(t, today)) if (p.status !== "ok") paper.push(`• ${label(t)}: ${p.label} ${p.shown}${p.status === "due" ? " (past due)" : ` (in ${p.days} days)`}`);
   }
   lines.push("", "OVERDUE", ...(groups.due.length ? groups.due : ["• none"]));
   lines.push("", "DUE SOON", ...(groups.soon.length ? groups.soon : ["• none"]));
+  if (groups.gps.length) lines.push("", "TRUCK ALERTS (GPS)", ...groups.gps);
   if (paper.length) lines.push("", "PAPERWORK", ...paper);
   return lines.join("\n");
 }
@@ -1606,6 +1801,16 @@ $("shareReport").addEventListener("click", async () => {
   }
 });
 $("addTruck").addEventListener("click", () => openEdit(null));
+$("gpsWarn").addEventListener("click", () => {
+  const g = gpsHealth || {};
+  const last = g.lastOk ? `${fmtWhen(g.lastOk)} ${fmtTime(new Date(g.lastOk))}` : "never";
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "One Step GPS sync problem" }),
+    h("p", { text: g.error ? `The last try didn't work: ${g.error}` : "The GPS sync hasn't run for a while." }),
+    h("p", { text: `Last good sync: ${last}. Until it works again, miles, check engine and locations may be out of date. You can still type miles in by hand.` }),
+    h("p", { text: "To fix: in the Google Sheet, Extensions > Apps Script. Check the ONESTEP_API_KEY in Project Settings > Script Properties, then pick gpsSetup and click Run." }),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn primary", type: "button", onclick: closeDialog, text: "OK" }))));
+});
 $("refreshBtn").addEventListener("click", () => refresh(false));
 $("meBtn").addEventListener("click", openSettings);
 
@@ -1613,8 +1818,7 @@ $("meBtn").addEventListener("click", openSettings);
 
 /* ---------- report: download for Excel, print or PDF, share text ---------- */
 function reportRows() {
-  return scoped().map(t => ({ t, e: evalTruck(t) }))
-    .sort((a, b) => (RANK[b.e.r.worst] - RANK[a.e.r.worst]) || (urgency(a.e.r) - urgency(b.e.r)) || ((a.t.order ?? 99) - (b.t.order ?? 99)));
+  return scoped().map(t => ({ t, e: evalTruck(t) })).sort(byUrgency);
 }
 function reportStamp() {
   const d = new Date();
@@ -1628,7 +1832,8 @@ function csvCell(v) {
 function buildCsv() {
   const head = ["Name", "Plate", "Unit", "Driver", "Vehicle", "Year", "Status", "Miles now", "Miles saved by", "Oil change every (mi)", "Miles since oil change",
     "Truck oil miles left", "Truckmount", "TM hrs now", "TM oil hrs left", "Next TM service", "TM service due at (hrs)", "TM service hrs left",
-    "Safety inspection due", "Registration due", "Insurance until", "Paperwork issues", "Last reading"];
+    "Safety inspection due", "Registration due", "Insurance until", "Paperwork issues", "Last reading",
+    "VIN", "Check engine", "Fuel %", "GPS status", "Last GPS report", "Location", "Van engine hrs (reference only)"];
   const lines = [head];
   for (const { t, e } of reportRows()) {
     const { r, pw } = e;
@@ -1643,7 +1848,14 @@ function buildCsv() {
       r.service ? `${r.service.level}-hr` : "", r.service ? r.service.dueAt : "", r.service ? Math.round(r.service.left) : "",
       get("Safety inspection"), get("Registration"), get("Insurance"),
       e.pwBad.map(p => `${p.label} ${p.status === "due" ? "past due" : "due soon"}`).join("; "),
-      t.readingAt ? fmtWhen(t.readingAt) : ""
+      t.readingAt ? fmtWhen(t.readingAt) : "",
+      t.vin || (t.gps ? t.gps.vin : "") || "",
+      t.gps ? (t.gps.check === "on" ? "ON" + (t.gps.codes.length ? ": " + t.gps.codes.join(" ") : "") : t.gps.check === "off" ? "Off" : "") : "",
+      t.gps && isNum(t.gps.fuel) ? t.gps.fuel : "",
+      t.gps ? (t.gps.offline ? "Offline" : t.gps.status) : "",
+      t.gps && t.gps.at ? `${fmtWhen(t.gps.at)} ${fmtTime(new Date(t.gps.at))}` : "",
+      t.gps ? (t.gps.address || (isNum(t.gps.lat) ? `${t.gps.lat}, ${t.gps.lng}` : "")) : "",
+      t.gps && isNum(t.gps.engineHrs) ? t.gps.engineHrs : ""
     ]);
   }
   return "\ufeff" + lines.map(row => row.map(csvCell).join(",")).join("\r\n");
@@ -1684,7 +1896,8 @@ function buildPrintReport() {
         return h("tr", null,
           h("td", null, h("strong", { text: t.unit || "Truck" }), t.plate ? ` · ${t.plate}` : "",
             h("div", { text: [t.division, t.driver, prog ? prog.name : ""].filter(Boolean).join(" · ") })),
-          td(r.empty ? "No reading" : statusWord(r.worst), "nw st-" + (r.empty ? "" : r.worst)),
+          h("td", { class: "nw st-" + (r.empty ? "" : r.worst) }, r.empty ? "No reading" : statusWord(r.worst),
+            gpsAlerts(t).map(a => h("div", { class: "st-" + a.status, text: a.short }))),
           td(isNum(e.v.miles) ? fmt(e.v.miles) : "", "num nw"),
           td(r.oil ? oilText(r.oil) : "", "nw"),
           td(prog && isNum(e.v.hrs) ? fmt(e.v.hrs) : "", "num nw"),
