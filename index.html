@@ -31,6 +31,8 @@
   --accent: #1f4fbf;
   --accent-ink: #ffffff;
   --accent-soft: #e7eefc;
+  --clean: #0f766e;
+  --clean-bg: #dcf3ef;
   --ok: #17803d;
   --ok-bg: #e2f3e7;
   --soon: #985a05;
@@ -46,7 +48,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0c1117; --surface: #151d27; --surface-2: #19222d; --ink: #e7ecf2; --muted: #9babbc; --line: #273241;
-    --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45;
+    --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45; --clean: #4fd1c0; --clean-bg: #12302c;
     --ok: #55c57f; --ok-bg: #12301f; --soon: #f0b54d; --soon-bg: #372a10; --due: #ff8072; --due-bg: #3d1814;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
     color-scheme: dark;
@@ -54,7 +56,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #0c1117; --surface: #151d27; --surface-2: #19222d; --ink: #e7ecf2; --muted: #9babbc; --line: #273241;
-  --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45;
+  --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45; --clean: #4fd1c0; --clean-bg: #12302c;
   --ok: #55c57f; --ok-bg: #12301f; --soon: #f0b54d; --soon-bg: #372a10; --due: #ff8072; --due-bg: #3d1814;
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
   color-scheme: dark;
@@ -154,7 +156,12 @@ button { font: inherit; color: inherit; }
 .tile[data-status="ok"]::before { background: var(--ok); }
 .tile.flash { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
 .tile-head { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 14px 14px 0; cursor: pointer; }
-.tile-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.tile-title { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; min-width: 0; }
+.plate { font-weight: 700; font-size: .8rem; letter-spacing: .07em; padding: 1px 6px; border: 1.5px solid var(--muted); border-radius: 5px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.div-chip { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.div-chip.cleaning { background: var(--clean-bg); color: var(--clean); }
+.div-chip.restoration { background: var(--accent-soft); color: var(--accent); }
+.div-chip.none { color: var(--muted); border: 1px dashed var(--line); }
 .unit { font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; text-transform: uppercase; letter-spacing: .02em; line-height: 1.05; }
 .driver { color: var(--muted); font-weight: 600; }
 .tile-sub { margin: 3px 0 0; padding: 0 14px; color: var(--muted); font-size: .84rem; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -226,10 +233,11 @@ dialog.drawer::backdrop { background: rgba(8, 12, 18, .45); }
 .rename { display: grid; gap: 8px; }
 .rn-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .rn-fields label { display: block; font-size: .74rem; font-weight: 700; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .05em; }
-.rn-fields input { width: 100%; font: inherit; font-weight: 700; font-size: 1.05rem; padding: 8px 10px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); }
-.rn-fields input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.rn-fields input, .rn-fields select { width: 100%; font: inherit; font-weight: 700; font-size: 1.05rem; padding: 8px 10px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); }
+.rn-fields input:focus, .rn-fields select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .rn-actions { display: flex; gap: 8px; }
 .dr-head .unit { font-size: 1.8rem; }
+.dr-head .tile-title { margin: 0; }
 .dr-body { padding: 16px 18px 28px; display: grid; gap: 14px; }
 .dfields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .df label { display: block; font-size: .78rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
@@ -375,8 +383,13 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
     <div class="toolbar">
       <label class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Search unit or driver" autocomplete="off" aria-label="Search unit or driver">
+        <input id="q" type="search" placeholder="Search name, plate or driver" autocomplete="off" aria-label="Search name, plate or driver">
       </label>
+      <select class="sortsel" id="divSel" aria-label="Filter by unit">
+        <option value="">All units</option>
+        <option value="Cleaning">Cleaning</option>
+        <option value="Restoration">Restoration</option>
+      </select>
       <button class="chip-btn" type="button" id="tmOnly" aria-pressed="false">Truckmounts only</button>
       <select class="sortsel" id="sortSel" aria-label="Sort trucks">
         <option value="urgent">Most urgent first</option>
@@ -749,8 +762,24 @@ function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "T
 
 /* ---------- view (filters, search, sort) ---------- */
 const K_VIEW = "voda.view";
-const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false }, store.get(K_VIEW) || {});
-function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly }); }
+const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "" }, store.get(K_VIEW) || {});
+function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division }); }
+const DIVISIONS = ["Cleaning", "Restoration"];
+const divClass = d => d === "Cleaning" ? "cleaning" : d === "Restoration" ? "restoration" : "none";
+const inScope = t => !view.division || t.division === view.division;
+const scoped = () => trucks.filter(inScope);
+/** name · plate · unit, in that order, on one row */
+function idBits(t, titleId) {
+  return [h("span", { class: "unit", id: titleId || null, text: t.unit || "Truck" }),
+    t.plate ? h("span", { class: "plate", title: "License plate", text: t.plate }) : null,
+    h("span", { class: "div-chip " + divClass(t.division), text: t.division || "No unit" })];
+}
+function subLine(t) { return [t.driver, t.vehicle, t.year].filter(Boolean).join(" · "); }
+function divisionField(id, value) {
+  const sel = h("select", { id }, h("option", { value: "", text: "Choose…" }), DIVISIONS.map(d => h("option", { value: d, text: d })));
+  sel.value = DIVISIONS.includes(value) ? value : "";
+  return h("div", { class: "field" }, h("label", { for: id, text: "Unit" }), sel);
+}
 let openId = null;            // truck shown in the details panel
 const historyCache = {};      // truck id -> history rows (loaded when the panel opens)
 const openTasks = new Set();  // trucks whose checklist is expanded in the panel
@@ -835,6 +864,7 @@ function startApp() {
   $("howBody").replaceChildren(howList());
   $("q").value = view.q;
   $("sortSel").value = view.sort;
+  $("divSel").value = DIVISIONS.includes(view.division) ? view.division : "";
   $("tmOnly").setAttribute("aria-pressed", String(!!view.tmOnly));
   renderSync();
   renderAll();
@@ -857,8 +887,8 @@ function urgency(r) {
 }
 function visibleTrucks() {
   const q = view.q.trim().toLowerCase();
-  let list = trucks.map(t => ({ t, e: evalTruck(t) }));
-  if (q) list = list.filter(x => [x.t.unit, x.t.driver, x.t.vehicle, x.t.plate, x.t.year].join(" ").toLowerCase().includes(q));
+  let list = scoped().map(t => ({ t, e: evalTruck(t) }));
+  if (q) list = list.filter(x => [x.t.unit, x.t.driver, x.t.vehicle, x.t.plate, x.t.year, x.t.division].join(" ").toLowerCase().includes(q));
   if (view.tmOnly) list = list.filter(x => progOf(x.t));
   if (view.filter === "due" || view.filter === "soon" || view.filter === "ok") list = list.filter(x => !x.e.r.empty && x.e.r.worst === view.filter);
   if (view.filter === "paper") list = list.filter(x => x.e.pwBad.length);
@@ -883,7 +913,8 @@ function renderAll() {
 function renderKpis() {
   if (!loaded) { $("kpis").replaceChildren(); return; }
   let nDue = 0, nSoon = 0, nOk = 0, nPaper = 0;
-  for (const t of trucks) {
+  const inUnit = scoped();
+  for (const t of inUnit) {
     const e = evalTruck(t);
     if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; else nOk++; }
     if (e.pwBad.length) nPaper++;
@@ -893,7 +924,7 @@ function renderKpis() {
     h("span", { class: "num", text: String(num) }),
     h("span", { class: "lbl" }, h("span", { class: "long", text: lbl }), h("span", { class: "short", text: short || lbl })));
   $("kpis").replaceChildren(
-    kpi("all", "all", trucks.length, "All trucks"),
+    kpi("all", "all", inUnit.length, view.division ? `All ${view.division}` : "All trucks"),
     kpi("due", "due", nDue, "Overdue"),
     kpi("soon", "soon", nSoon, "Due soon"),
     kpi("ok", "ok", nOk, "OK"),
@@ -908,11 +939,11 @@ function renderGrid() {
   if (!list.length) {
     grid.append(h("div", { class: "empty-grid" },
       trucks.length ? "No trucks match. " : "No trucks yet. ",
-      trucks.length ? h("button", { class: "link", type: "button", text: "Show all trucks", onclick: () => { view.filter = "all"; view.q = ""; view.tmOnly = false; $("q").value = ""; $("tmOnly").setAttribute("aria-pressed", "false"); saveView(); renderAll(); } })
+      trucks.length ? h("button", { class: "link", type: "button", text: "Show all trucks", onclick: () => { view.filter = "all"; view.q = ""; view.tmOnly = false; view.division = ""; $("q").value = ""; $("divSel").value = ""; $("tmOnly").setAttribute("aria-pressed", "false"); saveView(); renderAll(); } })
                     : h("button", { class: "link", type: "button", text: "Add truck", onclick: () => openEdit(null) })));
   }
   for (const x of list) updateTile(x.t.id);
-  $("countText").textContent = `${list.length} of ${trucks.length} trucks`;
+  $("countText").textContent = `${list.length} of ${scoped().length} trucks${view.division ? " · " + view.division : ""}`;
 }
 
 function quickField(labelText, id, value, mode, truckId, gps) {
@@ -926,10 +957,10 @@ function quickField(labelText, id, value, mode, truckId, gps) {
 function tileEl(t) {
   const prog = progOf(t);
   const v = currentValues(t);
-  const sub = [t.vehicle, t.year].filter(Boolean).join(" · ");
+  const sub = subLine(t);
   return h("article", { class: "tile", id: "tile-" + t.id, "data-status": "none" },
     h("button", { class: "tile-head", type: "button", onclick: () => openDetails(t.id), title: "Open details" },
-      h("span", { class: "tile-title" }, h("span", { class: "unit", text: t.unit || "Truck" }), t.driver ? h("span", { class: "driver", text: t.driver }) : null),
+      h("span", { class: "tile-title" }, idBits(t)),
       h("span", { class: "pill", id: "pill-" + t.id, text: "No reading" })),
     h("p", { class: "tile-sub" }, sub ? h("span", { text: sub }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null),
     h("div", { class: "metrics", id: "met-" + t.id }),
@@ -1029,7 +1060,7 @@ function renderAside() {
   const aside = $("aside");
   if (!loaded) { aside.replaceChildren(); return; }
   const items = [], paper = [];
-  for (const t of trucks) {
+  for (const t of scoped()) {
     const e = evalTruck(t);
     for (const line of issueLines(t, e.r)) items.push({ t, ...line });
     for (const p of e.pwBad) paper.push({ t, ...p });
@@ -1082,21 +1113,32 @@ function renameForm(t) {
     oninput: e => { renameDraft.unit = e.target.value; } });
   const driver = h("input", { id: "rn-driver", type: "text", autocomplete: "name", maxlength: "60", value: renameDraft.driver,
     oninput: e => { renameDraft.driver = e.target.value; } });
+  const plate = h("input", { id: "rn-plate", type: "text", autocomplete: "off", maxlength: "20", value: renameDraft.plate, autocapitalize: "characters",
+    oninput: e => { renameDraft.plate = e.target.value; } });
+  const division = h("select", { id: "rn-division", onchange: e => { renameDraft.division = e.target.value; } },
+    h("option", { value: "", text: "Choose…" }), DIVISIONS.map(d => h("option", { value: d, text: d })));
+  division.value = DIVISIONS.includes(renameDraft.division) ? renameDraft.division : "";
   const save = h("button", { class: "btn primary small", type: "submit", id: "rn-save", text: "Save name" });
   const cancel = () => { renameDraft = null; renderDrawer(id); };
   return h("form", { class: "titles rename", onsubmit: async e => {
       e.preventDefault();
       const newUnit = renameDraft.unit.trim().replace(/\s+/g, " ");
       const newDriver = renameDraft.driver.trim().replace(/\s+/g, " ");
+      const newPlate = renameDraft.plate.trim().replace(/\s+/g, " ").toUpperCase();
+      const newDiv = DIVISIONS.includes(renameDraft.division) ? renameDraft.division : "";
       if (!newUnit) { err.textContent = "Give the truck a name."; return; }
-      if (newUnit === (t.unit || "") && newDriver === (t.driver || "")) { cancel(); return; }
+      if (newUnit === (t.unit || "") && newDriver === (t.driver || "") && newPlate === (t.plate || "") && newDiv === (t.division || "")) { cancel(); return; }
       const clash = trucks.find(x => x.id !== id && unitKey(x.unit) === unitKey(newUnit));
       if (clash) { err.textContent = `"${clash.unit}" is already used by another truck. Pick a different name.`; return; }
       const body = plain(t);
       body.unit = newUnit.slice(0, 60);
       body.driver = newDriver.slice(0, 60);
+      body.plate = newPlate.slice(0, 20);
+      body.division = newDiv;
       const items = [];
       if (newUnit !== (t.unit || "")) items.push(`Renamed from ${t.unit || "(no name)"} to ${newUnit}`);
+      if (newPlate !== (t.plate || "")) items.push(`Plate set to ${newPlate || "(none)"}`);
+      if (newDiv !== (t.division || "")) items.push(`Unit set to ${newDiv || "(none)"}`);
       if (newDriver !== (t.driver || "")) items.push(`Driver changed from ${t.driver || "(none)"} to ${newDriver || "(none)"}`);
       save.disabled = true; save.textContent = "Saving…";
       try {
@@ -1111,7 +1153,9 @@ function renameForm(t) {
     },
     onkeydown: e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); } } },
     h("div", { class: "rn-fields" },
-      h("div", null, h("label", { for: "rn-unit", text: "Unit name" }), unit),
+      h("div", null, h("label", { for: "rn-unit", text: "Name" }), unit),
+      h("div", null, h("label", { for: "rn-plate", text: "Plate" }), plate),
+      h("div", null, h("label", { for: "rn-division", text: "Unit" }), division),
       h("div", null, h("label", { for: "rn-driver", text: "Driver" }), driver)),
     err,
     h("div", { class: "rn-actions" }, save, h("button", { class: "btn small", type: "button", text: "Cancel", onclick: cancel })));
@@ -1125,12 +1169,12 @@ function renderDrawer(id) {
   drawer.replaceChildren(
     h("div", { class: "dr-head" },
       renameDraft && renameDraft.id === id ? renameForm(t) : h("div", { class: "titles" },
-        h("div", { class: "title-row" },
-          h("h2", { class: "unit", id: "drTitle", text: label(t) }),
-          h("button", { class: "icon-btn sm", type: "button", id: "d-rename", "aria-label": "Rename truck", title: "Rename truck",
-            onclick: () => { renameDraft = { id, unit: t.unit || "", driver: t.driver || "" }; renderDrawer(id); const u = $("rn-unit"); if (u) { u.focus(); u.select(); } } }, pencilIcon())),
+        h("div", { class: "title-row", style: "flex-wrap:wrap" },
+          h("h2", { class: "tile-title", style: "font-size:inherit" }, idBits(t, "drTitle")),
+          h("button", { class: "icon-btn sm", type: "button", id: "d-rename", "aria-label": "Edit name, plate and unit", title: "Edit name, plate and unit",
+            onclick: () => { renameDraft = { id, unit: t.unit || "", plate: t.plate || "", division: t.division || "", driver: t.driver || "" }; renderDrawer(id); const u = $("rn-unit"); if (u) { u.focus(); u.select(); } } }, pencilIcon())),
         h("p", { class: "tile-sub", style: "padding:0;margin-top:4px" },
-          h("span", { text: [t.vehicle, t.year, t.plate].filter(Boolean).join(" · ") }), prog ? h("span", { class: "tag", text: prog.name }) : null)),
+          subLine(t) ? h("span", { text: subLine(t) }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null)),
       h("span", { class: "pill", id: "d-pill" }),
       h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => drawer.close() },
         h("span", { text: "✕", style: "font-size:15px;line-height:1" }))),
@@ -1226,7 +1270,7 @@ const _saveTruck = saveTruck;
 saveTruck = async function (t, body, log) {
   if (body && body.unit) {
     const clash = trucks.find(x => x.id !== t.id && unitKey(x.unit) === unitKey(body.unit));
-    if (clash) throw { error: "duplicate_shown", message: `"${clash.unit}" is already used by another truck. Pick a different name.` };
+    if (clash) throw { error: "duplicate_shown", message: `The name "${clash.unit}" is already used by another truck. Pick a different name.` };
   }
   let out;
   try { out = await _saveTruck(t, body, log); }
@@ -1270,6 +1314,7 @@ async function saveReading(id) {
 let qTimer = null;
 $("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { view.q = $("q").value; renderGrid(); }, 120); });
 $("sortSel").addEventListener("change", () => { view.sort = $("sortSel").value; saveView(); renderGrid(); });
+$("divSel").addEventListener("change", () => { view.division = $("divSel").value; if (view.filter !== "all") view.filter = "all"; saveView(); renderAll(); });
 $("tmOnly").addEventListener("click", () => { view.tmOnly = !view.tmOnly; $("tmOnly").setAttribute("aria-pressed", String(view.tmOnly)); saveView(); renderGrid(); });
 
 /* ---------- dialogs ---------- */
@@ -1373,7 +1418,7 @@ function openEdit(id) {
   const t = isNew
     ? { id: null, unit: "", driver: "", vehicle: "", year: "", plate: "", oilInterval: 5000, milesAtOil: null, milesNow: null, tm: "none",
         cdsMilesPerHr: DEFAULT_CDS_MILES_PER_HR, hrsAtOil: null, tmOilInterval: DEFAULT_TM_OIL_HRS, tmOilHrs: null, hrsNow: null, tiers: {},
-        inspectionDue: "", registrationDue: "", insuranceUntil: "", notes: "", order: (trucks.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1) }
+        inspectionDue: "", registrationDue: "", insuranceUntil: "", notes: "", division: view.division || "", order: (trucks.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1) }
     : byId(id);
   if (!t) return;
   const err = h("p", { class: "dlg-err", role: "alert" });
@@ -1410,11 +1455,12 @@ function openEdit(id) {
   openDialog(
     h("h3", { id: "dlgTitle", text: isNew ? "Add truck" : `Edit ${label(t)}` }),
     h("div", { class: "grid2" },
-      textField("Unit", "ed-unit", t.unit, "text", null, "VODA 15"),
+      textField("Name", "ed-unit", t.unit, "text", null, "VODA 15"),
+      textField("Plate", "ed-plate", t.plate),
+      divisionField("ed-division", t.division),
       textField("Driver", "ed-driver", t.driver),
       textField("Vehicle", "ed-vehicle", t.vehicle, "text", null, "Ford Transit 250"),
-      textField("Year", "ed-year", t.year),
-      textField("Plate", "ed-plate", t.plate)),
+      textField("Year", "ed-year", t.year)),
     h("fieldset", null,
       h("legend", { text: "Truck oil" }),
       h("div", { class: "grid2" },
@@ -1467,12 +1513,12 @@ function openEdit(id) {
           try {
             Object.assign(body, {
               unit: val("ed-unit").slice(0, 60), driver: val("ed-driver").slice(0, 60), vehicle: val("ed-vehicle").slice(0, 80),
-              year: val("ed-year").slice(0, 10), plate: val("ed-plate").slice(0, 20),
+              year: val("ed-year").slice(0, 10), plate: val("ed-plate").slice(0, 20), division: val("ed-division"),
               oilInterval: nums["ed-oilIv"], milesAtOil: nums["ed-milesAtOil"], tm: prog ? kind : "none",
               inspectionDue: val("ed-insp"), registrationDue: val("ed-reg"), insuranceUntil: val("ed-ins"),
               notes: val("ed-notes").slice(0, 1000), order: isNum(t.order) ? t.order : 99
             });
-            if (!body.unit) { err.textContent = "Give the truck a unit name."; return; }
+            if (!body.unit) { err.textContent = "Give the truck a name."; return; }
             if (body.registrationDue && !/^\d{4}-\d{2}$/.test(body.registrationDue)) { err.textContent = "Registration month should look like 2026-02."; return; }
             if (kind === "cds") {
               body.hrsAtOil = opt("ed-hrsAtOil");
@@ -1567,7 +1613,7 @@ $("meBtn").addEventListener("click", openSettings);
 
 /* ---------- report: download for Excel, print or PDF, share text ---------- */
 function reportRows() {
-  return trucks.map(t => ({ t, e: evalTruck(t) }))
+  return scoped().map(t => ({ t, e: evalTruck(t) }))
     .sort((a, b) => (RANK[b.e.r.worst] - RANK[a.e.r.worst]) || (urgency(a.e.r) - urgency(b.e.r)) || ((a.t.order ?? 99) - (b.t.order ?? 99)));
 }
 function reportStamp() {
@@ -1580,7 +1626,7 @@ function csvCell(v) {
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function buildCsv() {
-  const head = ["Unit", "Driver", "Vehicle", "Year", "Status", "Miles now", "Miles saved by", "Oil change every (mi)", "Miles since oil change",
+  const head = ["Name", "Plate", "Unit", "Driver", "Vehicle", "Year", "Status", "Miles now", "Miles saved by", "Oil change every (mi)", "Miles since oil change",
     "Truck oil miles left", "Truckmount", "TM hrs now", "TM oil hrs left", "Next TM service", "TM service due at (hrs)", "TM service hrs left",
     "Safety inspection due", "Registration due", "Insurance until", "Paperwork issues", "Last reading"];
   const lines = [head];
@@ -1589,7 +1635,7 @@ function buildCsv() {
     const prog = progOf(t);
     const get = lbl => { const p = pw.find(x => x.label === lbl); return p ? p.shown : ""; };
     lines.push([
-      t.unit, t.driver, t.vehicle, t.year, r.empty ? "No reading" : statusWord(r.worst),
+      t.unit, t.plate, t.division, t.driver, t.vehicle, t.year, r.empty ? "No reading" : statusWord(r.worst),
       isNum(e.v.miles) ? e.v.miles : "", t.readingBy || "",
       t.oilInterval, r.oil ? Math.round(r.oil.used) : "", r.oil ? Math.round(r.oil.left) : "",
       prog ? prog.name : "", prog && isNum(e.v.hrs) ? e.v.hrs : "",
@@ -1612,7 +1658,7 @@ function downloadFile(name, text, type) {
 }
 function downloadCsv() {
   const st = reportStamp();
-  downloadFile(`VODA-Fleet-Report-${st.iso}.csv`, buildCsv(), "text/csv;charset=utf-8");
+  downloadFile(`VODA-Fleet-Report-${view.division ? view.division + "-" : ""}${st.iso}.csv`, buildCsv(), "text/csv;charset=utf-8");
   toast("Report downloaded. Open it in Excel or Google Sheets.");
 }
 function buildPrintReport() {
@@ -1628,7 +1674,7 @@ function buildPrintReport() {
   const td = (v, cls) => h("td", { class: cls || null, text: v == null ? "" : String(v) });
   $("printReport").replaceChildren(
     h("h1", { text: "VODA Fleet Maintenance" }),
-    h("p", { class: "pr-sub", text: `Report · ${st.text} · ${trucks.length} trucks` }),
+    h("p", { class: "pr-sub", text: `Report · ${st.text} · ${view.division ? view.division + " · " : ""}${rows.length} trucks` }),
     h("div", { class: "pr-sum" }, h("span", { text: `${nDue} overdue` }), h("span", { text: `${nSoon} due soon` }), h("span", { text: `${nOk} OK` })),
     h("table", null,
       h("thead", null, h("tr", null, ["Truck", "Status", "Miles now", "Truck oil", "TM hrs", "TM oil", "Next TM service", "Paperwork", "Last reading"].map(x => h("th", { text: x })))),
@@ -1636,7 +1682,8 @@ function buildPrintReport() {
         const { r } = e;
         const prog = progOf(t);
         return h("tr", null,
-          h("td", null, h("strong", { text: t.unit || "Truck" }), t.driver ? ` · ${t.driver}` : "", prog ? h("div", { text: prog.name }) : null),
+          h("td", null, h("strong", { text: t.unit || "Truck" }), t.plate ? ` · ${t.plate}` : "",
+            h("div", { text: [t.division, t.driver, prog ? prog.name : ""].filter(Boolean).join(" · ") })),
           td(r.empty ? "No reading" : statusWord(r.worst), "nw st-" + (r.empty ? "" : r.worst)),
           td(isNum(e.v.miles) ? fmt(e.v.miles) : "", "num nw"),
           td(r.oil ? oilText(r.oil) : "", "nw"),
@@ -1672,7 +1719,7 @@ function reportOpt(icon, title, sub, onclick, id) {
 function openReportMenu() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Fleet report" }),
-    h("p", { text: `All ${trucks.length} trucks, most urgent first, with the numbers on screen right now.` }),
+    h("p", { text: `${view.division ? view.division + ": " : "All "}${scoped().length} trucks, most urgent first, with the numbers on screen right now.` }),
     h("div", { class: "report-opts" },
       reportOpt("csv", "Download for Excel (CSV)", "Every truck with miles, oil, TM service and paperwork. Opens in Excel or Google Sheets.", () => { downloadCsv(); closeDialog(); }, "rep-csv"),
       reportOpt("pdf", "Print or save as PDF", "A one-page fleet table. Choose Save as PDF in the print window.", printReport, "rep-pdf"),

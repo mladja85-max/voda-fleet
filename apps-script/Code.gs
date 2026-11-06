@@ -18,7 +18,7 @@
  * This file is kept in the voda-fleet GitHub repository (apps-script/Code.gs) so every change comes as a pull request.
  * After merging a change: open Apps Script, replace Code.gs with this file, Ctrl+S, then deploy a New version as above.
  *
- * In the Trucks tab, don't rename or move columns A to AB. You can add your own columns to the right.
+ * In the Trucks tab, don't rename or move columns A to AC. You can add your own columns to the right.
  *
  * ONE STEP GPS MILEAGE (optional)
  * 1. Project Settings (gear, left side) > Script Properties > Add script property.
@@ -32,7 +32,8 @@
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "oilInterval", "milesAtOil", "milesNow", "tm", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
-  "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt"];
+  "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division"];
+const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000"];
 const TIERS = ["100", "400", "500", "1000", "2000"];
@@ -96,7 +97,7 @@ function writeSetupTab_(code) {
     ["", ""],
     ["The app asks for this code the first time it opens on each phone.", ""],
     ["To change it: Extensions > Apps Script, pick newAccessCode, click Run.", ""],
-    ["Trucks tab: don't rename or move columns A to AB. You can add your own columns to the right.", ""],
+    ["Trucks tab: don't rename or move columns A to AC. You can add your own columns to the right.", ""],
     ["Log tab: every saved reading and service is added here.", ""]
   ]);
   s.getRange("A1:B1").setFontWeight("bold").setFontSize(14);
@@ -214,8 +215,20 @@ function appendLog_(t, log, by) {
 
 /* ---------------- rows ---------------- */
 
+/** Sheets set up before a column was added get it here: header written, nothing of yours overwritten. */
+function ensureTruckCols_(sheet) {
+  const need = TRUCK_COLS.length;
+  if (sheet.getMaxColumns() < need) sheet.insertColumnsAfter(sheet.getMaxColumns(), need - sheet.getMaxColumns());
+  const head = String(sheet.getRange(1, need).getValues()[0][0]);
+  if (head === TRUCK_COLS[need - 1]) return;
+  if (head.trim() !== "") sheet.insertColumnBefore(need);   // your own column there moves one to the right
+  sheet.getRange(1, need).setValue(TRUCK_COLS[need - 1]).setFontWeight("bold");
+  sheet.getRange(2, need, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+}
+
 function readTrucks_() {
   const sheet = sheet_("Trucks");
+  ensureTruckCols_(sheet);
   const last = sheet.getLastRow();
   if (last < 2) return [];
   const values = sheet.getRange(2, 1, last - 1, TRUCK_COLS.length).getValues();
@@ -263,7 +276,7 @@ function toRow_(t) {
 
 function clean_(t) {
   const out = { tiers: {} };
-  const limits = { unit: 60, driver: 60, vehicle: 80, year: 10, plate: 20, tm: 10,
+  const limits = { unit: 60, driver: 60, vehicle: 80, year: 10, plate: 20, tm: 10, division: 20,
     inspectionDue: 10, registrationDue: 7, insuranceUntil: 10, notes: 1000, readingAt: 40, readingBy: 60 };
   TRUCK_COLS.forEach(function (c) {
     if (c === "id" || c === "updatedAt" || c.indexOf("tier") === 0) return;
@@ -271,6 +284,7 @@ function clean_(t) {
     out[c] = t[c] === null || t[c] === undefined ? "" : String(t[c]).slice(0, limits[c] || 100);
   });
   if (TM_KINDS.indexOf(out.tm) === -1) out.tm = "none";
+  if (DIVISIONS.indexOf(out.division) === -1) out.division = "";
   if (t.tiers && typeof t.tiers === "object") {
     TIERS.forEach(function (k) { const n = num_(t.tiers[k]); if (n !== null) out.tiers[k] = n; });
   }
