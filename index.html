@@ -148,6 +148,12 @@ button { font: inherit; color: inherit; }
 .kpi.paper::after { background: var(--muted); }
 .kpi.all::after { background: var(--accent); }
 .kpi.engine::after { background: var(--due); }
+.kpi.doc.due::after { background: var(--due); }
+.kpi.doc.due .num { color: var(--due); }
+.kpi.doc.soon::after { background: var(--soon); }
+.kpi.doc.soon .num { color: var(--soon); }
+.kpi.doc.clear::after { background: var(--ok); }
+.kpi.doc.clear .num { color: var(--ok); }
 .kpi.engine .num { color: var(--due); }
 .kpi .num { font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .kpi.due .num { color: var(--due); }
@@ -155,7 +161,7 @@ button { font: inherit; color: inherit; }
 .kpi.ok .num { color: var(--ok); }
 .kpi .lbl { color: var(--muted); font-weight: 700; font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; }
 .kpi .lbl .short { display: none; }
-@media (max-width: 760px) { .kpi .lbl .short { display: inline; } }
+@media (max-width: 1279px) { .kpi .lbl .long { display: none; } .kpi .lbl .short { display: inline; } }
 .kpi[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
@@ -1281,6 +1287,7 @@ function visibleTrucks() {
   if (view.tmOnly) list = list.filter(x => progOf(x.t));
   if (view.filter === "due" || view.filter === "soon" || view.filter === "ok") list = list.filter(x => !x.e.r.empty && x.e.r.worst === view.filter);
   if (view.filter === "paper") list = list.filter(x => x.e.pwBad.length);
+  for (const [key, lbl] of PAPER_KPIS) if (view.filter === key) list = list.filter(x => x.e.pw.some(p => p.label === lbl && p.status !== "ok"));
   if (view.filter === "engine") list = list.filter(x => x.t.gps && x.t.gps.check === "on");
   if (view.filter === "tmcheck") list = list.filter(x => checkDue(x.t));
   if (view.sort === "urgent") list.sort(byUrgency);
@@ -1306,14 +1313,17 @@ function renderAll() {
   }
 }
 
+/** Summary boxes for one kind of paperwork each: past due or due within 30 days. */
+const PAPER_KPIS = [["insp", "Safety inspection"], ["reg", "Registration"]];
 function renderKpis() {
   if (!loaded) { $("kpis").replaceChildren(); return; }
-  let nDue = 0, nSoon = 0, nOk = 0, nPaper = 0, nEngine = 0, nTm = 0, tmMissed = false;
+  let nDue = 0, nSoon = 0, nEngine = 0, nTm = 0, tmMissed = false;
+  const doc = { insp: { due: 0, soon: 0 }, reg: { due: 0, soon: 0 } };
   const inUnit = scoped();
   for (const t of inUnit) {
     const e = evalTruck(t);
-    if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; else nOk++; }
-    if (e.pwBad.length) nPaper++;
+    if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; }
+    for (const [key, lbl] of PAPER_KPIS) { const p = e.pw.find(x => x.label === lbl); if (p && p.status !== "ok") doc[key][p.status]++; }
     if (t.gps && t.gps.check === "on") nEngine++;
     const c = tmCheck(t);
     if (c && (c.state === "today" || c.state === "missed")) { nTm++; if (c.state === "missed" || c.weeks >= 1 || !c.last) tmMissed = true; }
@@ -1322,9 +1332,16 @@ function renderKpis() {
   const showTm = apiLevel >= 10 && trucks.some(t => progOf(t));
   if (!showEngine && view.filter === "engine") view.filter = "all";
   if (!showTm && view.filter === "tmcheck") view.filter = "all";
+  if (view.filter === "ok" || view.filter === "paper") view.filter = "all";   // those boxes are gone
   const extra = (showEngine ? 1 : 0) + (showTm ? 1 : 0);
   $("kpis").style.setProperty("--kpis", 5 + extra);
-  $("kpis").style.setProperty("--kpis-phone", 4 + extra);
+  $("kpis").style.setProperty("--kpis-phone", 3);   // phones: rows of three (All trucks is hidden there)
+  const docKpi = (key, lbl, short) => {
+    const d = doc[key], n = d.due + d.soon;
+    const el = kpi(key, "doc " + (d.due ? "due" : n ? "soon" : "clear"), n, lbl, short);
+    el.title = n ? [d.due ? `${d.due} past due` : "", d.soon ? `${d.soon} due within 30 days` : ""].filter(Boolean).join(", ") : "Nothing due within 30 days";
+    return el;
+  };
   const kpi = (key, cls, num, lbl, short) => h("button", { class: "kpi " + cls, type: "button", "aria-pressed": String(view.filter === key),
     onclick: () => { view.filter = view.filter === key && key !== "all" ? "all" : key; saveView(); renderAll(); } },
     h("span", { class: "num", text: String(num) }),
@@ -1333,8 +1350,8 @@ function renderKpis() {
     kpi("all", "all", inUnit.length, view.division ? `All ${view.division}` : "All trucks"),
     kpi("due", "due", nDue, "Overdue"),
     kpi("soon", "soon", nSoon, "Due soon"),
-    kpi("ok", "ok", nOk, "OK"),
-    kpi("paper", "paper", nPaper, "Paperwork to check", extra ? "Papers" : "Paperwork"),
+    docKpi("insp", "Safety inspection", "Inspection"),
+    docKpi("reg", "Registration", "Registration"),
     showEngine ? kpi("engine", "engine", nEngine, "Check engine", "Engine") : null,
     showTm ? kpi("tmcheck", "tmchk" + (tmMissed ? " missed" : nTm ? "" : " clear"), nTm, "TM hrs not checked", "TM hrs") : null].filter(Boolean));
 }
