@@ -88,7 +88,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 15;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 16;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2010,7 +2010,7 @@ function setShop_(req) {
 // A technician sees only the checklists an Admin ticked for him (Settings > Users in the app); this script enforces it.
 
 const LIST_SHEET = "Checklists";
-const LIST_COLS = ["id", "order", "name", "createdAt"];
+const LIST_COLS = ["id", "order", "name", "createdAt", "note"];   // note: shown at the top of the checklist
 const DEFAULT_LIST = "cleaning";
 const DEFAULT_LIST_NAME = "Cleaning supplies";
 const SUP_SHEET = "Supplies";
@@ -2021,10 +2021,40 @@ const REQ_COLS = ["id", "productId", "product", "container", "section", "qty", "
 const CHK_SHEET = "Supply checks";
 const CHK_COLS = ["id", "at", "by", "missing", "items", "note", "list"];
 const REQ_STATUS = ["To order", "Ordered", "Received", "Removed"];
-const SUP_SCHEMA = "2";      // bumped when the tabs above gain columns; older tabs are brought up to date once
+const SUP_SCHEMA = "3";      // bumped when the tabs above gain columns; older tabs are brought up to date once
 const SUP_MAX_QTY = 999;
 const SUP_KEEP_DAYS = 45;    // received or removed items stay in the app this long (they stay in the sheet for good)
 const SUP_CHECKS_PER_LIST = 12;
+// More checklists from VODA's paper sheets. Each is added once (the first time this script version runs) and never again,
+// so renaming or deleting one in the app sticks. Assign them to technicians in the app (Settings > Users and invites).
+const SUP_STARTERS = [
+  { id: "mold", name: "Water/Mold remediation", note: "Warehouse in stock: mark what's missing or running low, and how many we need.", items: [
+    ["Protective gear", "Booties", ""], ["Protective gear", "Masks", ""], ["Protective gear", "HEPA mask cartridges", ""],
+    ["Protective gear", "Black gloves", ""], ["Protective gear", "Suits – coveralls", ""],
+    ["Containment & covers", "Furniture plastic", ""], ["Containment & covers", "Containment plastic", ""], ["Containment & covers", "Painters tape", ""],
+    ["Containment & covers", "Containment tape", ""], ["Containment & covers", "Floor paper", ""], ["Containment & covers", "Cloth – floor cover", ""],
+    ["Cleaning & treatment", "Black trash bags", ""], ["Cleaning & treatment", "White towels", ""],
+    ["Cleaning & treatment", "Disinfectant – Vital Oxide", ""], ["Cleaning & treatment", "Microbial paint", ""],
+    ["Blades, cords & bags", "Blades serrated – hand cutter", ""], ["Blades, cords & bags", "Blades – drywall for Makita cutter", ""],
+    ["Blades, cords & bags", "Extension cords", ""], ["Blades, cords & bags", "Vacuum bags – backpack", ""],
+    ["Filters", "Filter 12x12x1", ""], ["Filters", "Filter 16x16x1", ""], ["Filters", "Filter 18x20x1", ""], ["Filters", "Filter 14x14x1", ""],
+    ["Filters", "HEPA filter Dri-Eaz 500 (F321)", ""], ["Filters", "HEPA filter Dri-Eaz 700 – 19x21", ""], ["Filters", "Carbon filters", ""],
+    ["PPE kit", "Carrying bag – Husky (kit: 1)", ""], ["PPE kit", "Coveralls (kit: 4)", ""], ["PPE kit", "Eyewear sets – safety goggles (kit: 2)", "set"],
+    ["PPE kit", "Nitrile gloves (kit: 1 pack)", "pack"], ["PPE kit", "Waterproof boots (kit: 1 set)", "set"],
+    ["PPE kit", "Half face respirator (kit: 1)", ""], ["PPE kit", "Full face respirator (kit: 1)", ""],
+    ["PPE kit", "Mask filtration cartridges (kit: 2 sets, 4 total)", "set"], ["PPE kit", "Working gloves (kit: 4 pairs)", "pair"],
+    ["PPE kit", "N95 masks (kit: 4)", ""], ["PPE kit", "Clean towels (kit: 2)", ""], ["PPE kit", "Cleaning wipes for respirator masks", ""],
+    ["PPE kit", "Tape (kit: 1 roll)", "roll"], ["PPE kit", "White trash bags (kit: 2)", ""], ["PPE kit", "Booties (kit: 2 packs)", "pack"]] },
+  { id: "hvac", name: "HVAC air-duct cleaning", note: "VODA technicians assume full responsibility for any loss or misuse of their assigned equipment.", items: [
+    ["PPE", "Masks", ""], ["PPE", "Gloves", ""], ["PPE", "Booties", ""],
+    ["Machines & hoses", "HVAC negative air machine – vacuum", ""], ["Machines & hoses", "Compressor", ""], ["Machines & hoses", "HVAC hoses", ""],
+    ["Machines & hoses", "Plugs & connections", ""], ["Machines & hoses", "Medusa – return", ""],
+    ["Tape & tools", "HVAC tape – blue", ""], ["Tape & tools", "HVAC tape – silver", ""], ["Tape & tools", "Duct cutters", ""],
+    ["Tape & tools", "Drill", ""], ["Tape & tools", "Screws", ""],
+    ["Site gear", "Gas can", ""], ["Site gear", "Vacuum – regular", ""], ["Site gear", "Door/wall corners", ""], ["Site gear", "Toolbox", ""],
+    ["Site gear", "Extension cords", ""], ["Site gear", "Ladder", ""],
+    ["Cleaning", "Towels", ""], ["Cleaning", "Disinfectant", ""], ["Cleaning", "Fogger", ""]] }
+];
 const SUP_SEED = [
   ["Carpet & upholstery", "Procyon Powder", "box"],
   ["Carpet & upholstery", "Procyon Liquid", "gallon"],
@@ -2097,7 +2127,7 @@ function supSheets_() {
     return { s: s, isNew: true };
   };
   const l = make(LIST_SHEET, LIST_COLS, ["order"]);
-  if (l.isNew) appendRows_(l.s, LIST_COLS.length, [[DEFAULT_LIST, 1, DEFAULT_LIST_NAME, new Date().toISOString()]]);
+  if (l.isNew) appendRows_(l.s, LIST_COLS.length, [[DEFAULT_LIST, 1, DEFAULT_LIST_NAME, new Date().toISOString(), ""]]);
   const p = make(SUP_SHEET, SUP_COLS, ["order"]);
   if (p.isNew) {
     appendRows_(p.s, SUP_COLS.length, SUP_SEED.map(function (x, i) { return [supNewId_(), i + 1, x[0], x[1], x[2], DEFAULT_LIST]; }));
@@ -2106,8 +2136,32 @@ function supSheets_() {
   }
   const r = make(REQ_SHEET, REQ_COLS, ["qty"]);
   const c = make(CHK_SHEET, CHK_COLS, ["missing"]);
+  supAddStarters_(l.s, p.s);
   PropertiesService.getScriptProperties().setProperty("SUP_SCHEMA", SUP_SCHEMA);
   return { l: l.s, p: p.s, r: r.s, c: c.s };
+}
+
+/** Adds each starter checklist once. One with the same ID or name already there counts as added. */
+function supAddStarters_(ls, ps) {
+  const props = PropertiesService.getScriptProperties();
+  const done = String(props.getProperty("SUP_STARTERS") || "").split(",").filter(Boolean);
+  const todo = SUP_STARTERS.filter(function (x) { return done.indexOf(x.id) === -1; });
+  if (!todo.length) return;
+  const lists = supLists_(ls);
+  let order = lists.reduce(function (m, l) { return Math.max(m, l.order || 0); }, 0);
+  let itemOrder = supProducts_(ps, false).list.reduce(function (m, p) { return Math.max(m, p.order || 0); }, 0);
+  const now = new Date().toISOString();
+  const listRows = [], itemRows = [];
+  todo.forEach(function (x) {
+    done.push(x.id);
+    if (lists.some(function (l) { return l.id === x.id || l.name.toLowerCase() === x.name.toLowerCase(); })) return;
+    listRows.push([x.id, ++order, x.name, now, x.note || ""]);
+    x.items.forEach(function (it) { itemRows.push([supNewId_(), ++itemOrder, it[0], it[1], it[2], x.id]); });
+  });
+  appendRows_(ls, LIST_COLS.length, listRows);
+  appendRows_(ps, SUP_COLS.length, itemRows);
+  props.setProperty("SUP_STARTERS", done.join(","));
+  if (listRows.length) supBump_();
 }
 
 /** Changes whenever a checklist is saved from the app, so two people editing can't overwrite each other. */
@@ -2127,7 +2181,8 @@ function supLists_(s) {
   if (last < 2) return [];
   const seen = {};
   return s.getRange(2, 1, last - 1, LIST_COLS.length).getValues().map(function (r, i) {
-    return { id: String(r[0] || "").trim(), order: num_(r[1]), name: supText_(r[2], 40), createdAt: supIso_(r[3]), row: i + 2 };
+    return { id: String(r[0] || "").trim(), order: num_(r[1]), name: supText_(r[2], 40), createdAt: supIso_(r[3]),
+      note: String(r[4] === null || r[4] === undefined ? "" : r[4]).trim().slice(0, 300), row: i + 2 };
   }).filter(function (x) {
     if (!/^[A-Za-z0-9-]{1,40}$/.test(x.id) || seen[x.id]) return false;
     seen[x.id] = true;
@@ -2227,7 +2282,7 @@ function suppliesForApp_(inLock, user) {
   const open = reqs.filter(function (r) { return r.status === "To order" || r.status === "Ordered"; });
   return {
     ver: supVer_(),
-    lists: lists.map(function (l) { return { id: l.id, name: l.name }; }),
+    lists: lists.map(function (l) { return { id: l.id, name: l.name, note: l.note }; }),
     products: prod.list.filter(function (p) { return mine[p.list]; })
       .map(function (p) { return { id: p.id, list: p.list, section: p.section, name: p.name, container: p.container }; }),
     requests: open.concat(closed),
@@ -2339,6 +2394,7 @@ function saveChecklist_(req) {
   if (!body || !items || items.length > 500) return { ok: false, error: "bad_request" };
   const name = supText_(body.name, 40);
   if (!name) return { ok: false, error: "bad_list_name" };
+  const note = body.note === undefined ? null : String(body.note || "").trim().replace(/[ \t]+/g, " ").slice(0, 300);   // left alone when the app doesn't send one
   const lists = supLists_(sh.l);
   let list = body.id ? lists.filter(function (l) { return l.id === String(body.id); })[0] : null;
   if (body.id && !list) return { ok: false, error: "gone" };
@@ -2364,9 +2420,10 @@ function saveChecklist_(req) {
   if (!list) {
     const maxOrder = lists.reduce(function (m, l) { return Math.max(m, l.order || 0); }, 0);
     list = { id: supNewId_("l"), order: maxOrder + 1, name: name };
-    appendRows_(sh.l, LIST_COLS.length, [[list.id, list.order, name, now]]);
-  } else if (list.name !== name) {
-    sh.l.getRange(list.row, 3).setValue(name);
+    appendRows_(sh.l, LIST_COLS.length, [[list.id, list.order, name, now, note || ""]]);
+  } else {
+    if (list.name !== name) sh.l.getRange(list.row, 3).setValue(name);
+    if (note !== null && note !== list.note) sh.l.getRange(list.row, 5).setValue(note);
   }
   const byList = {};
   all.forEach(function (p) { if (p.list !== list.id) (byList[p.list] = byList[p.list] || []).push(p); });
@@ -2380,7 +2437,7 @@ function saveChecklist_(req) {
     sh.r.getRange(x.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(r)]);
   });
   supBump_();
-  return { ok: true, list: { id: list.id, name: name }, supplies: suppliesForApp_(true, req.user) };
+  return { ok: true, list: { id: list.id, name: name, note: note === null ? list.note || "" : note }, supplies: suppliesForApp_(true, req.user) };
 }
 
 /** Admin: deletes a checklist and its items. Anything of it still on the order list is marked Removed (kept in the

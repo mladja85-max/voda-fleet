@@ -445,6 +445,7 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 /* ---- cleaning supplies ---- */
 .sup { display: grid; gap: 12px; max-width: 920px; }
 .sup-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sup-notice { margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--ink); font-weight: 600; white-space: pre-line; }
 .sup-title { font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .03em; }
 .list-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
 .list-chips::-webkit-scrollbar { display: none; }
@@ -573,6 +574,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .sup-sec-head h3, .ord-head h3 { font-size: 1.12rem; }
 }
 @media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
+@media (max-width: 480px) { .sup-bar .sum.quiet { display: none; } .sup-bar #supNone { flex: 1; } }
 @media (prefers-reduced-motion: reduce) { .spin svg { animation: none; } }
 
 /* ---- report menu + printable report ---- */
@@ -906,7 +908,7 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 15;                          // the Google script version this app expects (15: checklists and who sees what)
+const NEEDS_API = 16;                          // the Google script version this app expects (16: a note on each checklist)
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like Checklists) won't work. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -3192,6 +3194,7 @@ function renderSupplies() {
     h("p", { class: "sup-last", id: "supLast" }, ...(last
       ? ["Last check: ", h("strong", { text: supWhen(last.at) }), ` by ${last.by || "someone"} · ${last.missing ? `${last.missing} missing` : "nothing missing"}${last.pending ? " · sending…" : ""}`]
       : ["No checks yet."])),
+    L.note ? h("p", { class: "sup-notice", id: "supNotice", text: L.note }) : null,
     ...(tab === "orders" ? supOrdersBody(sc) : supCheckBody(sc))].filter(Boolean));
 }
 /** Re-draw after a tap, keeping the keyboard focus where it was. */
@@ -3446,6 +3449,8 @@ function openChecklistEditor(listId) {
   const L = listId ? s.lists.find(l => l.id === listId) : null;
   if (listId && !L) return;
   let listName = L ? L.name : "";
+  let listNote = L ? L.note || "" : "";
+  const withNote = apiLevel >= 16;   // older scripts don't keep a note
   const secs = L ? supSections(supScope(s, L)).map(g => ({ name: g.name, items: g.items.map(p => ({ id: p.id, name: p.name, container: p.container })) }))
     : [{ name: "General", items: [{ id: "", name: "", container: "" }] }];
   const err = h("p", { class: "dlg-err", role: "alert", id: "ed-err" });
@@ -3459,6 +3464,9 @@ function openChecklistEditor(listId) {
         : "Name it, add its items (group them in sections if you like), and Save. Then choose who sees it in Settings > Users and invites." }),
       h("div", { class: "field" }, h("label", { for: "ed-list", text: "Checklist name" }),
         h("input", { id: "ed-list", type: "text", maxlength: "40", value: listName, placeholder: "e.g. Equipment", oninput: e => { listName = e.target.value; } })),
+      withNote ? h("div", { class: "field" }, h("label", { for: "ed-note", text: "Note at the top (optional)" }),
+        h("textarea", { id: "ed-note", rows: "2", maxlength: "300", value: listNote, placeholder: "e.g. Technicians are responsible for their assigned equipment.", oninput: e => { listNote = e.target.value; } }),
+        h("span", { class: "hint", text: "Everyone who has this checklist sees it above the items." })) : null,
       ...secs.map((g, si) => h("fieldset", { class: "ed-sec" },
         h("div", { class: "ed-sec-head" },
           h("input", { id: `ed-s-${si}`, type: "text", value: g.name, maxlength: "40", "aria-label": "Section name", placeholder: "Section name", oninput: e => { g.name = e.target.value; } }),
@@ -3507,7 +3515,9 @@ function openChecklistEditor(listId) {
             const btn = ev.currentTarget;
             btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
             try {
-              const out = await api("saveChecklist", { base, list: { id: L ? L.id : "", name }, products });
+              const list = { id: L ? L.id : "", name };
+              if (withNote) list.note = listNote.trim();
+              const out = await api("saveChecklist", { base, list, products });
               noteSupplies(out.supplies);
               closeDialog();
               if (!L && out.list) { view.list = out.list.id; view.supTab = "check"; saveView(); }
