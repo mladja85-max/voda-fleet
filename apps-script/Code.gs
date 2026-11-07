@@ -20,6 +20,12 @@
  *
  * In the Trucks tab, don't rename or move columns A to AE. You can add your own columns to the right.
  *
+ * SERVICE HISTORY
+ * Every service record lives in the Service tab (one row each). The app adds a row whenever an oil change or
+ * service is logged, and can add, edit or delete any record. To bring in an old log, import a file whose tab is
+ * named "Service import" (File > Import > Insert new sheet). It is merged in automatically the next time the app
+ * opens a truck, then renamed "Service import (merged)" so it is kept as a backup and never merged twice.
+ *
  * ONE STEP GPS MILEAGE (optional)
  * 1. Project Settings (gear, left side) > Script Properties > Add script property.
  *    Property: ONESTEP_API_KEY   Value: your One Step GPS API key.   Save script properties.
@@ -35,7 +41,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "oilInterval", "milesAtOil", "milesNow", "tm", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
   "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color"];
-const API_VERSION = 6;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 7;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color); older sheets get them automatically
 const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
@@ -145,6 +151,12 @@ function doPost(e) {
         return json_(withLock_(function () { return deleteTruck_(req); }));
       case "history":
         return json_({ ok: true, entries: history_(String(req.id || "")) });
+      case "services":
+        return json_(withLock_(function () { return { ok: true, services: svcList_(String(req.truckId || "")) }; }));
+      case "saveService":
+        return json_(withLock_(function () { return svcSave_(req); }));
+      case "deleteService":
+        return json_(withLock_(function () { return svcDelete_(req); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -176,9 +188,11 @@ function saveTruck_(req) {
   const sheet = sheet_("Trucks");
   if (found) sheet.getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([row]);
   else sheet.getRange(Math.max(sheet.getLastRow(), 1) + 1, 1, 1, TRUCK_COLS.length).setValues([row]);
-  if (found && found.truck.unit !== t.unit) gpsRenameTruck_(found.truck.unit, t.unit);
+  if (found && found.truck.unit !== t.unit) { gpsRenameTruck_(found.truck.unit, t.unit); svcRenameTruck_(id, t.unit); }
   if (req.log && typeof req.log === "object") appendLog_(t, req.log, req.by);
-  return { ok: true, truck: fromRow_(row) };
+  let service = null;
+  if (req.log && req.log.kind === "service") service = svcFromLog_(t, req.log, req.by);   // logged services go in the service history too
+  return { ok: true, truck: fromRow_(row), service: service };
 }
 
 function deleteTruck_(req) {
@@ -214,11 +228,203 @@ function appendLog_(t, log, by) {
   const sheet = sheet_("Log");
   const items = Array.isArray(log.items) ? log.items.map(String).join(", ").slice(0, 300) : "";
   const at = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMM d, yyyy h:mm a");
-  sheet.getRange(Math.max(sheet.getLastRow(), 1) + 1, 1, 1, LOG_COLS.length).setValues([[
+  appendRows_(sheet, LOG_COLS.length, [[
     at, t.id, String(t.unit || ""), String(log.kind || "").slice(0, 20),
     num_(log.miles) === null ? "" : num_(log.miles), num_(log.hrs) === null ? "" : num_(log.hrs),
     items, String(log.note || "").slice(0, 500), String(by || "").slice(0, 60)
   ]]);
+}
+
+/** Adds rows under the last one, growing the tab first when it's full (a new tab only has 1,000 rows). */
+function appendRows_(sheet, width, rows) {
+  if (!rows.length) return;
+  const start = Math.max(sheet.getLastRow(), 1) + 1;
+  const need = start + rows.length - 1;
+  if (sheet.getMaxRows() < need) sheet.insertRowsAfter(sheet.getMaxRows(), need - sheet.getMaxRows() + 200);
+  sheet.getRange(start, 1, rows.length, width).setValues(rows);
+}
+
+/* ---------------- Service history ---------------- */
+
+const SVC_SHEET = "Service";
+const SVC_IMPORT = "Service import";
+const SVC_COLS = ["id", "truckId", "truck", "date", "type", "what", "miles", "tmHrs", "shop", "cost", "payment", "check", "source", "updatedAt", "by"];
+const SVC_NUM = ["miles", "tmHrs", "cost"];
+const SVC_TYPES = ["Oil change", "TM service", "TM repair", "Tires", "Brakes", "Inspection", "Repair", "Other"];
+
+/** The Service tab, made the first time it's needed. Any "Service import" tab is merged in here. */
+function svcSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(SVC_SHEET);
+  if (!s) {
+    s = ss.insertSheet(SVC_SHEET);
+    if (s.getMaxColumns() < SVC_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), SVC_COLS.length - s.getMaxColumns());
+    s.getRange(1, 1, 1, SVC_COLS.length).setValues([SVC_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    SVC_COLS.forEach(function (c, i) {
+      if (SVC_NUM.indexOf(c) === -1) s.getRange(2, i + 1, Math.max(s.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+    });
+  }
+  svcMergeImport_(s);
+  return s;
+}
+
+function svcMergeImport_(s) {
+  const ss = SpreadsheetApp.getActive();
+  const imp = ss.getSheetByName(SVC_IMPORT);
+  if (!imp || imp.getLastRow() < 2 || imp.getLastColumn() < 2) return 0;
+  const head = imp.getRange(1, 1, 1, imp.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  const at = {};
+  head.forEach(function (h, i) { if (h) at[h] = i; });
+  if (at.truckId === undefined || at.what === undefined) return 0;   // not a service import file
+  const have = {};
+  svcRead_(s).forEach(function (x) { have[x.rec.id] = true; });
+  const names = {};
+  readTrucks_().forEach(function (x) { names[x.truck.id] = x.truck.unit; });
+  const now = new Date().toISOString();
+  const add = [];
+  imp.getRange(2, 1, imp.getLastRow() - 1, head.length).getValues().forEach(function (r) {
+    const raw = {};
+    SVC_COLS.forEach(function (c) { raw[c] = at[c] === undefined ? "" : r[at[c]]; });
+    if (!String(raw.truckId).trim() || (!String(raw.what).trim() && !raw.date)) return;
+    const rec = svcClean_(raw);
+    if (have[rec.id]) return;
+    rec.truck = names[rec.truckId] || String(raw.truck || "").slice(0, 60);
+    rec.check = String(raw.check || "").slice(0, 400);
+    rec.source = String(raw.source || "Import").slice(0, 30);
+    rec.updatedAt = now;
+    rec.by = String(raw.by || "Import").slice(0, 60);
+    have[rec.id] = true;
+    add.push(svcRow_(rec));
+  });
+  appendRows_(s, SVC_COLS.length, add);
+  let name = SVC_IMPORT + " (merged)";
+  for (let n = 2; ss.getSheetByName(name); n++) name = SVC_IMPORT + " (merged " + n + ")";
+  imp.setName(name);   // kept as a backup; the new name means it's never merged twice
+  return add.length;
+}
+
+function svcRead_(s) {
+  const last = s.getLastRow();
+  if (last < 2) return [];
+  return s.getRange(2, 1, last - 1, SVC_COLS.length).getValues().map(function (r, i) {
+    return { rowIndex: i + 2, rec: svcFromRow_(r) };
+  }).filter(function (x) { return x.rec.id; });
+}
+
+function svcFromRow_(r) {
+  const tz = Session.getScriptTimeZone();
+  const o = {};
+  SVC_COLS.forEach(function (c, i) {
+    let v = r[i];
+    if (SVC_NUM.indexOf(c) !== -1) { o[c] = num_(v); return; }
+    if (isDate_(v)) v = c === "date" ? Utilities.formatDate(v, tz, "yyyy-MM-dd") : v.toISOString();
+    o[c] = v === null || v === undefined ? "" : String(v);
+  });
+  return o;
+}
+
+function svcRow_(o) {
+  return SVC_COLS.map(function (c) {
+    if (SVC_NUM.indexOf(c) !== -1) { const n = num_(o[c]); return n === null ? "" : n; }
+    return o[c] === null || o[c] === undefined ? "" : String(o[c]);
+  });
+}
+
+/** Tidies a record: known types only, a real date or none, numbers as numbers, sensible lengths. */
+function svcClean_(raw) {
+  const tz = Session.getScriptTimeZone();
+  let date = isDate_(raw.date) ? Utilities.formatDate(raw.date, tz, "yyyy-MM-dd") : String(raw.date || "").trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = "";
+  const types = String(raw.type || "").split(/\s*,\s*/).map(function (x) {
+    return SVC_TYPES.filter(function (k) { return k.toLowerCase() === x.toLowerCase(); })[0];
+  }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+  const id = String(raw.id || "").trim();
+  return {
+    id: /^[A-Za-z0-9-]{3,40}$/.test(id) ? id : svcNewId_(),
+    truckId: String(raw.truckId || "").trim().slice(0, 60),
+    truck: String(raw.truck || "").slice(0, 60),
+    date: date,
+    type: (types.length ? types : ["Other"]).join(", "),
+    what: String(raw.what || "").trim().slice(0, 2000),
+    miles: num_(raw.miles), tmHrs: num_(raw.tmHrs), cost: num_(raw.cost),
+    shop: String(raw.shop || "").trim().slice(0, 60),
+    payment: String(raw.payment || "").trim().slice(0, 300),
+    check: "", source: "", updatedAt: "", by: ""
+  };
+}
+
+function isDate_(v) { return Object.prototype.toString.call(v) === "[object Date]" && !isNaN(v.getTime()); }
+function svcNewId_() { return "s-" + Utilities.getUuid().replace(/-/g, "").slice(0, 12); }
+
+function svcList_(truckId) {
+  return svcRead_(svcSheet_()).map(function (x) { return x.rec; })
+    .filter(function (r) { return !truckId || r.truckId === truckId; });
+}
+
+function svcSave_(req) {
+  const body = req.service;
+  if (!body || typeof body !== "object") return { ok: false, error: "bad_request" };
+  const s = svcSheet_();
+  const all = svcRead_(s);
+  const found = body.id ? all.filter(function (x) { return x.rec.id === String(body.id); })[0] : null;
+  if (found && found.rec.updatedAt !== (req.base || "")) return { ok: false, error: "conflict", service: found.rec };
+  if (!found && req.base) return { ok: false, error: "gone" };
+  const truck = readTrucks_().filter(function (x) { return x.truck.id === String(body.truckId || ""); })[0];
+  if (!truck) return { ok: false, error: "bad_request" };
+  const rec = svcClean_(body);
+  if (!rec.what && !rec.date) return { ok: false, error: "bad_request" };
+  if (found) rec.id = found.rec.id;
+  rec.truck = truck.truck.unit;
+  rec.check = "";   // saving from the app means someone has looked at it
+  rec.source = found ? found.rec.source || "App" : "App";
+  rec.updatedAt = new Date().toISOString();
+  rec.by = String(req.by || "").slice(0, 60);
+  if (found) s.getRange(found.rowIndex, 1, 1, SVC_COLS.length).setValues([svcRow_(rec)]);
+  else appendRows_(s, SVC_COLS.length, [svcRow_(rec)]);
+  return { ok: true, service: rec };
+}
+
+function svcDelete_(req) {
+  const s = svcSheet_();
+  const found = svcRead_(s).filter(function (x) { return x.rec.id === String(req.id || ""); })[0];
+  if (!found) return { ok: true };
+  if (found.rec.updatedAt !== (req.base || "")) return { ok: false, error: "conflict", service: found.rec };
+  s.deleteRow(found.rowIndex);
+  return { ok: true };
+}
+
+/** "Log oil change / service" in the app also writes a service record. */
+function svcFromLog_(t, log, by) {
+  const items = Array.isArray(log.items) ? log.items.map(String) : [];
+  const types = [];
+  items.forEach(function (x) {
+    const k = /truck oil/i.test(x) ? "Oil change" : /^TM /i.test(x) ? "TM service" : "";
+    if (k && types.indexOf(k) === -1) types.push(k);
+  });
+  const note = String(log.note || "").trim();
+  const rec = svcClean_({
+    date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"),
+    truckId: t.id, type: types.join(", "), what: items.join(", ") + (note ? " - " + note : ""),
+    miles: log.miles, tmHrs: log.hrs, shop: log.shop, cost: log.cost
+  });
+  rec.truck = t.unit;
+  rec.source = "Logged service";
+  rec.updatedAt = new Date().toISOString();
+  rec.by = String(by || "").slice(0, 60);
+  appendRows_(svcSheet_(), SVC_COLS.length, [svcRow_(rec)]);
+  return rec;
+}
+
+/** Keeps the truck name in the Service tab in step after a rename (the app goes by truck ID either way). */
+function svcRenameTruck_(id, unit) {
+  const s = SpreadsheetApp.getActive().getSheetByName(SVC_SHEET);
+  if (!s || s.getLastRow() < 2) return;
+  const range = s.getRange(2, 2, s.getLastRow() - 1, 2);
+  const vals = range.getValues();
+  let changed = false;
+  vals.forEach(function (v) { if (String(v[0]) === id && v[1] !== unit) { v[1] = unit; changed = true; } });
+  if (changed) range.setValues(vals);
 }
 
 /* ---------------- rows ---------------- */
