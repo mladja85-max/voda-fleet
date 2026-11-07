@@ -1548,8 +1548,8 @@ function renderKpis() {
     h("span", { class: "lbl" }, h("span", { class: "long", text: lbl }), h("span", { class: "short", text: short || lbl })));
   $("kpis").replaceChildren(...[
     kpi("all", "all", inUnit.length, view.division ? `All ${view.division}` : "All trucks"),
-    kpi("due", "due", nDue, "Overdue"),
-    kpi("soon", "soon", nSoon, "Due soon"),
+    kpi("due", "due", nDue, "Service overdue"),
+    kpi("soon", "soon", nSoon, "Service due soon"),
     docKpi("insp", "Safety inspection", "Safety inspection"),
     docKpi("reg", "Registration", "Registration"),
     showEngine ? kpi("engine", "engine", nEngine, "Check engine", "Engine") : null,
