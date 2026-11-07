@@ -20,6 +20,15 @@
  *
  * In the Trucks tab, don't rename or move columns A to AE. You can add your own columns to the right.
  *
+ * ACCOUNTS
+ * Everyone signs in to the app with their own username and passcode (4 to 6 characters, their choice).
+ * The very first account is made with the access code on the Setup tab and becomes an Admin.
+ * After that, an Admin invites each person from the app (Settings > Users) and gives them a one-time code.
+ * Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks;
+ * this script refuses anything else from a technician, whatever the app sends.
+ * Locked out of the only Admin account? Pick "adminRecovery" in the function menu and click Run: the log shows a
+ * one-time code; enter it in the app under "I have a code" to choose a new passcode.
+ *
  * SERVICE HISTORY
  * Every service record lives in the Service tab (one row each). The app adds a row whenever an oil change or
  * service is logged, and can add, edit or delete any record. To bring in an old log, import a file whose tab is
@@ -41,7 +50,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "oilInterval", "milesAtOil", "milesNow", "tm", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
   "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color"];
-const API_VERSION = 7;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 8;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color); older sheets get them automatically
 const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
@@ -105,8 +114,8 @@ function writeSetupTab_(code) {
   s.getRange(1, 1, 6, 2).setValues([
     ["Access code", code],
     ["", ""],
-    ["The app asks for this code the first time it opens on each phone.", ""],
-    ["To change it: Extensions > Apps Script, pick newAccessCode, click Run.", ""],
+    ["Use this code once in the app (I have a code) to create the first account, which becomes the Admin.", ""],
+    ["After that, people join with invite codes from Settings > Users in the app.", ""],
     ["Trucks tab: don't rename or move columns A to AE. You can add your own columns to the right.", ""],
     ["Log tab: every saved reading and service is added here.", ""]
   ]);
@@ -134,16 +143,33 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: "bad_request" });
   }
-  const saved = PropertiesService.getScriptProperties().getProperty("ACCESS_CODE");
-  if (!saved) return json_({ ok: false, error: "not_set_up" });
-  if (normCode_(req.code) !== normCode_(saved)) return json_({ ok: false, error: "bad_code" });
+  if (!PropertiesService.getScriptProperties().getProperty("ACCESS_CODE")) return json_({ ok: false, error: "not_set_up" });
   try {
+    if (req.action === "signup") return json_(withLock_(function () { return signup_(req); }));
+    if (req.action === "login") return json_(withLock_(function () { return login_(req); }));
+    const user = authUser_(req.token);
+    if (!user) return json_({ ok: false, error: "signed_out" });
+    if (ADMIN_ACTIONS.indexOf(req.action) !== -1 && user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+    req.user = user;
+    req.by = user.name;   // every change is stamped with the signed-in person, whatever the app sends
     switch (req.action) {
+      case "me":
+        return json_({ ok: true, user: publicUser_(user) });
+      case "changePasscode":
+        return json_(withLock_(function () { return changePasscode_(req); }));
+      case "users":
+        return json_({ ok: true, users: readUsers_(usersSheet_()).map(function (x) { return publicUser_(x.u); }) });
+      case "invite":
+        return json_(withLock_(function () { return invite_(req); }));
+      case "saveUser":
+        return json_(withLock_(function () { return saveUser_(req); }));
+      case "resetUser":
+        return json_(withLock_(function () { return resetUser_(req); }));
       case "list": {
         const trucks = readTrucks_().map(function (x) { return x.truck; });
         let gps = null;
         try { gps = gpsForApp_(trucks); } catch (e) { gps = null; }   // GPS details never stop the list from loading
-        return json_({ ok: true, trucks: trucks, gps: gps, serverTime: new Date().toISOString() });
+        return json_({ ok: true, trucks: trucks, gps: gps, me: publicUser_(user), serverTime: new Date().toISOString() });
       }
       case "saveTruck":
         return json_(withLock_(function () { return saveTruck_(req); }));
@@ -172,6 +198,7 @@ function saveTruck_(req) {
   const base = req.base || null;
   if (found && found.truck.updatedAt !== base) return { ok: false, error: "conflict", truck: found.truck };
   if (!found && base) return { ok: false, error: "gone" };
+  if (req.user && req.user.role !== "admin") return techSaveHours_(req, found);
   const t = clean_(req.truck);
   t.id = id;
   const all = readTrucks_();
@@ -184,6 +211,8 @@ function saveTruck_(req) {
     t.milesNow = found.truck.milesNow;
   }
   if (t.readingAt === "now") t.readingAt = t.updatedAt;
+  // A new reading carries the signed-in person's name (GPS keeps its own label).
+  if (req.by && t.readingBy !== "GPS" && (!found || t.readingAt !== found.truck.readingAt)) t.readingBy = String(req.by).slice(0, 60);
   const row = toRow_(t);
   const sheet = sheet_("Trucks");
   if (found) sheet.getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([row]);
@@ -242,6 +271,257 @@ function appendRows_(sheet, width, rows) {
   const need = start + rows.length - 1;
   if (sheet.getMaxRows() < need) sheet.insertRowsAfter(sheet.getMaxRows(), need - sheet.getMaxRows() + 200);
   sheet.getRange(start, 1, rows.length, width).setValues(rows);
+}
+
+/* ---------------- accounts ---------------- */
+
+const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin"];
+const ROLES = ["admin", "tech"];
+const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser"];
+const SESSION_DAYS = 90;     // stays signed in on a phone this long
+const INVITE_DAYS = 14;      // an invite or reset code works this long
+const MAX_TRIES = 5;         // wrong passcodes in a row before a lock
+const LOCK_MIN = 15;         // how long the lock lasts
+
+function usersSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName("Users");
+  if (!s) {
+    s = ss.insertSheet("Users");
+    if (s.getMaxColumns() < USER_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), USER_COLS.length - s.getMaxColumns());
+    s.getRange(1, 1, 1, USER_COLS.length).setValues([USER_COLS]).setFontWeight("bold");
+    s.getRange(2, 1, Math.max(s.getMaxRows() - 1, 1), USER_COLS.length).setNumberFormat("@");
+    s.setFrozenRows(1);
+  }
+  return s;
+}
+
+function readUsers_(s) {
+  const last = s.getLastRow();
+  if (last < 2) return [];
+  return s.getRange(2, 1, last - 1, USER_COLS.length).getValues().map(function (r, i) {
+    const u = {};
+    USER_COLS.forEach(function (c, k) { u[c] = isDate_(r[k]) ? r[k].toISOString() : String(r[k] === null || r[k] === undefined ? "" : r[k]); });
+    u.ver = Number(u.ver) || 1;
+    return { rowIndex: i + 2, u: u };
+  }).filter(function (x) { return x.u.id; });
+}
+
+function writeUser_(s, rowIndex, u) {
+  const row = USER_COLS.map(function (c) { return u[c] === null || u[c] === undefined ? "" : String(u[c]); });
+  if (rowIndex) s.getRange(rowIndex, 1, 1, USER_COLS.length).setValues([row]);
+  else appendRows_(s, USER_COLS.length, [row]);
+}
+
+function publicUser_(u) {
+  return { id: u.id, username: u.username, name: u.name, role: u.role, status: u.status,
+    created: u.created, lastLogin: u.lastLogin, inviteUntil: u.status === "invited" || u.inviteHash ? u.inviteUntil : "" };
+}
+
+function secret_() {
+  const p = PropertiesService.getScriptProperties();
+  let k = p.getProperty("SESSION_SECRET");
+  if (!k) { k = Utilities.getUuid() + Utilities.getUuid(); p.setProperty("SESSION_SECRET", k); }
+  return k;
+}
+
+/** Passcodes are stored only as a salted, keyed hash (the key lives in Script Properties, not in the sheet). */
+function hashPass_(salt, pass) {
+  const key = secret_();
+  let h = String(salt) + "|" + String(pass);
+  for (let i = 0; i < 300; i++) h = Utilities.base64Encode(Utilities.computeHmacSha256Signature(h, key));
+  return h;
+}
+
+function sign_(payload) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret_())).replace(/=+$/, "");
+}
+
+function makeToken_(u) {
+  const payload = [u.id, u.ver, Date.now() + SESSION_DAYS * 864e5].join(".");
+  return payload + "." + sign_(payload);
+}
+
+/** The signed-in person for a token, or null. Their role and status are read fresh every time. */
+function authUser_(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 4) return null;
+  const payload = parts.slice(0, 3).join(".");
+  if (sign_(payload) !== parts[3] || !(Number(parts[2]) > Date.now())) return null;
+  const x = readUsers_(usersSheet_()).filter(function (y) { return y.u.id === parts[0]; })[0];
+  if (!x || x.u.status !== "active" || String(x.u.ver) !== parts[1] || ROLES.indexOf(x.u.role) === -1) return null;
+  return x.u;
+}
+
+function checkName_(req) {
+  const username = String(req.username || "").trim().toLowerCase();
+  const name = String(req.name || "").trim().replace(/\s+/g, " ");
+  const pass = String(req.passcode === undefined || req.passcode === null ? "" : req.passcode);
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) return { error: "bad_username" };
+  if (!name || name.length > 40) return { error: "bad_name" };
+  if (pass.length < 4 || pass.length > 6 || /^\s|\s$/.test(pass)) return { error: "bad_passcode" };
+  return { username: username, name: name, pass: pass };
+}
+
+function tooManyTries_(key) { return Number(CacheService.getScriptCache().get(key) || 0) >= MAX_TRIES; }
+function failedTry_(key) {
+  const c = CacheService.getScriptCache();
+  c.put(key, String(Number(c.get(key) || 0) + 1), LOCK_MIN * 60);
+}
+
+/** Create an account with a code: the Setup tab's access code (first account only, becomes Admin), an invite, or a reset. */
+function signup_(req) {
+  if (tooManyTries_("fail_code")) return { ok: false, error: "locked" };
+  const s = usersSheet_();
+  const users = readUsers_(s);
+  const code = normCode_(req.invite);
+  const now = new Date();
+  let target = null;
+  if (!users.some(function (x) { return x.u.hash; })) {
+    const saved = PropertiesService.getScriptProperties().getProperty("ACCESS_CODE");
+    if (!code || code !== normCode_(saved)) { failedTry_("fail_code"); return { ok: false, error: "bad_invite" }; }
+  } else {
+    const h = code ? hashPass_("invite", code) : "";
+    target = users.filter(function (x) { return h && x.u.inviteHash === h; })[0];
+    if (!target || !(new Date(target.u.inviteUntil) > now)) { failedTry_("fail_code"); return { ok: false, error: "bad_invite" }; }
+    if (target.u.status === "disabled") return { ok: false, error: "bad_invite" };
+  }
+  const c = checkName_(req);
+  if (c.error) return { ok: false, error: c.error };
+  const clash = users.filter(function (x) { return x.u.username === c.username && (!target || x.u.id !== target.u.id); })[0];
+  if (clash) return { ok: false, error: "taken" };
+  const u = target ? target.u : { id: "u-" + Utilities.getUuid().replace(/-/g, "").slice(0, 10), role: "admin", ver: 0, created: now.toISOString() };
+  u.username = c.username;
+  u.name = c.name;
+  u.salt = Utilities.getUuid();
+  u.hash = hashPass_(u.salt, c.pass);
+  u.ver = (Number(u.ver) || 0) + 1;     // any older sessions stop working
+  u.status = "active";
+  u.inviteHash = "";
+  u.inviteUntil = "";
+  u.lastLogin = now.toISOString();
+  writeUser_(s, target ? target.rowIndex : 0, u);
+  return { ok: true, token: makeToken_(u), user: publicUser_(u) };
+}
+
+function login_(req) {
+  const username = String(req.username || "").trim().toLowerCase();
+  const key = "fail_" + username;
+  if (tooManyTries_(key)) return { ok: false, error: "locked" };
+  const s = usersSheet_();
+  const x = readUsers_(s).filter(function (y) { return y.u.username === username && y.u.hash; })[0];
+  if (!x || x.u.hash !== hashPass_(x.u.salt, String(req.passcode === undefined ? "" : req.passcode))) {
+    failedTry_(key);
+    return { ok: false, error: tooManyTries_(key) ? "locked" : "bad_login" };
+  }
+  if (x.u.status !== "active") return { ok: false, error: "disabled" };
+  CacheService.getScriptCache().remove(key);
+  x.u.lastLogin = new Date().toISOString();
+  writeUser_(s, x.rowIndex, x.u);
+  return { ok: true, token: makeToken_(x.u), user: publicUser_(x.u) };
+}
+
+function changePasscode_(req) {
+  const s = usersSheet_();
+  const x = readUsers_(s).filter(function (y) { return y.u.id === req.user.id; })[0];
+  const key = "fail_" + x.u.username;
+  if (tooManyTries_(key)) return { ok: false, error: "locked" };
+  if (x.u.hash !== hashPass_(x.u.salt, String(req.old === undefined ? "" : req.old))) { failedTry_(key); return { ok: false, error: "bad_login" }; }
+  const c = checkName_({ username: x.u.username, name: x.u.name, passcode: req.passcode });
+  if (c.error) return { ok: false, error: c.error };
+  x.u.salt = Utilities.getUuid();
+  x.u.hash = hashPass_(x.u.salt, c.pass);
+  x.u.ver = Number(x.u.ver) + 1;        // signs out this account's other phones
+  writeUser_(s, x.rowIndex, x.u);
+  return { ok: true, token: makeToken_(x.u), user: publicUser_(x.u) };
+}
+
+function newInvite_(u) {
+  const code = newCode_();
+  u.inviteHash = hashPass_("invite", normCode_(code));
+  u.inviteUntil = new Date(Date.now() + INVITE_DAYS * 864e5).toISOString();
+  return code;
+}
+
+/** Admin: make a one-time code for a new person (Technician unless chosen otherwise). */
+function invite_(req) {
+  const name = String(req.name || "").trim().replace(/\s+/g, " ");
+  if (!name || name.length > 40) return { ok: false, error: "bad_name" };
+  const s = usersSheet_();
+  const u = { id: "u-" + Utilities.getUuid().replace(/-/g, "").slice(0, 10), username: "", name: name,
+    role: req.role === "admin" ? "admin" : "tech", status: "invited", salt: "", hash: "", ver: 1, created: new Date().toISOString(), lastLogin: "" };
+  const code = newInvite_(u);
+  writeUser_(s, 0, u);
+  return { ok: true, code: code, user: publicUser_(u) };
+}
+
+/** Admin: change someone's role, turn an account off or on, or cancel an unused invite. Never your own account. */
+function saveUser_(req) {
+  const s = usersSheet_();
+  const all = readUsers_(s);
+  const x = all.filter(function (y) { return y.u.id === String(req.id || ""); })[0];
+  if (!x) return { ok: false, error: "gone" };
+  if (x.u.id === req.user.id) return { ok: false, error: "self" };
+  if (req.remove) {
+    if (x.u.status !== "invited") return { ok: false, error: "bad_request" };
+    s.deleteRow(x.rowIndex);
+    return { ok: true };
+  }
+  const role = req.role === undefined ? x.u.role : req.role;
+  const status = req.status === undefined ? x.u.status : req.status;
+  if (ROLES.indexOf(role) === -1 || ["active", "disabled", "invited"].indexOf(status) === -1) return { ok: false, error: "bad_request" };
+  if (status === "invited" && x.u.status !== "invited") return { ok: false, error: "bad_request" };
+  if (x.u.role !== role || x.u.status !== status) {
+    x.u.role = role;
+    x.u.status = status;
+    x.u.ver = Number(x.u.ver) + 1;      // takes effect on their phone straight away
+    writeUser_(s, x.rowIndex, x.u);
+  }
+  return { ok: true, user: publicUser_(x.u) };
+}
+
+/** Admin: a new one-time code so someone can choose a new passcode (or a fresh invite if the old one ran out). */
+function resetUser_(req) {
+  const s = usersSheet_();
+  const x = readUsers_(s).filter(function (y) { return y.u.id === String(req.id || ""); })[0];
+  if (!x) return { ok: false, error: "gone" };
+  if (x.u.status === "disabled") return { ok: false, error: "bad_request" };
+  const code = newInvite_(x.u);
+  writeUser_(s, x.rowIndex, x.u);
+  return { ok: true, code: code, user: publicUser_(x.u) };
+}
+
+/** Run from the Apps Script editor if no Admin can sign in: logs a one-time code for each Admin. */
+function adminRecovery() {
+  const s = usersSheet_();
+  const admins = readUsers_(s).filter(function (x) { return x.u.role === "admin" && x.u.status === "active"; });
+  if (!admins.length) { Logger.log("No Admin accounts yet. Use the access code on the Setup tab in the app to create the first one."); return; }
+  admins.forEach(function (x) {
+    const code = newInvite_(x.u);
+    writeUser_(s, x.rowIndex, x.u);
+    Logger.log(x.u.name + " (" + x.u.username + "): " + code + "  (enter it in the app under I have a code; works for " + INVITE_DAYS + " days)");
+  });
+}
+
+/** Technicians: only TM hours, only on truckmount trucks, only upward. Everything else on the truck stays as it is. */
+function techSaveHours_(req, found) {
+  if (!found) return { ok: false, error: "not_allowed" };
+  if (req.log && req.log.kind !== "reading") return { ok: false, error: "not_allowed" };
+  const cur = found.truck;
+  if (TM_KINDS.indexOf(cur.tm) < 1) return { ok: false, error: "not_allowed" };
+  const hrs = num_(req.truck.hrsNow);
+  if (hrs === null || hrs < 0) return { ok: false, error: "bad_request" };
+  if (cur.hrsNow !== null && hrs < cur.hrsNow) return { ok: false, error: "hrs_lower", hrs: cur.hrsNow };
+  if (cur.hrsNow !== null && hrs - cur.hrsNow > 2000) return { ok: false, error: "hrs_jump", hrs: cur.hrsNow };
+  const t = JSON.parse(JSON.stringify(cur));
+  t.hrsNow = hrs;
+  t.updatedAt = new Date().toISOString();
+  t.readingAt = t.updatedAt;
+  t.readingBy = String(req.by || "").slice(0, 60);
+  const row = toRow_(t);
+  sheet_("Trucks").getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([row]);
+  appendLog_(t, { kind: "reading", hrs: hrs, items: ["TM hrs"] }, req.by);
+  return { ok: true, truck: fromRow_(row) };
 }
 
 /* ---------------- Service history ---------------- */
