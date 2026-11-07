@@ -73,8 +73,10 @@
  * it. Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with
  * any note) is kept on the Supply checks tab. The checklists are on the Checklists tab and their items on the Supplies tab;
  * change them in the app rather than in the sheet. The tabs are made the first time the app opens Checklists.
- * When a technician sends missing items, an email goes to the Script Property SUPPLY_EMAIL if you add one, otherwise to
- * TM_CHECK_EMAIL, otherwise to the Google account that runs this script. Set SUPPLY_EMAIL to off to stop these emails.
+ * When a technician sends missing items, an email goes to the Script Property SUPPLY_EMAIL if you add one (for example
+ * info@dnaproclean.com; several addresses separated by commas), otherwise to TM_CHECK_EMAIL, otherwise to the Google
+ * account that runs this script. Set SUPPLY_EMAIL to off to stop these emails. The subject starts with "For Mike to order"
+ * (change it with the Script Property SUPPLY_SUBJECT), then the checklist, how many items, and who sent it.
  * To see one: pick "supplyEmailTest" and click Run.
  *
  * WEEKLY BACKUP (optional, recommended)
@@ -2629,7 +2631,11 @@ function supplyEmail_(by, list, lines, note, isTest) {
   lines.forEach(function (l) { body.push("• " + l.name + ": " + supQty_(l.qty, l.container)); });
   if (note) body.push("", "Note: " + note);
   body.push("", "The full list to order is in the app under Checklists > " + list.name + " > Order list: " + APP_URL + "#order-list/" + list.id);
-  MailApp.sendEmail({ to: to, subject: ((isTest ? "(Test) " : "") + list.name + ": " + n + " item" + (n === 1 ? "" : "s") + " to order from " + by).slice(0, 250), body: body.join("\n") });
+  // Subject starts with SUPPLY_SUBJECT ("For Mike to order" unless you set another); the checklist and count follow so
+  // Gmail keeps each list as its own email instead of piling them all into one conversation.
+  const lead = String(props.getProperty("SUPPLY_SUBJECT") || "").trim() || "For Mike to order";
+  const subject = (isTest ? "(Test) " : "") + lead + ": " + list.name + ", " + n + " item" + (n === 1 ? "" : "s") + " from " + by;
+  MailApp.sendEmail({ to: to, subject: subject.slice(0, 250), body: body.join("\n") });
   return to;
 }
 
