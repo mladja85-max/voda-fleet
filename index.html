@@ -80,6 +80,32 @@ button { font: inherit; color: inherit; }
 .sync { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
 .sync.offline { color: var(--soon); font-weight: 600; }
 .sync.saving { color: var(--accent); font-weight: 600; }
+.kpi.tmchk::after { background: var(--soon); }
+.kpi.tmchk .num { color: var(--soon); }
+.kpi.tmchk.missed::after { background: var(--due); }
+.kpi.tmchk.missed .num { color: var(--due); }
+.kpi.tmchk.clear::after { background: var(--ok); }
+.kpi.tmchk.clear .num { color: var(--ok); }
+.flag.ok { background: var(--ok-bg); color: var(--ok); }
+.flag.skip { background: var(--line); color: var(--muted); }
+.tile-chk { margin: 0; padding: 0 14px 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .8rem; }
+.tile-chk:empty { display: none; }
+.stale { margin: 2px 0 0; font-size: .76rem; color: var(--muted); font-style: italic; }
+.tmcheck { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; padding: 10px 14px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--soon); }
+.tmcheck[hidden] { display: none; }
+.tmcheck.due { border-left-color: var(--due); }
+.tmcheck.ok { border-left-color: var(--ok); }
+.tc-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tc-count { color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
+.tc-left { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tc-lbl { font-size: .82rem; font-weight: 700; color: var(--muted); }
+.tc-truck { font: inherit; font-size: .8rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 0; cursor: pointer; }
+.tc-truck.due { background: var(--due-bg); color: var(--due); }
+.tc-truck.soon { background: var(--soon-bg); color: var(--soon); }
+.tc-done { color: var(--ok); font-weight: 700; font-size: .9rem; }
+.tc-hint { flex-basis: 100%; margin: 0; font-size: .82rem; color: var(--muted); }
+.tc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .88rem; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .gps-warn { all: unset; cursor: pointer; font-weight: 700; font-size: .82rem; color: var(--soon); background: var(--soon-bg); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .gps-warn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -450,6 +476,7 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 
   <div id="app" hidden>
     <section class="kpis" id="kpis" aria-label="Fleet summary"></section>
+    <section class="tmcheck" id="tmcheck" aria-label="Tuesday TM hrs check" hidden></section>
     <div class="toolbar">
       <label class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -658,11 +685,13 @@ let lastSync = null;
 let offline = false;
 let refreshing = false;
 let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
-const NEEDS_API = 9;                           // the Google script version this app expects
+const NEEDS_API = 10;                          // the Google script version this app expects
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
 const scriptOld = out => !(out && out.api >= NEEDS_API);
+let apiLevel = Number(store.get("voda.api")) || 0;      // the Tuesday TM hrs check needs script version 10
+function noteApi(out) { apiLevel = out && out.api ? out.api : 0; store.set("voda.api", apiLevel); }
 const drafts = store.get(K_DRAFTS) || {};     // id -> { miles, hrs } typed but not saved
 const today = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
@@ -702,6 +731,41 @@ const isAdmin = () => !!(session && session.role === "admin");
 const canEditHrs = t => !!(session && progOf(t));
 const progOf = t => PROGRAMS[t.tm] || null;
 function plain(t) { const o = JSON.parse(JSON.stringify(t)); delete o.id; delete o.updatedAt; delete o.gps; return o; }
+
+/* ---------- the Tuesday TM hrs check ----------
+   Each week runs Tuesday to Monday. A truckmount truck is "done" once TM hrs were entered (or confirmed) that week,
+   "skipped" when marked not available, "today" on Tuesday until done, and "missed" from Wednesday on. */
+const CHECK_DAY = 2;
+let clockNow = () => new Date();   // tests move the clock
+const dayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function checkWeekStart(when) { const d = new Date(when.getFullYear(), when.getMonth(), when.getDate()); d.setDate(d.getDate() - ((d.getDay() - CHECK_DAY + 7) % 7)); return d; }
+const shortDate = d => `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+function tmCheck(t) {
+  if (!progOf(t) || apiLevel < 10) return null;   // an older script doesn't record when TM hrs were entered
+  const now = clockNow();
+  const start = checkWeekStart(now);
+  const week = dayKey(start);
+  const at = t.hrsAt ? new Date(t.hrsAt) : null;
+  const last = at && !isNaN(at) ? at : null;
+  const isTue = now.getDay() === CHECK_DAY;
+  if (last && last >= start) return { state: "done", week, start, last, isTue, weeks: 0 };
+  if (t.tmSkip === week) return { state: "skipped", week, start, last, isTue, weeks: 0 };
+  // Tuesdays gone by with no hours (today's doesn't count as missed until it's over)
+  const weeks = last ? Math.round((start - checkWeekStart(last)) / (7 * 864e5)) - (isTue ? 1 : 0) : null;
+  return { state: isTue ? "today" : "missed", week, start, last, isTue, weeks };
+}
+const checkDue = t => { const c = tmCheck(t); return !!c && (c.state === "today" || c.state === "missed"); };
+/** The TM numbers rest on hours that haven't been checked for 2 weeks or more. */
+const staleHrs = c => c && c.last && (c.state === "today" || c.state === "missed") && c.weeks >= 2 ? c.last : null;
+/** A queued change laid over a truck. What only the script sets (TM hrs check date, not available) keeps the newest value. */
+function overlay(cur, body) {
+  const t = Object.assign({}, cur || {}, JSON.parse(JSON.stringify(body)));
+  if (cur) {
+    t.tmSkip = cur.tmSkip || "";
+    if (String(cur.hrsAt || "") > String(body.hrsAt || "")) { t.hrsAt = cur.hrsAt; t.hrsBy = cur.hrsBy; }
+  }
+  return t;
+}
 function fmtWhen(iso) {
   const d = iso ? new Date(iso) : null;
   if (!d || isNaN(d)) return "";
@@ -779,6 +843,7 @@ async function refresh(quiet) {
     offline = false;
     loaded = true;
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
+    noteApi(out);
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -879,16 +944,17 @@ function sameAsSent(job, e) {
   const sent = job.action === "saveTruck" ? job.data.truck : job.action === "saveService" ? job.data.service : null;
   const got = job.action === "saveTruck" ? e.truck : e.service;
   if (!sent || !got) return false;
-  const skip = ["updatedAt", "readingAt", "readingBy", "by", "check", "source", "truck", "id", "gps"];
+  const skip = ["updatedAt", "readingAt", "readingBy", "by", "check", "source", "truck", "id", "gps", "hrsAt", "hrsBy", "tmSkip"];
   return Object.keys(sent).every(k => skip.includes(k) || JSON.stringify(sent[k] ?? null) === JSON.stringify(got[k] ?? null) ||
     (sent[k] === "" && (got[k] === null || got[k] === undefined)));
 }
 /** Changes still on their way are kept on screen when fresh data arrives. */
 function applyPendingTrucks() {
   for (const j of queue) {
+    if (j.action === "tmSkip") { const cur = byId(j.data.id); if (cur) cur.tmSkip = j.data.on ? j.data.week : ""; continue; }
     if (j.action !== "saveTruck") continue;
     const cur = byId(j.data.id);
-    const t = Object.assign({}, cur || {}, JSON.parse(JSON.stringify(j.data.truck)), { id: j.data.id, updatedAt: cur ? cur.updatedAt : null });
+    const t = Object.assign(overlay(cur, j.data.truck), { id: j.data.id, updatedAt: cur ? cur.updatedAt : null });
     if (cur && cur.gps) t.gps = cur.gps;
     const i = trucks.findIndex(x => x.id === t.id);
     if (i === -1) trucks.push(t); else trucks[i] = t;
@@ -897,7 +963,7 @@ function applyPendingTrucks() {
 }
 function saveTruck(t, body, log, okMsg, restore) {
   const cur = byId(t.id);
-  const local = Object.assign({}, cur || {}, JSON.parse(JSON.stringify(body)), { id: t.id, updatedAt: cur ? cur.updatedAt : null });
+  const local = Object.assign(overlay(cur, body), { id: t.id, updatedAt: cur ? cur.updatedAt : null });
   replaceTruck(local);
   enqueue({ action: "saveTruck", key: "t:" + t.id, base: cur ? (cur.updatedAt || null) : null, data: { id: t.id, truck: body, log: log || null },
     okMsg: okMsg || "", restore: restore || null, label: label(local) });
@@ -1037,7 +1103,8 @@ const HOW = [
   ["Check engine and GPS offline", "also come from One Step GPS. They move a truck up the list but don't change its oil or service countdowns."],
   ["Van engine hours", "from One Step GPS are shown for reference only. TM hours are always the ones you type in."],
   ["After an oil change or service", "open the truck and tap Log oil change / service so the countdown restarts. It's added to the truck's service history too."],
-  ["Service history", "everything done to a truck, in its details. Add tires, brakes, repairs and the like with + Add record; tap a record to fix it."]
+  ["Service history", "everything done to a truck, in its details. Add tires, brakes, repairs and the like with + Add record; tap a record to fix it."],
+  ["Tuesday TM hrs check", "every Tuesday, type or confirm the TM hrs on each truckmount truck. Not done shows amber on Tuesday and red from Wednesday. A truck that isn't there can be marked Not available this week. Saving only miles doesn't count."]
 ];
 function howList() { return h("ul", null, HOW.map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))); }
 
@@ -1075,6 +1142,7 @@ function showSignIn(message, mode) {
     const list = await api("list");
     trucks = sortTrucks(list.trucks || []); applyPendingTrucks(); gpsHealth = list.gps || null; loaded = true; lastSync = new Date(); offline = false;
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
+    noteApi(list);
     startApp();
     if (scriptOld(list)) setTimeout(() => setBanner(SCRIPT_OLD), 0);
   };
@@ -1186,6 +1254,7 @@ function visibleTrucks() {
   if (view.filter === "due" || view.filter === "soon" || view.filter === "ok") list = list.filter(x => !x.e.r.empty && x.e.r.worst === view.filter);
   if (view.filter === "paper") list = list.filter(x => x.e.pwBad.length);
   if (view.filter === "engine") list = list.filter(x => x.t.gps && x.t.gps.check === "on");
+  if (view.filter === "tmcheck") list = list.filter(x => checkDue(x.t));
   if (view.sort === "urgent") list.sort(byUrgency);
   return list;
 }
@@ -1199,6 +1268,7 @@ function renderAll() {
   const focused = document.activeElement && document.activeElement.id;
   const caret = (() => { try { return document.activeElement.selectionStart; } catch (e) { return null; } })();
   renderKpis();
+  renderCheck();
   renderGrid();
   renderAside();
   if (openId && drawer.open) renderDrawer(openId);
@@ -1210,29 +1280,60 @@ function renderAll() {
 
 function renderKpis() {
   if (!loaded) { $("kpis").replaceChildren(); return; }
-  let nDue = 0, nSoon = 0, nOk = 0, nPaper = 0, nEngine = 0;
+  let nDue = 0, nSoon = 0, nOk = 0, nPaper = 0, nEngine = 0, nTm = 0, tmMissed = false;
   const inUnit = scoped();
   for (const t of inUnit) {
     const e = evalTruck(t);
     if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; else nOk++; }
     if (e.pwBad.length) nPaper++;
     if (t.gps && t.gps.check === "on") nEngine++;
+    const c = tmCheck(t);
+    if (c && (c.state === "today" || c.state === "missed")) { nTm++; if (c.state === "missed" || c.weeks >= 1 || !c.last) tmMissed = true; }
   }
   const showEngine = gpsOn();
+  const showTm = apiLevel >= 10 && trucks.some(t => progOf(t));
   if (!showEngine && view.filter === "engine") view.filter = "all";
-  $("kpis").style.setProperty("--kpis", showEngine ? 6 : 5);
-  $("kpis").style.setProperty("--kpis-phone", showEngine ? 5 : 4);
+  if (!showTm && view.filter === "tmcheck") view.filter = "all";
+  const extra = (showEngine ? 1 : 0) + (showTm ? 1 : 0);
+  $("kpis").style.setProperty("--kpis", 5 + extra);
+  $("kpis").style.setProperty("--kpis-phone", 4 + extra);
   const kpi = (key, cls, num, lbl, short) => h("button", { class: "kpi " + cls, type: "button", "aria-pressed": String(view.filter === key),
     onclick: () => { view.filter = view.filter === key && key !== "all" ? "all" : key; saveView(); renderAll(); } },
     h("span", { class: "num", text: String(num) }),
     h("span", { class: "lbl" }, h("span", { class: "long", text: lbl }), h("span", { class: "short", text: short || lbl })));
-  $("kpis").replaceChildren(
+  $("kpis").replaceChildren(...[
     kpi("all", "all", inUnit.length, view.division ? `All ${view.division}` : "All trucks"),
     kpi("due", "due", nDue, "Overdue"),
     kpi("soon", "soon", nSoon, "Due soon"),
     kpi("ok", "ok", nOk, "OK"),
-    kpi("paper", "paper", nPaper, "Paperwork to check", showEngine ? "Papers" : "Paperwork"),
-    showEngine ? kpi("engine", "engine", nEngine, "Check engine", "Engine") : null);
+    kpi("paper", "paper", nPaper, "Paperwork to check", extra ? "Papers" : "Paperwork"),
+    showEngine ? kpi("engine", "engine", nEngine, "Check engine", "Engine") : null,
+    showTm ? kpi("tmcheck", "tmchk" + (tmMissed ? " missed" : nTm ? "" : " clear"), nTm, "TM hrs not checked", "TM hrs") : null].filter(Boolean));
+}
+
+/** The week's TM hrs checklist: shown on Tuesdays, and on other days while any truck was missed. */
+function renderCheck() {
+  const box = $("tmcheck");
+  const list = loaded ? scoped().map(t => ({ t, c: tmCheck(t) })).filter(x => x.c) : [];
+  const now = clockNow(), isTue = now.getDay() === CHECK_DAY;
+  const left = list.filter(x => x.c.state === "today" || x.c.state === "missed");
+  if (!list.length || (!isTue && !left.length)) { box.hidden = true; box.replaceChildren(); return; }
+  const done = list.filter(x => x.c.state === "done").length, skipped = list.filter(x => x.c.state === "skipped").length;
+  const late = x => x.c.state === "missed" || x.c.weeks >= 1 || !x.c.last;
+  const start = list[0].c.start;
+  box.hidden = false;
+  box.className = "tmcheck " + (!left.length ? "ok" : left.some(late) ? "due" : "soon");
+  box.replaceChildren(...[
+    h("div", { class: "tc-head" },
+      h("strong", { text: isTue ? "Today's TM hrs check" : `TM hrs check · Tue ${shortDate(start)}` }),
+      h("span", { class: "tc-count", id: "tcCount", text: `${done} of ${list.length} done${skipped ? ` · ${skipped} not available` : ""}` })),
+    left.length
+      ? h("div", { class: "tc-left" },
+          h("span", { class: "tc-lbl", text: isTue ? "Still to do:" : "Missed:" }),
+          left.map(x => h("button", { class: "tc-truck " + (late(x) ? "due" : "soon"), type: "button", onclick: () => openDetails(x.t.id),
+            title: x.c.last ? `TM hrs last entered ${fmtWhen(x.c.last.toISOString())}` : "No TM hrs entered in the app yet", text: x.t.unit || label(x.t) })))
+      : h("span", { class: "tc-done", text: "All done ✓" }),
+    !isAdmin() && left.length ? h("p", { class: "tc-hint", text: "Type the TM hrs on each truck and tap Save, or tap Confirm if they haven't changed. Truck not here? Open it and tap Not available this week." }) : null].filter(Boolean));
 }
 
 function renderGrid() {
@@ -1270,6 +1371,7 @@ function tileEl(t) {
       h("span", { class: "pill", id: "pill-" + t.id, text: "No reading" })),
     h("p", { class: "tile-sub" }, sub ? h("span", { text: sub }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null),
     h("div", { class: "metrics", id: "met-" + t.id }),
+    h("p", { class: "tile-chk", id: "chk-" + t.id }),
     h("p", { class: "tile-gps", id: "gps-" + t.id }),
     h("div", { class: "quick" + (prog ? "" : " no-tm") + (!isAdmin() && !prog ? " view-only" : "") },
       quickField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id, t.readingBy === "GPS", !isAdmin()),
@@ -1323,7 +1425,9 @@ function saveState(t, v) {
   const prog = progOf(t);
   const changed = (isAdmin() && isNum(v.miles) && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
   const invalid = Number.isNaN(v.miles) || Number.isNaN(v.hrs) || (!isAdmin() && prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs < t.hrsNow);
-  return { changed, invalid };
+  // Hours haven't changed but this week's check is still open: Save becomes Confirm.
+  const confirm = !changed && !invalid && !!prog && isNum(v.hrs) && checkDue(t);
+  return { changed, invalid, confirm };
 }
 function metaBits(t, changed) {
   const bits = [];
@@ -1352,7 +1456,11 @@ function updateTile(id) {
   $("warn-" + id).textContent = readingWarnings(t, v);
   const st = saveState(t, v);
   const save = $("save-" + id);
-  if (save && save.textContent !== "Saving…") save.disabled = !st.changed || st.invalid;
+  if (save) {
+    save.disabled = !(st.changed || st.confirm) || st.invalid;
+    save.textContent = st.confirm ? "Confirm" : "Save";
+    save.title = st.confirm ? "TM hrs haven't changed: tap to confirm them for this week's check" : "";
+  }
   const meta = $("meta-" + id);
   const bits = metaBits(t, st.changed);
   if (e.pwBad.length) {
@@ -1362,6 +1470,19 @@ function updateTile(id) {
   }
   meta.replaceChildren(...bits);
   $("gps-" + id).replaceChildren(...gpsLine(t));
+  $("chk-" + id).replaceChildren(...checkFlag(t));
+  const stale = staleHrs(tmCheck(t));
+  if (stale && (r.tmOil || r.service || (r.oil && t.tm === "cds"))) $("met-" + id).append(h("p", { class: "stale", text: `Based on TM hrs from ${shortDate(stale)}` }));
+}
+/** The tile's tag for the Tuesday TM hrs check. */
+function checkFlag(t) {
+  const c = tmCheck(t);
+  if (!c) return [];
+  const last = c.last ? `last ${shortDate(c.last)}` : "never entered";
+  if (c.state === "done") return c.isTue ? [h("span", { class: "flag ok", text: "TM hrs ✓" })] : [];
+  if (c.state === "skipped") return [h("span", { class: "flag skip", text: "Not available this week" })];
+  if (c.state === "today") return [h("span", { class: "flag " + (c.weeks >= 1 || !c.last ? "due" : "soon"), text: c.weeks >= 1 || !c.last ? `TM hrs due today · ${last}` : "TM hrs due today" })];
+  return [h("span", { class: "flag due", text: `TM hrs missed${c.weeks >= 2 ? ` ${c.weeks} weeks` : ""} · ${last}` })];
 }
 /** Alerts first, then a short "Parked 3 h · 12 Main St · Fuel 62%". */
 function gpsLine(t) {
@@ -1385,6 +1506,10 @@ function renderAside() {
     const e = evalTruck(t);
     for (const line of issueLines(t, e.r)) items.push({ t, ...line });
     for (const p of e.pwBad) paper.push({ t, ...p });
+    const c = tmCheck(t);
+    if (c && (c.state === "today" || c.state === "missed"))
+      items.push({ t, status: c.state === "missed" || c.weeks >= 1 || !c.last ? "due" : "soon",
+        text: c.state === "today" ? "TM hrs check due today" : `TM hrs not checked this week${c.last ? ` (last ${shortDate(c.last)})` : ""}` });
   }
   items.sort((a, b) => RANK[b.status] - RANK[a.status]);
   const btn = (t, status, text) => h("li", null, h("button", { class: "attn-btn", type: "button", onclick: () => openDetails(t.id) },
@@ -1526,6 +1651,7 @@ function renderDrawer(id) {
         isAdmin() ? h("button", { class: "btn", type: "button", onclick: () => openService(id), text: "Log oil change / service" }) : null,
         isAdmin() ? h("button", { class: "btn ghost", type: "button", onclick: () => openEdit(id), text: "Edit truck" }) : null,
         isAdmin() ? null : h("p", { class: "hint", style: "margin:0;align-self:center", text: prog ? "You can update TM hrs. Everything else is view only." : "View only." })),
+      prog ? h("div", { class: "tc-row", id: "d-chk" }) : null,
       h("div", { id: "d-res", style: "display:grid;gap:10px" }),
       h("div", { class: "chips", id: "d-paper" }),
       h("p", { class: "meta", id: "d-meta" }),
@@ -1582,10 +1708,30 @@ function updateDrawer(id) {
   $("d-warn").textContent = readingWarnings(t, v);
   const st = saveState(t, v);
   const save = $("dsave-" + id);
-  if (save && save.textContent !== "Saving…") save.disabled = !st.changed || st.invalid;
+  if (save) {
+    save.disabled = !(st.changed || st.confirm) || st.invalid;
+    save.textContent = st.confirm ? "Confirm TM hrs" : progOf(t) && !isAdmin() ? "Save TM hrs" : "Save reading";
+  }
+  const chk = $("d-chk"), c = tmCheck(t);
+  if (chk && c) chk.replaceChildren(...checkRow(t, c));
+  const stale = staleHrs(c);
+  if (stale && (r.tmOil || r.service || (r.oil && t.tm === "cds"))) res.append(h("p", { class: "stale", text: `These TM numbers are based on hours from ${fmtWhen(stale.toISOString())}. Enter today's TM hrs to update them.` }));
   $("d-meta").textContent = t.readingAt
     ? `Last saved reading: ${fmtWhen(t.readingAt)}${t.readingBy ? " by " + t.readingBy : ""}${drafts[id] && st.changed ? " · not saved yet" : ""}`
     : "No saved reading yet";
+}
+
+/** Details panel: where this truck stands on the week's TM hrs check, with "Not available this week". */
+function checkRow(t, c) {
+  const by = t.hrsBy ? ` by ${t.hrsBy}` : "";
+  const last = c.last ? `Last entered ${fmtWhen(c.last.toISOString())}${by}.` : "No TM hrs entered in the app yet.";
+  if (c.state === "done") return [h("span", { class: "flag ok", text: "TM hrs ✓" }), h("span", { text: ` Checked this week: ${fmtWhen(c.last.toISOString())}${by}.` })];
+  if (c.state === "skipped") return [h("span", { class: "flag skip", text: "Not available this week" }), h("span", { text: " Skipped on this week's TM hrs check. " }),
+    h("button", { class: "link", type: "button", id: "d-unskip", onclick: () => queueTmSkip(t.id, false), text: "Undo" })];
+  const late = c.state === "missed" || c.weeks >= 1 || !c.last;
+  return [h("span", { class: "flag " + (late ? "due" : "soon"), text: c.state === "today" ? "TM hrs due today" : "TM hrs missed this week" }),
+    h("span", { text: ` ${last} Same hours? Tap Confirm TM hrs. ` }),
+    h("button", { class: "btn small ghost", type: "button", id: "d-skip", onclick: () => queueTmSkip(t.id, true), text: "Not available this week" })];
 }
 
 /** The truck's One Step GPS details. Shown only; nothing here changes the oil or TM numbers. */
@@ -1692,12 +1838,12 @@ function renderServices(id) {
   list.forEach(r => { if (isNum(r.cost) && isoDay(r.date)) { const y = r.date.slice(0, 4); byYear[y] = (byYear[y] || 0) + r.cost; } });
   const years = Object.keys(byYear).sort().reverse().slice(0, 3);
   const shown = svcView.all ? list : list.slice(0, 12);
-  body.replaceChildren(
+  body.replaceChildren(...[
     h("div", { class: "chips svc-filters" }, chip("", `All ${rows.length}`), SVC_TYPES.filter(k => counts[k]).map(k => chip(k, `${k} ${counts[k]}`)),
       nCheck ? chip("check", `To check ${nCheck}`) : null),
     years.length ? h("p", { class: "meta", id: "svc-costs", text: "Costs on record: " + years.map(y => `${y} ${money(Math.round(byYear[y] * 100) / 100)}`).join(" · ") }) : null,
     list.length ? h("ul", { class: "svc-list", id: "svc-list" }, shown.map(r => svcItem(id, r))) : h("p", { class: "meta", text: "No records match." }),
-    list.length > shown.length ? h("button", { class: "btn small", type: "button", id: "svc-more", text: `Show all ${list.length}`, onclick: () => { svcView.all = true; renderServices(id); } }) : null);
+    list.length > shown.length ? h("button", { class: "btn small", type: "button", id: "svc-more", text: `Show all ${list.length}`, onclick: () => { svcView.all = true; renderServices(id); } }) : null].filter(Boolean));
 }
 function svcItem(id, r) {
   const meta = [isNum(r.miles) ? `${fmt(r.miles)} mi` : null, isNum(r.tmHrs) ? `${fmt(r.tmHrs)} TM hrs` : null, r.shop || null].filter(Boolean).join(" · ");
@@ -1734,7 +1880,7 @@ function renderHistory(id) {
   if (c.error) { ul.replaceChildren(h("li", null, h("small", { text: "History couldn't load right now." }))); return; }
   if (!c.rows.length) { ul.replaceChildren(h("li", null, h("small", { text: "No history yet." }))); return; }
   ul.replaceChildren(...c.rows.slice(0, 10).map(x => {
-    const what = x.kind === "reading" ? "Reading" : (Array.isArray(x.items) && x.items.length ? x.items.join(", ") : x.kind);
+    const what = Array.isArray(x.items) && x.items.length ? x.items.join(", ") : x.kind === "reading" ? "Reading" : x.kind;
     const nums = [isNum(x.miles) ? `${fmt(x.miles)} mi` : null, isNum(x.hrs) ? `${fmt(x.hrs)} TM hrs` : null].filter(Boolean).join(" · ");
     return h("li", null, h("strong", { text: what }), nums ? ` · ${nums}` : "", h("br"),
       h("small", { text: [x.at, x.by ? "by " + x.by : "", x.note ? "“" + x.note + "”" : ""].filter(Boolean).join(" · ") }));
@@ -1761,7 +1907,9 @@ function jobDone(job, out) {
   if (job.action === "saveTruck" && out && out.truck) {
     rebase(job.key, out.truck.updatedAt);
     let t = out.truck;   // the sheet's copy, plus anything still waiting for this truck
-    for (const j of pendingFor(job.key)) t = Object.assign({}, t, JSON.parse(JSON.stringify(j.data.truck)), { id: t.id, updatedAt: t.updatedAt });
+    for (const j of pendingFor(job.key)) t = Object.assign(overlay(t, j.data.truck), { id: t.id, updatedAt: t.updatedAt });
+    const cur = byId(t.id);
+    if (cur && String(cur.tmSkip || "") !== String(t.tmSkip || "") && queue.some(j => j.action === "tmSkip" && j.data.id === t.id)) t.tmSkip = cur.tmSkip;
     replaceTruck(t);
     const id = job.data.id, log = job.data.log;
     delete historyCache[id];
@@ -1780,6 +1928,11 @@ function jobDone(job, out) {
     }
   } else if (job.action === "deleteService") {
     delete knownBase[job.key];
+  } else if (job.action === "tmSkip" && out && out.truck) {
+    const cur = byId(job.data.id);
+    if (cur && !pendingFor(job.key).length) replaceTruck(Object.assign({}, cur, { tmSkip: out.truck.tmSkip || "" }));
+    delete historyCache[job.data.id];
+    if (openId === job.data.id && drawer.open) loadHistory(job.data.id);
   }
   if (failNote && $("banner").textContent === failNote) setBanner("");   // the next good save clears an old "not saved" note
   failNote = "";
@@ -1807,6 +1960,10 @@ function jobFailed(job, e) {
         : `${job.label}: not saved. ${errText(e, "Nothing")}`;
       refresh(true);
     }
+  } else if (job.action === "tmSkip") {
+    queue = queue.filter(j => j.key !== job.key); saveQueue();
+    msg = e.error === "gone" ? `${job.label} was deleted on another phone.` : `${job.label}: "not available" wasn't saved. ${errText(e, "Nothing")}`;
+    refresh(true);
   } else {
     queue = queue.filter(j => j.key !== job.key); saveQueue();
     msg = e.error === "conflict" ? "Someone else just changed that service record, so your change wasn't saved. The latest version is shown."
@@ -1836,6 +1993,15 @@ function queueServiceDelete(truckId, rec, okMsg) {
   enqueue({ action: "deleteService", key: "s:" + rec.id, base: rec.updatedAt || "", truckId, data: { id: rec.id }, okMsg });
 }
 const newSvcId = () => "s-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+/** "Not available this week" for the TM hrs check, or undo it. */
+function queueTmSkip(id, on) {
+  const t = byId(id), c = t && tmCheck(t);
+  if (!c) return;
+  replaceTruck(Object.assign({}, t, { tmSkip: on ? c.week : "" }));
+  enqueue({ action: "tmSkip", key: "k:" + id, data: { id, on, week: c.week }, label: label(t),
+    okMsg: on ? `${label(t)}: not available this week` : `${label(t)}: back on this week's TM hrs check` });
+  renderAll();
+}
 
 /* ---------- saving a reading ---------- */
 async function saveReading(id) {
@@ -1843,16 +2009,19 @@ async function saveReading(id) {
   const v = currentValues(t);
   const prog = progOf(t);
   if (Number.isNaN(v.miles) || Number.isNaN(v.hrs) || (isAdmin() && !isNum(v.miles))) return;
-  const changed = (isAdmin() && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
-  if (!changed) return;
+  const st = saveState(t, v);
+  if (!st.changed && !st.confirm) return;
   const body = plain(t);
   body.milesNow = isAdmin() ? v.miles : t.milesNow;
   if (prog && isNum(v.hrs)) body.hrsNow = v.hrs;
   body.readingAt = new Date().toISOString();
   body.readingBy = session ? session.name : "";
+  if (prog && isNum(v.hrs) && (v.hrs !== t.hrsNow || st.confirm)) { body.hrsAt = body.readingAt; body.hrsBy = body.readingBy; }   // counts for the Tuesday check
   const restore = { miles: v.milesStr, hrs: v.hrsStr };
   delete drafts[id]; saveDrafts();
-  try { saveTruck(t, body, { kind: "reading", miles: body.milesNow, hrs: prog && isNum(v.hrs) ? v.hrs : null, items: [] }, `Saved ${label(t)}`, restore); }
+  const log = { kind: "reading", miles: body.milesNow, hrs: prog && isNum(v.hrs) ? v.hrs : null, items: st.confirm ? ["TM hrs confirmed (no change)"] : [] };
+  if (st.confirm) log.hrsChecked = true;
+  try { saveTruck(t, body, log, st.confirm ? `TM hrs confirmed for ${label(t)}` : `Saved ${label(t)}`, restore); }
   catch (e) { drafts[id] = restore; saveDrafts(); toast(failText(e, "Your numbers")); }
   renderAll();
 }
@@ -2028,9 +2197,12 @@ function openService(id) {
           if (prog && isNum(hrs) && (!isNum(body.hrsNow) || hrs >= body.hrsNow)) body.hrsNow = hrs;
           body.readingAt = new Date().toISOString();
           body.readingBy = session ? session.name : "";
+          // A TM service (or new hours) counts for the Tuesday TM hrs check
+          const hrsChecked = !!prog && isNum(hrs) && (hrs !== t.hrsNow || done.some(x => /^TM /.test(x)));
+          if (hrsChecked) { body.hrsAt = body.readingAt; body.hrsBy = body.readingBy; }
           try {
             saveTruck(t, body, { kind: "service", miles, hrs: prog ? hrs : null, items: done, note: val("sv-note").slice(0, 500),
-              shop: val("sv-shop").slice(0, 60), cost: isNum(cost) ? cost : null }, `Logged for ${label(t)}: ${done.join(", ")}`);
+              shop: val("sv-shop").slice(0, 60), cost: isNum(cost) ? cost : null, hrsChecked }, `Logged for ${label(t)}: ${done.join(", ")}`);
             delete drafts[t.id]; saveDrafts();
             closeDialog();
             renderAll();
@@ -2312,6 +2484,8 @@ function buildReport() {
   lines.push("", "DUE SOON", ...(groups.soon.length ? groups.soon : ["• none"]));
   if (groups.gps.length) lines.push("", "TRUCK ALERTS (GPS)", ...groups.gps);
   if (paper.length) lines.push("", "PAPERWORK", ...paper);
+  const chk = checkReport();
+  if (chk) lines.push("", chk.title.toUpperCase(), ...(chk.lines.length ? chk.lines.map(x => "• " + x) : ["• nothing missed"]));
   return lines.join("\n");
 }
 $("shareReport").addEventListener("click", async () => {
@@ -2362,7 +2536,8 @@ function buildCsv() {
   const head = ["Name", "Plate", "Unit", "Driver", "Vehicle", "Year", "Status", "Miles now", "Miles saved by", "Oil change every (mi)", "Miles since oil change",
     "Truck oil miles left", "Truckmount", "TM hrs now", "TM oil hrs left", "Next TM service", "TM service due at (hrs)", "TM service hrs left",
     "Safety inspection due", "Registration due", "Insurance until", "Paperwork issues", "Last reading",
-    "VIN", "Check engine", "Fuel %", "GPS status", "Last GPS report", "Location", "Van engine hrs (reference only)"];
+    "VIN", "Check engine", "Fuel %", "GPS status", "Last GPS report", "Location", "Van engine hrs (reference only)",
+    "TM hrs last entered", "TM hrs check this week"];
   const lines = [head];
   for (const { t, e } of reportRows()) {
     const { r, pw } = e;
@@ -2384,10 +2559,24 @@ function buildCsv() {
       t.gps ? (t.gps.offline ? "Offline" : t.gps.status) : "",
       t.gps && t.gps.at ? `${fmtWhen(t.gps.at)} ${fmtTime(new Date(t.gps.at))}` : "",
       t.gps ? (t.gps.address || (isNum(t.gps.lat) ? `${t.gps.lat}, ${t.gps.lng}` : "")) : "",
-      t.gps && isNum(t.gps.engineHrs) ? t.gps.engineHrs : ""
+      t.gps && isNum(t.gps.engineHrs) ? t.gps.engineHrs : "",
+      t.hrsAt ? `${fmtWhen(t.hrsAt)}${t.hrsBy ? " · " + t.hrsBy : ""}` : "",
+      checkWord(tmCheck(t))
     ]);
   }
   return "\ufeff" + lines.map(row => row.map(csvCell).join(",")).join("\r\n");
+}
+const checkWord = c => !c ? "" : c.state === "done" ? "Done" : c.state === "skipped" ? "Not available" : c.state === "today" ? "Due today" : "Missed";
+/** Lines for reports: the week's TM hrs check. */
+function checkReport() {
+  const chk = scoped().map(t => ({ t, c: tmCheck(t) })).filter(x => x.c);
+  if (!chk.length) return null;
+  const left = chk.filter(x => x.c.state === "today" || x.c.state === "missed");
+  return {
+    title: `TM hrs check (Tue ${shortDate(chk[0].c.start)}): ${chk.filter(x => x.c.state === "done").length} of ${chk.length} done`,
+    lines: left.map(x => `${label(x.t)}: ${x.c.state === "today" ? "due today" : "missed"} (${x.c.last ? "last entered " + shortDate(x.c.last) : "never entered"})`)
+      .concat(chk.filter(x => x.c.state === "skipped").map(x => `${label(x.t)}: not available this week`))
+  };
 }
 function downloadFile(name, text, type) {
   const blob = new Blob([text], { type });
@@ -2413,7 +2602,7 @@ function buildPrintReport() {
     e.pwBad.forEach(p => paper.push(`${label(t)}: ${p.label} ${p.shown}${p.status === "due" ? " (past due)" : ` (in ${p.days} days)`}`));
   });
   const td = (v, cls) => h("td", { class: cls || null, text: v == null ? "" : String(v) });
-  $("printReport").replaceChildren(
+  $("printReport").replaceChildren(...[
     h("h1", { text: "VODA Fleet Maintenance" }),
     h("p", { class: "pr-sub", text: `Report · ${st.text} · ${view.division ? view.division + " · " : ""}${rows.length} trucks` }),
     h("div", { class: "pr-sum" }, h("span", { text: `${nDue} overdue` }), h("span", { text: `${nSoon} due soon` }), h("span", { text: `${nOk} OK` })),
@@ -2438,7 +2627,8 @@ function buildPrintReport() {
     h("h2", { text: "Needs attention" }),
     issues.length ? h("ul", null, issues.map(x => h("li", { text: x }))) : h("p", { text: "Nothing due on oil or TM service." }),
     paper.length ? h("h2", { text: "Paperwork" }) : null,
-    paper.length ? h("ul", null, paper.map(x => h("li", { text: x }))) : null);
+    paper.length ? h("ul", null, paper.map(x => h("li", { text: x }))) : null,
+    ...(() => { const c = checkReport(); return c ? [h("h2", { text: c.title }), c.lines.length ? h("ul", null, c.lines.map(x => h("li", { text: x }))) : h("p", { text: "Nothing missed." })] : []; })()].filter(Boolean));
 }
 function printReport() {
   buildPrintReport();
