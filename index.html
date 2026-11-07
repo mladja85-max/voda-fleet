@@ -1317,13 +1317,12 @@ function renderAll() {
 const PAPER_KPIS = [["insp", "Safety inspection"], ["reg", "Registration"]];
 function renderKpis() {
   if (!loaded) { $("kpis").replaceChildren(); return; }
-  let nDue = 0, nSoon = 0, nPaper = 0, nEngine = 0, nTm = 0, tmMissed = false;
+  let nDue = 0, nSoon = 0, nEngine = 0, nTm = 0, tmMissed = false;
   const doc = { insp: { due: 0, soon: 0 }, reg: { due: 0, soon: 0 } };
   const inUnit = scoped();
   for (const t of inUnit) {
     const e = evalTruck(t);
     if (!e.r.empty) { if (e.r.worst === "due") nDue++; else if (e.r.worst === "soon") nSoon++; }
-    if (e.pwBad.length) nPaper++;
     for (const [key, lbl] of PAPER_KPIS) { const p = e.pw.find(x => x.label === lbl); if (p && p.status !== "ok") doc[key][p.status]++; }
     if (t.gps && t.gps.check === "on") nEngine++;
     const c = tmCheck(t);
@@ -1333,10 +1332,10 @@ function renderKpis() {
   const showTm = apiLevel >= 10 && trucks.some(t => progOf(t));
   if (!showEngine && view.filter === "engine") view.filter = "all";
   if (!showTm && view.filter === "tmcheck") view.filter = "all";
-  if (view.filter === "ok") view.filter = "all";   // the OK box is gone
+  if (view.filter === "ok" || view.filter === "paper") view.filter = "all";   // those boxes are gone
   const extra = (showEngine ? 1 : 0) + (showTm ? 1 : 0);
-  $("kpis").style.setProperty("--kpis", 6 + extra);
-  $("kpis").style.setProperty("--kpis-phone", 4);   // phones: two rows of four (All trucks is hidden there)
+  $("kpis").style.setProperty("--kpis", 5 + extra);
+  $("kpis").style.setProperty("--kpis-phone", 3);   // phones: rows of three (All trucks is hidden there)
   const docKpi = (key, lbl, short) => {
     const d = doc[key], n = d.due + d.soon;
     const el = kpi(key, "doc " + (d.due ? "due" : n ? "soon" : "clear"), n, lbl, short);
@@ -1351,9 +1350,8 @@ function renderKpis() {
     kpi("all", "all", inUnit.length, view.division ? `All ${view.division}` : "All trucks"),
     kpi("due", "due", nDue, "Overdue"),
     kpi("soon", "soon", nSoon, "Due soon"),
-    kpi("paper", "paper", nPaper, "Paperwork to check", "Papers"),
     docKpi("insp", "Safety inspection", "Inspection"),
-    docKpi("reg", "Registration", "Registr."),
+    docKpi("reg", "Registration", "Registration"),
     showEngine ? kpi("engine", "engine", nEngine, "Check engine", "Engine") : null,
     showTm ? kpi("tmcheck", "tmchk" + (tmMissed ? " missed" : nTm ? "" : " clear"), nTm, "TM hrs not checked", "TM hrs") : null].filter(Boolean));
 }
