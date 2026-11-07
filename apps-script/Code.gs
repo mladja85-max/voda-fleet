@@ -45,6 +45,14 @@
  * Script Property TM_CHECK_EMAIL (one or more addresses, separated by commas), or to that same account if it's
  * not set. To stop it: pick "tmCheckEmailStop" and click Run.
  *
+ * PAPERWORK EMAIL (optional)
+ * Every Monday between 7 and 8 AM: any truck whose safety inspection or registration is due within a month, or
+ * already past due. Nothing is sent when nothing is due. To turn it on: pick "paperworkEmailSetup" and click Run
+ * (it sends a test email right away). It's sent from the Google account that ran the setup, to the Script Property
+ * PAPERWORK_EMAIL if you add one, otherwise to TM_CHECK_EMAIL, otherwise to that same account.
+ * Once a truck is renewed, put the new date in the app (Edit truck) and it drops off the email.
+ * To stop it: pick "paperworkEmailStop" and click Run.
+ *
  * ONE STEP GPS MILEAGE (optional)
  * 1. Project Settings (gear, left side) > Script Properties > Add script property.
  *    Property: ONESTEP_API_KEY   Value: your One Step GPS API key.   Save script properties.
@@ -848,6 +856,74 @@ function tmCheckEmail(test) {
     : today ? "Today's TM hrs check: " + missed.length + " truck" + (missed.length === 1 ? "" : "s") + " to do (" + units + ")"
     : daysLate > 1 ? "Still missing TM hrs (" + daysLate + " days since Tuesday): " + units : "Missed Tuesday TM hrs: " + units);
   MailApp.sendEmail({ to: to, subject: subject.slice(0, 250), body: lines.join("\n") });
+  return to;
+}
+
+/* ---------------- paperwork email ---------------- */
+
+const PAPER_DAYS = 30;   // "due within a month", the same window the app uses for Due soon
+
+/** Run once from the editor: every Monday morning, an email listing inspections and registrations due within a month
+ *  or past due. Sends a test email now so you can see it. */
+function paperworkEmailSetup() {
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "paperworkEmail") ScriptApp.deleteTrigger(tr); });
+  ScriptApp.newTrigger("paperworkEmail").timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(7).create();
+  const sent = paperworkEmail(true);
+  Logger.log("Paperwork email is on: every Monday between 7 and 8 AM, only when something is due within a month or past due. Test email sent to " + sent + ".");
+}
+function paperworkEmailStop() {
+  let n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "paperworkEmail") { ScriptApp.deleteTrigger(tr); n++; } });
+  Logger.log(n ? "Paperwork email stopped." : "Paperwork email wasn't on.");
+}
+/** Safety inspections and registrations due within PAPER_DAYS (or past due), soonest first. */
+function paperworkDue_(trucks, now) {
+  const tz = Session.getScriptTimeZone();
+  const p = Utilities.formatDate(now, tz, "yyyy-MM-dd").split("-").map(Number);
+  const today = Date.UTC(p[0], p[1] - 1, p[2]);
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const out = [];
+  trucks.forEach(function (t) {
+    const insp = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(t.inspectionDue || ""));
+    if (insp) out.push({ t: t, what: "Safety inspection", at: Date.UTC(+insp[1], +insp[2] - 1, +insp[3]), shown: MON[+insp[2] - 1] + " " + Number(insp[3]) + ", " + insp[1] });
+    const reg = /^(\d{4})-(\d{2})$/.exec(String(t.registrationDue || ""));
+    if (reg) out.push({ t: t, what: "Registration", at: Date.UTC(+reg[1], +reg[2], 0), shown: "end of " + MON[+reg[2] - 1] + " " + reg[1] });
+  });
+  return out.map(function (x) { x.days = Math.round((x.at - today) / 864e5); return x; })
+    .filter(function (x) { return x.days <= PAPER_DAYS; })
+    .sort(function (a, b) { return a.days - b.days; });
+}
+/** Runs every Monday morning. */
+function paperworkEmail(test) {
+  const isTest = test === true;
+  const tz = Session.getScriptTimeZone();
+  const now = new Date();
+  const due = paperworkDue_(readTrucks_().map(function (x) { return x.truck; }), now);
+  const past = due.filter(function (x) { return x.days < 0; });
+  const soon = due.filter(function (x) { return x.days >= 0; });
+  if (!due.length && !isTest) { Logger.log("No inspection or registration due within " + PAPER_DAYS + " days. No email sent."); return ""; }
+  const name = function (t) { return t.unit + (t.driver ? " · " + t.driver : ""); };
+  const plural = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+  const line = function (x) {
+    return "• " + name(x.t) + ": " + x.what + (x.days < 0 ? " was due " + x.shown + " (" + plural(-x.days, "day") + " ago)"
+      : x.days === 0 ? " due today (" + x.shown + ")" : " due " + x.shown + " (in " + plural(x.days, "day") + ")");
+  };
+  const lines = [];
+  if (isTest) lines.push("TEST: this is what the Monday paperwork email looks like. From now on it's only sent when something is due within a month or past due.", "");
+  lines.push("Truck paperwork, " + Utilities.formatDate(now, tz, "EEE MMM d") + ":", "");
+  if (past.length) { lines.push("Past due:"); past.forEach(function (x) { lines.push(line(x)); }); lines.push(""); }
+  if (soon.length) { lines.push("Due within a month:"); soon.forEach(function (x) { lines.push(line(x)); }); lines.push(""); }
+  if (!due.length) lines.push("Nothing due within a month.", "");
+  if (due.length) lines.push("Renewed? Open the truck in the app, tap Edit truck and put in the new date. It drops off this email once it's more than a month away.",
+    "This email comes every Monday while anything is due within a month or past due.", "");
+  lines.push("Open the app: " + APP_URL);
+  const props = PropertiesService.getScriptProperties();
+  const to = String(props.getProperty("PAPERWORK_EMAIL") || "").trim() || String(props.getProperty("TM_CHECK_EMAIL") || "").trim() || Session.getEffectiveUser().getEmail();
+  const parts = [];
+  if (soon.length) parts.push(soon.length + " due within a month");
+  if (past.length) parts.push(past.length + " past due");
+  const subject = (isTest ? "(Test) " : "") + (due.length ? "Truck paperwork: " + parts.join(", ") : "Truck paperwork: nothing due");
+  MailApp.sendEmail({ to: to, subject: subject, body: lines.join("\n") });
   return to;
 }
 
