@@ -198,6 +198,16 @@ button { font: inherit; color: inherit; }
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .qf .gps { font-size: .66rem; color: var(--accent); margin-left: 4px; }
+.qf input.locked, .df input.locked { background: transparent; border-style: dashed; color: var(--muted); }
+.quick.view-only { grid-template-columns: minmax(0, 1fr); }
+.user-row { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.user-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.user-top strong { font-size: 1rem; }
+.user-meta { color: var(--muted); font-size: .84rem; }
+.user-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.user-acts select { font: inherit; font-size: .88rem; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.code-box { display: grid; gap: 8px; padding: 12px; border-radius: 10px; border: 1.5px solid var(--accent); background: var(--accent-soft); }
+.code-box .code { font-family: var(--font-display); font-size: 1.8rem; font-weight: 700; letter-spacing: .08em; color: var(--ink); }
 .warn { margin: 0; padding: 0 14px 8px; background: var(--surface-2); color: var(--soon); font-weight: 600; font-size: .82rem; }
 .warn:empty { display: none; }
 .tile-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 8px; padding: 0 14px 10px; font-size: .8rem; color: var(--muted); background: var(--surface-2); }
@@ -638,14 +648,16 @@ const store = {
 const K_SESSION = "voda.session", K_CACHE = "voda.cache", K_DRAFTS = "voda.drafts", K_INSTALL = "voda.installDismissed";
 
 /* ---------- state ---------- */
-let session = store.get(K_SESSION);           // { code, name }
+let session = store.get(K_SESSION);           // { token, id, name, username, role }
+const hadOldSession = !!(session && !session.token);   // phones connected with the old shared code
+if (hadOldSession) { session = null; store.del(K_SESSION); }
 let trucks = [];
 let loaded = false;
 let lastSync = null;
 let offline = false;
 let refreshing = false;
 let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
-const NEEDS_API = 7;                           // the Google script version this app expects
+const NEEDS_API = 8;                           // the Google script version this app expects
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -684,6 +696,9 @@ function parseNum(s) {
   return Number.isFinite(n) ? n : NaN;
 }
 const byId = id => trucks.find(t => t.id === id);
+const isAdmin = () => !!(session && session.role === "admin");
+/** Technicians may change only TM hours, and only on trucks with a truckmount. */
+const canEditHrs = t => !!(session && progOf(t));
 const progOf = t => PROGRAMS[t.tm] || null;
 function plain(t) { const o = JSON.parse(JSON.stringify(t)); delete o.id; delete o.updatedAt; delete o.gps; return o; }
 function fmtWhen(iso) {
@@ -723,7 +738,7 @@ async function api(action, data) {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(Object.assign({ action, code: session ? session.code : "", by: session ? session.name : "" }, data || {})),
+      body: JSON.stringify(Object.assign({ action, token: session ? session.token : "" }, data || {})),
       signal: ctrl.signal
     });
     let out;
@@ -738,7 +753,10 @@ async function api(action, data) {
 function errText(e, what) {
   const code = e && e.error;
   if (code === "offline") return `No connection. ${what || "Your numbers"} stay on this phone. Try again when you're back online.`;
-  if (code === "bad_code") return "The access code was changed. Enter the new code from the Setup tab.";
+  if (code === "bad_code" || code === "signed_out") return "Your sign-in ended. Please sign in again.";
+  if (code === "not_allowed") return "Only an admin can do that.";
+  if (code === "hrs_lower") return `TM hrs can't go below the last reading (${fmt(e.hrs)}). Ask an admin if it's wrong.`;
+  if (code === "hrs_jump") return `That's a big jump from ${fmt(e.hrs)} TM hrs. Check the number.`;
   if (code === "not_set_up") return "The Google Sheet isn't set up yet. Run setup in Apps Script first.";
   if (code === "server") return "The Google Sheet had a problem: " + (e.message || "unknown error") + ".";
   return "Couldn't reach the Google Sheet. Check the connection and try again.";
@@ -750,6 +768,7 @@ async function refresh(quiet) {
   $("syncText").textContent = "Updating…";
   try {
     const out = await api("list");
+    if (out.me) { const roleChanged = session.role !== out.me.role; Object.assign(session, { name: out.me.name, role: out.me.role, username: out.me.username }); store.set(K_SESSION, session); if (roleChanged) applyRole(); }
     trucks = sortTrucks(out.trucks || []);
     gpsHealth = out.gps || null;
     for (const k of Object.keys(drafts)) if (!byId(k)) delete drafts[k];
@@ -760,7 +779,7 @@ async function refresh(quiet) {
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
-    if (e && e.error === "bad_code") { signOut("The access code was changed. Enter the new code from the Setup tab."); refreshing = false; return; }
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
     offline = true;
     if (!loaded) {
       const cache = store.get(K_CACHE);
@@ -965,57 +984,104 @@ function showNotConfigured() {
       " and paste the Apps Script web app URL (it ends in ", h("code", { text: "/exec" }), "). Then upload the file again."));
 }
 
-function showSignIn(message) {
+/* Sign in with your own account, or set one up with a code (invite, passcode reset, or the very first Admin). */
+function showSignIn(message, mode) {
   showApp(false);
+  mode = mode || "login";
   const err = h("p", { class: "dlg-err", role: "alert", text: message || "" });
-  const btn = h("button", { class: "btn primary", type: "submit", id: "gateGo", text: "Connect" });
+  const pass = (id, label, auto) => h("div", { class: "field" }, h("label", { for: id, text: label }),
+    h("input", { id, type: "password", maxlength: "6", autocomplete: auto, autocapitalize: "none", autocorrect: "off", spellcheck: "false" }));
+  const showPass = h("label", { class: "check", style: "align-items:center" },
+    h("input", { type: "checkbox", id: "gateShow", onchange: e => { for (const el of $("gate").querySelectorAll("input[maxlength='6']")) el.type = e.target.checked ? "text" : "password"; } }),
+    h("span", { text: "Show passcode" }));
+  const btn = h("button", { class: "btn primary", type: "submit", id: "gateGo", text: mode === "login" ? "Sign in" : "Create account" });
+  const done = async out => {
+    const first = !session || session.id !== out.user.id;
+    session = { token: out.token, id: out.user.id, name: out.user.name, username: out.user.username, role: out.user.role };
+    store.set(K_SESSION, session);
+    if (first && out.user.role !== "admin") { view.tmOnly = true; saveView(); }   // technicians start on the truckmounts
+    const list = await api("list");
+    trucks = sortTrucks(list.trucks || []); gpsHealth = list.gps || null; loaded = true; lastSync = new Date(); offline = false;
+    store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
+    startApp();
+    if (scriptOld(list)) setTimeout(() => setBanner(SCRIPT_OLD), 0);
+  };
+  const fail = ex => {
+    const c = ex && ex.error;
+    err.textContent = c === "bad_login" ? "Username or passcode is wrong."
+      : c === "locked" ? "Too many wrong tries. Wait 15 minutes and try again."
+      : c === "disabled" ? "This account is turned off. Ask an admin."
+      : c === "bad_invite" ? "That code doesn't work. It may be used up or older than 14 days; ask an admin for a new one."
+      : c === "taken" ? "That username is taken. Pick another."
+      : c === "bad_username" ? "Username: 3 to 30 letters or numbers (dots, dashes and underscores are fine)."
+      : c === "bad_passcode" ? "Passcode: 4 to 6 characters, anything you like (no space at the start or end)."
+      : c === "bad_name" ? "Enter your name (up to 40 characters)."
+      : c === "bad_code" || c === "bad_request" ? SCRIPT_OLD
+      : c === "offline" ? "No connection. Connect to the internet and try again."
+      : c === "not_set_up" ? errText(ex)
+      : "Couldn't reach the Google Sheet. Check the connection. During first setup, also check that the web app deployment has access set to Anyone.";
+    btn.disabled = false; btn.textContent = mode === "login" ? "Sign in" : "Create account";
+  };
   const form = h("form", { style: "display:grid;gap:14px", onsubmit: async e => {
     e.preventDefault();
-    const code = $("gateCode").value.trim();
-    const name = $("gateName").value.trim();
-    if (!code) { err.textContent = "Enter the access code."; return; }
-    if (!name) { err.textContent = "Enter your name. It shows next to the readings you save."; return; }
-    btn.disabled = true; btn.textContent = "Connecting…"; err.textContent = "";
-    session = { code, name: name.slice(0, 40) };
-    try {
-      const out = await api("list");
-      store.set(K_SESSION, session);
-      trucks = sortTrucks(out.trucks || []); gpsHealth = out.gps || null; loaded = true; lastSync = new Date(); offline = false;
-      if (scriptOld(out)) setTimeout(() => setBanner(SCRIPT_OLD), 0);
-      store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
-      startApp();
-    } catch (ex) {
-      session = null;
-      err.textContent = ex && ex.error === "bad_code"
-        ? "That code doesn't match. Check the Setup tab in the Google Sheet."
-        : ex && ex.error === "offline" ? "No connection. Connect to the internet and try again."
-        : ex && ex.error === "not_set_up" ? errText(ex)
-        : "Couldn't reach the Google Sheet. Check the connection. During first setup, also check that the web app deployment has access set to Anyone.";
-      btn.disabled = false; btn.textContent = "Connect";
+    err.textContent = "";
+    const username = $("gateUser").value.trim();
+    const passcode = $("gatePass").value;
+    if (mode === "login") {
+      if (!username || !passcode) { err.textContent = "Enter your username and passcode."; return; }
+      btn.disabled = true; btn.textContent = "Signing in…";
+      try { await done(await api("login", { username, passcode })); } catch (ex) { fail(ex); }
+      return;
     }
+    const invite = $("gateCode").value.trim(), name = $("gateName").value.trim();
+    if (!invite) { err.textContent = "Enter the code you were given."; return; }
+    if (!name) { err.textContent = "Enter your name. It shows next to the readings you save."; return; }
+    if (passcode.length < 4 || passcode.length > 6) { err.textContent = "Passcode: 4 to 6 characters, anything you like."; return; }
+    if (passcode !== $("gatePass2").value) { err.textContent = "The two passcodes don't match."; return; }
+    btn.disabled = true; btn.textContent = "Creating…";
+    try { await done(await api("signup", { invite, name, username, passcode })); } catch (ex) { fail(ex); }
   } },
-    h("div", { class: "field" }, h("label", { for: "gateCode", text: "Access code" }),
-      h("input", { id: "gateCode", type: "text", autocomplete: "off", autocapitalize: "characters", spellcheck: "false", placeholder: "ABCD-1234" })),
-    h("div", { class: "field" }, h("label", { for: "gateName", text: "Your name" }),
-      h("input", { id: "gateName", type: "text", autocomplete: "name", placeholder: "Mike", value: (store.get("voda.lastName") || "") })),
-    err, h("div", null, btn));
+    mode === "code" ? h("div", { class: "field" }, h("label", { for: "gateCode", text: "Code" }),
+      h("input", { id: "gateCode", type: "text", autocomplete: "off", autocapitalize: "characters", spellcheck: "false", placeholder: "ABCD-1234" })) : null,
+    mode === "code" ? h("div", { class: "field" }, h("label", { for: "gateName", text: "Your name" }),
+      h("input", { id: "gateName", type: "text", autocomplete: "name", maxlength: "40", placeholder: "Mike" })) : null,
+    h("div", { class: "field" }, h("label", { for: "gateUser", text: mode === "code" ? "Pick a username" : "Username" }),
+      h("input", { id: "gateUser", type: "text", autocomplete: "username", autocapitalize: "none", autocorrect: "off", spellcheck: "false", maxlength: "30" })),
+    pass("gatePass", mode === "code" ? "Pick a passcode (4 to 6 characters)" : "Passcode", mode === "code" ? "new-password" : "current-password"),
+    mode === "code" ? pass("gatePass2", "Passcode again", "new-password") : null,
+    showPass, err, h("div", null, btn));
+  const other = h("button", { class: "link", type: "button", id: "gateSwitch",
+    text: mode === "login" ? "I have a code (new account or forgotten passcode)" : "I already have an account",
+    onclick: () => showSignIn("", mode === "login" ? "code" : "login") });
   $("gate").replaceChildren(
-    h("h2", { text: "Connect this phone" }),
-    h("p", { text: "Enter the access code from the Setup tab of the VODA Fleet Google Sheet. You only do this once on each phone." }),
-    form);
-  setTimeout(() => { const el = $("gateCode"); if (el) el.focus(); }, 50);
+    h("h2", { text: mode === "login" ? "Sign in" : "Set up your account" }),
+    h("p", { text: mode === "login"
+      ? (hadOldSession ? "VODA Fleet now has a login for each person. Sign in, or tap “I have a code” if you were given one." : "Sign in with your own username and passcode.")
+      : "Enter the code an admin gave you, then pick your username and passcode. Setting up the app for the very first time? Use the access code on the Setup tab of the Google Sheet." }),
+    form, h("p", null, other));
+  if (!isTouch()) setTimeout(() => { const el = $(mode === "code" ? "gateCode" : "gateUser"); if (el) el.focus(); }, 50);
 }
 
 function signOut(message) {
-  if (session && session.name) store.set("voda.lastName", session.name);
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
+  for (const k of Object.keys(svcCache)) delete svcCache[k];
+  for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
+  if (dlg.open) dlg.close();
   showSignIn(message);
+}
+
+/** What this person can see and do: technicians get no add/edit/delete controls at all. */
+function applyRole() {
+  $("addTruck").hidden = !isAdmin();
+  renderSync();
+  if (loaded) renderAll();
 }
 
 function startApp() {
   showApp(true);
   setBanner("");
+  $("addTruck").hidden = !isAdmin();
   $("howBody").replaceChildren(howList());
   $("q").value = view.q;
   $("sortSel").value = view.sort;
@@ -1112,10 +1178,11 @@ function renderGrid() {
   $("countText").textContent = `${list.length} of ${scoped().length} trucks${view.division ? " · " + view.division : ""}`;
 }
 
-function quickField(labelText, id, value, mode, truckId, gps) {
+function quickField(labelText, id, value, mode, truckId, gps, locked) {
   return h("div", { class: "qf" },
     h("label", { for: id }, labelText, gps ? h("span", { class: "gps", text: "· GPS" }) : null),
-    h("input", { id, type: "text", inputmode: mode, autocomplete: "off", enterkeyhint: "done", value,
+    h("input", { id, type: "text", inputmode: mode, autocomplete: "off", enterkeyhint: "done", value, readonly: !!locked, class: locked ? "locked" : null,
+      title: locked ? "Only an admin can change this" : null,
       oninput: () => onType(truckId, ""),
       onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); saveReading(truckId); } } }));
 }
@@ -1132,10 +1199,10 @@ function tileEl(t) {
     h("p", { class: "tile-sub" }, sub ? h("span", { text: sub }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null),
     h("div", { class: "metrics", id: "met-" + t.id }),
     h("p", { class: "tile-gps", id: "gps-" + t.id }),
-    h("div", { class: "quick" + (prog ? "" : " no-tm") },
-      quickField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id, t.readingBy === "GPS"),
+    h("div", { class: "quick" + (prog ? "" : " no-tm") + (!isAdmin() && !prog ? " view-only" : "") },
+      quickField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id, t.readingBy === "GPS", !isAdmin()),
       prog ? quickField("TM hrs now", "h-" + t.id, v.hrsStr, "decimal", t.id, false) : null,
-      h("button", { class: "btn primary small", type: "button", id: "save-" + t.id, onclick: () => saveReading(t.id), text: "Save" })),
+      isAdmin() || prog ? h("button", { class: "btn primary small", type: "button", id: "save-" + t.id, onclick: () => saveReading(t.id), text: "Save" }) : null),
     h("p", { class: "warn", id: "warn-" + t.id, "aria-live": "polite" }),
     h("div", { class: "tile-foot" },
       h("span", { class: "left", id: "meta-" + t.id }),
@@ -1176,14 +1243,14 @@ function readingWarnings(t, v) {
   if (Number.isNaN(v.miles) || Number.isNaN(v.hrs)) warns.push("Enter numbers only.");
   if (isNum(v.miles) && isNum(t.milesNow) && v.miles < t.milesNow) warns.push(`Miles are lower than the last reading (${fmt(t.milesNow)}).`);
   if (isNum(v.miles) && isNum(t.milesNow) && v.miles - t.milesNow > 5000) warns.push(`That's ${fmt(v.miles - t.milesNow)} mi since the last reading.`);
-  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs < t.hrsNow) warns.push(`TM hrs are lower than the last reading (${fmt(t.hrsNow)}).`);
+  if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs < t.hrsNow) warns.push(isAdmin() ? `TM hrs are lower than the last reading (${fmt(t.hrsNow)}).` : `TM hrs can't go below the last reading (${fmt(t.hrsNow)}). Ask an admin if it's wrong.`);
   if (prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs - t.hrsNow > 200) warns.push(`That's ${fmt(v.hrs - t.hrsNow)} TM hrs since the last reading.`);
   return warns.join(" ");
 }
 function saveState(t, v) {
   const prog = progOf(t);
-  const changed = (isNum(v.miles) && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
-  const invalid = Number.isNaN(v.miles) || Number.isNaN(v.hrs);
+  const changed = (isAdmin() && isNum(v.miles) && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
+  const invalid = Number.isNaN(v.miles) || Number.isNaN(v.hrs) || (!isAdmin() && prog && isNum(v.hrs) && isNum(t.hrsNow) && v.hrs < t.hrsNow);
   return { changed, invalid };
 }
 function metaBits(t, changed) {
@@ -1213,7 +1280,7 @@ function updateTile(id) {
   $("warn-" + id).textContent = readingWarnings(t, v);
   const st = saveState(t, v);
   const save = $("save-" + id);
-  if (save.textContent !== "Saving…") save.disabled = !st.changed || st.invalid;
+  if (save && save.textContent !== "Saving…") save.disabled = !st.changed || st.invalid;
   const meta = $("meta-" + id);
   const bits = metaBits(t, st.changed);
   if (e.pwBad.length) {
@@ -1287,10 +1354,11 @@ function openDetails(id) {
   if (!svcCache[id]) loadServices(id);
 }
 
-function detailField(labelText, id, value, mode, truckId) {
+function detailField(labelText, id, value, mode, truckId, locked) {
   return h("div", { class: "df" },
     h("label", { for: id, text: labelText }),
-    h("input", { id, type: "text", inputmode: mode, autocomplete: "off", enterkeyhint: "done", value,
+    h("input", { id, type: "text", inputmode: mode, autocomplete: "off", enterkeyhint: "done", value, readonly: !!locked, class: locked ? "locked" : null,
+      title: locked ? "Only an admin can change this" : null,
       oninput: () => onType(truckId, "d"),
       onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); saveReading(truckId); } } }));
 }
@@ -1372,7 +1440,7 @@ function renderDrawer(id) {
       renameDraft && renameDraft.id === id ? renameForm(t) : h("div", { class: "titles" },
         h("div", { class: "title-row", style: "flex-wrap:wrap" },
           h("h2", { class: "tile-title", style: "font-size:inherit" }, idBits(t, "drTitle")),
-          h("button", { class: "icon-btn sm", type: "button", id: "d-rename", "aria-label": "Edit name, plate, unit and color", title: "Edit name, plate, unit and color",
+          !isAdmin() ? null : h("button", { class: "icon-btn sm", type: "button", id: "d-rename", "aria-label": "Edit name, plate, unit and color", title: "Edit name, plate, unit and color",
             onclick: () => { renameDraft = { id, unit: t.unit || "", plate: t.plate || "", division: t.division || "", driver: t.driver || "", color: t.color || "" }; renderDrawer(id); const u = $("rn-unit"); if (u && !isTouch()) { u.focus(); u.select(); } } }, pencilIcon())),
         h("p", { class: "tile-sub", style: "padding:0;margin-top:4px" },
           subLine(t) ? h("span", { text: subLine(t) }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null)),
@@ -1381,13 +1449,14 @@ function renderDrawer(id) {
         h("span", { text: "✕", style: "font-size:15px;line-height:1" }))),
     h("div", { class: "dr-body" },
       h("div", { class: "dfields" },
-        detailField("Miles now", "dm-" + id, v.milesStr, "numeric", id),
+        detailField("Miles now", "dm-" + id, v.milesStr, "numeric", id, !isAdmin()),
         prog ? detailField("TM hrs now", "dh-" + id, v.hrsStr, "decimal", id) : null),
       h("p", { class: "warn", id: "d-warn", style: "padding:0;background:none" }),
       h("div", { class: "dr-actions" },
-        h("button", { class: "btn primary", type: "button", id: "dsave-" + id, onclick: () => saveReading(id), text: "Save reading" }),
-        h("button", { class: "btn", type: "button", onclick: () => openService(id), text: "Log oil change / service" }),
-        h("button", { class: "btn ghost", type: "button", onclick: () => openEdit(id), text: "Edit truck" })),
+        isAdmin() || prog ? h("button", { class: "btn primary", type: "button", id: "dsave-" + id, onclick: () => saveReading(id), text: prog && !isAdmin() ? "Save TM hrs" : "Save reading" }) : null,
+        isAdmin() ? h("button", { class: "btn", type: "button", onclick: () => openService(id), text: "Log oil change / service" }) : null,
+        isAdmin() ? h("button", { class: "btn ghost", type: "button", onclick: () => openEdit(id), text: "Edit truck" }) : null,
+        isAdmin() ? null : h("p", { class: "hint", style: "margin:0;align-self:center", text: prog ? "You can update TM hrs. Everything else is view only." : "View only." })),
       h("div", { id: "d-res", style: "display:grid;gap:10px" }),
       h("div", { class: "chips", id: "d-paper" }),
       h("p", { class: "meta", id: "d-meta" }),
@@ -1512,7 +1581,7 @@ function serviceSection(t) {
     h("div", { class: "svc-head" }, h("h3", { text: "Service history" }),
       h("div", { class: "svc-actions" },
         h("button", { class: "btn small", type: "button", id: "svc-csv", text: "Download", onclick: () => downloadServices(t.id) }),
-        h("button", { class: "btn small primary", type: "button", id: "svc-add", text: "+ Add record", onclick: () => openServiceRecord(t.id, null) }))),
+        isAdmin() ? h("button", { class: "btn small primary", type: "button", id: "svc-add", text: "+ Add record", onclick: () => openServiceRecord(t.id, null) }) : null)),
     h("input", { type: "search", id: "svc-q", class: "svc-q", placeholder: "Search records (shop, part, miles…)", value: svcView.q, autocomplete: "off", "aria-label": "Search service records",
       oninput: e => { svcView.q = e.target.value; svcView.all = false; renderServices(t.id); } }),
     h("div", { id: "d-svc-body" }));
@@ -1535,7 +1604,7 @@ function renderServices(id) {
     return;
   }
   const { rows, list } = svcFiltered(id);
-  if (!rows.length) { body.replaceChildren(h("p", { class: "meta", text: "No service records yet. Logging an oil change or service adds one, or use + Add record." })); return; }
+  if (!rows.length) { body.replaceChildren(h("p", { class: "meta", text: isAdmin() ? "No service records yet. Logging an oil change or service adds one, or use + Add record." : "No service records yet." })); return; }
   const counts = {};
   rows.forEach(r => svcTypes(r).forEach(k => { counts[k] = (counts[k] || 0) + 1; }));
   const nCheck = rows.filter(r => r.check).length;
@@ -1618,11 +1687,11 @@ async function saveReading(id) {
   const t = byId(id); if (!t) return;
   const v = currentValues(t);
   const prog = progOf(t);
-  if (Number.isNaN(v.miles) || Number.isNaN(v.hrs) || !isNum(v.miles)) return;
-  const changed = v.miles !== t.milesNow || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
+  if (Number.isNaN(v.miles) || Number.isNaN(v.hrs) || (isAdmin() && !isNum(v.miles))) return;
+  const changed = (isAdmin() && v.miles !== t.milesNow) || (prog && isNum(v.hrs) && v.hrs !== t.hrsNow);
   if (!changed) return;
   const body = plain(t);
-  body.milesNow = v.miles;
+  body.milesNow = isAdmin() ? v.miles : t.milesNow;
   if (prog && isNum(v.hrs)) body.hrsNow = v.hrs;
   body.readingAt = new Date().toISOString();
   body.readingBy = session ? session.name : "";
@@ -1751,6 +1820,14 @@ function openServiceRecord(truckId, rec) {
             btn.disabled = false; btn.textContent = "Save";
           }
         } }))));
+  if (!isAdmin()) lockDialog();
+}
+/** Technicians can open a record but not change it. */
+function lockDialog() {
+  for (const el of dlg.querySelectorAll("input, textarea, select")) el.disabled = true;
+  for (const id of ["sr-save", "sr-del"]) { const b = $(id); if (b) b.remove(); }
+  const f = $("sr-flag"); if (f) f.textContent = f.textContent.replace(" Saving marks it as checked.", "");
+  const c = dlg.querySelector(".dlg-foot .btn:not(.primary)"); if (c) c.textContent = "Close";
 }
 function svcErr(e) { return e && e.error === "bad_request" ? "The Google script needs updating first (see the yellow note at the top)." : errText(e, "Nothing"); }
 
@@ -1986,20 +2063,107 @@ function openEdit(id) {
 }
 
 function openSettings() {
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const pass = (id, label) => h("div", { class: "field" }, h("label", { for: id, text: label }),
+    h("input", { id, type: "password", maxlength: "6", autocomplete: id === "st-old" ? "current-password" : "new-password", autocapitalize: "none", autocorrect: "off", spellcheck: "false" }));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Settings" }),
-    h("div", { class: "field" }, h("label", { for: "st-name", text: "Your name (shows next to readings you save)" }),
-      h("input", { id: "st-name", type: "text", autocomplete: "name", value: session ? session.name : "" })),
-    h("p", { text: "Disconnect removes the access code from this phone. You'll need the code to connect again." }),
+    h("p", null, "Signed in as ", h("strong", { text: session ? session.name : "" }), ` (${session ? session.username : ""}) · `, h("strong", { text: isAdmin() ? "Admin" : "Technician" })),
+    isAdmin() ? h("div", null, h("button", { class: "btn", type: "button", id: "st-users", text: "Users and invites", onclick: openUsers })) : null,
+    h("fieldset", null, h("legend", { text: "Change your passcode" }),
+      h("div", { class: "grid2" }, pass("st-old", "Current passcode"), pass("st-new", "New passcode (4 to 6)"), pass("st-new2", "New passcode again")),
+      err,
+      h("div", null, h("button", { class: "btn", type: "button", id: "st-pass", text: "Change passcode", onclick: async () => {
+        const old = $("st-old").value, nw = $("st-new").value;
+        if (nw.length < 4 || nw.length > 6) { err.textContent = "New passcode: 4 to 6 characters."; return; }
+        if (nw !== $("st-new2").value) { err.textContent = "The new passcodes don't match."; return; }
+        const b = $("st-pass"); b.disabled = true; err.textContent = "";
+        try {
+          const out = await api("changePasscode", { old, passcode: nw });
+          session.token = out.token; store.set(K_SESSION, session);
+          closeDialog(); toast("Passcode changed. Your other phones will ask you to sign in again.");
+        } catch (e) {
+          err.textContent = e && e.error === "bad_login" ? "Current passcode is wrong." : e && e.error === "locked" ? "Too many wrong tries. Wait 15 minutes." : e && e.error === "bad_passcode" ? "New passcode: 4 to 6 characters, no space at the start or end." : errText(e, "Nothing");
+          b.disabled = false;
+        }
+      } }))),
     h("div", { class: "dlg-foot" },
-      h("button", { class: "btn ghost danger", type: "button", text: "Disconnect this phone", onclick: () => { closeDialog(); signOut(""); } }),
-      h("div", { class: "right" },
-        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
-        h("button", { class: "btn primary", type: "button", text: "Save", onclick: () => {
-          const n = val("st-name");
-          if (n && session) { session.name = n.slice(0, 40); store.set(K_SESSION, session); }
-          closeDialog(); renderSync();
-        } }))));
+      h("button", { class: "btn ghost danger", type: "button", id: "st-out", text: "Sign out", onclick: () => { closeDialog(); signOut(""); } }),
+      h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
+}
+
+/** Admin: everyone's account, invites, roles, turning accounts off, and passcode resets. */
+async function openUsers() {
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const listBox = h("div", { style: "display:grid;gap:8px" }, h("p", { class: "meta", text: "Loading…" }));
+  const codeBox = h("div");
+  const appUrl = location.origin + location.pathname;
+  const showCode = (name, code, isReset) => {
+    const msg = `${name}, here is your VODA Fleet code: ${code}\nOpen ${appUrl} , tap "I have a code", enter it, then pick your username and passcode. The code works once, for 14 days.`;
+    codeBox.replaceChildren(h("div", { class: "code-box", id: "u-codebox" },
+      h("span", { text: `${isReset ? "Passcode reset code" : "Invite code"} for ${name}` }),
+      h("span", { class: "code", id: "u-code", text: code }),
+      h("span", { class: "hint", text: "Works once, for 14 days. Send it to them; they tap “I have a code” in the app." }),
+      h("div", { class: "user-acts" },
+        h("button", { class: "btn small primary", type: "button", text: "Send / share", onclick: async () => {
+          if (navigator.share) { try { await navigator.share({ text: msg }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+          try { await navigator.clipboard.writeText(msg); toast("Copied. Paste it into a text."); } catch (e) { toast("Copy the code by hand: " + code); }
+        } }),
+        h("button", { class: "btn small", type: "button", text: "Copy code", onclick: async () => { try { await navigator.clipboard.writeText(code); toast("Code copied"); } catch (e) { toast(code); } } }))));
+  };
+  const call = async (action, data, okMsg) => {
+    err.textContent = "";
+    try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(); return out; }
+    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : errText(e, "Nothing"); return null; }
+  };
+  const fmtAt = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "never";
+  const row = u => {
+    const me = session && u.id === session.id;
+    const status = u.status === "invited" ? `Invite not used yet (code works until ${fmtWhen(u.inviteUntil)})` : u.status === "disabled" ? "Turned off" : `Last sign-in: ${fmtAt(u.lastLogin)}`;
+    const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => call("saveUser", { id: u.id, role: e.target.value }, `${u.name} is now ${e.target.value === "admin" ? "an Admin" : "a Technician"}`) },
+      h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
+    role.value = u.role;
+    return h("div", { class: "user-row", "data-user": u.username || u.name },
+      h("div", { class: "user-top" }, h("strong", { text: u.name }), u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
+        u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null),
+      h("span", { class: "user-meta", text: status }),
+      me ? null : h("div", { class: "user-acts" }, role,
+        u.status === "invited"
+          ? [h("button", { class: "btn small", type: "button", text: "New code", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, false); } }),
+             h("button", { class: "btn small ghost danger", type: "button", text: "Cancel invite", onclick: () => call("saveUser", { id: u.id, remove: true }, "Invite cancelled") })]
+          : [u.status === "active"
+              ? h("button", { class: "btn small", type: "button", text: "Reset passcode", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, true); } })
+              : null,
+             h("button", { class: "btn small ghost" + (u.status === "active" ? " danger" : ""), type: "button", text: u.status === "active" ? "Turn off" : "Turn on",
+               onclick: () => call("saveUser", { id: u.id, status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]));
+  };
+  const load = async () => {
+    try {
+      const out = await api("users");
+      const users = (out.users || []).slice().sort((a, b) => (a.status === "invited") - (b.status === "invited") || String(a.name).localeCompare(String(b.name)));
+      listBox.replaceChildren(...users.map(row));
+    } catch (e) { listBox.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Nothing") })); }
+  };
+  const roleSel = h("select", { id: "u-role" }, h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Users and invites" }),
+    h("p", { text: "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
+    h("fieldset", null, h("legend", { text: "Invite someone" }),
+      h("div", { class: "grid2" },
+        h("div", { class: "field" }, h("label", { for: "u-name", text: "Their name" }), h("input", { id: "u-name", type: "text", maxlength: "40", autocomplete: "off", placeholder: "Joe" })),
+        h("div", { class: "field" }, h("label", { for: "u-role", text: "Role" }), roleSel)),
+      h("div", null, h("button", { class: "btn primary", type: "button", id: "u-invite", text: "Create invite code", onclick: async () => {
+        const name = val("u-name");
+        if (!name) { err.textContent = "Enter their name."; return; }
+        const out = await call("invite", { name, role: roleSel.value });
+        if (out) { $("u-name").value = ""; showCode(name, out.code, false); }
+      } })),
+      codeBox),
+    err,
+    h("h4", { text: "Everyone", style: "margin:4px 0 0" }),
+    listBox,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
+  await load();
 }
 
 /* ---------- report ---------- */
