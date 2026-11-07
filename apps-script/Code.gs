@@ -38,10 +38,12 @@
  * TUESDAY TM HOURS CHECK
  * Every Tuesday the technician enters (or confirms) TM hrs on each truckmount truck. The app shows what's left,
  * flags any truck that was missed, and a truck can be marked "Not available this week".
- * Email when a Tuesday is missed (optional): pick "tmCheckEmailSetup" and click Run, then approve the permission.
- * Every Wednesday morning it emails the trucks that weren't checked (nothing is sent when all were done).
- * It goes to the Google account that ran the setup; to send it somewhere else, add a Script Property
- * TM_CHECK_EMAIL with one or more addresses, separated by commas. To stop it: pick "tmCheckEmailStop" and click Run.
+ * Reminder email (optional): pick "tmCheckEmailSetup" and click Run, then approve the permission.
+ * From Wednesday on, every morning between 7 and 8 AM it emails the trucks still missing that week's TM hrs.
+ * Once every truck is done or marked not available, the emails stop until the next week's check is missed.
+ * Nothing is sent on Tuesdays (the check day). It's sent from the Google account that ran the setup, to the
+ * Script Property TM_CHECK_EMAIL (one or more addresses, separated by commas), or to that same account if it's
+ * not set. To stop it: pick "tmCheckEmailStop" and click Run.
  *
  * ONE STEP GPS MILEAGE (optional)
  * 1. Project Settings (gear, left side) > Script Properties > Add script property.
@@ -784,31 +786,45 @@ function tmSkip_(req) {
   return { ok: true, truck: t, week: week };
 }
 
-/** Run once from the editor: emails you every Wednesday morning when Tuesday's TM hrs check missed a truck.
- *  Sends a test email now so you can see what it looks like. */
+/** Run once from the editor: every morning from Wednesday on, emails the trucks still missing that week's TM hrs,
+ *  until they're all done. Sends a test email now so you can see what it looks like. */
 function tmCheckEmailSetup() {
-  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "tmCheckEmail") ScriptApp.deleteTrigger(tr); });
-  ScriptApp.newTrigger("tmCheckEmail").timeBased().onWeekDay(ScriptApp.WeekDay.WEDNESDAY).atHour(7).create();
+  tmCheckSchedule_();
   const sent = tmCheckEmail(true);
-  Logger.log("TM hrs check email is on: every Wednesday between 7 and 8 AM, only when a truck was missed. Test email sent to " + sent + ".");
+  Logger.log("TM hrs check email is on: every morning between 7 and 8 AM from Wednesday, until every truck is done. Test email sent to " + sent + ".");
 }
 function tmCheckEmailStop() {
   let n = 0;
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "tmCheckEmail") { ScriptApp.deleteTrigger(tr); n++; } });
+  PropertiesService.getScriptProperties().deleteProperty("TM_CHECK_SCHEDULE");
   Logger.log(n ? "TM hrs check email stopped." : "TM hrs check email wasn't on.");
 }
-/** Runs Wednesday morning: the trucks from this week's Tuesday check that have no TM hrs and weren't marked not available. */
+/** One daily 7 AM run (replaces any earlier schedule, such as the old Wednesday-only one). */
+function tmCheckSchedule_() {
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "tmCheckEmail") ScriptApp.deleteTrigger(tr); });
+  ScriptApp.newTrigger("tmCheckEmail").timeBased().everyDays(1).atHour(7).create();
+  PropertiesService.getScriptProperties().setProperty("TM_CHECK_SCHEDULE", "daily");
+}
+/** Runs every morning. Not on Tuesday (the check day). Other days: emails the trucks with no TM hrs since Tuesday that
+ *  weren't marked not available; sends nothing once they're all done. */
 function tmCheckEmail(test) {
   const isTest = test === true;
+  // A setup from before daily reminders ran only on Wednesdays: switch it over the first time it runs.
+  if (!isTest && PropertiesService.getScriptProperties().getProperty("TM_CHECK_SCHEDULE") !== "daily") tmCheckSchedule_();
   const tz = Session.getScriptTimeZone();
-  const week = checkWeek_(new Date());
+  const now = new Date();
+  const day = Number(Utilities.formatDate(now, tz, "u")) % 7;
+  if (day === CHECK_DAY && !isTest) { Logger.log("Today is the TM hrs check day. Reminders start tomorrow for any truck that's missed."); return ""; }
+  const week = checkWeek_(now);
+  const p = Utilities.formatDate(now, tz, "yyyy-MM-dd").split("-").map(Number), w = week.split("-").map(Number);
+  const daysLate = Math.round((Date.UTC(p[0], p[1] - 1, p[2]) - Date.UTC(w[0], w[1] - 1, w[2])) / 864e5);
   const tm = readTrucks_().map(function (x) { return x.truck; }).filter(function (t) { return TM_KINDS.indexOf(t.tm) > 0; });
   const state = {};
   tm.forEach(function (t) { state[t.id] = checkState_(t, week); });
   const missed = tm.filter(function (t) { return state[t.id] === "missed"; });
   const skipped = tm.filter(function (t) { return state[t.id] === "skipped"; });
   const done = tm.filter(function (t) { return state[t.id] === "done"; });
-  if (!missed.length && !isTest) { Logger.log("All " + tm.length + " truckmount trucks were checked. No email sent."); return ""; }
+  if (!missed.length && !isTest) { Logger.log("All " + tm.length + " truckmount trucks are done for this week. No email sent."); return ""; }
   const weekText = Utilities.formatDate(new Date(week + "T12:00:00Z"), "UTC", "EEE MMM d");
   const lastText = function (t) {
     if (!t.hrsAt) return "no TM hrs entered in the app yet";
@@ -819,14 +835,17 @@ function tmCheckEmail(test) {
   };
   const name = function (t) { return t.unit + (t.driver ? " · " + t.driver : ""); };
   const lines = [];
-  if (isTest) lines.push("TEST: this is what the Wednesday email looks like. From now on it's only sent when a truck was missed.", "");
+  if (isTest) lines.push("TEST: this is what the reminder looks like. It comes every morning from Wednesday while a truck is still missing its TM hrs.", "");
   lines.push("Tuesday TM hrs check, " + weekText + ": " + done.length + " of " + tm.length + " truckmount trucks done.", "");
   if (missed.length) { lines.push("Not checked:"); missed.forEach(function (t) { lines.push("• " + name(t) + ": " + lastText(t)); }); lines.push(""); }
   else lines.push("Nothing missed so far this week.", "");
   if (skipped.length) { lines.push("Marked not available:"); skipped.forEach(function (t) { lines.push("• " + name(t)); }); lines.push(""); }
+  if (missed.length) lines.push("This email comes every morning until each truck above has its TM hrs entered or is marked Not available this week. Then it stops until next week's check.", "");
   lines.push("Open the app: " + APP_URL);
   const to = String(PropertiesService.getScriptProperties().getProperty("TM_CHECK_EMAIL") || "").trim() || Session.getEffectiveUser().getEmail();
-  const subject = (isTest ? "(Test) " : "") + (missed.length ? "Missed Tuesday TM hrs: " + missed.map(function (t) { return t.unit; }).join(", ") : "Tuesday TM hrs check: all done");
+  const units = missed.map(function (t) { return t.unit; }).join(", ");
+  const subject = (isTest ? "(Test) " : "") + (!missed.length ? "Tuesday TM hrs check: all done"
+    : daysLate > 1 ? "Still missing TM hrs (" + daysLate + " days since Tuesday): " + units : "Missed Tuesday TM hrs: " + units);
   MailApp.sendEmail({ to: to, subject: subject.slice(0, 250), body: lines.join("\n") });
   return to;
 }
@@ -1116,7 +1135,7 @@ function gpsSync() {
   try { devices = gpsDevices_(gpsFetch_().json); }
   catch (err) {
     const msg = String(err && err.message ? err.message : err);
-    props.setProperties({ GPS_LAST_ERROR: msg.slice(0, 300), GPS_LAST_TRY: new Date().toISOString() });
+    props.setProperties({ GPS_LAST_ERROR: msg.slice(0, 300) || "Unknown error", GPS_LAST_TRY: new Date().toISOString() });
     if (sheet.getMaxColumns() >= GPS_NCOLS + 2) sheet.getRange(GPS_STATUS_CELL).setValue("Last sync failed " + stamp + ": " + msg);
     return;
   }
@@ -1258,7 +1277,8 @@ function gpsSync() {
     // Only columns F to U are written back, so edits to Truck, Use GPS miles and Adjust are never overwritten.
     sheet.getRange(2, 6, n, GPS_NCOLS - 5).setValues(outFT);
   });
-  props.setProperties({ GPS_LAST_ERROR: "", GPS_LAST_TRY: new Date().toISOString(), GPS_LAST_OK: new Date().toISOString() });
+  props.setProperties({ GPS_LAST_TRY: new Date().toISOString(), GPS_LAST_OK: new Date().toISOString() });
+  props.deleteProperty("GPS_LAST_ERROR");   // removed, not left blank: the Script Properties page refuses to save a blank value
   sheet.getRange(GPS_STATUS_CELL).setValue("Last sync " + stamp + ": " + updated + " truck" + (updated === 1 ? "" : "s") + " updated.");
 }
 
