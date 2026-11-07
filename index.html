@@ -139,7 +139,7 @@ button { font: inherit; color: inherit; }
 .kpis { display: grid; grid-template-columns: repeat(var(--kpis, 5), minmax(0, 1fr)); gap: 12px; }
 .kpi {
   text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: 12px 16px; display: grid; gap: 2px; cursor: pointer; position: relative; overflow: hidden;
+  padding: 12px 16px; display: grid; gap: 2px; align-content: start; cursor: pointer; position: relative; overflow: hidden;
 }
 .kpi::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--line); }
 .kpi.due::after { background: var(--due); }
@@ -1350,7 +1350,7 @@ function renderKpis() {
     kpi("all", "all", inUnit.length, view.division ? `All ${view.division}` : "All trucks"),
     kpi("due", "due", nDue, "Overdue"),
     kpi("soon", "soon", nSoon, "Due soon"),
-    docKpi("insp", "Safety inspection", "Inspection"),
+    docKpi("insp", "Safety inspection", "Safety inspection"),
     docKpi("reg", "Registration", "Registration"),
     showEngine ? kpi("engine", "engine", nEngine, "Check engine", "Engine") : null,
     showTm ? kpi("tmcheck", "tmchk" + (tmMissed ? " missed" : nTm ? "" : " clear"), nTm, "TM hrs not checked", "TM hrs") : null].filter(Boolean));
