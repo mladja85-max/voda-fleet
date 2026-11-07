@@ -62,6 +62,8 @@
  * The sync also reads each truck's VIN, check-engine codes, fuel, status, location and van engine hours (shown only, never used for TM hours).
  * To see what your account sends: pick "gpsInspect" and click Run (it only reads).
  * To stop the sync: pick "gpsStop" and click Run.
+ * Shop: in the app, open a truck parked at the shop > GPS > "Set as shop". Trucks parked there then show "At shop"
+ *  instead of the street address. It's kept in the Script Property SHOP_AT; "Remove shop" in the app clears it.
  */
 
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
@@ -71,7 +73,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 11;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 12;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -208,6 +210,8 @@ function doPost(e) {
         return json_(withLock_(function () { return svcSave_(req); }));
       case "deleteService":
         return json_(withLock_(function () { return svcDelete_(req); }));
+      case "setShop":
+        return json_(setShop_(req));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -308,7 +312,7 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin"];
 const ROLES = ["admin", "tech"];
-const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser"];
+const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setShop"];
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
 const INVITE_DAYS = 14;      // an invite or reset code works this long
 const MAX_TRIES = 5;         // wrong passcodes in a row before a lock
@@ -1898,5 +1902,25 @@ function gpsForApp_(trucks) {
     };
   });
   const p = PropertiesService.getScriptProperties();
-  return { lastOk: p.getProperty("GPS_LAST_OK") || "", lastTry: p.getProperty("GPS_LAST_TRY") || "", error: p.getProperty("GPS_LAST_ERROR") || "" };
+  return { lastOk: p.getProperty("GPS_LAST_OK") || "", lastTry: p.getProperty("GPS_LAST_TRY") || "", error: p.getProperty("GPS_LAST_ERROR") || "", shop: shopAt_() };
+}
+
+/* ---------------- shop location ---------------- */
+// Trucks parked within SHOP_RADIUS_M of the shop show "At shop" in the app instead of the street address.
+// Set from the app (a truck's GPS tab > "Set as shop"); kept in the Script Property SHOP_AT as "lat, lng".
+
+const SHOP_RADIUS_M = 150;
+
+function shopAt_() {
+  const c = gpsParseCoords_(PropertiesService.getScriptProperties().getProperty("SHOP_AT"));
+  return c ? { lat: c.lat, lng: c.lng, radius: SHOP_RADIUS_M } : null;
+}
+
+function setShop_(req) {
+  const p = PropertiesService.getScriptProperties();
+  if (req.clear === true) { p.deleteProperty("SHOP_AT"); return { ok: true, shop: null }; }
+  const lat = Number(req.lat), lng = Number(req.lng);
+  if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return { ok: false, error: "bad_request" };
+  p.setProperty("SHOP_AT", lat.toFixed(5) + ", " + lng.toFixed(5));
+  return { ok: true, shop: shopAt_() };
 }
