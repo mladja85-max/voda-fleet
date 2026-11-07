@@ -73,7 +73,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 12;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 13;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -82,7 +82,7 @@ const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPer
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000", "tier200"];
 const TIERS = ["100", "200", "400", "500", "1000", "2000"];   // 200: the Apex 570's engine oil and filter (Sapphire manual)
 const TM_KINDS = ["none", "cds", "legend", "apex"];
-const LOG_COLS = ["at", "truckId", "unit", "kind", "miles", "hrs", "items", "note", "by"];
+const LOG_COLS = ["at", "truckId", "unit", "kind", "miles", "hrs", "items", "note", "by", "milesWas", "hrsWas"];   // milesWas/hrsWas (J, K): the numbers before a reading
 
 // setup() fills a brand-new Trucks tab from SEED. Left empty in this copy: your trucks are already in the Google Sheet,
 // and this repository is public, so no truck data is kept here.
@@ -252,7 +252,8 @@ function saveTruck_(req) {
   if (found) sheet.getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([row]);
   else sheet.getRange(Math.max(sheet.getLastRow(), 1) + 1, 1, 1, TRUCK_COLS.length).setValues([row]);
   if (found && found.truck.unit !== t.unit) { gpsRenameTruck_(found.truck.unit, t.unit); svcRenameTruck_(id, t.unit); }
-  if (req.log && typeof req.log === "object") appendLog_(t, req.log, req.by);
+  if (req.log && typeof req.log === "object")
+    appendLog_(t, req.log.kind === "reading" ? readingLog_(found ? found.truck : null, t, req.log.hrsChecked === true, req.log.note) : req.log, req.by);
   let service = null;
   if (req.log && req.log.kind === "service") service = svcFromLog_(t, req.log, req.by);   // logged services go in the service history too
   return { ok: true, truck: fromRow_(row), service: service };
@@ -273,7 +274,8 @@ function history_(id) {
   const sheet = sheet_("Log");
   const last = sheet.getLastRow();
   if (last < 2) return [];
-  const values = sheet.getRange(2, 1, last - 1, LOG_COLS.length).getValues();
+  const width = Math.min(LOG_COLS.length, sheet.getMaxColumns());
+  const values = sheet.getRange(2, 1, last - 1, width).getValues();
   const out = [];
   for (let i = values.length - 1; i >= 0 && out.length < 15; i--) {
     const r = values[i];
@@ -281,7 +283,8 @@ function history_(id) {
     out.push({
       at: r[0] instanceof Date ? Utilities.formatDate(r[0], Session.getScriptTimeZone(), "MMM d, yyyy h:mm a") : String(r[0]),
       kind: String(r[3]), miles: num_(r[4]), hrs: num_(r[5]),
-      items: r[6] ? String(r[6]).split(", ") : [], note: String(r[7] || ""), by: String(r[8] || "")
+      items: r[6] ? String(r[6]).split(", ") : [], note: String(r[7] || ""), by: String(r[8] || ""),
+      milesWas: width > 9 ? num_(r[9]) : null, hrsWas: width > 10 ? num_(r[10]) : null
     });
   }
   return out;
@@ -289,13 +292,42 @@ function history_(id) {
 
 function appendLog_(t, log, by) {
   const sheet = sheet_("Log");
+  logCols_(sheet);
   const items = Array.isArray(log.items) ? log.items.map(String).join(", ").slice(0, 300) : "";
   const at = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMM d, yyyy h:mm a");
+  const n = function (v) { return num_(v) === null ? "" : num_(v); };
   appendRows_(sheet, LOG_COLS.length, [[
-    at, t.id, String(t.unit || ""), String(log.kind || "").slice(0, 20),
-    num_(log.miles) === null ? "" : num_(log.miles), num_(log.hrs) === null ? "" : num_(log.hrs),
-    items, String(log.note || "").slice(0, 500), String(by || "").slice(0, 60)
+    at, t.id, String(t.unit || ""), String(log.kind || "").slice(0, 20), n(log.miles), n(log.hrs),
+    items, String(log.note || "").slice(0, 500), String(by || "").slice(0, 60), n(log.milesWas), n(log.hrsWas)
   ]]);
+}
+
+/** Older Log tabs end at "by" (I): adds the milesWas / hrsWas headings (J, K) once. */
+function logCols_(sheet) {
+  const need = LOG_COLS.length;
+  if (sheet.getMaxColumns() < need) sheet.insertColumnsAfter(sheet.getMaxColumns(), need - sheet.getMaxColumns());
+  if (String(sheet.getRange(1, need).getValues()[0][0]) === LOG_COLS[need - 1]) return;
+  sheet.getRange(1, 10, 1, need - 9).setValues([LOG_COLS.slice(9)]).setFontWeight("bold");
+}
+
+/** A reading in the Log: the numbers as saved (after any GPS miles), what they were before, and what changed in words. */
+function readingLog_(before, t, confirmed, note) {
+  const tm = TM_KINDS.indexOf(t.tm) > 0;
+  const miles = num_(t.milesNow), hrs = tm ? num_(t.hrsNow) : null;
+  const milesWas = before ? num_(before.milesNow) : null, hrsWas = before && tm ? num_(before.hrsNow) : null;
+  const items = [];
+  if (hrs !== null && hrs !== hrsWas) items.push(hrsWas === null ? "TM hrs set to " + fmtNum_(hrs) : "TM hrs " + fmtNum_(hrsWas) + " → " + fmtNum_(hrs));
+  else if (hrs !== null && confirmed) items.push("TM hrs confirmed at " + fmtNum_(hrs) + " (no change)");
+  if (miles !== null && miles !== milesWas) items.push(milesWas === null ? "Miles set to " + fmtNum_(miles) : "Miles " + fmtNum_(milesWas) + " → " + fmtNum_(miles));
+  if (!items.length) items.push("No change");
+  return { kind: "reading", miles: miles, hrs: hrs, milesWas: milesWas, hrsWas: hrsWas, items: items, note: note || "" };
+}
+
+/** 2756 -> "2,756"; 1495.5 -> "1,495.5". */
+function fmtNum_(n) {
+  const p = String(Math.round(n * 10) / 10).split(".");
+  p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return p.join(".");
 }
 
 /** Adds rows under the last one, growing the tab first when it's full (a new tab only has 1,000 rows). */
@@ -573,7 +605,7 @@ function techSaveHours_(req, found) {
   t.hrsBy = t.readingBy;
   const row = toRow_(t);
   sheet_("Trucks").getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([row]);
-  appendLog_(t, { kind: "reading", hrs: hrs, items: [hrs === cur.hrsNow ? "TM hrs confirmed (no change)" : "TM hrs"] }, req.by);
+  appendLog_(t, readingLog_(cur, t, true), req.by);
   return { ok: true, truck: fromRow_(row) };
 }
 
@@ -958,7 +990,7 @@ function backfillHrsAt_(sheet) {
   const log = SpreadsheetApp.getActive().getSheetByName("Log");
   const latest = {};
   if (log && log.getLastRow() >= 2) {
-    log.getRange(2, 1, log.getLastRow() - 1, LOG_COLS.length).getValues().forEach(function (r) {
+    log.getRange(2, 1, log.getLastRow() - 1, 9).getValues().forEach(function (r) {
       const kind = String(r[3]), by = String(r[8] || "");
       if ((kind !== "reading" && kind !== "service") || num_(r[5]) === null || by === "GPS") return;
       const at = isDate_(r[0]) ? r[0] : new Date(String(r[0]));
