@@ -18,7 +18,7 @@
  * This file is kept in the voda-fleet GitHub repository (apps-script/Code.gs) so every change comes as a pull request.
  * After merging a change: open Apps Script, replace Code.gs with this file, Ctrl+S, then deploy a New version as above.
  *
- * In the Trucks tab, don't rename or move columns A to AE. You can add your own columns to the right.
+ * In the Trucks tab, don't rename or move columns A to AH. You can add your own columns to the right.
  *
  * ACCOUNTS
  * Everyone signs in to the app with their own username and passcode (4 to 6 characters, their choice).
@@ -35,6 +35,14 @@
  * named "Service import" (File > Import > Insert new sheet). It is merged in automatically the next time the app
  * opens a truck, then renamed "Service import (merged)" so it is kept as a backup and never merged twice.
  *
+ * TUESDAY TM HOURS CHECK
+ * Every Tuesday the technician enters (or confirms) TM hrs on each truckmount truck. The app shows what's left,
+ * flags any truck that was missed, and a truck can be marked "Not available this week".
+ * Email when a Tuesday is missed (optional): pick "tmCheckEmailSetup" and click Run, then approve the permission.
+ * Every Wednesday morning it emails the trucks that weren't checked (nothing is sent when all were done).
+ * It goes to the Google account that ran the setup; to send it somewhere else, add a Script Property
+ * TM_CHECK_EMAIL with one or more addresses, separated by commas. To stop it: pick "tmCheckEmailStop" and click Run.
+ *
  * ONE STEP GPS MILEAGE (optional)
  * 1. Project Settings (gear, left side) > Script Properties > Add script property.
  *    Property: ONESTEP_API_KEY   Value: your One Step GPS API key.   Save script properties.
@@ -49,9 +57,14 @@
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "oilInterval", "milesAtOil", "milesNow", "tm", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
-  "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color"];
-const API_VERSION = 9;        // the app warns when the deployed web app is older than it expects
-const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color); older sheets get them automatically
+  "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color", "hrsAt", "hrsBy", "tmSkip"];
+// Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
+// and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
+const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
+const API_VERSION = 10;        // the app warns when the deployed web app is older than it expects
+const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip); older sheets get them automatically
+const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
+const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
 const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000"];
@@ -175,6 +188,8 @@ function doPost(e) {
         return json_(withLock_(function () { return saveTruck_(req); }));
       case "deleteTruck":
         return json_(withLock_(function () { return deleteTruck_(req); }));
+      case "tmSkip":
+        return json_(withLock_(function () { return tmSkip_(req); }));
       case "history":
         return json_({ ok: true, entries: history_(String(req.id || "")) });
       case "services":
@@ -213,6 +228,11 @@ function saveTruck_(req) {
   if (t.readingAt === "now") t.readingAt = t.updatedAt;
   // A new reading carries the signed-in person's name (GPS keeps its own label).
   if (req.by && t.readingBy !== "GPS" && (!found || t.readingAt !== found.truck.readingAt)) t.readingBy = String(req.by).slice(0, 60);
+  SERVER_OWNED.forEach(function (c) { t[c] = found ? found.truck[c] || "" : ""; });
+  // TM hrs count as checked when they changed, or when someone confirmed the same number.
+  const hrsChanged = t.hrsNow !== null && (!found || t.hrsNow !== found.truck.hrsNow);
+  const confirmed = req.log && req.log.hrsChecked === true && t.hrsNow !== null;
+  if (TM_KINDS.indexOf(t.tm) > 0 && (hrsChanged || confirmed)) { t.hrsAt = t.updatedAt; t.hrsBy = String(req.by || "").slice(0, 60); }
   const row = toRow_(t);
   const sheet = sheet_("Trucks");
   if (found) sheet.getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([row]);
@@ -535,9 +555,11 @@ function techSaveHours_(req, found) {
   t.updatedAt = new Date().toISOString();
   t.readingAt = t.updatedAt;
   t.readingBy = String(req.by || "").slice(0, 60);
+  t.hrsAt = t.updatedAt;
+  t.hrsBy = t.readingBy;
   const row = toRow_(t);
   sheet_("Trucks").getRange(found.rowIndex, 1, 1, TRUCK_COLS.length).setValues([row]);
-  appendLog_(t, { kind: "reading", hrs: hrs, items: ["TM hrs"] }, req.by);
+  appendLog_(t, { kind: "reading", hrs: hrs, items: [hrs === cur.hrsNow ? "TM hrs confirmed (no change)" : "TM hrs"] }, req.by);
   return { ok: true, truck: fromRow_(row) };
 }
 
@@ -724,6 +746,91 @@ function svcRenameTruck_(id, unit) {
   if (changed) range.setValues(vals);
 }
 
+/* ---------------- Tuesday TM hours check ---------------- */
+
+/** The Tuesday that starts the check week holding `when`, as yyyy-MM-dd in the script's time zone. */
+function checkWeek_(when) {
+  const tz = Session.getScriptTimeZone();
+  const day = Number(Utilities.formatDate(when, tz, "u")) % 7;   // 0 = Sunday ... 6 = Saturday
+  const p = Utilities.formatDate(when, tz, "yyyy-MM-dd").split("-").map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2] - ((day - CHECK_DAY + 7) % 7)));
+  return Utilities.formatDate(d, "UTC", "yyyy-MM-dd");
+}
+/** done, skipped or missed for the check week `week`. */
+function checkState_(t, week) {
+  if (t.hrsAt) {
+    const at = new Date(t.hrsAt);
+    if (!isNaN(at.getTime()) && Utilities.formatDate(at, Session.getScriptTimeZone(), "yyyy-MM-dd") >= week) return "done";
+  }
+  return t.tmSkip === week ? "skipped" : "missed";
+}
+
+/** "Not available this week" for the TM hrs check (Admins and Technicians). Doesn't touch anything else on the truck. */
+function tmSkip_(req) {
+  const id = String(req.id || "");
+  const found = readTrucks_().filter(function (x) { return x.truck.id === id; })[0];
+  if (!found) return { ok: false, error: "gone" };
+  if (TM_KINDS.indexOf(found.truck.tm) < 1) return { ok: false, error: "not_allowed" };
+  const t = found.truck;
+  const week = checkWeek_(new Date());
+  const old = String(t.tmSkip || "");
+  const on = req.on === true;
+  const next = on ? week : (old === week ? "" : old);
+  if (next !== old) {
+    t.tmSkip = next;
+    sheet_("Trucks").getRange(found.rowIndex, TRUCK_COLS.indexOf("tmSkip") + 1).setValue(next);
+    appendLog_(t, { kind: "skip", items: [on ? "Not available for the Tuesday TM hrs check" : "TM hrs check: not available undone"] }, req.by);
+  }
+  return { ok: true, truck: t, week: week };
+}
+
+/** Run once from the editor: emails you every Wednesday morning when Tuesday's TM hrs check missed a truck.
+ *  Sends a test email now so you can see what it looks like. */
+function tmCheckEmailSetup() {
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "tmCheckEmail") ScriptApp.deleteTrigger(tr); });
+  ScriptApp.newTrigger("tmCheckEmail").timeBased().onWeekDay(ScriptApp.WeekDay.WEDNESDAY).atHour(7).create();
+  const sent = tmCheckEmail(true);
+  Logger.log("TM hrs check email is on: every Wednesday between 7 and 8 AM, only when a truck was missed. Test email sent to " + sent + ".");
+}
+function tmCheckEmailStop() {
+  let n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "tmCheckEmail") { ScriptApp.deleteTrigger(tr); n++; } });
+  Logger.log(n ? "TM hrs check email stopped." : "TM hrs check email wasn't on.");
+}
+/** Runs Wednesday morning: the trucks from this week's Tuesday check that have no TM hrs and weren't marked not available. */
+function tmCheckEmail(test) {
+  const isTest = test === true;
+  const tz = Session.getScriptTimeZone();
+  const week = checkWeek_(new Date());
+  const tm = readTrucks_().map(function (x) { return x.truck; }).filter(function (t) { return TM_KINDS.indexOf(t.tm) > 0; });
+  const state = {};
+  tm.forEach(function (t) { state[t.id] = checkState_(t, week); });
+  const missed = tm.filter(function (t) { return state[t.id] === "missed"; });
+  const skipped = tm.filter(function (t) { return state[t.id] === "skipped"; });
+  const done = tm.filter(function (t) { return state[t.id] === "done"; });
+  if (!missed.length && !isTest) { Logger.log("All " + tm.length + " truckmount trucks were checked. No email sent."); return ""; }
+  const weekText = Utilities.formatDate(new Date(week + "T12:00:00Z"), "UTC", "EEE MMM d");
+  const lastText = function (t) {
+    if (!t.hrsAt) return "no TM hrs entered in the app yet";
+    const at = new Date(t.hrsAt);
+    if (isNaN(at.getTime())) return "no TM hrs entered in the app yet";
+    const days = Math.floor((Date.now() - at.getTime()) / 864e5);
+    return "last entered " + Utilities.formatDate(at, tz, "MMM d") + (t.hrsBy ? " by " + t.hrsBy : "") + " (" + days + " day" + (days === 1 ? "" : "s") + " ago, " + (t.hrsNow === null ? "no hrs" : t.hrsNow + " hrs") + ")";
+  };
+  const name = function (t) { return t.unit + (t.driver ? " · " + t.driver : ""); };
+  const lines = [];
+  if (isTest) lines.push("TEST: this is what the Wednesday email looks like. From now on it's only sent when a truck was missed.", "");
+  lines.push("Tuesday TM hrs check, " + weekText + ": " + done.length + " of " + tm.length + " truckmount trucks done.", "");
+  if (missed.length) { lines.push("Not checked:"); missed.forEach(function (t) { lines.push("• " + name(t) + ": " + lastText(t)); }); lines.push(""); }
+  else lines.push("Nothing missed so far this week.", "");
+  if (skipped.length) { lines.push("Marked not available:"); skipped.forEach(function (t) { lines.push("• " + name(t)); }); lines.push(""); }
+  lines.push("Open the app: " + APP_URL);
+  const to = String(PropertiesService.getScriptProperties().getProperty("TM_CHECK_EMAIL") || "").trim() || Session.getEffectiveUser().getEmail();
+  const subject = (isTest ? "(Test) " : "") + (missed.length ? "Missed Tuesday TM hrs: " + missed.map(function (t) { return t.unit; }).join(", ") : "Tuesday TM hrs check: all done");
+  MailApp.sendEmail({ to: to, subject: subject.slice(0, 250), body: lines.join("\n") });
+  return to;
+}
+
 /* ---------------- rows ---------------- */
 
 /** Sheets set up before a column was added get it here: header written, nothing of yours overwritten. */
@@ -731,13 +838,39 @@ function ensureTruckCols_(sheet) {
   const need = TRUCK_COLS.length;
   if (sheet.getMaxColumns() < need) sheet.insertColumnsAfter(sheet.getMaxColumns(), need - sheet.getMaxColumns());
   if (String(sheet.getRange(1, need).getValues()[0][0]) === TRUCK_COLS[need - 1]) return;
+  let addedHrsAt = false;
   for (let i = ADDED_COLS_FROM; i < need; i++) {
     const head = String(sheet.getRange(1, i + 1).getValues()[0][0]);
     if (head === TRUCK_COLS[i]) continue;
     if (head.trim() !== "") sheet.insertColumnBefore(i + 1);   // your own column there moves one to the right
     sheet.getRange(1, i + 1).setValue(TRUCK_COLS[i]).setFontWeight("bold");
     sheet.getRange(2, i + 1, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+    if (TRUCK_COLS[i] === "hrsAt") addedHrsAt = true;
   }
+  if (addedHrsAt) backfillHrsAt_(sheet);
+}
+
+/** When the hrsAt column is first added: fill it from the Log (the last time a person entered TM hrs on each truck),
+ *  so trucks don't all show as "never entered". */
+function backfillHrsAt_(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 2) return;
+  const log = SpreadsheetApp.getActive().getSheetByName("Log");
+  const latest = {};
+  if (log && log.getLastRow() >= 2) {
+    log.getRange(2, 1, log.getLastRow() - 1, LOG_COLS.length).getValues().forEach(function (r) {
+      const kind = String(r[3]), by = String(r[8] || "");
+      if ((kind !== "reading" && kind !== "service") || num_(r[5]) === null || by === "GPS") return;
+      const at = isDate_(r[0]) ? r[0] : new Date(String(r[0]));
+      if (isNaN(at.getTime())) return;
+      const id = String(r[1]);
+      if (!latest[id] || at > latest[id].at) latest[id] = { at: at, by: by };
+    });
+  }
+  const col = TRUCK_COLS.indexOf("hrsAt");
+  const ids = sheet.getRange(2, 1, last - 1, 1).getValues();
+  const vals = ids.map(function (r) { const x = latest[String(r[0])]; return x ? [x.at.toISOString(), x.by.slice(0, 60)] : ["", ""]; });
+  sheet.getRange(2, col + 1, vals.length, 2).setValues(vals);
 }
 
 function readTrucks_() {
@@ -793,7 +926,7 @@ function clean_(t) {
   const limits = { unit: 60, driver: 60, vehicle: 80, year: 10, plate: 20, tm: 10, division: 20, vin: 17, color: 7,
     inspectionDue: 10, registrationDue: 7, insuranceUntil: 10, notes: 1000, readingAt: 40, readingBy: 60 };
   TRUCK_COLS.forEach(function (c) {
-    if (c === "id" || c === "updatedAt" || c.indexOf("tier") === 0) return;
+    if (c === "id" || c === "updatedAt" || c.indexOf("tier") === 0 || SERVER_OWNED.indexOf(c) !== -1) return;
     if (NUM_COLS.indexOf(c) !== -1) { out[c] = num_(t[c]); return; }
     out[c] = t[c] === null || t[c] === undefined ? "" : String(t[c]).slice(0, limits[c] || 100);
   });
