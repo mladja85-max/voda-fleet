@@ -79,6 +79,7 @@ button { font: inherit; color: inherit; }
 .brand h1 { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .sync { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
 .sync.offline { color: var(--soon); font-weight: 600; }
+.sync.saving { color: var(--accent); font-weight: 600; }
 .gps-warn { all: unset; cursor: pointer; font-weight: 700; font-size: .82rem; color: var(--soon); background: var(--soon-bg); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .gps-warn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -657,7 +658,7 @@ let lastSync = null;
 let offline = false;
 let refreshing = false;
 let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
-const NEEDS_API = 8;                           // the Google script version this app expects
+const NEEDS_API = 9;                           // the Google script version this app expects
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -770,6 +771,7 @@ async function refresh(quiet) {
     const out = await api("list");
     if (out.me) { const roleChanged = session.role !== out.me.role; Object.assign(session, { name: out.me.name, role: out.me.role, username: out.me.username }); store.set(K_SESSION, session); if (roleChanged) applyRole(); }
     trucks = sortTrucks(out.trucks || []);
+    applyPendingTrucks();
     gpsHealth = out.gps || null;
     for (const k of Object.keys(drafts)) if (!byId(k)) delete drafts[k];
     saveDrafts();
@@ -794,8 +796,13 @@ async function refresh(quiet) {
 }
 function renderSync() {
   const bar = $("syncbar");
-  bar.classList.toggle("offline", offline);
-  $("syncText").textContent = offline
+  const n = queue.length;
+  const waiting = n && (waitingForSignal || !navigator.onLine);
+  bar.classList.toggle("offline", offline || !!waiting);
+  bar.classList.toggle("saving", !!n && !waiting);
+  $("syncText").textContent = waiting ? `${n} change${n === 1 ? "" : "s"} not sent yet · will send when there's signal`
+    : n ? `Saving${n > 1 ? ` ${n} changes` : ""}…`
+    : offline
     ? (lastSync ? `Offline · data from ${fmtWhen(lastSync.toISOString())} ${fmtTime(lastSync)}` : "Offline")
     : (lastSync ? `Updated ${fmtTime(lastSync)}` : "");
   $("gpsWarn").hidden = offline || !gpsProblem();
@@ -816,20 +823,85 @@ function replaceTruck(t) {
   trucks = sortTrucks(trucks);
   store.set(K_CACHE, { at: (lastSync || new Date()).toISOString(), trucks });
 }
-async function saveTruck(t, body, log) {
-  try {
-    const out = await api("saveTruck", { id: t.id, base: t.updatedAt || null, truck: body, log });
-    replaceTruck(out.truck);
-    return out.truck;
-  } catch (e) {
-    if (e && e.error === "conflict" && e.truck) {
-      replaceTruck(e.truck);
-      renderAll();
-      throw { error: "conflict_shown", message: `Someone else just updated ${label(e.truck)}. The latest numbers are loaded. Check them and save again.` };
-    }
-    if (e && e.error === "gone") { refresh(true); throw { error: "gone_shown", message: "This truck was deleted on another phone." }; }
-    throw e;
+/* ---------- saving in the background ----------
+   A change shows on screen at once and goes to the Google Sheet in the background, one at a time, in order.
+   With no signal it waits on the phone (even if the app is closed) and goes out when the signal is back. */
+const K_QUEUE = "voda.queue";
+let queue = store.get(K_QUEUE) || [];
+let sending = false, waitingForSignal = false, retryTimer = null, retryWait = 4000;
+const knownBase = {};                                   // what the sheet last confirmed for each truck / record
+function saveQueue() { store.set(K_QUEUE, queue); }
+const pendingFor = key => queue.filter(j => j.key === key);
+function enqueue(job) {
+  job.qid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  job.userId = session ? session.id : "";
+  queue.push(job);
+  saveQueue();
+  renderSync();
+  setTimeout(pump, 0);
+}
+async function pump() {
+  if (sending || !session) return;
+  queue = queue.filter(j => !j.userId || j.userId === session.id);   // never send someone else's changes
+  saveQueue();
+  if (!queue.length) { waitingForSignal = false; renderSync(); return; }
+  const job = queue[0];
+  sending = true;
+  waitingForSignal = false;
+  clearTimeout(retryTimer);
+  renderSync();
+  const data = JSON.parse(JSON.stringify(job.data));
+  data.base = knownBase[job.key] !== undefined ? knownBase[job.key] : job.base;
+  let out = null, err = null;
+  try { out = await api(job.action, data); } catch (e) { err = e || { error: "network" }; }
+  sending = false;
+  if (err && (err.error === "offline" || err.error === "network")) {
+    waitingForSignal = true;
+    renderSync();
+    retryTimer = setTimeout(pump, retryWait);
+    retryWait = Math.min(retryWait * 2, 60000);
+    return;
   }
+  retryWait = 4000;
+  if (err && (err.error === "signed_out" || err.error === "bad_code")) {
+    renderSync();
+    signOut("Your sign-in ended. Sign in again and your changes will be sent.");
+    return;
+  }
+  queue = queue.filter(j => j.qid !== job.qid);
+  saveQueue();
+  // A save that reached the sheet but whose answer got lost comes back as a "conflict" with our own change in it.
+  if (err && err.error === "conflict" && sameAsSent(job, err)) { out = { ok: true, truck: err.truck, service: err.service }; err = null; }
+  try { if (err) jobFailed(job, err); else jobDone(job, out); } finally { renderSync(); }
+  if (queue.length) setTimeout(pump, 0);
+}
+function sameAsSent(job, e) {
+  const sent = job.action === "saveTruck" ? job.data.truck : job.action === "saveService" ? job.data.service : null;
+  const got = job.action === "saveTruck" ? e.truck : e.service;
+  if (!sent || !got) return false;
+  const skip = ["updatedAt", "readingAt", "readingBy", "by", "check", "source", "truck", "id", "gps"];
+  return Object.keys(sent).every(k => skip.includes(k) || JSON.stringify(sent[k] ?? null) === JSON.stringify(got[k] ?? null) ||
+    (sent[k] === "" && (got[k] === null || got[k] === undefined)));
+}
+/** Changes still on their way are kept on screen when fresh data arrives. */
+function applyPendingTrucks() {
+  for (const j of queue) {
+    if (j.action !== "saveTruck") continue;
+    const cur = byId(j.data.id);
+    const t = Object.assign({}, cur || {}, JSON.parse(JSON.stringify(j.data.truck)), { id: j.data.id, updatedAt: cur ? cur.updatedAt : null });
+    if (cur && cur.gps) t.gps = cur.gps;
+    const i = trucks.findIndex(x => x.id === t.id);
+    if (i === -1) trucks.push(t); else trucks[i] = t;
+  }
+  trucks = sortTrucks(trucks);
+}
+function saveTruck(t, body, log, okMsg, restore) {
+  const cur = byId(t.id);
+  const local = Object.assign({}, cur || {}, JSON.parse(JSON.stringify(body)), { id: t.id, updatedAt: cur ? cur.updatedAt : null });
+  replaceTruck(local);
+  enqueue({ action: "saveTruck", key: "t:" + t.id, base: cur ? (cur.updatedAt || null) : null, data: { id: t.id, truck: body, log: log || null },
+    okMsg: okMsg || "", restore: restore || null, label: label(local) });
+  return local;
 }
 function failText(e, what) { return e && e.message && /_shown$/.test(e.error) ? e.message : errText(e, what); }
 
@@ -1001,7 +1073,7 @@ function showSignIn(message, mode) {
     store.set(K_SESSION, session);
     if (first && out.user.role !== "admin") { view.tmOnly = true; saveView(); }   // technicians start on the truckmounts
     const list = await api("list");
-    trucks = sortTrucks(list.trucks || []); gpsHealth = list.gps || null; loaded = true; lastSync = new Date(); offline = false;
+    trucks = sortTrucks(list.trucks || []); applyPendingTrucks(); gpsHealth = list.gps || null; loaded = true; lastSync = new Date(); offline = false;
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     startApp();
     if (scriptOld(list)) setTimeout(() => setBanner(SCRIPT_OLD), 0);
@@ -1089,7 +1161,7 @@ function startApp() {
   $("tmOnly").setAttribute("aria-pressed", String(!!view.tmOnly));
   renderSync();
   renderAll();
-  refresh(true);
+  refresh(true).then(() => pump());
 }
 
 /* ---------- rendering ---------- */
@@ -1407,15 +1479,12 @@ function renameForm(t) {
       if (newDiv !== (t.division || "")) items.push(`Unit set to ${newDiv || "(none)"}`);
       if (newDriver !== (t.driver || "")) items.push(`Driver changed from ${t.driver || "(none)"} to ${newDriver || "(none)"}`);
       if (newColor !== (t.color || "")) items.push(newColor ? "Color changed" : "Color removed");
-      save.disabled = true; save.textContent = "Saving…";
       try {
-        await saveTruck(t, body, { kind: "edited", items });
+        saveTruck(t, body, { kind: "edited", items }, `Saved: ${label(body)}`);
         renameDraft = null;
-        toast(`Saved: ${label(body)}`);
         renderAll();
       } catch (ex) {
         err.textContent = failText(ex, "Nothing");
-        save.disabled = false; save.textContent = "Save";
       }
     },
     onkeydown: e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); } } },
@@ -1573,7 +1642,16 @@ function svcGuessType(what) {
 function loadServices(id) {
   svcCache[id] = { loading: true, rows: [] };
   renderServices(id);
-  api("services", { truckId: id }).then(out => { svcCache[id] = { rows: out.services || [] }; renderServices(id); })
+  api("services", { truckId: id }).then(out => {
+    let rows = out.services || [];
+    for (const j of queue) {   // changes still on their way stay on screen
+      if (j.truckId !== id) continue;
+      if (j.action === "deleteService") rows = rows.filter(x => x.id !== j.data.id);
+      else if (j.action === "saveService") { const r = j.data.service; const old = rows.find(x => x.id === r.id); rows = old ? rows.map(x => x.id === r.id ? Object.assign({}, x, r, { check: "" }) : x) : rows.concat([Object.assign({ source: "App" }, r)]); }
+    }
+    svcCache[id] = { rows };
+    renderServices(id);
+  })
     .catch(e => { svcCache[id] = { error: e || {}, rows: [] }; renderServices(id); });
 }
 function serviceSection(t) {
@@ -1664,23 +1742,100 @@ function renderHistory(id) {
 }
 
 const _saveTruck = saveTruck;
-saveTruck = async function (t, body, log) {
+saveTruck = function (t, body, log, okMsg, restore) {
   if (body && body.unit) {
     const clash = trucks.find(x => x.id !== t.id && unitKey(x.unit) === unitKey(body.unit));
     if (clash) throw { error: "duplicate_shown", message: `The name "${clash.unit}" is already used by another truck. Pick a different name.` };
   }
-  let out;
-  try { out = await _saveTruck(t, body, log); }
-  catch (e) {
-    if (e && e.error === "duplicate_unit") throw { error: "duplicate_shown", message: `"${e.unit || body.unit}" is already used by another truck. Pick a different name.` };
-    throw e;
-  }
-  delete historyCache[t.id];
-  if (openId === t.id && drawer.open) setTimeout(() => loadHistory(t.id), 0);
-  if (body && body.color && out && out.color === undefined) setBanner(SCRIPT_OLD);   // an old script drops the color
-  if (log && log.kind === "service") { delete svcCache[t.id]; if (openId === t.id && drawer.open) setTimeout(() => loadServices(t.id), 0); }
-  return out;
+  return _saveTruck(t, body, log, okMsg, restore);
 };
+
+/* ---------- what happens when a background save comes back ---------- */
+/** Later changes to the same truck or record now build on what the sheet just confirmed. */
+function rebase(key, updatedAt) {
+  knownBase[key] = updatedAt;
+  for (const j of pendingFor(key)) j.base = updatedAt;
+  saveQueue();
+}
+function jobDone(job, out) {
+  if (job.action === "saveTruck" && out && out.truck) {
+    rebase(job.key, out.truck.updatedAt);
+    let t = out.truck;   // the sheet's copy, plus anything still waiting for this truck
+    for (const j of pendingFor(job.key)) t = Object.assign({}, t, JSON.parse(JSON.stringify(j.data.truck)), { id: t.id, updatedAt: t.updatedAt });
+    replaceTruck(t);
+    const id = job.data.id, log = job.data.log;
+    delete historyCache[id];
+    if (openId === id && drawer.open) loadHistory(id);
+    if (job.data.truck.color && out.truck.color === undefined) setBanner(SCRIPT_OLD);   // an old script drops the color
+    if (log && log.kind === "service") { delete svcCache[id]; if (openId === id && drawer.open) loadServices(id); }
+  } else if (job.action === "saveService" && out && out.service) {
+    rebase(job.key, out.service.updatedAt);
+    const c = svcCache[job.truckId];
+    if (c && c.rows) {
+      let r = out.service;
+      for (const j of pendingFor(job.key)) if (j.action === "saveService") r = Object.assign({}, r, j.data.service, { updatedAt: r.updatedAt, check: "" });
+      const gone = pendingFor(job.key).some(j => j.action === "deleteService");
+      c.rows = gone ? c.rows.filter(x => x.id !== r.id) : c.rows.some(x => x.id === r.id) ? c.rows.map(x => x.id === r.id ? r : x) : c.rows.concat([r]);
+      renderServices(job.truckId);
+    }
+  } else if (job.action === "deleteService") {
+    delete knownBase[job.key];
+  }
+  if (failNote && $("banner").textContent === failNote) setBanner("");   // the next good save clears an old "not saved" note
+  failNote = "";
+  if (job.okMsg) toast(job.okMsg);
+  renderAll();
+}
+let failNote = "";
+function jobFailed(job, e) {
+  let msg;
+  const dropped = pendingFor(job.key);
+  if (job.action === "saveTruck") {
+    const id = job.data.id;
+    if (e.error === "conflict" && e.truck) {
+      knownBase[job.key] = e.truck.updatedAt;
+      queue = queue.filter(j => j.key !== job.key); saveQueue();   // later changes were based on the old copy too
+      replaceTruck(e.truck);
+      for (const j of [job].concat(dropped)) if (j.restore) { drafts[id] = j.restore; saveDrafts(); }
+      msg = `Someone else just updated ${label(e.truck)}. Your change wasn't saved; the latest numbers are loaded` +
+        (job.restore ? " and yours are back in the boxes. Check them and tap Save again." : ". Check them and save again.");
+    } else {
+      queue = queue.filter(j => j.key !== job.key); saveQueue();
+      if (job.restore) { drafts[id] = job.restore; saveDrafts(); }
+      msg = e.error === "duplicate_unit" ? `"${e.unit || job.data.truck.unit}" is already used by another truck, so ${job.label} wasn't saved. Pick a different name.`
+        : e.error === "gone" ? `${job.label} was deleted on another phone, so the change wasn't saved.`
+        : `${job.label}: not saved. ${errText(e, "Nothing")}`;
+      refresh(true);
+    }
+  } else {
+    queue = queue.filter(j => j.key !== job.key); saveQueue();
+    msg = e.error === "conflict" ? "Someone else just changed that service record, so your change wasn't saved. The latest version is shown."
+      : e.error === "gone" ? "That service record was deleted on another phone."
+      : `Service record not saved. ${errText(e, "Nothing")}`;
+    if (job.truckId) loadServices(job.truckId);
+  }
+  failNote = msg;
+  setBanner(msg);
+  toast(msg);
+  renderAll();
+}
+/** Service records: show the change now, send it in the background. New records get their ID here so later edits can follow them. */
+function queueService(truckId, rec, okMsg) {
+  const c = svcCache[truckId];
+  const old = c && c.rows ? c.rows.find(x => x.id === rec.id) : null;
+  if (c && c.rows) {
+    const local = Object.assign({}, old || {}, rec, { check: "", updatedAt: old ? old.updatedAt : "", source: old ? old.source : "App", by: session ? session.name : "" });
+    c.rows = old ? c.rows.map(x => x.id === rec.id ? local : x) : c.rows.concat([local]);
+    renderServices(truckId);
+  }
+  enqueue({ action: "saveService", key: "s:" + rec.id, base: old ? old.updatedAt || "" : "", truckId, data: { service: rec }, okMsg });
+}
+function queueServiceDelete(truckId, rec, okMsg) {
+  const c = svcCache[truckId];
+  if (c && c.rows) { c.rows = c.rows.filter(x => x.id !== rec.id); renderServices(truckId); }
+  enqueue({ action: "deleteService", key: "s:" + rec.id, base: rec.updatedAt || "", truckId, data: { id: rec.id }, okMsg });
+}
+const newSvcId = () => "s-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 /* ---------- saving a reading ---------- */
 async function saveReading(id) {
@@ -1695,18 +1850,11 @@ async function saveReading(id) {
   if (prog && isNum(v.hrs)) body.hrsNow = v.hrs;
   body.readingAt = new Date().toISOString();
   body.readingBy = session ? session.name : "";
-  const btns = [$("save-" + id), $("dsave-" + id)].filter(Boolean);
-  btns.forEach(b => { b.disabled = true; b.dataset.label = b.textContent; b.textContent = "Saving…"; });
-  try {
-    await saveTruck(t, body, { kind: "reading", miles: v.miles, hrs: prog && isNum(v.hrs) ? v.hrs : null, items: [] });
-    delete drafts[id]; saveDrafts();
-    toast(`Saved ${label(t)}`);
-  } catch (e) {
-    toast(failText(e, "Your numbers"));
-  } finally {
-    [$("save-" + id), $("dsave-" + id)].filter(Boolean).forEach(b => { b.textContent = b.dataset.label || (b.id.startsWith("d") ? "Save reading" : "Save"); });
-    renderAll();
-  }
+  const restore = { miles: v.milesStr, hrs: v.hrsStr };
+  delete drafts[id]; saveDrafts();
+  try { saveTruck(t, body, { kind: "reading", miles: body.milesNow, hrs: prog && isNum(v.hrs) ? v.hrs : null, items: [] }, `Saved ${label(t)}`, restore); }
+  catch (e) { drafts[id] = restore; saveDrafts(); toast(failText(e, "Your numbers")); }
+  renderAll();
 }
 
 /* ---------- toolbar ---------- */
@@ -1761,8 +1909,6 @@ function openServiceRecord(truckId, rec) {
   const err = h("p", { class: "dlg-err", role: "alert" });
   const types = isNew ? [] : svcTypes(r);
   let armed = false;
-  const keep = list => { svcCache[truckId] = { rows: list }; renderServices(truckId); };
-  const rows = () => ((svcCache[truckId] || {}).rows || []).slice();
   openDialog(
     h("h3", { id: "dlgTitle", text: `${isNew ? "Add service record" : "Service record"} · ${label(t)}` }),
     rec && rec.check ? h("p", { class: "svc-flag", id: "sr-flag", text: `Flagged: ${rec.check} Saving marks it as checked.` }) : null,
@@ -1785,16 +1931,8 @@ function openServiceRecord(truckId, rec) {
       isNew ? null : h("button", { class: "btn ghost danger", type: "button", id: "sr-del", text: "Delete record", onclick: async () => {
         const b = $("sr-del");
         if (!armed) { armed = true; b.textContent = "Tap again to delete"; return; }
-        b.disabled = true;
-        try {
-          await api("deleteService", { id: rec.id, base: rec.updatedAt || "" });
-          keep(rows().filter(x => x.id !== rec.id));
-          closeDialog(); toast("Service record deleted");
-        } catch (e) {
-          if (e && e.error === "conflict" && e.service) { keep(rows().map(x => x.id === rec.id ? e.service : x)); err.textContent = "Someone else just changed this record. Close this and check it before deleting."; }
-          else err.textContent = svcErr(e);
-          b.disabled = false;
-        }
+        queueServiceDelete(truckId, rec, "Service record deleted");
+        closeDialog();
       } }),
       h("div", { class: "right" },
         h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
@@ -1806,19 +1944,10 @@ function openServiceRecord(truckId, rec) {
           if (date && !isoDay(date)) { err.textContent = "Pick a date, or leave it empty."; return; }
           let tps = [...dlg.querySelectorAll('input[name="sr-type"]:checked')].map(x => x.value);
           if (!tps.length) tps = svcGuessType(what);
-          const body = { id: isNew ? "" : rec.id, truckId, date, type: tps.join(", "), what: what.slice(0, 2000), miles, tmHrs: hrs,
+          const body = { id: isNew ? newSvcId() : rec.id, truckId, date, type: tps.join(", "), what: what.slice(0, 2000), miles, tmHrs: hrs,
             shop: val("sr-shop").slice(0, 60), cost, payment: val("sr-pay").slice(0, 300) };
-          const btn = $("sr-save"); btn.disabled = true; btn.textContent = "Saving…";
-          try {
-            const out = await api("saveService", { service: body, base: isNew ? "" : rec.updatedAt || "" });
-            keep(isNew ? rows().concat([out.service]) : rows().map(x => x.id === rec.id ? out.service : x));
-            closeDialog(); toast(isNew ? "Service record added" : "Service record saved");
-          } catch (e) {
-            if (e && e.error === "conflict" && e.service) { keep(rows().map(x => x.id === rec.id ? e.service : x)); err.textContent = "Someone else just changed this record. The latest version is in the list now; close this and check it."; }
-            else if (e && e.error === "gone") { keep(rows().filter(x => x.id !== rec.id)); err.textContent = "This record was deleted on another phone."; }
-            else err.textContent = svcErr(e);
-            btn.disabled = false; btn.textContent = "Save";
-          }
+          queueService(truckId, body, isNew ? "Service record added" : "Service record saved");
+          closeDialog();
         } }))));
   if (!isAdmin()) lockDialog();
 }
@@ -1899,15 +2028,13 @@ function openService(id) {
           if (prog && isNum(hrs) && (!isNum(body.hrsNow) || hrs >= body.hrsNow)) body.hrsNow = hrs;
           body.readingAt = new Date().toISOString();
           body.readingBy = session ? session.name : "";
-          const btn = $("sv-save"); btn.disabled = true; btn.textContent = "Saving…";
           try {
-            await saveTruck(t, body, { kind: "service", miles, hrs: prog ? hrs : null, items: done, note: val("sv-note").slice(0, 500),
-              shop: val("sv-shop").slice(0, 60), cost: isNum(cost) ? cost : null });
+            saveTruck(t, body, { kind: "service", miles, hrs: prog ? hrs : null, items: done, note: val("sv-note").slice(0, 500),
+              shop: val("sv-shop").slice(0, 60), cost: isNum(cost) ? cost : null }, `Logged for ${label(t)}: ${done.join(", ")}`);
             delete drafts[t.id]; saveDrafts();
             closeDialog();
             renderAll();
-            toast(`Logged for ${label(t)}: ${done.join(", ")}`);
-          } catch (e) { err.textContent = failText(e, "Nothing"); btn.disabled = false; btn.textContent = "Save"; }
+          } catch (e) { err.textContent = failText(e, "Nothing"); }
         } }))));
 }
 
@@ -2039,11 +2166,10 @@ function openEdit(id) {
           const target = isNew
             ? { id: (body.unit.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "truck") + "-" + Math.random().toString(36).slice(2, 6), updatedAt: null }
             : t;
-          const btn = $("ed-save"); btn.disabled = true; btn.textContent = "Saving…";
           try {
-            await saveTruck(target, body, isNew ? { kind: "added", items: ["Truck added"] } : { kind: "edited", items: ["Truck details edited"] });
-            closeDialog(); renderAll(); toast(isNew ? `Added ${label(body)}` : `Saved ${label(body)}`);
-          } catch (e) { err.textContent = failText(e, "Nothing"); btn.disabled = false; btn.textContent = "Save"; }
+            saveTruck(target, body, isNew ? { kind: "added", items: ["Truck added"] } : { kind: "edited", items: ["Truck details edited"] }, isNew ? `Added ${label(body)}` : `Saved ${label(body)}`);
+            closeDialog(); renderAll();
+          } catch (e) { err.textContent = failText(e, "Nothing"); }
         } }))));
   drawTm();
   // Leaving without saving puts the previewed color back.
@@ -2088,7 +2214,11 @@ function openSettings() {
         }
       } }))),
     h("div", { class: "dlg-foot" },
-      h("button", { class: "btn ghost danger", type: "button", id: "st-out", text: "Sign out", onclick: () => { closeDialog(); signOut(""); } }),
+      h("button", { class: "btn ghost danger", type: "button", id: "st-out", text: "Sign out", onclick: ev => {
+        const n = queue.length, b = ev.currentTarget;
+        if (n && !b.dataset.armed) { b.dataset.armed = "1"; b.textContent = `${n} change${n === 1 ? " isn't" : "s aren't"} sent yet · tap again to sign out`; return; }
+        closeDialog(); signOut(n ? "Your changes will be sent when you sign back in." : "");
+      } }),
       h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
 }
 
@@ -2370,7 +2500,7 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && session && CONFIGURED) refresh(true); });
-window.addEventListener("online", () => { if (session && CONFIGURED) refresh(true); });
+window.addEventListener("online", () => { if (session && CONFIGURED) { refresh(true); pump(); } });
 setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true); }, 90000);
 
 renderInstall();
