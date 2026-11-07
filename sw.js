@@ -1,6 +1,6 @@
 // VODA Prime offline support: keeps a copy of the app on the phone so it opens without signal.
 // Truck data is not cached here; the app keeps its own last-known copy.
-const CACHE = "voda-fleet-v27";
+const CACHE = "voda-fleet-v28";
 const SHELL = ["./", "./index.html", "./config.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./favicon-32.png"];
 
