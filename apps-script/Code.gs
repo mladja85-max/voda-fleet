@@ -65,14 +65,20 @@
  * Shop: in the app, open a truck parked at the shop > GPS > "Set as shop". Trucks parked there then show "At shop"
  *  instead of the street address. It's kept in the Script Property SHOP_AT; "Remove shop" in the app clears it.
  *
- * CLEANING SUPPLIES
- * The app's Supplies tab is the cleaning products checklist. A technician taps what's missing, sets how many, and sends it.
- * Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with any
- * note) is kept on the Supply checks tab. The product list is the Supplies tab: change it in the app (Supplies > Edit
- * products). The three tabs are made the first time the app opens Supplies, with the products from the paper checklist.
+ * CHECKLISTS (cleaning supplies, products, equipment)
+ * The app's Checklists section starts with the paper cleaning products checklist; Admins add more in the app
+ * (Checklists > + New checklist) and change any of them (Edit). A technician taps what's missing, sets how many, and sends
+ * it. Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with
+ * any note) is kept on the Supply checks tab. The checklists are on the Checklists tab and their items on the Supplies tab;
+ * change them in the app rather than in the sheet. The tabs are made the first time the app opens Checklists.
  * When a technician sends missing items, an email goes to the Script Property SUPPLY_EMAIL if you add one, otherwise to
  * TM_CHECK_EMAIL, otherwise to the Google account that runs this script. Set SUPPLY_EMAIL to off to stop these emails.
  * To see one: pick "supplyEmailTest" and click Run.
+ *
+ * WHO SEES WHAT
+ * Admins see everything. Each technician sees only what an Admin ticks for him in the app (Settings > Users and invites):
+ * Trucks and/or any of the checklists. Technicians from before this choice keep Trucks only. This script refuses anything
+ * a technician isn't given, whatever the app sends.
  */
 
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
@@ -82,7 +88,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 14;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 15;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -184,6 +190,7 @@ function doPost(e) {
     const user = authUser_(req.token);
     if (!user) return json_({ ok: false, error: "signed_out" });
     if (ADMIN_ACTIONS.indexOf(req.action) !== -1 && user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+    if (TRUCK_ACTIONS.indexOf(req.action) !== -1 && !canSee_(user, "trucks")) return json_({ ok: false, error: "not_allowed" });
     req.user = user;
     req.by = user.name;   // every change is stamped with the signed-in person, whatever the app sends
     switch (req.action) {
@@ -200,11 +207,12 @@ function doPost(e) {
       case "resetUser":
         return json_(withLock_(function () { return resetUser_(req); }));
       case "list": {
-        const trucks = readTrucks_().map(function (x) { return x.truck; });
+        const seesTrucks = canSee_(user, "trucks");
+        const trucks = seesTrucks ? readTrucks_().map(function (x) { return x.truck; }) : [];
         let gps = null;
-        try { gps = gpsForApp_(trucks); } catch (e) { gps = null; }   // GPS details never stop the list from loading
+        if (seesTrucks) { try { gps = gpsForApp_(trucks); } catch (e) { gps = null; } }   // GPS details never stop the list from loading
         let supplies = null;
-        try { supplies = suppliesForApp_(false); } catch (e) { supplies = null; }   // nor do the cleaning supplies
+        try { supplies = suppliesForApp_(false, user); } catch (e) { supplies = null; }   // nor do the checklists
         return json_({ ok: true, trucks: trucks, gps: gps, supplies: supplies, me: publicUser_(user), serverTime: new Date().toISOString() });
       }
       case "saveTruck":
@@ -224,13 +232,15 @@ function doPost(e) {
       case "setShop":
         return json_(setShop_(req));
       case "supplies":
-        return json_({ ok: true, supplies: suppliesForApp_(false) });
+        return json_({ ok: true, supplies: suppliesForApp_(false, user) });
       case "supplyReport":
         return json_(withLock_(function () { return supplyReport_(req); }));
       case "supplyStatus":
         return json_(withLock_(function () { return supplyStatus_(req); }));
-      case "saveProducts":
-        return json_(withLock_(function () { return saveProducts_(req); }));
+      case "saveChecklist":
+        return json_(withLock_(function () { return saveChecklist_(req); }));
+      case "deleteChecklist":
+        return json_(withLock_(function () { return deleteChecklist_(req); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -361,10 +371,11 @@ function appendRows_(sheet, width, rows) {
 /* ---------------- accounts ---------------- */
 
 const USER_CACHE_SEC = 300;
-const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin"];
+const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech"];
 const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setShop",
-  "supplyStatus", "saveProducts"];
+  "supplyStatus", "saveChecklist", "deleteChecklist"];
+const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
 const INVITE_DAYS = 14;      // an invite or reset code works this long
 const MAX_TRIES = 5;         // wrong passcodes in a row before a lock
@@ -379,6 +390,11 @@ function usersSheet_() {
     s.getRange(1, 1, 1, USER_COLS.length).setValues([USER_COLS]).setFontWeight("bold");
     s.getRange(2, 1, Math.max(s.getMaxRows() - 1, 1), USER_COLS.length).setNumberFormat("@");
     s.setFrozenRows(1);
+  } else if (String(s.getRange(1, USER_COLS.length).getValue()) !== USER_COLS[USER_COLS.length - 1]) {
+    // Users tabs from before "who sees what" end at lastLogin: add the access heading (column M) once.
+    if (s.getMaxColumns() < USER_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), USER_COLS.length - s.getMaxColumns());
+    s.getRange(1, USER_COLS.length).setValue(USER_COLS[USER_COLS.length - 1]).setFontWeight("bold");
+    s.getRange(2, USER_COLS.length, Math.max(s.getMaxRows() - 1, 1), 1).setNumberFormat("@");
   }
   return s;
 }
@@ -402,7 +418,7 @@ function writeUser_(s, rowIndex, u) {
 }
 
 function publicUser_(u) {
-  return { id: u.id, username: u.username, name: u.name, role: u.role, status: u.status,
+  return { id: u.id, username: u.username, name: u.name, role: u.role, status: u.status, access: parseAccess_(u.access),
     created: u.created, lastLogin: u.lastLogin, inviteUntil: u.status === "invited" || u.inviteHash ? u.inviteUntil : "" };
 }
 
@@ -445,7 +461,7 @@ function authUser_(token) {
     const x = readUsers_(usersSheet_()).filter(function (y) { return y.u.id === parts[0]; })[0];
     if (!x) return null;
     u = { id: x.u.id, username: x.u.username, name: x.u.name, role: x.u.role, status: x.u.status, ver: x.u.ver,
-      inviteHash: x.u.inviteHash ? "1" : "", inviteUntil: x.u.inviteUntil, created: x.u.created, lastLogin: x.u.lastLogin };
+      inviteHash: x.u.inviteHash ? "1" : "", inviteUntil: x.u.inviteUntil, created: x.u.created, lastLogin: x.u.lastLogin, access: x.u.access };
     try { cache.put("user_" + u.id, JSON.stringify(u), USER_CACHE_SEC); } catch (e) { /* the cache is only a speed-up */ }
   }
   if (u.status !== "active" || String(u.ver) !== parts[1] || ROLES.indexOf(u.role) === -1) return null;
@@ -550,8 +566,11 @@ function invite_(req) {
   const name = String(req.name || "").trim().replace(/\s+/g, " ");
   if (!name || name.length > 40) return { ok: false, error: "bad_name" };
   const s = usersSheet_();
+  const access = req.access === undefined ? ACCESS_DEFAULT.slice() : cleanAccess_(req.access);
+  if (!access) return { ok: false, error: "bad_request" };
   const u = { id: "u-" + Utilities.getUuid().replace(/-/g, "").slice(0, 10), username: "", name: name,
-    role: req.role === "admin" ? "admin" : "tech", status: "invited", salt: "", hash: "", ver: 1, created: new Date().toISOString(), lastLogin: "" };
+    role: req.role === "admin" ? "admin" : "tech", status: "invited", salt: "", hash: "", ver: 1, created: new Date().toISOString(), lastLogin: "",
+    access: accessText_(access) };
   const code = newInvite_(u);
   writeUser_(s, 0, u);
   return { ok: true, code: code, user: publicUser_(u) };
@@ -574,6 +593,12 @@ function saveUser_(req) {
   const status = req.status === undefined ? x.u.status : req.status;
   if (ROLES.indexOf(role) === -1 || ["active", "disabled", "invited"].indexOf(status) === -1) return { ok: false, error: "bad_request" };
   if (status === "invited" && x.u.status !== "invited") return { ok: false, error: "bad_request" };
+  if (req.access !== undefined) {
+    // What a technician sees: takes effect on his phone at the next refresh; he stays signed in.
+    const access = cleanAccess_(req.access);
+    if (!access) return { ok: false, error: "bad_request" };
+    if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
+  }
   if (x.u.role !== role || x.u.status !== status) {
     x.u.role = role;
     x.u.status = status;
@@ -1977,21 +2002,29 @@ function setShop_(req) {
   return { ok: true, shop: shopAt_() };
 }
 
-/* ---------------- cleaning supplies ---------------- */
-// Supplies: the checklist, one product per row (from the paper "Cleaning products checklist").
-// Supply orders: one row per missing product: To order > Ordered > Received (or Removed).
+/* ---------------- checklists (cleaning supplies, products, equipment) ---------------- */
+// Checklists: one row per checklist (Cleaning supplies first; Admins add more in the app).
+// Supplies: every item on every checklist, one per row (column F says which checklist).
+// Supply orders: one row per missing item: To order > Ordered > Received (or Removed).
 // Supply checks: every list a person sends from the app, even "nothing missing".
+// A technician sees only the checklists an Admin ticked for him (Settings > Users in the app); this script enforces it.
 
+const LIST_SHEET = "Checklists";
+const LIST_COLS = ["id", "order", "name", "createdAt"];
+const DEFAULT_LIST = "cleaning";
+const DEFAULT_LIST_NAME = "Cleaning supplies";
 const SUP_SHEET = "Supplies";
-const SUP_COLS = ["id", "order", "section", "name", "container"];
+const SUP_COLS = ["id", "order", "section", "name", "container", "list"];
 const REQ_SHEET = "Supply orders";
 const REQ_COLS = ["id", "productId", "product", "container", "section", "qty", "status",
-  "reportedAt", "reportedBy", "orderedAt", "orderedBy", "closedAt", "closedBy", "updatedAt", "checkId"];
+  "reportedAt", "reportedBy", "orderedAt", "orderedBy", "closedAt", "closedBy", "updatedAt", "checkId", "list"];
 const CHK_SHEET = "Supply checks";
-const CHK_COLS = ["id", "at", "by", "missing", "items", "note"];
+const CHK_COLS = ["id", "at", "by", "missing", "items", "note", "list"];
 const REQ_STATUS = ["To order", "Ordered", "Received", "Removed"];
+const SUP_SCHEMA = "2";      // bumped when the tabs above gain columns; older tabs are brought up to date once
 const SUP_MAX_QTY = 999;
 const SUP_KEEP_DAYS = 45;    // received or removed items stay in the app this long (they stay in the sheet for good)
+const SUP_CHECKS_PER_LIST = 12;
 const SUP_SEED = [
   ["Carpet & upholstery", "Procyon Powder", "box"],
   ["Carpet & upholstery", "Procyon Liquid", "gallon"],
@@ -2034,18 +2067,26 @@ const SUP_SEED = [
 function supNewId_(prefix) { return (prefix || "p") + "-" + Utilities.getUuid().replace(/-/g, "").slice(0, 10); }
 function supText_(v, max) { return String(v === null || v === undefined ? "" : v).trim().replace(/\s+/g, " ").slice(0, max); }
 function supIso_(v) { return isDate_(v) ? v.toISOString() : String(v === null || v === undefined ? "" : v); }
+function supListOf_(v) { return supText_(v, 40) || DEFAULT_LIST; }   // rows from before there were several checklists
 
 function supReady_() {
   const ss = SpreadsheetApp.getActive();
-  return !!(ss.getSheetByName(SUP_SHEET) && ss.getSheetByName(REQ_SHEET) && ss.getSheetByName(CHK_SHEET));
+  return PropertiesService.getScriptProperties().getProperty("SUP_SCHEMA") === SUP_SCHEMA &&
+    !!(ss.getSheetByName(LIST_SHEET) && ss.getSheetByName(SUP_SHEET) && ss.getSheetByName(REQ_SHEET) && ss.getSheetByName(CHK_SHEET));
 }
 
-/** The three supply tabs, made the first time they're needed (the checklist starts with the paper list). Call inside the lock. */
+/** The four checklist tabs, made the first time they're needed (Cleaning supplies starts with the paper list), and
+ *  older tabs given any new heading. Call inside the lock. */
 function supSheets_() {
   const ss = SpreadsheetApp.getActive();
   const make = function (name, cols, numCols) {
     let s = ss.getSheetByName(name);
-    if (s) return { s: s, isNew: false };
+    if (s) {
+      if (s.getMaxColumns() < cols.length) s.insertColumnsAfter(s.getMaxColumns(), cols.length - s.getMaxColumns());
+      const head = s.getRange(1, 1, 1, cols.length).getValues()[0];
+      if (head.some(function (h, i) { return String(h) !== cols[i]; })) s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+      return { s: s, isNew: false };
+    }
     s = ss.insertSheet(name);
     if (s.getMaxColumns() < cols.length) s.insertColumnsAfter(s.getMaxColumns(), cols.length - s.getMaxColumns());
     s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
@@ -2055,18 +2096,21 @@ function supSheets_() {
     });
     return { s: s, isNew: true };
   };
+  const l = make(LIST_SHEET, LIST_COLS, ["order"]);
+  if (l.isNew) appendRows_(l.s, LIST_COLS.length, [[DEFAULT_LIST, 1, DEFAULT_LIST_NAME, new Date().toISOString()]]);
   const p = make(SUP_SHEET, SUP_COLS, ["order"]);
   if (p.isNew) {
-    appendRows_(p.s, SUP_COLS.length, SUP_SEED.map(function (x, i) { return [supNewId_(), i + 1, x[0], x[1], x[2]]; }));
+    appendRows_(p.s, SUP_COLS.length, SUP_SEED.map(function (x, i) { return [supNewId_(), i + 1, x[0], x[1], x[2], DEFAULT_LIST]; }));
     p.s.autoResizeColumns(1, SUP_COLS.length);
     supBump_();
   }
   const r = make(REQ_SHEET, REQ_COLS, ["qty"]);
   const c = make(CHK_SHEET, CHK_COLS, ["missing"]);
-  return { p: p.s, r: r.s, c: c.s };
+  PropertiesService.getScriptProperties().setProperty("SUP_SCHEMA", SUP_SCHEMA);
+  return { l: l.s, p: p.s, r: r.s, c: c.s };
 }
 
-/** Changes whenever the product list is saved from the app, so two people editing it can't overwrite each other. */
+/** Changes whenever a checklist is saved from the app, so two people editing can't overwrite each other. */
 function supVer_() {
   const p = PropertiesService.getScriptProperties();
   return p.getProperty("SUPPLIES_VER") || supBump_();
@@ -2077,7 +2121,25 @@ function supBump_() {
   return v;
 }
 
-/** Products in checklist order. A row typed straight into the sheet gets an ID when `fix` is true (inside the lock). */
+/** Checklists in the order they show in the app. */
+function supLists_(s) {
+  const last = s.getLastRow();
+  if (last < 2) return [];
+  const seen = {};
+  return s.getRange(2, 1, last - 1, LIST_COLS.length).getValues().map(function (r, i) {
+    return { id: String(r[0] || "").trim(), order: num_(r[1]), name: supText_(r[2], 40), createdAt: supIso_(r[3]), row: i + 2 };
+  }).filter(function (x) {
+    if (!/^[A-Za-z0-9-]{1,40}$/.test(x.id) || seen[x.id]) return false;
+    seen[x.id] = true;
+    if (!x.name) x.name = x.id === DEFAULT_LIST ? DEFAULT_LIST_NAME : "Checklist";
+    return true;
+  }).sort(function (a, b) {
+    const ao = a.order === null ? 1e9 : a.order, bo = b.order === null ? 1e9 : b.order;
+    return ao - bo || a.row - b.row;
+  });
+}
+
+/** Items in checklist order. A row typed straight into the sheet gets an ID when `fix` is true (inside the lock). */
 function supProducts_(s, fix) {
   const last = s.getLastRow();
   if (last < 2) return { list: [], missingIds: false };
@@ -2096,7 +2158,7 @@ function supProducts_(s, fix) {
       s.getRange(i + 2, 1).setValue(id);
     }
     seen[id] = true;
-    out.push({ id: id, order: num_(r[1]), section: supText_(r[2], 40) || "Other", name: name, container: supText_(r[4], 20), row: i + 2 });
+    out.push({ id: id, order: num_(r[1]), section: supText_(r[2], 40) || "Other", name: name, container: supText_(r[4], 20), list: supListOf_(r[5]), row: i + 2 });
   });
   out.sort(function (a, b) {
     const ao = a.order === null ? 1e9 : a.order, bo = b.order === null ? 1e9 : b.order;
@@ -2109,6 +2171,7 @@ function supReqFromRow_(r) {
   const o = {};
   REQ_COLS.forEach(function (c, i) { o[c] = c === "qty" ? num_(r[i]) : supIso_(r[i]); });
   if (REQ_STATUS.indexOf(o.status) === -1) o.status = "To order";
+  o.list = supListOf_(o.list);
   return o;
 }
 function supReqRow_(o) {
@@ -2124,13 +2187,18 @@ function supRequests_(s) {
     return { rowIndex: i + 2, rec: supReqFromRow_(r) };
   }).filter(function (x) { return x.rec.id && x.rec.productId; });
 }
-function supChecks_(s, n) {
+/** The newest checks, up to `perList` for each checklist, newest first. */
+function supChecks_(s, perList) {
   const last = s.getLastRow();
   if (last < 2) return [];
-  const from = Math.max(2, last - n + 1);
+  const from = Math.max(2, last - 499);
+  const count = {};
   return s.getRange(from, 1, last - from + 1, CHK_COLS.length).getValues().map(function (r) {
-    return { id: String(r[0] || ""), at: supIso_(r[1]), by: String(r[2] || ""), missing: num_(r[3]) || 0, items: String(r[4] || ""), note: String(r[5] || "") };
-  }).filter(function (c) { return c.id; }).reverse();
+    return { id: String(r[0] || ""), at: supIso_(r[1]), by: String(r[2] || ""), missing: num_(r[3]) || 0, items: String(r[4] || ""), note: String(r[5] || ""), list: supListOf_(r[6]) };
+  }).filter(function (c) { return c.id; }).reverse().filter(function (c) {
+    count[c.list] = (count[c.list] || 0) + 1;
+    return count[c.list] <= perList;
+  });
 }
 function supCheckSeen_(s, checkId) {
   const last = s.getLastRow();
@@ -2139,38 +2207,48 @@ function supCheckSeen_(s, checkId) {
   return s.getRange(from, 1, last - from + 1, 1).getValues().some(function (r) { return String(r[0]) === checkId; });
 }
 
-/** What the app shows: the checklist, everything still to order or on its way, what closed lately, the last checks. */
-function suppliesForApp_(inLock) {
+/** What the app shows this person: the checklists they may see, with their items, everything still to order or on its
+ *  way, what closed lately, and the last checks. */
+function suppliesForApp_(inLock, user) {
   const lockIf = function (fn) { return inLock ? fn() : withLock_(fn); };
   if (!supReady_()) lockIf(supSheets_);
   const ss = SpreadsheetApp.getActive();
   const ps = ss.getSheetByName(SUP_SHEET);
   let prod = supProducts_(ps, false);
   if (prod.missingIds) prod = lockIf(function () { return supProducts_(ps, true); });
+  const lists = supLists_(ss.getSheetByName(LIST_SHEET)).filter(function (l) { return canSee_(user, l.id); });
+  const mine = {};
+  lists.forEach(function (l) { mine[l.id] = true; });
   const cutoff = new Date(Date.now() - SUP_KEEP_DAYS * 864e5).toISOString();
   const reqs = supRequests_(ss.getSheetByName(REQ_SHEET)).map(function (x) { return x.rec; })
-    .filter(function (r) { return r.status === "To order" || r.status === "Ordered" || String(r.closedAt || r.updatedAt) >= cutoff; });
+    .filter(function (r) { return mine[r.list] && (r.status === "To order" || r.status === "Ordered" || String(r.closedAt || r.updatedAt) >= cutoff); });
   const closed = reqs.filter(function (r) { return r.status === "Received" || r.status === "Removed"; })
-    .sort(function (a, b) { return String(b.closedAt).localeCompare(String(a.closedAt)); }).slice(0, 60);
+    .sort(function (a, b) { return String(b.closedAt).localeCompare(String(a.closedAt)); }).slice(0, 150);
   const open = reqs.filter(function (r) { return r.status === "To order" || r.status === "Ordered"; });
   return {
     ver: supVer_(),
-    products: prod.list.map(function (p) { return { id: p.id, section: p.section, name: p.name, container: p.container }; }),
+    lists: lists.map(function (l) { return { id: l.id, name: l.name }; }),
+    products: prod.list.filter(function (p) { return mine[p.list]; })
+      .map(function (p) { return { id: p.id, list: p.list, section: p.section, name: p.name, container: p.container }; }),
     requests: open.concat(closed),
-    checks: supChecks_(ss.getSheetByName(CHK_SHEET), 12)
+    checks: supChecks_(ss.getSheetByName(CHK_SHEET), SUP_CHECKS_PER_LIST).filter(function (c) { return mine[c.list]; })
   };
 }
 
-/** Anyone signed in: the products that are missing and how many (the newest count wins for a product not ordered yet),
- *  or an empty list for "nothing missing". checkId comes from the phone, so a list sent twice counts once. */
+/** Anyone with that checklist: the items that are missing and how many (the newest count wins for an item not ordered
+ *  yet), or an empty list for "nothing missing". checkId comes from the phone, so a list sent twice counts once. */
 function supplyReport_(req) {
   const sh = supSheets_();
   const checkId = String(req.checkId || "");
   const items = Array.isArray(req.items) ? req.items : null;
+  const listId = String(req.list || DEFAULT_LIST);
   if (!/^[A-Za-z0-9-]{6,40}$/.test(checkId) || !items || items.length > 300) return { ok: false, error: "bad_request" };
-  if (supCheckSeen_(sh.c, checkId)) return { ok: true, repeat: true, supplies: suppliesForApp_(true) };
+  const list = supLists_(sh.l).filter(function (l) { return l.id === listId; })[0];
+  if (!list) return { ok: false, error: "gone" };
+  if (!canSee_(req.user, list.id)) return { ok: false, error: "not_allowed" };
+  if (supCheckSeen_(sh.c, checkId)) return { ok: true, repeat: true, supplies: suppliesForApp_(true, req.user) };
   const products = {};
-  supProducts_(sh.p, true).list.forEach(function (p) { products[p.id] = p; });
+  supProducts_(sh.p, true).list.forEach(function (p) { if (p.list === list.id) products[p.id] = p; });
   const all = supRequests_(sh.r);
   const now = new Date().toISOString();
   const by = String(req.by || "").slice(0, 60);
@@ -2184,7 +2262,7 @@ function supplyReport_(req) {
     seen[p.id] = true;
     const open = all.filter(function (x) { return x.rec.productId === p.id && x.rec.status === "To order"; })[0];
     const rec = open ? open.rec : { id: supNewId_("r"), productId: p.id, status: "To order", orderedAt: "", orderedBy: "", closedAt: "", closedBy: "" };
-    rec.product = p.name; rec.container = p.container; rec.section = p.section;
+    rec.product = p.name; rec.container = p.container; rec.section = p.section; rec.list = list.id;
     rec.qty = qty;
     rec.reportedAt = now; rec.reportedBy = by;
     rec.updatedAt = now; rec.checkId = checkId;
@@ -2194,11 +2272,11 @@ function supplyReport_(req) {
   });
   appendRows_(sh.r, REQ_COLS.length, add);
   const text = lines.map(function (l) { return l.name + " x" + l.qty; }).join(", ");
-  appendRows_(sh.c, CHK_COLS.length, [[checkId, now, by, lines.length, text.slice(0, 2000) || "Nothing missing", note]]);
+  appendRows_(sh.c, CHK_COLS.length, [[checkId, now, by, lines.length, text.slice(0, 2000) || "Nothing missing", note, list.id]]);
   if (lines.length && req.user && req.user.role !== "admin") {
-    try { supplyEmail_(by, lines, note, false); } catch (e) { /* an email problem never stops the list from saving */ }
+    try { supplyEmail_(by, list, lines, note, false); } catch (e) { /* an email problem never stops the list from saving */ }
   }
-  return { ok: true, skipped: skipped, supplies: suppliesForApp_(true) };
+  return { ok: true, skipped: skipped, supplies: suppliesForApp_(true, req.user) };
 }
 
 /** Admin: mark items Ordered / Received / back to To order / Removed, and/or change how many. */
@@ -2219,50 +2297,81 @@ function supplyStatus_(req) {
     if (!x) { gone++; return; }
     const r = x.rec;
     if (qty !== null) r.qty = qty;
-    if (status !== null && status !== r.status) {
-      if (status === "To order") { r.orderedAt = ""; r.orderedBy = ""; r.closedAt = ""; r.closedBy = ""; }
-      else if (status === "Ordered") { r.orderedAt = now; r.orderedBy = by; r.closedAt = ""; r.closedBy = ""; }
-      else {
-        if (status === "Received" && !r.orderedAt) { r.orderedAt = now; r.orderedBy = by; }
-        r.closedAt = now; r.closedBy = by;
-      }
-      r.status = status;
-    }
+    if (status !== null && status !== r.status) supSetStatus_(r, status, now, by);
     r.updatedAt = now;
     sh.r.getRange(x.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(r)]);
     changed++;
   });
-  return { ok: true, changed: changed, gone: gone, supplies: suppliesForApp_(true) };
+  return { ok: true, changed: changed, gone: gone, supplies: suppliesForApp_(true, req.user) };
+}
+function supSetStatus_(r, status, now, by) {
+  if (status === "To order") { r.orderedAt = ""; r.orderedBy = ""; r.closedAt = ""; r.closedBy = ""; }
+  else if (status === "Ordered") { r.orderedAt = now; r.orderedBy = by; r.closedAt = ""; r.closedBy = ""; }
+  else {
+    if (status === "Received" && !r.orderedAt) { r.orderedAt = now; r.orderedBy = by; }
+    r.closedAt = now; r.closedBy = by;
+  }
+  r.status = status;
 }
 
-/** Admin: the whole product list from the app's editor (names, containers, sections, order). Items already on the
- *  order list keep showing, and pick up a product's new name. */
-function saveProducts_(req) {
-  const sh = supSheets_();
-  if (String(req.base || "") !== supVer_()) return { ok: false, error: "conflict", supplies: suppliesForApp_(true) };
-  const list = Array.isArray(req.products) ? req.products : null;
-  if (!list || list.length > 500) return { ok: false, error: "bad_request" };
-  const cur = {};
-  supProducts_(sh.p, true).list.forEach(function (p) { cur[p.id] = p; });
-  const rows = [], used = {}, byId = {};
-  list.forEach(function (x) {
-    if (!x || typeof x !== "object") return;
-    const name = supText_(x.name, 60);
-    if (!name) return;
-    let id = String(x.id || "");
-    if (!cur[id] || used[id]) id = supNewId_();
-    used[id] = true;
-    const p = { id: id, section: supText_(x.section, 40) || "Other", name: name, container: supText_(x.container, 20) };
-    byId[id] = p;
-    rows.push([p.id, rows.length + 1, p.section, p.name, p.container]);
+/** Rewrites the Supplies tab: every checklist's items, checklist by checklist, in order. */
+function supWriteProducts_(s, byList, lists) {
+  const rows = [];
+  const ids = lists.map(function (l) { return l.id; });
+  Object.keys(byList).forEach(function (k) { if (ids.indexOf(k) === -1) ids.push(k); });   // items of a checklist row someone deleted by hand
+  ids.forEach(function (k) {
+    (byList[k] || []).forEach(function (p) { rows.push([p.id, rows.length + 1, p.section, p.name, p.container, k]); });
   });
-  if (!rows.length) return { ok: false, error: "empty_list" };   // never wipe the whole checklist by mistake
-  const s = sh.p;
   const last = s.getLastRow();
   if (last > 1) s.getRange(2, 1, last - 1, SUP_COLS.length).clearContent();
+  if (!rows.length) return;
   if (s.getMaxRows() < rows.length + 1) s.insertRowsAfter(s.getMaxRows(), rows.length + 1 - s.getMaxRows() + 50);
   s.getRange(2, 1, rows.length, SUP_COLS.length).setValues(rows);
+}
+
+/** Admin: one checklist from the app's editor: its name and all its items (names, containers, sections, order).
+ *  No id = a new checklist. Items already on the order list keep showing, and pick up an item's new name. */
+function saveChecklist_(req) {
+  const sh = supSheets_();
+  if (String(req.base || "") !== supVer_()) return { ok: false, error: "conflict", supplies: suppliesForApp_(true, req.user) };
+  const body = req.list && typeof req.list === "object" ? req.list : null;
+  const items = Array.isArray(req.products) ? req.products : null;
+  if (!body || !items || items.length > 500) return { ok: false, error: "bad_request" };
+  const name = supText_(body.name, 40);
+  if (!name) return { ok: false, error: "bad_list_name" };
+  const lists = supLists_(sh.l);
+  let list = body.id ? lists.filter(function (l) { return l.id === String(body.id); })[0] : null;
+  if (body.id && !list) return { ok: false, error: "gone" };
+  const clash = lists.filter(function (l) { return (!list || l.id !== list.id) && l.name.toLowerCase() === name.toLowerCase(); })[0];
+  if (clash) return { ok: false, error: "duplicate_list", name: clash.name };
+  const all = supProducts_(sh.p, true).list;
+  const cur = {};
+  all.forEach(function (p) { cur[p.id] = p; });
+  const out = [], used = {}, byId = {};
+  items.forEach(function (x) {
+    if (!x || typeof x !== "object") return;
+    const pname = supText_(x.name, 60);
+    if (!pname) return;
+    let id = String(x.id || "");
+    if (!cur[id] || used[id] || (list && cur[id].list !== list.id) || !list) id = supNewId_();
+    used[id] = true;
+    const p = { id: id, section: supText_(x.section, 40) || "Other", name: pname, container: supText_(x.container, 20) };
+    byId[id] = p;
+    out.push(p);
+  });
+  if (!out.length) return { ok: false, error: "empty_list" };   // a checklist needs at least one item
   const now = new Date().toISOString();
+  if (!list) {
+    const maxOrder = lists.reduce(function (m, l) { return Math.max(m, l.order || 0); }, 0);
+    list = { id: supNewId_("l"), order: maxOrder + 1, name: name };
+    appendRows_(sh.l, LIST_COLS.length, [[list.id, list.order, name, now]]);
+  } else if (list.name !== name) {
+    sh.l.getRange(list.row, 3).setValue(name);
+  }
+  const byList = {};
+  all.forEach(function (p) { if (p.list !== list.id) (byList[p.list] = byList[p.list] || []).push(p); });
+  byList[list.id] = out;
+  supWriteProducts_(sh.p, byList, supLists_(sh.l));
   supRequests_(sh.r).forEach(function (x) {
     const r = x.rec, p = byId[r.productId];
     if (!p || (r.status !== "To order" && r.status !== "Ordered")) return;
@@ -2271,10 +2380,42 @@ function saveProducts_(req) {
     sh.r.getRange(x.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(r)]);
   });
   supBump_();
-  return { ok: true, supplies: suppliesForApp_(true) };
+  return { ok: true, list: { id: list.id, name: name }, supplies: suppliesForApp_(true, req.user) };
 }
 
-/** "2 gallons", "1 box", or just "3" for a product with no container. */
+/** Admin: deletes a checklist and its items. Anything of it still on the order list is marked Removed (kept in the
+ *  sheet), and it's taken off everyone's access. */
+function deleteChecklist_(req) {
+  const sh = supSheets_();
+  if (String(req.base || "") !== supVer_()) return { ok: false, error: "conflict", supplies: suppliesForApp_(true, req.user) };
+  const id = String(req.id || "");
+  const lists = supLists_(sh.l);
+  const list = lists.filter(function (l) { return l.id === id; })[0];
+  if (!list) return { ok: false, error: "gone" };
+  sh.l.deleteRow(list.row);
+  const byList = {};
+  supProducts_(sh.p, true).list.forEach(function (p) { if (p.list !== id) (byList[p.list] = byList[p.list] || []).push(p); });
+  supWriteProducts_(sh.p, byList, supLists_(sh.l));
+  const now = new Date().toISOString(), by = String(req.by || "").slice(0, 60);
+  supRequests_(sh.r).forEach(function (x) {
+    const r = x.rec;
+    if (r.list !== id || (r.status !== "To order" && r.status !== "Ordered")) return;
+    supSetStatus_(r, "Removed", now, by);
+    r.updatedAt = now;
+    sh.r.getRange(x.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(r)]);
+  });
+  const us = usersSheet_();
+  readUsers_(us).forEach(function (x) {
+    const a = parseAccess_(x.u.access);
+    if (a.indexOf(id) === -1) return;
+    x.u.access = accessText_(a.filter(function (k) { return k !== id; }));
+    writeUser_(us, x.rowIndex, x.u);
+  });
+  supBump_();
+  return { ok: true, supplies: suppliesForApp_(true, req.user) };
+}
+
+/** "2 gallons", "1 box", or just "3" for an item with no container. */
 function supQty_(qty, container) {
   if (!container) return String(qty);
   if (qty === 1) return "1 " + container;
@@ -2283,7 +2424,7 @@ function supQty_(qty, container) {
 }
 
 /** The email when a technician sends missing items. */
-function supplyEmail_(by, lines, note, isTest) {
+function supplyEmail_(by, list, lines, note, isTest) {
   const props = PropertiesService.getScriptProperties();
   const set = String(props.getProperty("SUPPLY_EMAIL") || "").trim();
   if (/^off$/i.test(set) && !isTest) return "";
@@ -2291,18 +2432,39 @@ function supplyEmail_(by, lines, note, isTest) {
   if (!to) return "";
   const n = lines.length;
   const body = [];
-  if (isTest) body.push("TEST: this is what the email looks like when a technician sends missing supplies.", "");
-  body.push(by + " checked the cleaning supplies. Missing (" + n + "):", "");
+  if (isTest) body.push("TEST: this is what the email looks like when a technician sends missing items.", "");
+  body.push(by + " checked " + list.name + ". Missing (" + n + "):", "");
   lines.forEach(function (l) { body.push("• " + l.name + ": " + supQty_(l.qty, l.container)); });
   if (note) body.push("", "Note: " + note);
-  body.push("", "The full list to order is in the app under Supplies > Order list: " + APP_URL + "#order-list");
-  MailApp.sendEmail({ to: to, subject: ((isTest ? "(Test) " : "") + "Supplies to order: " + n + " item" + (n === 1 ? "" : "s") + " from " + by).slice(0, 250), body: body.join("\n") });
+  body.push("", "The full list to order is in the app under Checklists > " + list.name + " > Order list: " + APP_URL + "#order-list/" + list.id);
+  MailApp.sendEmail({ to: to, subject: ((isTest ? "(Test) " : "") + list.name + ": " + n + " item" + (n === 1 ? "" : "s") + " to order from " + by).slice(0, 250), body: body.join("\n") });
   return to;
 }
 
-/** Run from the editor to see the supplies email (it goes where the real ones would). */
+/** Run from the editor to see the email (it goes where the real ones would). */
 function supplyEmailTest() {
-  const to = supplyEmail_("Your technician", [{ name: "Procyon Powder", container: "box", qty: 2 }, { name: "Pet Zone", container: "jug", qty: 1 },
-    { name: "Shoe covers", container: "", qty: 3 }], "Pet Zone is almost empty too.", true);
+  const to = supplyEmail_("Your technician", { id: DEFAULT_LIST, name: DEFAULT_LIST_NAME },
+    [{ name: "Procyon Powder", container: "box", qty: 2 }, { name: "Pet Zone", container: "jug", qty: 1 }, { name: "Shoe covers", container: "", qty: 3 }],
+    "Pet Zone is almost empty too.", true);
   Logger.log(to ? "Test email sent to " + to + "." : "No email address found.");
+}
+
+/* ---------------- who sees what ---------------- */
+// Users tab, column M (access): what a technician sees, comma-separated: "trucks" and/or checklist IDs.
+// Empty means Trucks only (how every technician worked before checklists). "-" means nothing yet. Admins see everything.
+
+const ACCESS_DEFAULT = ["trucks"];
+function parseAccess_(s) {
+  s = String(s === null || s === undefined ? "" : s).trim();
+  if (!s) return ACCESS_DEFAULT.slice();
+  if (s === "-") return [];
+  return s.split(",").map(function (x) { return x.trim(); }).filter(function (x, i, a) { return /^[A-Za-z0-9-]{1,40}$/.test(x) && a.indexOf(x) === i; });
+}
+function accessText_(arr) { return arr && arr.length ? arr.join(",") : "-"; }
+function canSee_(user, section) { return !!user && (user.role === "admin" || parseAccess_(user.access).indexOf(section) !== -1); }
+/** Only "trucks" and checklists that exist. */
+function cleanAccess_(raw) {
+  if (!Array.isArray(raw)) return null;
+  const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }

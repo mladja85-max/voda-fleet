@@ -445,6 +445,18 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 /* ---- cleaning supplies ---- */
 .sup { display: grid; gap: 12px; max-width: 920px; }
 .sup-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sup-title { font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .03em; }
+.list-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+.list-chips::-webkit-scrollbar { display: none; }
+.list-chip { all: unset; box-sizing: border-box; cursor: pointer; flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px;
+  border: 1.5px solid var(--line); background: var(--surface); font-weight: 700; font-size: .92rem; color: var(--ink); white-space: nowrap; }
+.list-chip[aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.list-chip .n { font-size: .74rem; padding: 0 7px; border-radius: 999px; background: var(--soon-bg); color: var(--soon); line-height: 1.5; }
+.list-chip.new { border-style: dashed; color: var(--accent); }
+.list-chip:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.acc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.acc-lbl { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.acc .chip-btn[aria-pressed="true"]::before { content: "✓ "; }
 .sup-top > .btn { margin-left: auto; }
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--line); }
 .seg-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: .95rem; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
@@ -633,12 +645,12 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   <section class="gate" id="gate" hidden></section>
 
   <div id="app" hidden>
-    <nav class="views" aria-label="Trucks or supplies">
+    <nav class="views" id="views" aria-label="Trucks or checklists">
       <button type="button" class="view-btn" id="viewTrucks" aria-pressed="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4.5L22 12.5V16h-8"/><circle cx="6" cy="17.5" r="2"/><circle cx="18" cy="17.5" r="2"/></svg>Trucks
       </button>
       <button type="button" class="view-btn" id="viewSupplies" aria-pressed="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h6V6l2.5 2.5V20a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V8.5L9 6z"/><path d="M6.5 12h11"/><path d="M6.5 17h11"/></svg>Supplies<span class="vbadge" id="supBadge" hidden></span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="4" width="15" height="18" rx="2"/><path d="M9 4V2.5h6V4"/><path d="M8.5 13l2.5 2.5 4.5-5"/></svg>Checklists<span class="vbadge" id="supBadge" hidden></span>
       </button>
     </nav>
     <div id="fleetView">
@@ -671,7 +683,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
       <div id="howBody"></div>
     </details>
     </div>
-    <section class="sup" id="suppliesView" aria-label="Cleaning supplies" hidden></section>
+    <section class="sup" id="suppliesView" aria-label="Checklists" hidden></section>
+    <section class="panel" id="noAccess" hidden>
+      <h2>Nothing here yet</h2>
+      <p class="meta">An admin hasn't given you Trucks or a checklist yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
+    </section>
   </div>
 </main>
 
@@ -890,8 +906,8 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 14;                          // the Google script version this app expects (14: cleaning supplies)
-const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like Supplies) won't work. " +
+const NEEDS_API = 15;                          // the Google script version this app expects (15: checklists and who sees what)
+const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like Checklists) won't work. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
 const scriptOld = out => !(out && out.api >= NEEDS_API);
@@ -1038,7 +1054,13 @@ async function refresh(quiet) {
   $("syncText").textContent = "Updating…";
   try {
     const out = await api("list");
-    if (out.me) { const roleChanged = session.role !== out.me.role; Object.assign(session, { name: out.me.name, role: out.me.role, username: out.me.username }); store.set(K_SESSION, session); if (roleChanged) applyRole(); }
+    let roleChanged = false;
+    if (out.me) {
+      const access = Array.isArray(out.me.access) ? out.me.access : ["trucks"];
+      roleChanged = session.role !== out.me.role || JSON.stringify(session.access || ["trucks"]) !== JSON.stringify(access);
+      Object.assign(session, { name: out.me.name, role: out.me.role, username: out.me.username, access });
+      store.set(K_SESSION, session);
+    }
     trucks = sortTrucks(out.trucks || []);
     applyPendingTrucks();
     noteGps(out.gps);
@@ -1050,6 +1072,7 @@ async function refresh(quiet) {
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     noteApi(out);
     noteSupplies(out.supplies);
+    if (roleChanged) applyRole();   // what this person may see changed
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -1226,8 +1249,8 @@ function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "T
 
 /* ---------- view (filters, search, sort) ---------- */
 const K_VIEW = "voda.view";
-const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "" }, store.get(K_VIEW) || {});
-function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab }); }
+const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "", list: "" }, store.get(K_VIEW) || {});
+function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab, list: view.list }); }
 const DIVISIONS = ["Cleaning", "Restoration"];
 const divClass = d => d === "Cleaning" ? "cleaning" : d === "Restoration" ? "restoration" : "none";
 const inScope = t => !view.division || t.division === view.division;
@@ -1340,7 +1363,8 @@ function showSignIn(message, mode) {
   const btn = h("button", { class: "btn primary", type: "submit", id: "gateGo", text: mode === "login" ? "Sign in" : "Create account" });
   const done = async out => {
     const first = !session || session.id !== out.user.id;
-    session = { token: out.token, id: out.user.id, name: out.user.name, username: out.user.username, role: out.user.role };
+    session = { token: out.token, id: out.user.id, name: out.user.name, username: out.user.username, role: out.user.role,
+      access: Array.isArray(out.user.access) ? out.user.access : ["trucks"] };
     store.set(K_SESSION, session);
     if (first && out.user.role !== "admin") { view.tmOnly = true; saveView(); }   // technicians start on the truckmounts
     const list = await api("list");
@@ -2220,8 +2244,9 @@ function jobFailed(job, e) {
   } else if (job.action === "supplyReport") {
     queue = queue.filter(j => j.key !== job.key); saveQueue();
     supRestoreDraft(job);
-    msg = (e.error === "bad_request" ? "The supply list wasn't sent: the Google script needs updating (see the note at the top)."
-      : `The supply list wasn't sent. ${errText(e, "Your marks")}`) + " Your marks are back on the checklist.";
+    msg = (e.error === "bad_request" ? "The checklist wasn't sent: the Google script needs updating (see the note at the top)."
+      : e.error === "not_allowed" || e.error === "gone" ? "The checklist wasn't sent: you no longer have that checklist."
+      : `The checklist wasn't sent. ${errText(e, "Your marks")}`) + (e.error === "not_allowed" || e.error === "gone" ? "" : " Your marks are back on the checklist.");
   } else if (job.action === "tmSkip") {
     queue = queue.filter(j => j.key !== job.key); saveQueue();
     msg = e.error === "gone" ? `${job.label} was deleted on another phone.` : `${job.label}: "not available" wasn't saved. ${errText(e, "Nothing")}`;
@@ -2707,10 +2732,17 @@ async function openUsers() {
     const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => call("saveUser", { id: u.id, role: e.target.value }, `${u.name} is now ${e.target.value === "admin" ? "an Admin" : "a Technician"}`) },
       h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
     role.value = u.role;
+    const access = Array.isArray(u.access) ? u.access.slice() : ["trucks"];
+    const sees = u.role === "admin" ? h("span", { class: "user-meta", text: "Sees everything (Admin)" })
+      : apiLevel >= SUP_API ? accessChips(access, async (next, name, on) => {
+          const out = await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
+          if (!out) load();
+        }, "acc-" + (u.username || u.id)) : null;
     return h("div", { class: "user-row", "data-user": u.username || u.name },
       h("div", { class: "user-top" }, h("strong", { text: u.name }), u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
         u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null),
       h("span", { class: "user-meta", text: status }),
+      sees,
       me ? null : h("div", { class: "user-acts" }, role,
         u.status === "invited"
           ? [h("button", { class: "btn small", type: "button", text: "New code", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, false); } }),
@@ -2728,18 +2760,29 @@ async function openUsers() {
       listBox.replaceChildren(...users.map(row));
     } catch (e) { listBox.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Nothing") })); }
   };
-  const roleSel = h("select", { id: "u-role" }, h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
+  const inviteAccess = ["trucks"];
+  const inviteChips = apiLevel >= SUP_API ? accessChips(inviteAccess, () => {}, "u-acc") : null;
+  const roleSel = h("select", { id: "u-role", onchange: () => { if (inviteChips) inviteChips.hidden = roleSel.value === "admin"; } },
+    h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
-    h("p", { text: "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
+    h("p", { text: apiLevel >= SUP_API
+      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours) and each checklist (they can send what's missing)."
+      : "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
     h("fieldset", null, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
         h("div", { class: "field" }, h("label", { for: "u-name", text: "Their name" }), h("input", { id: "u-name", type: "text", maxlength: "40", autocomplete: "off", placeholder: "Joe" })),
         h("div", { class: "field" }, h("label", { for: "u-role", text: "Role" }), roleSel)),
+      inviteChips,
       h("div", null, h("button", { class: "btn primary", type: "button", id: "u-invite", text: "Create invite code", onclick: async () => {
         const name = val("u-name");
         if (!name) { err.textContent = "Enter their name."; return; }
-        const out = await call("invite", { name, role: roleSel.value });
+        const data = { name, role: roleSel.value };
+        if (inviteChips && roleSel.value !== "admin") {
+          if (!inviteAccess.length) { err.textContent = "Tick at least one thing they'll see (Trucks or a checklist)."; return; }
+          data.access = inviteAccess.slice();
+        }
+        const out = await call("invite", data);
         if (out) { $("u-name").value = ""; showCode(name, out.code, false); }
       } })),
       codeBox),
@@ -2940,30 +2983,50 @@ function openReportMenu() {
 }
 $("reportBtn").addEventListener("click", openReportMenu);
 
-/* ---------- cleaning supplies ----------
-   The paper "Cleaning products checklist" as its own tab. A technician taps what's missing, sets how many, and sends it.
-   It lands on the order list (the Supply orders tab in the Google Sheet); an Admin marks it Ordered, then Received.
-   A list sent with no signal waits on the phone and goes out when the signal is back, like truck readings. */
-const SUP_API = 14;                                   // the Google script version that has Supplies
+/* ---------- checklists (cleaning supplies, products, equipment) ----------
+   Each checklist works like the paper "Cleaning products checklist": tap what's missing, set how many, send it. It lands
+   on that checklist's order list (the Supply orders tab); an Admin marks it Ordered, then Received. Admins build and
+   change checklists here and choose who sees each one (Settings > Users and invites). A list sent with no signal waits
+   on the phone and goes out when the signal is back, like truck readings. */
+const SUP_API = 15;                                   // the Google script version with checklists and who-sees-what
 const K_SUP = "voda.supplies", K_SUPDRAFT = "voda.supDraft";
-let supplies = store.get(K_SUP);                      // { ver, products, requests, checks }: the sheet's last copy
+const DEFAULT_LIST = "cleaning";
+let supplies = null;                                  // { ver, lists, products, requests, checks }: the sheet's last copy
 let supDraft = Object.assign({ items: {}, note: "" }, store.get(K_SUPDRAFT) || {});   // marked on this phone, not sent yet
 if (!supDraft.items || typeof supDraft.items !== "object") supDraft.items = {};
+if (!supDraft.notes || typeof supDraft.notes !== "object") supDraft.notes = {};   // a note per checklist
+if (supDraft.note) { supDraft.notes[DEFAULT_LIST] = supDraft.notes[DEFAULT_LIST] || supDraft.note; delete supDraft.note; }
 const SEC_COLORS = ["#2f7a3f", "#1f4fbf", "#c2571a", "#b4233a", "#7c3aed", "#0d9488", "#92400e", "#475569"];   // the paper's colored blocks, then more
 const supOk = () => apiLevel >= SUP_API;
 const OPEN = r => r.status === "To order" || r.status === "Ordered";
 function saveSupDraft() { store.set(K_SUPDRAFT, supDraft); }
 function noteSupplies(s) {
   if (!s || !Array.isArray(s.products)) return;
-  supplies = { ver: s.ver || "", products: s.products, requests: Array.isArray(s.requests) ? s.requests : [], checks: Array.isArray(s.checks) ? s.checks : [] };
+  const lists = Array.isArray(s.lists) ? s.lists : [{ id: DEFAULT_LIST, name: "Cleaning supplies" }];   // a copy from before checklists
+  const withList = x => Object.assign({}, x, { list: x.list || DEFAULT_LIST });
+  supplies = { ver: s.ver || "", lists, products: s.products.map(withList),
+    requests: (Array.isArray(s.requests) ? s.requests : []).map(withList), checks: (Array.isArray(s.checks) ? s.checks : []).map(withList) };
   store.set(K_SUP, supplies);
   const ids = new Set(supplies.products.map(p => p.id));
   let gone = false;
-  for (const k of Object.keys(supDraft.items)) if (!ids.has(k)) { delete supDraft.items[k]; gone = true; }   // product taken off the list
+  for (const k of Object.keys(supDraft.items)) if (!ids.has(k)) { delete supDraft.items[k]; gone = true; }   // item taken off, or checklist taken away
   if (gone) saveSupDraft();
 }
+noteSupplies(store.get(K_SUP));
+
+/* who sees what: Admins everything; a technician what an Admin ticked (Trucks and/or checklists) */
+const userAccess = () => (session && Array.isArray(session.access) ? session.access : ["trucks"]);
+const canSee = sec => isAdmin() || userAccess().includes(sec);
+const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
+function allowedTabs() {
+  const out = [];
+  if (canSee("trucks")) out.push("trucks");
+  if (isAdmin() || userAccess().some(a => a !== "trucks")) out.push("supplies");
+  return out;
+}
+
 function supPlural(w) { return /(s|x|z|ch|sh)$/i.test(w) ? w + "es" : /[^aeiou]y$/i.test(w) ? w.slice(0, -1) + "ies" : w + "s"; }
-/** "2 gallons", "1 box", or just "3" for a product with no container. */
+/** "2 gallons", "1 box", or just "3" for an item with no container. */
 function supQty(qty, container) { return !container ? String(qty) : qty === 1 ? "1 " + container : `${qty} ${supPlural(container)}`; }
 /** "today", "yesterday", "Tue Nov 4" */
 function supDay(iso) {
@@ -2980,16 +3043,16 @@ function supWhen(iso) { const day = supDay(iso); return day === "today" || day =
 
 /** A list still on its way, laid over the sheet's copy the same way the script will save it. */
 function supApply(s, job) {
-  const d = job.data;
+  const d = job.data, list = d.list || DEFAULT_LIST;
   for (const it of d.items) {
     const p = s.products.find(x => x.id === it.productId);
     if (!p) continue;
     const open = s.requests.find(r => r.productId === p.id && r.status === "To order");
     const rec = { qty: it.qty, reportedAt: job.at, reportedBy: job.by, checkId: d.checkId, pending: true };
     if (open) Object.assign(open, rec);
-    else s.requests.unshift(Object.assign({ id: `tmp-${d.checkId}-${p.id}`, productId: p.id, product: p.name, container: p.container, section: p.section, status: "To order" }, rec));
+    else s.requests.unshift(Object.assign({ id: `tmp-${d.checkId}-${p.id}`, productId: p.id, product: p.name, container: p.container, section: p.section, status: "To order", list }, rec));
   }
-  if (!s.checks.some(c => c.id === d.checkId)) s.checks.unshift({ id: d.checkId, at: job.at, by: job.by, missing: d.items.length, note: d.note || "", pending: true });
+  if (!s.checks.some(c => c.id === d.checkId)) s.checks.unshift({ id: d.checkId, at: job.at, by: job.by, missing: d.items.length, note: d.note || "", list, pending: true });
 }
 /** What's on screen: the sheet's copy plus any lists not sent yet. */
 function supNow() {
@@ -2998,7 +3061,17 @@ function supNow() {
   for (const j of queue) if (j.action === "supplyReport") supApply(s, j);
   return s;
 }
-const supMarked = () => Object.entries(supDraft.items).filter(([, q]) => q > 0);
+/** The checklist on screen (the one picked, or the first one this person has). */
+function curList(s) {
+  const ls = visLists(s);
+  return ls.find(l => l.id === view.list) || ls[0] || null;
+}
+/** One checklist's share of everything. */
+function supScope(s, list) {
+  const mine = x => x.list === list.id;
+  return { ver: s.ver, list, products: s.products.filter(mine), requests: s.requests.filter(mine), checks: s.checks.filter(mine) };
+}
+const supMarkedIn = sc => sc.products.filter(p => supDraft.items[p.id] > 0).map(p => [p.id, supDraft.items[p.id]]);
 function supSetQty(id, qty) {
   qty = Math.max(0, Math.min(999, Math.round(qty) || 0));
   if (qty) supDraft.items[id] = qty; else delete supDraft.items[id];
@@ -3009,12 +3082,13 @@ function supRestoreDraft(job) {
   const d = job && job.draft;
   if (!d) return;
   for (const [k, q] of Object.entries(d.items || {})) if (!supDraft.items[k]) supDraft.items[k] = q;
-  if (!supDraft.note && d.note) supDraft.note = d.note;
+  const list = (job.data && job.data.list) || DEFAULT_LIST;
+  if (!supDraft.notes[list] && job.data && job.data.note) supDraft.notes[list] = job.data.note;
   saveSupDraft();
 }
-function supSections(s) {
+function supSections(sc) {
   const out = [];
-  for (const p of s.products) {
+  for (const p of sc.products) {
     let g = out.find(x => x.name === p.section);
     if (!g) out.push(g = { name: p.section, items: [] });
     g.items.push(p);
@@ -3025,7 +3099,7 @@ function supSections(s) {
 const secTheme = hex => `--sec:${hex};--sec-text:${readableOn(hex, "#ffffff")};--sec-text-dark:${readableOn(hex, "#151d27")}`;
 const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
-/* Trucks or Supplies */
+/* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
   view.tab = tab === "supplies" ? "supplies" : "trucks";
   if (sub) view.supTab = sub;
@@ -3034,16 +3108,22 @@ function setTab(tab, sub) {
   window.scrollTo(0, 0);
 }
 function applyTab() {
-  const sup = view.tab === "supplies";
+  const tabs = allowedTabs();
+  if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
+  const sup = view.tab === "supplies", trk = view.tab === "trucks";
   if (location.hash !== (sup ? "#supplies" : "")) {
     try { history.replaceState(null, "", sup ? "#supplies" : location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
-  $("fleetView").hidden = sup;
+  $("views").hidden = tabs.length < 2;
+  $("viewTrucks").hidden = !tabs.includes("trucks");
+  $("viewSupplies").hidden = !tabs.includes("supplies");
+  $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
-  $("viewTrucks").setAttribute("aria-pressed", String(!sup));
+  $("noAccess").hidden = tabs.length > 0;
+  $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
-  $("reportBtn").hidden = sup;
-  $("addTruck").hidden = sup || !isAdmin();
+  $("reportBtn").hidden = !trk;
+  $("addTruck").hidden = !trk || !isAdmin();
   renderSupplies();
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
@@ -3051,16 +3131,17 @@ $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 
 function renderSupBadge() {
   const s = supOk() ? supNow() : null;
-  const n = s ? s.requests.filter(r => r.status === "To order").length : 0;
+  const mine = new Set(visLists(s).map(l => l.id));
+  const n = s ? s.requests.filter(r => r.status === "To order" && mine.has(r.list)).length : 0;
   const b = $("supBadge");
   b.hidden = !n;
   b.textContent = String(n);
   b.title = n ? `${n} to order` : "";
-  $("viewSupplies").setAttribute("aria-label", n ? `Supplies, ${n} to order` : "Supplies");
+  $("viewSupplies").setAttribute("aria-label", n ? `Checklists, ${n} to order` : "Checklists");
 }
-function supTabNow(s) {
+function supTabNow(sc) {
   if (view.supTab === "check" || view.supTab === "orders") return view.supTab;
-  return isAdmin() && s.requests.some(r => r.status === "To order") ? "orders" : "check";
+  return isAdmin() && sc.requests.some(r => r.status === "To order") ? "orders" : "check";
 }
 function renderSupplies() {
   renderSupBadge();
@@ -3069,30 +3150,49 @@ function renderSupplies() {
   if (loaded && !supOk()) {
     box.replaceChildren(h("div", { class: "panel" },
       h("h2", { text: "One more step: update the Google script" }),
-      h("p", { class: "meta", text: "Supplies needs the newest Google script. In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+      h("p", { class: "meta", text: "Checklists need the newest Google script. In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
     return;
   }
   const s = supNow();
   if (!s) {
-    box.replaceChildren(h("p", { class: "loading", text: offline ? "Supplies need a connection the first time. Try again when you're back online." : "Loading supplies…" }));
+    box.replaceChildren(h("p", { class: "loading", text: offline ? "Checklists need a connection the first time. Try again when you're back online." : "Loading checklists…" }));
     return;
   }
-  const tab = supTabNow(s);
+  const lists = visLists(s);
+  const L = curList(s);
+  if (!L) {
+    box.replaceChildren(h("div", { class: "panel sup-empty" }, ...(isAdmin()
+      ? [h("p", { class: "meta", text: "No checklists yet." }), h("div", null, h("button", { class: "btn primary", type: "button", id: "supNewList", text: "+ New checklist", onclick: () => openChecklistEditor(null) }))]
+      : [h("p", { class: "meta", text: "No checklists for you yet. Ask an admin to give you one." })])));
+    return;
+  }
+  view.list = L.id;
+  const sc = supScope(s, L);
+  const tab = supTabNow(sc);
   view.supTab = tab;   // stays put while things change underneath (an admin's list emptying out, say)
-  const toOrder = s.requests.filter(r => r.status === "To order").length;
-  const marked = supMarked().length;
+  const toOrder = sc.requests.filter(r => r.status === "To order").length;
+  const marked = supMarkedIn(sc).length;
   const seg = (key, text, n, hot) => h("button", { class: "seg-btn", type: "button", role: "tab", id: "supTab-" + key, "aria-selected": String(tab === key),
     onclick: () => { view.supTab = key; saveView(); renderSupplies(); window.scrollTo(0, 0); } },
     text, n ? h("span", { class: "n" + (hot ? " hot" : ""), text: String(n) }) : null);
-  const last = s.checks[0];
-  box.replaceChildren(
+  const chips = lists.length > 1 || isAdmin() ? h("div", { class: "list-chips", role: "tablist", "aria-label": "Checklists", id: "listChips" },
+    lists.map(l => {
+      const n = s.requests.filter(r => r.list === l.id && r.status === "To order").length;
+      return h("button", { class: "list-chip", type: "button", role: "tab", "data-list": l.id, "aria-selected": String(l.id === L.id),
+        onclick: () => { if (view.list !== l.id) { view.list = l.id; view.supTab = ""; saveView(); renderSupplies(); window.scrollTo(0, 0); } } },
+        l.name, n ? h("span", { class: "n", text: String(n) }) : null);
+    }),
+    isAdmin() ? h("button", { class: "list-chip new", type: "button", id: "supNewList", text: "+ New", "aria-label": "New checklist", title: "New checklist", onclick: () => openChecklistEditor(null) }) : null) : null;
+  const last = sc.checks[0];
+  box.replaceChildren(...[
+    chips || h("h2", { class: "sup-title", id: "supTitle", text: L.name }),   // one checklist: its name as the heading
     h("div", { class: "sup-top" },
-      h("div", { class: "seg", role: "tablist", "aria-label": "Supplies" }, seg("check", "Checklist", marked, false), seg("orders", "Order list", toOrder, true)),
-      isAdmin() && tab === "check" ? h("button", { class: "btn small", type: "button", id: "supEdit", text: "Edit products", onclick: openProductEditor }) : null),
+      h("div", { class: "seg", role: "tablist", "aria-label": L.name }, seg("check", "Checklist", marked, false), seg("orders", "Order list", toOrder, true)),
+      isAdmin() && tab === "check" ? h("button", { class: "btn small", type: "button", id: "supEdit", text: "Edit checklist", onclick: () => openChecklistEditor(L.id) }) : null),
     h("p", { class: "sup-last", id: "supLast" }, ...(last
       ? ["Last check: ", h("strong", { text: supWhen(last.at) }), ` by ${last.by || "someone"} · ${last.missing ? `${last.missing} missing` : "nothing missing"}${last.pending ? " · sending…" : ""}`]
       : ["No checks yet."])),
-    ...(tab === "orders" ? supOrdersBody(s) : supCheckBody(s)));
+    ...(tab === "orders" ? supOrdersBody(sc) : supCheckBody(sc))].filter(Boolean));
 }
 /** Re-draw after a tap, keeping the keyboard focus where it was. */
 function supRerender() {
@@ -3103,14 +3203,15 @@ function supRerender() {
 }
 
 /* the checklist */
-function supCheckBody(s) {
+function supCheckBody(sc) {
   const openOf = id => {
-    const l = s.requests.filter(r => r.productId === id && OPEN(r));
+    const l = sc.requests.filter(r => r.productId === id && OPEN(r));
     return l.find(r => r.status === "To order") || l[0] || null;
   };
   return [
     h("p", { class: "sup-hint", text: "Tap anything that's missing or running low and set how many we need. Then tap Send list." }),
-    ...supSections(s).map(g => {
+    ...(sc.products.length ? [] : [h("p", { class: "meta", text: "This checklist has no items yet." })]),
+    ...supSections(sc).map(g => {
       const cnt = g.items.filter(p => supDraft.items[p.id]).length;
       return h("section", { class: "sup-sec", style: secTheme(g.color) },
         h("div", { class: "sup-sec-head" }, h("h3", { text: g.name }),
@@ -3119,17 +3220,17 @@ function supCheckBody(s) {
     }),
     h("div", { class: "field sup-note" },
       h("label", { for: "supNote", text: "Note for the office (optional)" }),
-      h("textarea", { id: "supNote", rows: "2", maxlength: "500", placeholder: "Anything else, like “need it before Friday”", value: supDraft.note || "",
-        oninput: e => { supDraft.note = e.target.value; saveSupDraft(); } })),
-    supBar(),
-    h("details", { class: "panel how" }, h("summary", { text: "How Supplies works" }),
+      h("textarea", { id: "supNote", rows: "2", maxlength: "500", placeholder: "Anything else, like “need it before Friday”", value: supDraft.notes[sc.list.id] || "",
+        oninput: e => { supDraft.notes[sc.list.id] = e.target.value; saveSupDraft(); } })),
+    supBar(sc),
+    h("details", { class: "panel how" }, h("summary", { text: "How checklists work" }),
       h("ul", null, [
-        ["Check", "tap what's missing or low, set how many we need, then Send list. It goes straight on the order list."],
+        ["Check", "tap what's missing or low, set how many we need, then Send list. It goes straight on this checklist's order list."],
         ["Already on the list", "if it isn't ordered yet, the number you send replaces the old one. Once it's ordered, sending it again adds a new line."],
-        ["Nothing missing", "tap Checked: nothing missing, so the office knows the shelf was checked."],
+        ["Nothing missing", "tap Checked: nothing missing, so the office knows it was checked."],
         ["No signal", "the list waits on this phone and sends itself when you're back online."],
-        ["Admins", "Order list: tap Ordered when you place the order and Received when it arrives. Share copies the list for a text or email to the supplier."],
-        ["Google Sheet", "the order list is the Supply orders tab and every check is on the Supply checks tab."]
+        ["Admins", "Order list: tap Ordered when you place the order and Received when it arrives. Share copies the list for a text or email to the supplier. + New checklist and Edit checklist build them; Settings > Users and invites chooses who sees each one."],
+        ["Google Sheet", "checklists are on the Checklists and Supplies tabs, the order lists on Supply orders, and every check on Supply checks."]
       ].map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))))];
 }
 function supItem(p, open) {
@@ -3154,36 +3255,43 @@ function supItem(p, open) {
       input,
       h("button", { type: "button", id: "sa-" + p.id, "aria-label": `One more ${p.name}`, text: "+", onclick: () => { supSetQty(p.id, (supDraft.items[p.id] || 0) + 1); supRerender(); } })) : null);
 }
-function supBar() {
-  const n = supMarked().length;
+function supBar(sc) {
+  const n = supMarkedIn(sc).length;
   return h("div", { class: "sup-bar" + (n ? " on" : ""), id: "supBar" }, ...(n
     ? [h("span", { class: "sum", text: `${n} item${n === 1 ? "" : "s"} marked` }),
        h("button", { class: "btn ghost", type: "button", id: "supClear", text: "Clear", onclick: ev => {
          const b = ev.currentTarget;
          if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to clear"; return; }
-         supDraft = { items: {}, note: supDraft.note || "" }; saveSupDraft(); supRerender();
+         for (const p of sc.products) delete supDraft.items[p.id];
+         saveSupDraft(); supRerender();
        } }),
-       h("button", { class: "btn primary", type: "button", id: "supSend", text: "Send list", onclick: () => supSend(false) })]
+       h("button", { class: "btn primary", type: "button", id: "supSend", text: "Send list", onclick: () => supSend(sc, false) })]
     : [h("span", { class: "sum quiet", text: "Nothing marked" }),
-       h("button", { class: "btn", type: "button", id: "supNone", text: "Checked: nothing missing", onclick: () => supSend(true) })]));
+       h("button", { class: "btn", type: "button", id: "supNone", text: "Checked: nothing missing", onclick: () => supSend(sc, true) })]));
 }
 function supBarUpdate() {
+  const s = supNow(), L = s && curList(s);
+  if (!L) return;
+  const sc = supScope(s, L);
   const bar = $("supBar");
-  if (bar) bar.replaceWith(supBar());
-  const n = supMarked().length, t = $("supTab-check");
+  if (bar) bar.replaceWith(supBar(sc));
+  const n = supMarkedIn(sc).length, t = $("supTab-check");
   if (t) t.replaceChildren("Checklist", ...(n ? [h("span", { class: "n", text: String(n) })] : []));
 }
-function supSend(nothing) {
+function supSend(sc, nothing) {
   if (!session) return;
-  if (!supOk()) { toast("Supplies need the Google script updated first (see the note at the top)."); return; }
-  const items = nothing ? [] : supMarked().map(([productId, qty]) => ({ productId, qty }));
+  if (!supOk()) { toast("Checklists need the Google script updated first (see the note at the top)."); return; }
+  const marked = supMarkedIn(sc);
+  const items = nothing ? [] : marked.map(([productId, qty]) => ({ productId, qty }));
   if (!nothing && !items.length) return;
+  const list = sc.list.id;
   const checkId = "c-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-  const note = String(supDraft.note || "").trim().slice(0, 500);
+  const note = String(supDraft.notes[list] || "").trim().slice(0, 500);
   enqueue({ action: "supplyReport", key: "sup:" + checkId, at: new Date().toISOString(), by: session.name,
-    data: { checkId, items, note }, draft: JSON.parse(JSON.stringify(supDraft)),
-    okMsg: nothing ? "Saved: nothing missing" : `Sent: ${items.length} item${items.length === 1 ? "" : "s"} on the order list` });
-  supDraft = { items: {}, note: "" };
+    data: { checkId, list, items, note }, draft: { items: Object.fromEntries(marked) },
+    okMsg: nothing ? `${sc.list.name}: saved, nothing missing` : `Sent: ${items.length} item${items.length === 1 ? "" : "s"} on the ${sc.list.name} order list` });
+  for (const [id] of marked) delete supDraft.items[id];
+  delete supDraft.notes[list];
   saveSupDraft();
   if (!navigator.onLine) toast("No signal. The list will send itself when you're back online.");
   renderSupplies();
@@ -3191,14 +3299,14 @@ function supSend(nothing) {
 }
 
 /* the order list */
-function supOrdersBody(s) {
-  const pos = new Map(s.products.map((p, i) => [p.id, i]));
+function supOrdersBody(sc) {
+  const pos = new Map(sc.products.map((p, i) => [p.id, i]));
   const byList = (a, b) => (pos.has(a.productId) ? pos.get(a.productId) : 1e6) - (pos.has(b.productId) ? pos.get(b.productId) : 1e6);
-  const toOrder = s.requests.filter(r => r.status === "To order").sort(byList);
-  const ordered = s.requests.filter(r => r.status === "Ordered").sort(byList);
-  const closed = s.requests.filter(r => r.status === "Received" || r.status === "Removed");
+  const toOrder = sc.requests.filter(r => r.status === "To order").sort(byList);
+  const ordered = sc.requests.filter(r => r.status === "Ordered").sort(byList);
+  const closed = sc.requests.filter(r => r.status === "Received" || r.status === "Removed");
   const admin = isAdmin();
-  const notes = s.checks.filter(c => c.note && s.requests.some(r => r.checkId === c.id && OPEN(r)));
+  const notes = sc.checks.filter(c => c.note && sc.requests.some(r => r.checkId === c.id && OPEN(r)));
   const out = [];
   if (!toOrder.length) out.push(h("div", { class: "panel sup-empty", id: "supEmpty" },
     h("p", { class: "empty-ok", text: "Nothing to order right now ✓" }),
@@ -3209,7 +3317,7 @@ function supOrdersBody(s) {
     out.push(h("section", { class: "ord-sec to", id: "ordTo" },
       h("div", { class: "ord-head" }, h("h3", { text: "To order" }), h("span", { class: "cnt", text: String(toOrder.length) }),
         h("div", { class: "ord-tools" },
-          h("button", { class: "btn small", type: "button", id: "supShare", text: "Share list", onclick: () => supShare(s) }),
+          h("button", { class: "btn small", type: "button", id: "supShare", text: "Share list", onclick: () => supShare(sc) }),
           admin && ready.length > 1 ? h("button", { class: "btn small", type: "button", id: "supAllOrdered", text: "All ordered", onclick: ev => {
             const b = ev.currentTarget;
             if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = `Tap again: mark all ${ready.length} ordered`; return; }
@@ -3272,12 +3380,12 @@ async function supChange(data, okMsg) {
   }
   supRerender();
 }
-function supOrderText(s) {
-  const pos = new Map(s.products.map((p, i) => [p.id, i]));
-  const list = s.requests.filter(r => r.status === "To order")
+function supOrderText(sc) {
+  const pos = new Map(sc.products.map((p, i) => [p.id, i]));
+  const list = sc.requests.filter(r => r.status === "To order")
     .sort((a, b) => (pos.has(a.productId) ? pos.get(a.productId) : 1e6) - (pos.has(b.productId) ? pos.get(b.productId) : 1e6));
   const d = clockNow();
-  const lines = [`VODA cleaning supplies to order (${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()})`];
+  const lines = [`VODA ${sc.list.name}: to order (${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()})`];
   let sec = null;
   for (const r of list) {
     if (r.section !== sec) { sec = r.section; lines.push("", (sec || "Other") + ":"); }
@@ -3285,8 +3393,8 @@ function supOrderText(s) {
   }
   return lines.join("\n");
 }
-async function supShare(s) {
-  const text = supOrderText(s);
+async function supShare(sc) {
+  const text = supOrderText(sc);
   if (navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
   try { await navigator.clipboard.writeText(text); toast("Copied. Paste it into a text or email."); }
   catch (e) {
@@ -3329,69 +3437,116 @@ function openSupLine(id) {
       h("div", { class: "right" }, b("Cancel", "", closeDialog), b("Save", "primary", () => go(null), "sl-save"))));
 }
 
-/** Admin: the product list (names, containers, sections, order), saved all at once. */
-function openProductEditor() {
+/** Admin: build a new checklist, or change one (its name and all its items: names, containers, sections, order). */
+function openChecklistEditor(listId) {
   const s = supNow();
   if (!s) return;
+  if (!supOk()) { toast("Checklists need the Google script updated first (see the note at the top)."); return; }
   const base = s.ver;
-  const secs = supSections(s).map(g => ({ name: g.name, items: g.items.map(p => ({ id: p.id, name: p.name, container: p.container })) }));
+  const L = listId ? s.lists.find(l => l.id === listId) : null;
+  if (listId && !L) return;
+  let listName = L ? L.name : "";
+  const secs = L ? supSections(supScope(s, L)).map(g => ({ name: g.name, items: g.items.map(p => ({ id: p.id, name: p.name, container: p.container })) }))
+    : [{ name: "General", items: [{ id: "", name: "", container: "" }] }];
   const err = h("p", { class: "dlg-err", role: "alert", id: "ed-err" });
   const ib = (text, label, disabled, onclick) => h("button", { class: "icon-btn xs", type: "button", "aria-label": label, title: label, disabled, text, onclick });
   const move = (list, i, d) => { list.splice(i + d, 0, list.splice(i, 1)[0]); };
   const draw = focusId => {
     const top = dlg.scrollTop;
     openDialog(
-      h("h3", { id: "dlgTitle", text: "Edit products" }),
-      h("p", { text: "Rename, move, add or remove products. Everyone's checklist changes when you tap Save. Items already on the order list stay there." }),
+      h("h3", { id: "dlgTitle", text: L ? "Edit checklist" : "New checklist" }),
+      h("p", { text: L ? "Rename, move, add or remove items. Everyone with this checklist sees the change when you tap Save. Items already on the order list stay there."
+        : "Name it, add its items (group them in sections if you like), and Save. Then choose who sees it in Settings > Users and invites." }),
+      h("div", { class: "field" }, h("label", { for: "ed-list", text: "Checklist name" }),
+        h("input", { id: "ed-list", type: "text", maxlength: "40", value: listName, placeholder: "e.g. Equipment", oninput: e => { listName = e.target.value; } })),
       ...secs.map((g, si) => h("fieldset", { class: "ed-sec" },
         h("div", { class: "ed-sec-head" },
           h("input", { id: `ed-s-${si}`, type: "text", value: g.name, maxlength: "40", "aria-label": "Section name", placeholder: "Section name", oninput: e => { g.name = e.target.value; } }),
           ib("↑", "Move section up", si === 0, () => { move(secs, si, -1); draw(); }),
           ib("↓", "Move section down", si === secs.length - 1, () => { move(secs, si, 1); draw(); })),
         ...g.items.map((p, ii) => h("div", { class: "ed-row", "data-row": `${si}-${ii}` },
-          h("input", { id: `ed-n-${si}-${ii}`, type: "text", value: p.name, maxlength: "60", placeholder: "Product name", "aria-label": "Product name", oninput: e => { p.name = e.target.value; } }),
-          h("input", { id: `ed-c-${si}-${ii}`, type: "text", value: p.container, maxlength: "20", placeholder: "gallon, box…", "aria-label": `Container for ${p.name || "this product"}`, oninput: e => { p.container = e.target.value; } }),
+          h("input", { id: `ed-n-${si}-${ii}`, type: "text", value: p.name, maxlength: "60", placeholder: "Item name", "aria-label": "Item name", oninput: e => { p.name = e.target.value; } }),
+          h("input", { id: `ed-c-${si}-${ii}`, type: "text", value: p.container, maxlength: "20", placeholder: "gallon, box…", "aria-label": `Container for ${p.name || "this item"}`, oninput: e => { p.container = e.target.value; } }),
           h("div", { class: "ed-acts" },
-            ib("↑", `Move ${p.name || "product"} up`, ii === 0, () => { move(g.items, ii, -1); draw(); }),
-            ib("↓", `Move ${p.name || "product"} down`, ii === g.items.length - 1, () => { move(g.items, ii, 1); draw(); }),
+            ib("↑", `Move ${p.name || "item"} up`, ii === 0, () => { move(g.items, ii, -1); draw(); }),
+            ib("↓", `Move ${p.name || "item"} down`, ii === g.items.length - 1, () => { move(g.items, ii, 1); draw(); }),
             secs.length > 1 ? (() => {
-              const sel = h("select", { "aria-label": `Section for ${p.name || "product"} (pick another to move it)`, title: "Move to another section", onchange: e => { const to = Number(e.target.value); if (to !== si) { secs[to].items.push(g.items.splice(ii, 1)[0]); draw(); } } },
+              const sel = h("select", { "aria-label": `Section for ${p.name || "item"} (pick another to move it)`, title: "Move to another section", onchange: e => { const to = Number(e.target.value); if (to !== si) { secs[to].items.push(g.items.splice(ii, 1)[0]); draw(); } } },
                 secs.map((x, k) => h("option", { value: String(k), text: x.name || `Section ${k + 1}` })));
               sel.value = String(si);
               return sel;
             })() : null,
             h("button", { class: "btn small ghost danger", type: "button", text: "Remove", onclick: () => { g.items.splice(ii, 1); draw(); } })))),
-        h("div", null, h("button", { class: "btn small", type: "button", id: `ed-add-${si}`, text: "+ Add product", onclick: () => { g.items.push({ id: "", name: "", container: "" }); draw(`ed-n-${si}-${g.items.length - 1}`); } })))),
+        h("div", null, h("button", { class: "btn small", type: "button", id: `ed-add-${si}`, text: "+ Add item", onclick: () => { g.items.push({ id: "", name: "", container: "" }); draw(`ed-n-${si}-${g.items.length - 1}`); } })))),
       h("div", null, h("button", { class: "btn small", type: "button", id: "ed-add-sec", text: "+ Add section", onclick: () => { secs.push({ name: "", items: [{ id: "", name: "", container: "" }] }); draw(`ed-s-${secs.length - 1}`); } })),
       err,
-      h("div", { class: "dlg-foot ed-foot" }, h("div", { class: "right" },
-        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
-        h("button", { class: "btn primary", type: "button", id: "ed-save", text: "Save", onclick: async ev => {
-          const products = [];
-          for (const g of secs) for (const p of g.items) {
-            const name = p.name.trim().replace(/\s+/g, " ");
-            if (name) products.push({ id: p.id, name, container: p.container.trim(), section: g.name.trim().replace(/\s+/g, " ") || "Other" });
-          }
-          if (!products.length) { err.textContent = "The checklist needs at least one product."; return; }
-          const btn = ev.currentTarget;
-          btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+      h("div", { class: "dlg-foot ed-foot" },
+        L ? h("button", { class: "btn ghost danger", type: "button", id: "ed-del", text: "Delete checklist", onclick: async ev => {
+          const b = ev.currentTarget;
+          if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = `Tap again to delete ${L.name}`; return; }
+          b.disabled = true; err.textContent = "";
           try {
-            const out = await api("saveProducts", { base, products });
+            const out = await api("deleteChecklist", { base, id: L.id });
             noteSupplies(out.supplies);
-            closeDialog();
-            toast("Products saved");
+            closeDialog(); view.list = ""; view.supTab = ""; saveView();
+            toast(`${L.name} deleted`);
             renderSupplies();
-          } catch (e) {
-            if (e && e.error === "conflict") { noteSupplies(e.supplies); renderSupplies(); err.textContent = "Someone else changed the product list while you were editing, so this wasn't saved. Close this and open Edit products again to see their version."; }
-            else err.textContent = e && e.error === "offline" ? "No connection. Nothing was saved; try again when you're back online." : errText(e);
-            btn.disabled = false; btn.textContent = "Save";
-          }
-        } }))));
+          } catch (e) { b.disabled = false; err.textContent = edErr(e); }
+        } }) : null,
+        h("div", { class: "right" },
+          h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+          h("button", { class: "btn primary", type: "button", id: "ed-save", text: L ? "Save" : "Create", onclick: async ev => {
+            const name = listName.trim().replace(/\s+/g, " ");
+            if (!name) { err.textContent = "Give the checklist a name."; return; }
+            const products = [];
+            for (const g of secs) for (const p of g.items) {
+              const pname = p.name.trim().replace(/\s+/g, " ");
+              if (pname) products.push({ id: p.id, name: pname, container: p.container.trim(), section: g.name.trim().replace(/\s+/g, " ") || "Other" });
+            }
+            if (!products.length) { err.textContent = "Add at least one item."; return; }
+            const btn = ev.currentTarget;
+            btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+            try {
+              const out = await api("saveChecklist", { base, list: { id: L ? L.id : "", name }, products });
+              noteSupplies(out.supplies);
+              closeDialog();
+              if (!L && out.list) { view.list = out.list.id; view.supTab = "check"; saveView(); }
+              toast(L ? "Checklist saved" : `${name} created. Choose who sees it in Settings > Users and invites.`);
+              renderSupplies();
+            } catch (e) {
+              err.textContent = edErr(e);
+              btn.disabled = false; btn.textContent = L ? "Save" : "Create";
+            }
+          } }))));
     dlg.firstChild.classList.add("ed");
     dlg.scrollTop = top;
     if (focusId && $(focusId)) $(focusId).focus();
   };
-  draw();
+  const edErr = e => {
+    if (e && e.error === "conflict") { noteSupplies(e.supplies); renderSupplies(); return "Someone else changed the checklists while you were editing, so this wasn't saved. Close this and open it again to see their version."; }
+    if (e && e.error === "duplicate_list") return `There's already a checklist called "${e.name}". Pick another name.`;
+    if (e && e.error === "gone") return "This checklist was deleted on another phone.";
+    if (e && e.error === "offline") return "No connection. Nothing was saved; try again when you're back online.";
+    return errText(e);
+  };
+  draw(L ? null : "ed-list");
+}
+
+/** Admin: Trucks and checklist toggles for one technician (or for an invite). */
+function accessChips(selected, onchange, idPrefix) {
+  const lists = (supplies && supplies.lists) || [];
+  const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]));
+  return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
+    h("span", { class: "acc-lbl", text: "Sees:" }),
+    items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
+      "aria-pressed": String(selected.includes(id)),
+      onclick: ev => {
+        const on = ev.currentTarget.getAttribute("aria-pressed") !== "true";
+        ev.currentTarget.setAttribute("aria-pressed", String(on));
+        const next = items.map(x => x[0]).filter(k => k === id ? on : selected.includes(k));
+        selected.splice(0, selected.length, ...next);
+        onchange(next.slice(), name, on);
+      } }, name)));
 }
 
 /* ---------- install as an app ---------- */
@@ -3428,7 +3583,9 @@ window.addEventListener("online", () => { if (session && CONFIGURED) { refresh(t
 setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true); }, 90000);
 
 renderInstall();
-if (location.hash === "#order-list") { view.tab = "supplies"; view.supTab = "orders"; saveView(); }   // the link in the supplies email
+if (/^#order-list(\/|$)/.test(location.hash)) {   // the link in the checklist email
+  view.tab = "supplies"; view.supTab = "orders"; view.list = decodeURIComponent(location.hash.slice(12)) || view.list; saveView();
+}
 else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
