@@ -24,8 +24,10 @@
  * Everyone signs in to the app with their own username and passcode (4 to 6 characters, their choice).
  * The very first account is made with the access code on the Setup tab and becomes an Admin.
  * After that, an Admin invites each person from the app (Settings > Users) and gives them a one-time code.
- * Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks;
- * this script refuses anything else from a technician, whatever the app sends.
+ * Admins can do everything. Technicians see only what an Admin gives them (see WHO SEES WHAT): on trucks they update only
+ * TM hours on truckmount trucks; on checklists they add missing items and send them, and see the order list, but can't
+ * mark anything ordered or received, change a count, or remove anything already on it.
+ * This script refuses anything else from a technician, whatever the app sends.
  * Locked out of the only Admin account? Pick "adminRecovery" in the function menu and click Run: the log shows a
  * one-time code; enter it in the app under "I have a code" to choose a new passcode.
  *
@@ -88,7 +90,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 16;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 17;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2310,12 +2312,17 @@ function supplyReport_(req) {
   const note = String(req.note || "").trim().slice(0, 500);
   const lines = [], add = [], seen = {};
   let skipped = 0;
+  const already = [];
+  const admin = !!(req.user && req.user.role === "admin");
   items.forEach(function (it) {
     const p = it && products[String(it.productId || "")];
     const qty = Math.round(Number(it && it.qty));
     if (!p || seen[p.id] || !(qty >= 1 && qty <= SUP_MAX_QTY)) { skipped++; return; }
     seen[p.id] = true;
     const open = all.filter(function (x) { return x.rec.productId === p.id && x.rec.status === "To order"; })[0];
+    // Technicians add to the order list but never change what's on it: an item already there waiting to be ordered
+    // stays exactly as it is (only an Admin changes or removes it). An Admin's newer count replaces the old one.
+    if (open && !admin) { already.push(p.name); return; }
     const rec = open ? open.rec : { id: supNewId_("r"), productId: p.id, status: "To order", orderedAt: "", orderedBy: "", closedAt: "", closedBy: "" };
     rec.product = p.name; rec.container = p.container; rec.section = p.section; rec.list = list.id;
     rec.qty = qty;
@@ -2331,7 +2338,7 @@ function supplyReport_(req) {
   if (lines.length && req.user && req.user.role !== "admin") {
     try { supplyEmail_(by, list, lines, note, false); } catch (e) { /* an email problem never stops the list from saving */ }
   }
-  return { ok: true, skipped: skipped, supplies: suppliesForApp_(true, req.user) };
+  return { ok: true, skipped: skipped, already: already, supplies: suppliesForApp_(true, req.user) };
 }
 
 /** Admin: mark items Ordered / Received / back to To order / Removed, and/or change how many. */

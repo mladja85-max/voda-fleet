@@ -484,6 +484,8 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .sup-tap:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; }
 .sup-box { grid-row: span 2; width: 24px; height: 24px; border-radius: 7px; border: 2px solid color-mix(in srgb, var(--muted) 70%, transparent); display: grid; place-items: center; color: #fff; }
 .marked .sup-box { background: var(--soon); border-color: var(--soon); }
+.locked .sup-tap { cursor: default; }
+.locked .sup-box { border-style: dashed; opacity: .55; }
 .sup-box svg { width: 16px; height: 16px; }
 .sup-name { font-weight: 700; font-size: 1.02rem; line-height: 1.25; overflow-wrap: anywhere; }
 .sup-sub { color: var(--muted); font-size: .82rem; display: flex; gap: 4px 8px; flex-wrap: wrap; align-items: center; }
@@ -908,7 +910,7 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 16;                          // the Google script version this app expects (16: a note on each checklist)
+const NEEDS_API = 17;                          // the Google script version this app expects (17: technicians can't change the order list)
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like Checklists) won't work. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -2211,6 +2213,9 @@ function jobDone(job, out) {
     delete knownBase[job.key];
   } else if (job.action === "supplyReport" && out) {
     noteSupplies(out.supplies);
+    if (Array.isArray(out.already) && out.already.length) {
+      job.okMsg = `${out.already.join(", ")}: already on the order list, so left as it was. Only an admin can change ${out.already.length === 1 ? "it" : "them"}.`;
+    }
   } else if (job.action === "tmSkip" && out && out.truck) {
     const cur = byId(job.data.id);
     if (cur && !pendingFor(job.key).length) replaceTruck(Object.assign({}, cur, { tmSkip: out.truck.tmSkip || "" }));
@@ -3050,6 +3055,7 @@ function supApply(s, job) {
     const p = s.products.find(x => x.id === it.productId);
     if (!p) continue;
     const open = s.requests.find(r => r.productId === p.id && r.status === "To order");
+    if (open && !job.admin) continue;   // a technician's list never changes what's already on the order list
     const rec = { qty: it.qty, reportedAt: job.at, reportedBy: job.by, checkId: d.checkId, pending: true };
     if (open) Object.assign(open, rec);
     else s.requests.unshift(Object.assign({ id: `tmp-${d.checkId}-${p.id}`, productId: p.id, product: p.name, container: p.container, section: p.section, status: "To order", list }, rec));
@@ -3073,7 +3079,12 @@ function supScope(s, list) {
   const mine = x => x.list === list.id;
   return { ver: s.ver, list, products: s.products.filter(mine), requests: s.requests.filter(mine), checks: s.checks.filter(mine) };
 }
-const supMarkedIn = sc => sc.products.filter(p => supDraft.items[p.id] > 0).map(p => [p.id, supDraft.items[p.id]]);
+/** Technicians: items waiting on the order list can't be marked again; only an Admin changes or removes them. */
+const supLocked = sc => new Set(isAdmin() ? [] : sc.requests.filter(r => r.status === "To order").map(r => r.productId));
+function supMarkedIn(sc) {
+  const locked = supLocked(sc);
+  return sc.products.filter(p => supDraft.items[p.id] > 0 && !locked.has(p.id)).map(p => [p.id, supDraft.items[p.id]]);
+}
 function supSetQty(id, qty) {
   qty = Math.max(0, Math.min(999, Math.round(qty) || 0));
   if (qty) supDraft.items[id] = qty; else delete supDraft.items[id];
@@ -3229,7 +3240,7 @@ function supCheckBody(sc) {
     h("details", { class: "panel how" }, h("summary", { text: "How checklists work" }),
       h("ul", null, [
         ["Check", "tap what's missing or low, set how many we need, then Send list. It goes straight on this checklist's order list."],
-        ["Already on the list", "if it isn't ordered yet, the number you send replaces the old one. Once it's ordered, sending it again adds a new line."],
+        ["Already on the list", "an item waiting to be ordered can't be marked again by a technician, and only an admin can change or remove anything on the order list. Once it's ordered, it can be sent again if more is needed."],
         ["Nothing missing", "tap Checked: nothing missing, so the office knows it was checked."],
         ["No signal", "the list waits on this phone and sends itself when you're back online."],
         ["Admins", "Order list: tap Ordered when you place the order and Received when it arrives. Share copies the list for a text or email to the supplier. + New checklist and Edit checklist build them; Settings > Users and invites chooses who sees each one."],
@@ -3237,12 +3248,17 @@ function supCheckBody(sc) {
       ].map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))))];
 }
 function supItem(p, open) {
-  const qty = supDraft.items[p.id] || 0;
+  const locked = !isAdmin() && !!open && open.status === "To order";
+  const qty = locked ? 0 : supDraft.items[p.id] || 0;
   const chip = !open ? null : open.status === "To order"
     ? h("span", { class: "sup-chip to", text: `On order list: ${supQty(open.qty, p.container)}` })
     : h("span", { class: "sup-chip ord", text: `Ordered ${supDay(open.orderedAt)}` });
-  const tap = h("button", { class: "sup-tap", type: "button", id: "sp-" + p.id, "aria-pressed": String(!!qty),
-    onclick: () => { supSetQty(p.id, qty ? 0 : (open && open.status === "To order" ? open.qty : 1)); supRerender(); } },
+  const tap = h("button", { class: "sup-tap", type: "button", id: "sp-" + p.id, "aria-pressed": String(!!qty), "aria-disabled": locked ? "true" : null,
+    title: locked ? "Already on the order list" : null,
+    onclick: () => {
+      if (locked) { toast(`${p.name} is already on the order list (${supQty(open.qty, p.container)}${open.reportedBy ? ", asked by " + open.reportedBy : ""}). Only an admin can change it.`); return; }
+      supSetQty(p.id, qty ? 0 : (open && open.status === "To order" ? open.qty : 1)); supRerender();
+    } },
     h("span", { class: "sup-box", "aria-hidden": "true" }),
     h("span", { class: "sup-name", text: p.name }),
     h("span", { class: "sup-sub" }, p.container ? h("span", { text: p.container }) : null, chip));
@@ -3251,7 +3267,7 @@ function supItem(p, open) {
     onfocus: e => e.target.select(),
     oninput: e => { const v = parseInt(e.target.value.replace(/\D/g, ""), 10); if (v > 0) { supSetQty(p.id, v); supBarUpdate(); } },
     onchange: e => { e.target.value = String(supDraft.items[p.id] || 1); } }) : null;
-  return h("li", { class: "sup-item" + (qty ? " marked" : ""), "data-p": p.id }, tap,
+  return h("li", { class: "sup-item" + (qty ? " marked" : "") + (locked ? " locked" : ""), "data-p": p.id }, tap,
     qty ? h("div", { class: "step" },
       h("span", { class: "lbl", text: "Need" }),
       h("button", { type: "button", id: "sm-" + p.id, "aria-label": qty === 1 ? `Unmark ${p.name}` : `One less ${p.name}`, text: "−", onclick: () => { supSetQty(p.id, (supDraft.items[p.id] || 1) - 1); supRerender(); } }),
@@ -3290,7 +3306,7 @@ function supSend(sc, nothing) {
   const list = sc.list.id;
   const checkId = "c-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   const note = String(supDraft.notes[list] || "").trim().slice(0, 500);
-  enqueue({ action: "supplyReport", key: "sup:" + checkId, at: new Date().toISOString(), by: session.name,
+  enqueue({ action: "supplyReport", key: "sup:" + checkId, at: new Date().toISOString(), by: session.name, admin: isAdmin(),
     data: { checkId, list, items, note }, draft: { items: Object.fromEntries(marked) },
     okMsg: nothing ? `${sc.list.name}: saved, nothing missing` : `Sent: ${items.length} item${items.length === 1 ? "" : "s"} on the ${sc.list.name} order list` });
   for (const [id] of marked) delete supDraft.items[id];
