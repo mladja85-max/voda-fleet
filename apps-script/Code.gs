@@ -50,7 +50,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "oilInterval", "milesAtOil", "milesNow", "tm", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
   "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color"];
-const API_VERSION = 8;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 9;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color); older sheets get them automatically
 const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
@@ -194,14 +194,14 @@ function doPost(e) {
 function saveTruck_(req) {
   const id = String(req.id || "").trim();
   if (!/^[a-z0-9-]{1,60}$/.test(id) || !req.truck || typeof req.truck !== "object") return { ok: false, error: "bad_request" };
-  const found = readTrucks_().filter(function (x) { return x.truck.id === id; })[0];
+  const all = readTrucks_();
+  const found = all.filter(function (x) { return x.truck.id === id; })[0];
   const base = req.base || null;
   if (found && found.truck.updatedAt !== base) return { ok: false, error: "conflict", truck: found.truck };
   if (!found && base) return { ok: false, error: "gone" };
   if (req.user && req.user.role !== "admin") return techSaveHours_(req, found);
   const t = clean_(req.truck);
   t.id = id;
-  const all = readTrucks_();
   const clash = all.filter(function (x) { return x.truck.id !== id && unitKey_(x.truck.unit) === unitKey_(t.unit) && unitKey_(t.unit) !== ""; })[0];
   if (clash) return { ok: false, error: "duplicate_unit", unit: clash.truck.unit };
   t.updatedAt = new Date().toISOString();
@@ -275,6 +275,7 @@ function appendRows_(sheet, width, rows) {
 
 /* ---------------- accounts ---------------- */
 
+const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin"];
 const ROLES = ["admin", "tech"];
 const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser"];
@@ -308,6 +309,7 @@ function readUsers_(s) {
 }
 
 function writeUser_(s, rowIndex, u) {
+  forgetUser_(u.id);
   const row = USER_COLS.map(function (c) { return u[c] === null || u[c] === undefined ? "" : String(u[c]); });
   if (rowIndex) s.getRange(rowIndex, 1, 1, USER_COLS.length).setValues([row]);
   else appendRows_(s, USER_COLS.length, [row]);
@@ -348,9 +350,23 @@ function authUser_(token) {
   if (parts.length !== 4) return null;
   const payload = parts.slice(0, 3).join(".");
   if (sign_(payload) !== parts[3] || !(Number(parts[2]) > Date.now())) return null;
-  const x = readUsers_(usersSheet_()).filter(function (y) { return y.u.id === parts[0]; })[0];
-  if (!x || x.u.status !== "active" || String(x.u.ver) !== parts[1] || ROLES.indexOf(x.u.role) === -1) return null;
-  return x.u;
+  // The account is looked up in a short-lived cache so each save doesn't have to read the Users tab.
+  // Any change made through the app clears it right away; a hand edit in the sheet shows within a few minutes.
+  const cache = CacheService.getScriptCache();
+  let u = null;
+  try { u = JSON.parse(cache.get("user_" + parts[0]) || "null"); } catch (e) { u = null; }
+  if (!u) {
+    const x = readUsers_(usersSheet_()).filter(function (y) { return y.u.id === parts[0]; })[0];
+    if (!x) return null;
+    u = { id: x.u.id, username: x.u.username, name: x.u.name, role: x.u.role, status: x.u.status, ver: x.u.ver,
+      inviteHash: x.u.inviteHash ? "1" : "", inviteUntil: x.u.inviteUntil, created: x.u.created, lastLogin: x.u.lastLogin };
+    try { cache.put("user_" + u.id, JSON.stringify(u), USER_CACHE_SEC); } catch (e) { /* the cache is only a speed-up */ }
+  }
+  if (u.status !== "active" || String(u.ver) !== parts[1] || ROLES.indexOf(u.role) === -1) return null;
+  return u;
+}
+function forgetUser_(id) {
+  try { CacheService.getScriptCache().remove("user_" + id); } catch (e) { /* the cache is only a speed-up */ }
 }
 
 function checkName_(req) {
@@ -465,6 +481,7 @@ function saveUser_(req) {
   if (req.remove) {
     if (x.u.status !== "invited") return { ok: false, error: "bad_request" };
     s.deleteRow(x.rowIndex);
+    forgetUser_(x.u.id);
     return { ok: true };
   }
   const role = req.role === undefined ? x.u.role : req.role;
