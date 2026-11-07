@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VODA Fleet</title>
-<meta name="description" content="Oil changes and truckmount service for the VODA trucks.">
+<title>VODA Prime</title>
+<meta name="description" content="VODA Prime: truck maintenance and checklists for VODA Cleaning &amp; Restoration.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="VODA Fleet">
+<meta name="apple-mobile-web-app-title" content="VODA Prime">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121a23" media="(prefers-color-scheme: dark)">
@@ -611,8 +611,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 <body>
 <header class="topbar">
   <div class="brand">
-    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#16202b"/><path d="M32 9 C38 20 46 28 46 38 a14 14 0 0 1 -28 0 C18 28 26 20 32 9Z" fill="#4078f0"/><path d="M24 40 a8 8 0 0 1 16 0" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M32 40 L37 34" stroke="#f0b44c" stroke-width="3" stroke-linecap="round"/></svg>
-    <h1>VODA Fleet</h1>
+    <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2b3c"/><path d="M148,214 L236,346 L372,156" fill="none" stroke="#2fa4da" stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/> <circle cx="148" cy="214" r="40" fill="#2fa4da"/> <circle cx="236" cy="346" r="54" fill="#2fa4da"/> <circle cx="372" cy="156" r="46" fill="#2fa4da"/></svg>
+    <h1>VODA Prime</h1>
   </div>
   <div class="sync" id="syncbar" hidden>
     <span id="syncText">Loading…</span>
@@ -1425,7 +1425,7 @@ function showSignIn(message, mode) {
   $("gate").replaceChildren(
     h("h2", { text: mode === "login" ? "Sign in" : "Set up your account" }),
     h("p", { text: mode === "login"
-      ? (hadOldSession ? "VODA Fleet now has a login for each person. Sign in, or tap “I have a code” if you were given one." : "Sign in with your own username and passcode.")
+      ? (hadOldSession ? "VODA Prime has a login for each person. Sign in, or tap “I have a code” if you were given one." : "Sign in with your own username and passcode.")
       : "Enter the code an admin gave you, then pick your username and passcode. Setting up the app for the very first time? Use the access code on the Setup tab of the Google Sheet." }),
     form, h("p", null, other));
   if (!isTouch()) setTimeout(() => { const el = $(mode === "code" ? "gateCode" : "gateUser"); if (el) el.focus(); }, 50);
@@ -2708,7 +2708,7 @@ async function openUsers() {
   const codeBox = h("div");
   const appUrl = location.origin + location.pathname;
   const showCode = (name, code, isReset) => {
-    const msg = `${name}, here is your VODA Fleet code: ${code}\nOpen ${appUrl} , tap "I have a code", enter it, then pick your username and passcode. The code works once, for 14 days.`;
+    const msg = `${name}, here is your VODA Prime code: ${code}\nOpen ${appUrl} , tap "I have a code", enter it, then pick your username and passcode. The code works once, for 14 days.`;
     codeBox.replaceChildren(h("div", { class: "code-box", id: "u-codebox" },
       h("span", { text: `${isReset ? "Passcode reset code" : "Invite code"} for ${name}` }),
       h("span", { class: "code", id: "u-code", text: code }),
@@ -2912,7 +2912,7 @@ function downloadFile(name, text, type) {
 }
 function downloadCsv() {
   const st = reportStamp();
-  downloadFile(`VODA-Fleet-Report-${view.division ? view.division + "-" : ""}${st.iso}.csv`, buildCsv(), "text/csv;charset=utf-8");
+  downloadFile(`VODA-Prime-Fleet-Report-${view.division ? view.division + "-" : ""}${st.iso}.csv`, buildCsv(), "text/csv;charset=utf-8");
   toast("Report downloaded. Open it in Excel or Google Sheets.");
 }
 function buildPrintReport() {
@@ -2927,7 +2927,7 @@ function buildPrintReport() {
   });
   const td = (v, cls) => h("td", { class: cls || null, text: v == null ? "" : String(v) });
   $("printReport").replaceChildren(...[
-    h("h1", { text: "VODA Fleet Maintenance" }),
+    h("h1", { text: "VODA Prime · Fleet maintenance" }),
     h("p", { class: "pr-sub", text: `Report · ${st.text} · ${view.division ? view.division + " · " : ""}${rows.length} trucks` }),
     h("div", { class: "pr-sum" }, h("span", { text: `${nDue} overdue` }), h("span", { text: `${nSoon} due soon` }), h("span", { text: `${nOk} OK` })),
     h("table", null,
@@ -3557,7 +3557,7 @@ function renderInstall() {
   const bar = $("installbar");
   if (isStandalone() || store.get(K_INSTALL)) { bar.hidden = true; return; }
   if (installEvt) {
-    $("installText").textContent = "Install VODA Fleet on this phone so it opens like an app.";
+    $("installText").textContent = "Install VODA Prime on this phone so it opens like an app.";
     $("installBtn").hidden = false; bar.hidden = false;
   } else if (isIOS) {
     $("installText").textContent = "To install on iPhone: tap the Share button (square with an arrow), then Add to Home Screen.";
@@ -3565,7 +3565,7 @@ function renderInstall() {
   } else bar.hidden = true;
 }
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; renderInstall(); });
-window.addEventListener("appinstalled", () => { installEvt = null; $("installbar").hidden = true; toast("VODA Fleet installed. Open it from your home screen."); });
+window.addEventListener("appinstalled", () => { installEvt = null; $("installbar").hidden = true; toast("VODA Prime installed. Open it from your home screen."); });
 $("installBtn").addEventListener("click", async () => {
   if (!installEvt) return;
   installEvt.prompt();
