@@ -772,7 +772,7 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 12;                          // the Google script version this app expects
+const NEEDS_API = 13;                          // the Google script version this app expects
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -1996,12 +1996,29 @@ function renderHistory(id) {
   if (!c || c.loading) { ul.replaceChildren(h("li", null, h("small", { text: "Loading history…" }))); return; }
   if (c.error) { ul.replaceChildren(h("li", null, h("small", { text: "History couldn't load right now." }))); return; }
   if (!c.rows.length) { ul.replaceChildren(h("li", null, h("small", { text: "No history yet." }))); return; }
-  ul.replaceChildren(...c.rows.slice(0, 10).map(x => {
-    const what = Array.isArray(x.items) && x.items.length ? x.items.join(", ") : x.kind === "reading" ? "Reading" : x.kind;
-    const nums = [isNum(x.miles) ? `${fmt(x.miles)} mi` : null, isNum(x.hrs) ? `${fmt(x.hrs)} TM hrs` : null].filter(Boolean).join(" · ");
-    return h("li", null, h("strong", { text: what }), nums ? ` · ${nums}` : "", h("br"),
-      h("small", { text: [x.at, x.by ? "by " + x.by : "", x.note ? "“" + x.note + "”" : ""].filter(Boolean).join(" · ") }));
-  }));
+  ul.replaceChildren(...c.rows.slice(0, 10).map((x, i) => histEntry(c.rows, i)));
+}
+/** One line of a truck's history (newest first). A reading says what changed, e.g. "TM hrs 2,756 → 2,757".
+ *  Lines saved before the script said so get the TM hrs before from the older line under them. */
+const SAYS_CHANGE = /→| set to |^No change$| confirmed at /;
+function histEntry(rows, i) {
+  const x = rows[i], items = Array.isArray(x.items) ? x.items : [];
+  let what = items.length ? items.join(", ") : x.kind, miles = isNum(x.miles), hrs = isNum(x.hrs);
+  if (x.kind === "reading") {
+    if (items.some(s => SAYS_CHANGE.test(s))) {
+      what = items.join(" · ");
+      if (items.some(s => /^Miles /.test(s))) miles = false;
+      if (items.some(s => /^TM hrs /.test(s))) hrs = false;
+    } else {
+      const prev = rows.slice(i + 1).find(r => isNum(r.hrs));
+      if (hrs && items.some(s => /confirmed/.test(s))) { what = `TM hrs confirmed at ${fmt(x.hrs)} (no change)`; hrs = false; }
+      else if (hrs && prev && prev.hrs !== x.hrs) { what = `TM hrs ${fmt(prev.hrs)} → ${fmt(x.hrs)}`; hrs = false; }
+      else what = "Reading";
+    }
+  }
+  const nums = [miles ? `${fmt(x.miles)} mi` : null, hrs ? `${fmt(x.hrs)} TM hrs` : null].filter(Boolean).join(" · ");
+  return h("li", null, h("strong", { text: what }), nums ? ` · ${nums}` : "", h("br"),
+    h("small", { text: [x.at, x.by ? "by " + x.by : "", x.note ? "\u201c" + x.note + "\u201d" : ""].filter(Boolean).join(" · ") }));
 }
 
 const _saveTruck = saveTruck;
@@ -2491,12 +2508,8 @@ function openEdit(id) {
   if (!isNew) {
     api("history", { id: t.id }).then(out => {
       const rows = out.entries || [];
-      history.replaceChildren(...(rows.length ? rows.map(x => {
-        const what = x.kind === "reading" ? "Reading" : (Array.isArray(x.items) && x.items.length ? x.items.join(", ") : x.kind);
-        const nums = [isNum(x.miles) ? `${fmt(x.miles)} mi` : null, isNum(x.hrs) ? `${fmt(x.hrs)} TM hrs` : null].filter(Boolean).join(" · ");
-        return h("li", null, h("strong", { text: what }), nums ? ` · ${nums}` : "", h("br"),
-          h("small", { text: [x.at, x.by ? "by " + x.by : "", x.note ? "“" + x.note + "”" : ""].filter(Boolean).join(" · ") }));
-      }) : [h("li", null, h("small", { text: "No history yet. It starts with the next saved reading." }))]));
+      history.replaceChildren(...(rows.length ? rows.map((x, i) => histEntry(rows, i))
+        : [h("li", null, h("small", { text: "No history yet. It starts with the next saved reading." }))]));
     }).catch(() => { history.replaceChildren(h("li", null, h("small", { text: "History couldn't load right now." }))); });
   }
 }
