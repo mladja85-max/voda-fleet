@@ -73,9 +73,28 @@
  * it. Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with
  * any note) is kept on the Supply checks tab. The checklists are on the Checklists tab and their items on the Supplies tab;
  * change them in the app rather than in the sheet. The tabs are made the first time the app opens Checklists.
- * When a technician sends missing items, an email goes to the Script Property SUPPLY_EMAIL if you add one, otherwise to
- * TM_CHECK_EMAIL, otherwise to the Google account that runs this script. Set SUPPLY_EMAIL to off to stop these emails.
+ * When a technician sends missing items, an email goes to the Script Property SUPPLY_EMAIL if you add one (for example
+ * info@dnaproclean.com; several addresses separated by commas), otherwise to TM_CHECK_EMAIL, otherwise to the Google
+ * account that runs this script. Set SUPPLY_EMAIL to off to stop these emails. The subject starts with "For Mike to order"
+ * (change it with the Script Property SUPPLY_SUBJECT), then the checklist, how many items, and who sent it.
  * To see one: pick "supplyEmailTest" and click Run.
+ *
+ * WEEKLY BACKUP (optional, recommended)
+ * Pick "backupSetup" and click Run (approve the Google Drive permission). Every Sunday around 2 AM a full copy of this
+ * sheet goes into a Drive folder named "VODA Prime backups"; the newest 12 are kept. "backupNow" makes one right away;
+ * "backupStop" turns it off. To restore, open a backup and copy what you need back (or use it as the new sheet).
+ *
+ * MOVING TO ANOTHER GOOGLE ACCOUNT (for example the company Google Workspace account)
+ * A copied sheet doesn't bring the script's settings (sign-in key, access code, GPS key, emails) or its automatic jobs,
+ * so the move is done in two steps that carry them over. Everyone stays signed in; nothing typed during the move is lost.
+ *  1. In this (old) sheet's Apps Script: pick "moveOut" and Run. It saves the settings and the list of automatic jobs in a
+ *     tab named "Move settings", stops the jobs, and pauses this copy of the app (phones hold on to anything new).
+ *  2. Share the sheet with the new account. Signed in as the new account: open it, File > Make a copy.
+ *  3. In the copy: Extensions > Apps Script, pick "moveIn" and Run (approve the permissions). It loads the settings, turns
+ *     the same jobs back on, and deletes the "Move settings" tab.
+ *  4. Still in the copy: Deploy > New deployment > Web app, Execute as: Me, Who has access: Anyone. Put the new web app
+ *     URL into config.js in GitHub. Phones switch over the next time the app opens.
+ * Changed your mind before step 4? Run "moveCancel" in the old sheet: it un-pauses it and turns its jobs back on.
  *
  * WHO SEES WHAT
  * Admins see everything. Each technician sees only what an Admin ticks for him in the app (Settings > Users and invites):
@@ -90,7 +109,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 19;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 20;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -185,6 +204,8 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: "bad_request" });
   }
+  // After moveOut this copy is paused: phones keep their unsent changes and send them to the new home once they reopen.
+  if (PropertiesService.getScriptProperties().getProperty("MOVED")) return json_({ ok: false, error: "moved" });
   if (!PropertiesService.getScriptProperties().getProperty("ACCESS_CODE")) return json_({ ok: false, error: "not_set_up" });
   try {
     if (req.action === "signup") return json_(withLock_(function () { return signup_(req); }));
@@ -243,6 +264,8 @@ function doPost(e) {
         return json_(withLock_(function () { return saveChecklist_(req); }));
       case "deleteChecklist":
         return json_(withLock_(function () { return deleteChecklist_(req); }));
+      case "mergeChecklist":
+        return json_(withLock_(function () { return mergeChecklist_(req); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -376,7 +399,7 @@ const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech"];
 const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setShop",
-  "supplyStatus", "saveChecklist", "deleteChecklist"];
+  "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
 const INVITE_DAYS = 14;      // an invite or reset code works this long
@@ -2521,6 +2544,71 @@ function deleteChecklist_(req) {
   return { ok: true, supplies: suppliesForApp_(true, req.user) };
 }
 
+/** Admin: puts one checklist inside another. Its items go to the end, their sections tagged with the first word of its
+ *  name ("HVAC · PPE"); its order list, history and checks come along; its note is added below the other one; everyone
+ *  who had it gets the other one instead. Then it's removed. */
+function mergeChecklist_(req) {
+  const sh = supSheets_();
+  if (String(req.base || "") !== supVer_()) return { ok: false, error: "conflict", supplies: suppliesForApp_(true, req.user) };
+  const fromId = String(req.from || ""), intoId = String(req.into || "");
+  if (!fromId || !intoId || fromId === intoId) return { ok: false, error: "bad_request" };
+  const lists = supLists_(sh.l);
+  const from = lists.filter(function (l) { return l.id === fromId; })[0], into = lists.filter(function (l) { return l.id === intoId; })[0];
+  if (!from || !into) return { ok: false, error: "gone" };
+  const tag = supText_(from.name.split(" ")[0], 20) || "Merged";
+  const all = supProducts_(sh.p, true).list;
+  const byList = {};
+  let moved = 0;
+  all.forEach(function (p) {
+    if (p.list === fromId) {
+      const sec = p.section.toLowerCase().indexOf(tag.toLowerCase()) === 0 ? p.section : supText_(tag + " · " + p.section, 40);
+      p = { id: p.id, section: sec, name: p.name, container: p.container };
+      (byList[intoId] = byList[intoId] || []).push(Object.assign(p, { tail: true }));
+      moved++;
+    } else (byList[p.list] = byList[p.list] || []).push(p);
+  });
+  // its items after the other checklist's own
+  if (byList[intoId]) byList[intoId].sort(function (a, b) { return (a.tail ? 1 : 0) - (b.tail ? 1 : 0); });
+  const now = new Date().toISOString();
+  // its order list and history
+  const reqs = supRequests_(sh.r), changed = [];
+  reqs.forEach(function (x) {
+    if (x.rec.list !== fromId) return;
+    x.rec.list = intoId;
+    if (OPEN_STATUS_(x.rec.status)) { const p = (byList[intoId] || []).filter(function (q) { return q.id === x.rec.productId; })[0]; if (p) x.rec.section = p.section; }
+    x.rec.updatedAt = now;
+    changed.push(x);
+  });
+  supWriteReqRows_(sh.r, changed);
+  // its checks
+  const lastC = sh.c.getLastRow();
+  if (lastC > 1) {
+    const col = CHK_COLS.indexOf("list") + 1;
+    const rng = sh.c.getRange(2, col, lastC - 1, 1);
+    const vals = rng.getValues();
+    let hit = false;
+    vals.forEach(function (r) { if (supListOf_(r[0]) === fromId) { r[0] = intoId; hit = true; } });
+    if (hit) rng.setValues(vals);
+  }
+  // note: the other one's, then this one's
+  const note = [into.note, from.note].filter(Boolean).join("\n").slice(0, 300);
+  if (note !== into.note) sh.l.getRange(into.row, 5).setValue(note);
+  sh.l.deleteRow(from.row);
+  supWriteProducts_(sh.p, byList, supLists_(sh.l));
+  // people who had it now have the other one
+  const us = usersSheet_();
+  readUsers_(us).forEach(function (x) {
+    const a = parseAccess_(x.u.access);
+    if (a.indexOf(fromId) === -1) return;
+    const next = a.map(function (k) { return k === fromId ? intoId : k; }).filter(function (k, i, arr) { return arr.indexOf(k) === i; });
+    x.u.access = accessText_(next);
+    writeUser_(us, x.rowIndex, x.u);
+  });
+  supBump_();
+  return { ok: true, moved: moved, list: { id: into.id, name: into.name }, supplies: suppliesForApp_(true, req.user) };
+}
+function OPEN_STATUS_(st) { return st === "To order" || st === "Ordered"; }
+
 /** "2 gallons", "1 box", or just "3" for an item with no container. */
 function supQty_(qty, container) {
   if (!container) return String(qty);
@@ -2543,7 +2631,11 @@ function supplyEmail_(by, list, lines, note, isTest) {
   lines.forEach(function (l) { body.push("• " + l.name + ": " + supQty_(l.qty, l.container)); });
   if (note) body.push("", "Note: " + note);
   body.push("", "The full list to order is in the app under Checklists > " + list.name + " > Order list: " + APP_URL + "#order-list/" + list.id);
-  MailApp.sendEmail({ to: to, subject: ((isTest ? "(Test) " : "") + list.name + ": " + n + " item" + (n === 1 ? "" : "s") + " to order from " + by).slice(0, 250), body: body.join("\n") });
+  // Subject starts with SUPPLY_SUBJECT ("For Mike to order" unless you set another); the checklist and count follow so
+  // Gmail keeps each list as its own email instead of piling them all into one conversation.
+  const lead = String(props.getProperty("SUPPLY_SUBJECT") || "").trim() || "For Mike to order";
+  const subject = (isTest ? "(Test) " : "") + lead + ": " + list.name + ", " + n + " item" + (n === 1 ? "" : "s") + " from " + by;
+  MailApp.sendEmail({ to: to, subject: subject.slice(0, 250), body: body.join("\n") });
   return to;
 }
 
@@ -2573,4 +2665,124 @@ function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
   return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+}
+
+/* ---------------- weekly backup ---------------- */
+
+const BACKUP_FOLDER = "VODA Prime backups";
+const BACKUP_KEEP = 12;
+
+/** Run once: a full copy of this sheet every Sunday around 2 AM, newest 12 kept. Makes the first one now. */
+function backupSetup() {
+  backupSchedule_();
+  const name = backupNow();
+  Logger.log('Weekly backup is on: every Sunday around 2 AM into the Drive folder "' + BACKUP_FOLDER + '" (newest ' + BACKUP_KEEP + ' kept). First backup made: ' + name);
+}
+function backupStop() {
+  let n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "backupNow") { ScriptApp.deleteTrigger(tr); n++; } });
+  Logger.log(n ? "Weekly backup stopped. The backups already made stay in Drive." : "Weekly backup wasn't on.");
+}
+function backupSchedule_() {
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "backupNow") ScriptApp.deleteTrigger(tr); });
+  ScriptApp.newTrigger("backupNow").timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(2).create();
+}
+/** A copy of the whole sheet in the backups folder; older ones beyond the newest 12 go to the Drive trash. */
+function backupNow() {
+  const ss = SpreadsheetApp.getActive();
+  const it = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  const prefix = ss.getName() + " backup ";
+  const name = prefix + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+  DriveApp.getFileById(ss.getId()).makeCopy(name, folder);
+  const files = [];
+  const fi = folder.getFiles();
+  while (fi.hasNext()) { const f = fi.next(); if (f.getName().indexOf(prefix) === 0) files.push(f); }
+  files.sort(function (a, b) { return b.getDateCreated().getTime() - a.getDateCreated().getTime(); });
+  files.slice(BACKUP_KEEP).forEach(function (f) { f.setTrashed(true); });
+  return name;
+}
+
+/* ---------------- moving to another Google account ---------------- */
+// See MOVING TO ANOTHER GOOGLE ACCOUNT at the top. Settings travel in the "Move settings" tab, each value stored as JSON
+// text so nothing in it can turn into a formula.
+
+const MOVE_TAB = "Move settings";
+const MOVE_JOBS = ["gpsSync", "tmCheckEmail", "paperworkEmail", "backupNow"];
+
+/** Old sheet: save the settings and jobs, stop the jobs, and pause this copy of the app. */
+function moveOut() {
+  const p = PropertiesService.getScriptProperties();
+  if (p.getProperty("MOVED")) throw new Error('This sheet was already moved out. To undo, run "moveCancel".');
+  const props = p.getProperties();
+  const jobs = moveJobsOn_();
+  const ss = SpreadsheetApp.getActive();
+  const old = ss.getSheetByName(MOVE_TAB);
+  if (old) ss.deleteSheet(old);
+  const s = ss.insertSheet(MOVE_TAB);
+  const rows = [["Setting", "Value (don't edit)"]].concat(Object.keys(props).sort().map(function (k) { return [k, JSON.stringify(props[k])]; }),
+    [["__JOBS__", JSON.stringify(jobs.join(","))], ["__FROM__", JSON.stringify(Session.getEffectiveUser().getEmail())], ["__AT__", JSON.stringify(new Date().toISOString())]]);
+  if (s.getMaxColumns() < 2) s.insertColumnsAfter(s.getMaxColumns(), 2 - s.getMaxColumns());
+  appendRows_(s, 2, rows);
+  s.getRange(1, 1, 1, 2).setFontWeight("bold");
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (MOVE_JOBS.indexOf(tr.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(tr); });
+  p.setProperty("MOVED", new Date().toISOString());
+  Logger.log("Ready to move: " + Object.keys(props).length + " settings and " + (jobs.length ? "these automatic jobs: " + jobs.join(", ") : "no automatic jobs") +
+    ' are saved in the "' + MOVE_TAB + '" tab. This copy of the app is paused. Next: as the new account, File > Make a copy, then run moveIn in the copy.');
+}
+
+/** The copy, as the new account: load the settings, turn the same jobs on, delete the move tab. */
+function moveIn() {
+  const ss = SpreadsheetApp.getActive();
+  const s = ss.getSheetByName(MOVE_TAB);
+  if (!s || s.getLastRow() < 2) throw new Error('No "' + MOVE_TAB + '" tab here. Run moveOut in the old sheet first, then make the copy and run moveIn in the copy.');
+  const saved = moveRead_(s);
+  if (!saved.props.SESSION_SECRET || !saved.props.ACCESS_CODE) throw new Error('The "' + MOVE_TAB + '" tab is missing the sign-in settings, so nothing was changed. Run moveOut in the old sheet again and make a new copy.');
+  const p = PropertiesService.getScriptProperties();
+  p.setProperties(saved.props, false);
+  p.deleteProperty("MOVED");
+  saved.jobs.forEach(moveJob_);
+  ss.deleteSheet(s);
+  Logger.log("Moved in from " + (saved.from || "the old account") + ": " + Object.keys(saved.props).length + " settings loaded" +
+    (saved.jobs.length ? ", automatic jobs back on: " + saved.jobs.join(", ") : "") +
+    ". Next: Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone) and put the new URL in config.js.");
+}
+
+/** Old sheet, if you change your mind before switching the app over: un-pause it and turn its jobs back on. */
+function moveCancel() {
+  const ss = SpreadsheetApp.getActive();
+  const s = ss.getSheetByName(MOVE_TAB);
+  const p = PropertiesService.getScriptProperties();
+  if (!p.getProperty("MOVED")) { Logger.log("This sheet isn't paused; nothing to undo."); return; }
+  const jobs = s ? moveRead_(s).jobs : [];
+  p.deleteProperty("MOVED");
+  jobs.forEach(moveJob_);
+  if (s) ss.deleteSheet(s);
+  Logger.log("Move cancelled: this sheet is live again" + (jobs.length ? " and these jobs are back on: " + jobs.join(", ") : "") + ".");
+}
+
+function moveJobsOn_() {
+  return ScriptApp.getProjectTriggers().map(function (tr) { return tr.getHandlerFunction(); })
+    .filter(function (x, i, a) { return MOVE_JOBS.indexOf(x) !== -1 && a.indexOf(x) === i; });
+}
+function moveRead_(s) {
+  const out = { props: {}, jobs: [], from: "" };
+  s.getRange(2, 1, s.getLastRow() - 1, 2).getValues().forEach(function (r) {
+    const k = String(r[0] || "").trim();
+    if (!k) return;
+    let v;
+    try { v = JSON.parse(String(r[1])); } catch (e) { v = String(r[1]); }
+    if (k === "__JOBS__") out.jobs = String(v || "").split(",").filter(function (j) { return MOVE_JOBS.indexOf(j) !== -1; });
+    else if (k === "__FROM__") out.from = String(v || "");
+    else if (k.indexOf("__") !== 0 && k !== "MOVED") out.props[k] = String(v === null || v === undefined ? "" : v);
+  });
+  return out;
+}
+/** Turns one automatic job on with the same schedule its own setup uses. */
+function moveJob_(name) {
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === name) ScriptApp.deleteTrigger(tr); });
+  if (name === "gpsSync") ScriptApp.newTrigger("gpsSync").timeBased().everyMinutes(15).create();
+  else if (name === "tmCheckEmail") tmCheckSchedule_();
+  else if (name === "paperworkEmail") ScriptApp.newTrigger("paperworkEmail").timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(7).create();
+  else if (name === "backupNow") backupSchedule_();
 }
