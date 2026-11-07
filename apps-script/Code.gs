@@ -73,7 +73,7 @@
  * it. Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with
  * any note) is kept on the Supply checks tab. The checklists are on the Checklists tab and their items on the Supplies tab;
  * change them in the app rather than in the sheet. The tabs are made the first time the app opens Checklists.
- * When a technician sends missing items, an email goes to the Script Property SUPPLY_EMAIL if you add one (for example
+ * When anyone sends missing items (technicians and admins), an email goes to the Script Property SUPPLY_EMAIL if you add one (for example
  * info@dnaproclean.com; several addresses separated by commas), otherwise to TM_CHECK_EMAIL, otherwise to the Google
  * account that runs this script. Set SUPPLY_EMAIL to off to stop these emails. The subject starts with "For Mike to order"
  * (change it with the Script Property SUPPLY_SUBJECT), then the checklist, how many items, and who sent it.
@@ -2395,7 +2395,7 @@ function supplyReport_(req) {
   const chk = { id: checkId, at: now, by: by, missing: lines.length, items: text.slice(0, 2000) || "Nothing missing", note: note, list: list.id };
   appendRows_(sh.c, CHK_COLS.length, [[chk.id, chk.at, chk.by, chk.missing, chk.items, chk.note, chk.list]]);
   checks.push(chk);
-  if (lines.length && req.user && req.user.role !== "admin") {
+  if (lines.length) {   // technicians and admins alike, so an admin can leave a reminder in the inbox
     try { supplyEmail_(by, list, lines, note, false); } catch (e) { /* an email problem never stops the list from saving */ }
   }
   return { ok: true, skipped: skipped, already: already, supplies: answer(fresh) };
