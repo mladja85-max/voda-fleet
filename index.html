@@ -307,7 +307,7 @@ dialog.drawer {
 }
 dialog.drawer::backdrop { background: rgba(8, 12, 18, .45); }
 .dr-top { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); }
-.dr-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 8px; background: var(--surface); }
+.dr-head { padding: 10px 12px 7px 16px; background: var(--surface); }
 .dr-tabs { display: flex; gap: 2px; padding: 0 12px; overflow-x: auto; scrollbar-width: none; }
 .dr-tabs::-webkit-scrollbar { display: none; }
 .dr-tab { all: unset; box-sizing: border-box; cursor: pointer; padding: 9px 10px 8px; font-weight: 700; font-size: .88rem; color: var(--muted); white-space: nowrap; border-bottom: 3px solid transparent; }
@@ -324,8 +324,17 @@ dialog.drawer::backdrop { background: rgba(8, 12, 18, .45); }
 .rn-fields input, .rn-fields select { width: 100%; font: inherit; font-weight: 700; font-size: 1.05rem; padding: 8px 10px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); }
 .rn-fields input:focus, .rn-fields select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .rn-actions { display: flex; gap: 8px; }
-.dr-head .unit { font-size: 1.8rem; }
-.dr-head .tile-title { margin: 0; }
+.dr-head .unit { font-size: 1.4rem; }
+.dr-head .tile-title { margin: 0 auto 0 0; font-size: inherit; flex-wrap: nowrap; min-width: 0; }
+.dr-head .tile-title .unit { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-head .title-row .pill { flex: none; }
+.dr-sub { padding: 0; margin-top: 3px; font-size: .8rem; gap: 4px 6px; }
+.dr-sub .div-chip { font-size: .62rem; padding: 2px 7px; }
+.dr-sub .tag { font-size: .64rem; padding: 1px 6px; }
+.dr-edit { flex: none; gap: 5px; padding-inline: 10px; }
+.dr-edit svg { width: 14px; height: 14px; }
+.shop-row { display: block; margin-top: 4px; color: var(--muted); }
+.at-shop { color: var(--ok); }
 .dr-body { padding: 16px 18px 28px; display: grid; gap: 14px; }
 .dfields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .df label { display: block; font-size: .78rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
@@ -742,8 +751,28 @@ let loaded = false;
 let lastSync = null;
 let offline = false;
 let refreshing = false;
-let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
-const NEEDS_API = 11;                          // the Google script version this app expects
+let gpsHealth = null;                          // { lastOk, lastTry, error, shop } when One Step GPS is set up
+/** Keeps the GPS sync health from the Google Sheet, and the shop location (also offline). */
+function noteGps(gps) {
+  gpsHealth = gps || null;
+  store.set("voda.shop", gpsHealth && gpsHealth.shop ? gpsHealth.shop : null);
+}
+/** The shop's { lat, lng, radius }, set from a truck's GPS tab, or null. */
+function shopLoc() {
+  const s = gpsHealth ? gpsHealth.shop : store.get("voda.shop");
+  return s && isNum(s.lat) && isNum(s.lng) ? s : null;
+}
+function distM(lat1, lng1, lat2, lng2) {
+  const r = Math.PI / 180;
+  const a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lng2 - lng1) * r / 2) ** 2;
+  return 12742000 * Math.asin(Math.sqrt(a));
+}
+/** Parked or idling at the shop (by the tracker's last position). */
+function atShop(t) {
+  const s = shopLoc(), g = t && t.gps;
+  return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
+}
+const NEEDS_API = 12;                          // the Google script version this app expects
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -894,7 +923,7 @@ async function refresh(quiet) {
     if (out.me) { const roleChanged = session.role !== out.me.role; Object.assign(session, { name: out.me.name, role: out.me.role, username: out.me.username }); store.set(K_SESSION, session); if (roleChanged) applyRole(); }
     trucks = sortTrucks(out.trucks || []);
     applyPendingTrucks();
-    gpsHealth = out.gps || null;
+    noteGps(out.gps);
     for (const k of Object.keys(drafts)) if (!byId(k)) delete drafts[k];
     saveDrafts();
     lastSync = new Date();
@@ -1148,7 +1177,6 @@ function divisionField(id, value) {
 let openId = null;            // truck shown in the details panel
 const historyCache = {};      // truck id -> history rows (loaded when the panel opens)
 const openTasks = new Set();  // trucks whose checklist is expanded in the panel
-let renameDraft = null;        // { id, unit, driver } while a truck is being renamed
 const unitKey = u => String(u || "").trim().toLowerCase().replace(/\s+/g, " ");
 
 const HOW = [
@@ -1197,7 +1225,7 @@ function showSignIn(message, mode) {
     store.set(K_SESSION, session);
     if (first && out.user.role !== "admin") { view.tmOnly = true; saveView(); }   // technicians start on the truckmounts
     const list = await api("list");
-    trucks = sortTrucks(list.trucks || []); applyPendingTrucks(); gpsHealth = list.gps || null; loaded = true; lastSync = new Date(); offline = false;
+    trucks = sortTrucks(list.trucks || []); applyPendingTrucks(); noteGps(list.gps); loaded = true; lastSync = new Date(); offline = false;
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     noteApi(list);
     startApp();
@@ -1432,7 +1460,7 @@ function renderGrid() {
       h("span", { class: "grp-name", text: g.name || "No unit" }),
       h("span", { class: "grp-count", text: `${g.items.length} truck${g.items.length === 1 ? "" : "s"}` }),
       h("span", { class: "grp-stats" }),
-      g.name ? null : h("span", { class: "grp-hint", text: "Set the unit with the pencil in the truck's details" })));
+      g.name ? null : h("span", { class: "grp-hint", text: "Set the unit with Edit in the truck's details" })));
     kids.push(...g.items.map(x => tileEl(x.t)));
   }
   grid.replaceChildren(...kids);
@@ -1599,7 +1627,7 @@ function checkFlag(t) {
   if (c.state === "today") return [h("span", { class: "flag " + (c.weeks >= 1 || !c.last ? "due" : "soon"), text: c.weeks >= 1 || !c.last ? `TM hrs due today · ${last}` : "TM hrs due today" })];
   return [h("span", { class: "flag due", text: `TM hrs missed${c.weeks >= 2 ? ` ${c.weeks} weeks` : ""} · ${last}` })];
 }
-/** Alerts first, then a short "Parked 3 h · 12 Main St · Fuel 62%". */
+/** Alerts first, then a short "Parked 3 h · 12 Main St · Fuel 62%" ("At shop" in place of the street when it's there). */
 function gpsLine(t) {
   const g = t.gps;
   if (!g) return [];
@@ -1607,7 +1635,8 @@ function gpsLine(t) {
   const bits = [];
   if (g.offline) bits.push(`Last report ${agoText(g.at)}`);
   else if (g.status) bits.push(g.status + (g.status !== "Driving" && g.since ? " " + sinceText(g.since) : ""));
-  if (!g.offline && g.address) bits.push(g.address.split(",")[0]);
+  if (atShop(t)) bits.push("At shop");
+  else if (!g.offline && g.address) bits.push(g.address.split(",")[0]);
   if (isNum(g.fuel)) bits.push(`Fuel ${g.fuel}%`);
   const txt = bits.join(" · ");
   return flags.concat(txt ? [h("span", { class: "gps-txt", title: [g.status, g.address].filter(Boolean).join(" · "), text: txt })] : []);
@@ -1642,10 +1671,7 @@ function renderAside() {
 
 /* ---------- details panel ---------- */
 const drawer = $("drawer");
-drawer.addEventListener("close", () => {
-  if (renameDraft) previewColor(renameDraft.id, (byId(renameDraft.id) || {}).color);
-  openId = null; renameDraft = null;
-});
+drawer.addEventListener("close", () => { openId = null; });
 /** Shows a color on the tile (and the open panel) right away, before it's saved. */
 function previewColor(id, color) {
   const theme = truckTheme(color);
@@ -1683,63 +1709,6 @@ function pencilIcon() {
   return span;
 }
 
-function renameForm(t) {
-  const id = t.id;
-  const err = h("p", { class: "dlg-err", role: "alert", id: "rn-err" });
-  const unit = h("input", { id: "rn-unit", type: "text", autocomplete: "off", maxlength: "60", value: renameDraft.unit,
-    oninput: e => { renameDraft.unit = e.target.value; } });
-  const driver = h("input", { id: "rn-driver", type: "text", autocomplete: "name", maxlength: "60", value: renameDraft.driver,
-    oninput: e => { renameDraft.driver = e.target.value; } });
-  const plate = h("input", { id: "rn-plate", type: "text", autocomplete: "off", maxlength: "20", value: renameDraft.plate, autocapitalize: "characters",
-    oninput: e => { renameDraft.plate = e.target.value; } });
-  const division = h("select", { id: "rn-division", onchange: e => { renameDraft.division = e.target.value; } },
-    h("option", { value: "", text: "Choose…" }), DIVISIONS.map(d => h("option", { value: d, text: d })));
-  division.value = DIVISIONS.includes(renameDraft.division) ? renameDraft.division : "";
-  const color = colorPicker("rn-color", renameDraft.color, v => { renameDraft.color = v; previewColor(id, v); });
-  const save = h("button", { class: "btn primary small", type: "submit", id: "rn-save", text: "Save" });
-  const cancel = () => { renameDraft = null; previewColor(id, t.color); renderDrawer(id); };
-  return h("form", { class: "titles rename", onsubmit: async e => {
-      e.preventDefault();
-      const newUnit = renameDraft.unit.trim().replace(/\s+/g, " ");
-      const newDriver = renameDraft.driver.trim().replace(/\s+/g, " ");
-      const newPlate = renameDraft.plate.trim().replace(/\s+/g, " ").toUpperCase();
-      const newDiv = DIVISIONS.includes(renameDraft.division) ? renameDraft.division : "";
-      const newColor = isColor(renameDraft.color) ? renameDraft.color.toLowerCase() : "";
-      if (!newUnit) { err.textContent = "Give the truck a name."; return; }
-      if (newUnit === (t.unit || "") && newDriver === (t.driver || "") && newPlate === (t.plate || "") && newDiv === (t.division || "") && newColor === (t.color || "")) { cancel(); return; }
-      const clash = trucks.find(x => x.id !== id && unitKey(x.unit) === unitKey(newUnit));
-      if (clash) { err.textContent = `"${clash.unit}" is already used by another truck. Pick a different name.`; return; }
-      const body = plain(t);
-      body.unit = newUnit.slice(0, 60);
-      body.driver = newDriver.slice(0, 60);
-      body.plate = newPlate.slice(0, 20);
-      body.division = newDiv;
-      body.color = newColor;
-      const items = [];
-      if (newUnit !== (t.unit || "")) items.push(`Renamed from ${t.unit || "(no name)"} to ${newUnit}`);
-      if (newPlate !== (t.plate || "")) items.push(`Plate set to ${newPlate || "(none)"}`);
-      if (newDiv !== (t.division || "")) items.push(`Unit set to ${newDiv || "(none)"}`);
-      if (newDriver !== (t.driver || "")) items.push(`Driver changed from ${t.driver || "(none)"} to ${newDriver || "(none)"}`);
-      if (newColor !== (t.color || "")) items.push(newColor ? "Color changed" : "Color removed");
-      try {
-        saveTruck(t, body, { kind: "edited", items }, `Saved: ${label(body)}`);
-        renameDraft = null;
-        renderAll();
-      } catch (ex) {
-        err.textContent = failText(ex, "Nothing");
-      }
-    },
-    onkeydown: e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); } } },
-    h("div", { class: "rn-fields" },
-      h("div", null, h("label", { for: "rn-unit", text: "Name" }), unit),
-      h("div", null, h("label", { for: "rn-plate", text: "Plate" }), plate),
-      h("div", null, h("label", { for: "rn-division", text: "Unit" }), division),
-      h("div", null, h("label", { for: "rn-driver", text: "Driver" }), driver),
-      h("div", { class: "rn-color" }, color)),
-    err,
-    h("div", { class: "rn-actions" }, save, h("button", { class: "btn small", type: "button", text: "Cancel", onclick: cancel })));
-}
-
 /* ---------- the truck panel's tabs: Overview · Service history · GPS · Activity ---------- */
 let drawerTab = "overview";
 const tabPanel = (key, el) => el ? (el.classList.add("tab-panel"), el.dataset.tab = key, el) : null;
@@ -1760,16 +1729,17 @@ function renderDrawer(id) {
   drawer.replaceChildren(
     h("div", { class: "dr-top" },
     h("div", { class: "dr-head" + (theme ? " colored" : ""), style: theme },
-      renameDraft && renameDraft.id === id ? renameForm(t) : h("div", { class: "titles" },
-        h("div", { class: "title-row", style: "flex-wrap:wrap" },
-          h("h2", { class: "tile-title", style: "font-size:inherit" }, idBits(t, "drTitle")),
-          !isAdmin() ? null : h("button", { class: "icon-btn sm", type: "button", id: "d-rename", "aria-label": "Edit name, plate, unit and color", title: "Edit name, plate, unit and color",
-            onclick: () => { renameDraft = { id, unit: t.unit || "", plate: t.plate || "", division: t.division || "", driver: t.driver || "", color: t.color || "" }; renderDrawer(id); const u = $("rn-unit"); if (u && !isTouch()) { u.focus(); u.select(); } } }, pencilIcon())),
-        h("p", { class: "tile-sub", style: "padding:0;margin-top:4px" },
-          subLine(t) ? h("span", { text: subLine(t) }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null)),
-      h("span", { class: "pill", id: "d-pill" }),
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => drawer.close() },
-        h("span", { text: "✕", style: "font-size:15px;line-height:1" }))),
+      h("div", { class: "title-row" },
+        h("h2", { class: "tile-title" }, h("span", { class: "unit", id: "drTitle", text: t.unit || "Truck" }),
+          t.plate ? h("span", { class: "plate", title: "License plate", text: t.plate }) : null),
+        h("span", { class: "pill", id: "d-pill" }),
+        isAdmin() ? h("button", { class: "btn small dr-edit", type: "button", id: "d-edit", title: "Edit name, plate, unit, color, oil, truckmount and paperwork",
+          onclick: () => openEdit(id) }, pencilIcon(), h("span", { text: "Edit" })) : null,
+        h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => drawer.close() },
+          h("span", { text: "✕", style: "font-size:15px;line-height:1" }))),
+      h("p", { class: "tile-sub dr-sub" },
+        h("span", { class: "div-chip " + divClass(t.division), text: t.division || "No unit" }),
+        subLine(t) ? h("span", { text: subLine(t) }) : null, prog ? h("span", { class: "tag", text: prog.name }) : null)),
     h("div", { class: "dr-tabs", role: "tablist", "aria-label": "Truck details" },
       tabs.map(([k, lbl]) => h("button", { class: "dr-tab", type: "button", role: "tab", id: "tab-" + k, "aria-selected": String(k === drawerTab),
         onclick: () => showTab(k), text: lbl })))),
@@ -1782,7 +1752,6 @@ function renderDrawer(id) {
       h("div", { class: "dr-actions" },
         isAdmin() || prog ? h("button", { class: "btn primary", type: "button", id: "dsave-" + id, onclick: () => saveReading(id), text: prog && !isAdmin() ? "Save TM hrs" : "Save reading" }) : null,
         isAdmin() ? h("button", { class: "btn", type: "button", onclick: () => openService(id), text: "Log oil change / service" }) : null,
-        isAdmin() ? h("button", { class: "btn ghost", type: "button", onclick: () => openEdit(id), text: "Edit truck" }) : null,
         isAdmin() ? null : h("p", { class: "hint", style: "margin:0;align-self:center", text: prog ? "You can update TM hrs. Everything else is view only." : "View only." })),
       prog ? h("div", { class: "tc-row", id: "d-chk" }) : null,
       h("div", { id: "d-res", style: "display:grid;gap:10px" }),
@@ -1875,8 +1844,9 @@ function gpsSection(t) {
   else items.push(row("Status", (g.status || "Unknown") + (g.since && g.status !== "Driving" ? ` since ${when(g.since)}` : ""), g.at ? h("small", { text: `Last report ${agoText(g.at)}` }) : null));
   if (isNum(g.lat) && isNum(g.lng)) {
     const url = `https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`;
-    items.push(row("Location", g.address || `${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}`, " · ",
-      h("a", { href: url, target: "_blank", rel: "noopener", class: "link", id: "d-map", text: "Open map" })));
+    const here = atShop(t);
+    items.push(row("Location", here ? h("strong", { class: "at-shop", text: "At shop · " }) : null, g.address || `${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}`, " · ",
+      h("a", { href: url, target: "_blank", rel: "noopener", class: "link", id: "d-map", text: "Open map" }), shopButton(t, here)));
   }
   if (isNum(g.fuel)) items.push(row("Fuel", `${g.fuel}%`));
   if (g.check === "on") items.push(row("Check engine", h("span", { class: "bad", text: "ON" }),
@@ -1890,6 +1860,26 @@ function gpsSection(t) {
   items.push(row("Tracker", g.device || "GPS device", h("small", { text: g.syncing ? "Miles come from this tracker." : "Miles are not synced from this tracker." })));
   if (g.note && !/^OK/.test(g.note)) items.push(row("Note", h("small", { text: g.note, style: "color:inherit" })));
   return h("div", { class: "dr-section", id: "d-gps" }, head, h("dl", { class: "gps-list" }, items));
+}
+
+/** Admins: "Set as shop" on a parked truck, so every truck parked there shows "At shop" instead of the street. */
+function shopButton(t, here) {
+  const g = t.gps;
+  if (!isAdmin() || apiLevel < 12 || g.offline || g.status === "Driving") return null;
+  const shop = shopLoc();
+  const [text, hint] = here ? ["Remove shop", "Trucks parked here show \u201cAt shop\u201d."]
+    : shop ? ["Make this the shop", "The shop is set somewhere else."]
+    : ["Set as shop", "Parked at the shop? Then trucks parked here show \u201cAt shop\u201d instead of the street."];
+  return h("small", { class: "shop-row" }, hint + " ",
+    h("button", { class: "link", type: "button", id: "d-shop", text, onclick: async e => {
+      const b = e.currentTarget; b.disabled = true;
+      try {
+        const out = await api("setShop", here ? { clear: true } : { lat: g.lat, lng: g.lng });
+        noteGps(Object.assign({}, gpsHealth, { shop: out.shop || null }));
+        toast(here ? "Shop removed" : "Shop set. Trucks parked here show \u201cAt shop\u201d.");
+        renderAll();
+      } catch (ex) { toast(ex && ex.error === "offline" ? "No connection. Try again when you're back online." : errText(ex)); b.disabled = false; }
+    } }));
 }
 
 /* ---------- service history ---------- */
@@ -2347,6 +2337,21 @@ function openService(id) {
         } }))));
 }
 
+/** What an edit changed, for the truck's history: name, plate, unit, driver and color by name, anything else as "Truck details edited". */
+function editItems(t, body) {
+  const s = v => v == null ? "" : typeof v === "object" ? JSON.stringify(Object.keys(v).sort().map(k => [k, v[k]])) : String(v);
+  const was = k => s(t[k]);
+  const items = [];
+  if (s(body.unit) !== was("unit")) items.push(`Renamed from ${t.unit || "(no name)"} to ${body.unit}`);
+  if (s(body.plate) !== was("plate")) items.push(`Plate set to ${body.plate || "(none)"}`);
+  if (s(body.division) !== was("division")) items.push(`Unit set to ${body.division || "(none)"}`);
+  if (s(body.driver) !== was("driver")) items.push(`Driver changed from ${t.driver || "(none)"} to ${body.driver || "(none)"}`);
+  if (s(body.color) !== was("color")) items.push(body.color ? "Color changed" : "Color removed");
+  const named = ["unit", "plate", "division", "driver", "color"];
+  if (Object.keys(body).some(k => !named.includes(k) && s(body[k]) !== was(k))) items.push("Truck details edited");
+  return items;
+}
+
 function openEdit(id) {
   const isNew = !id;
   const t = isNew
@@ -2445,8 +2450,8 @@ function openEdit(id) {
           const body = isNew ? {} : plain(t);
           try {
             Object.assign(body, {
-              unit: val("ed-unit").slice(0, 60), driver: val("ed-driver").slice(0, 60), vehicle: val("ed-vehicle").slice(0, 80),
-              year: val("ed-year").slice(0, 10), plate: val("ed-plate").slice(0, 20), division: val("ed-division"),
+              unit: val("ed-unit").slice(0, 60), driver: val("ed-driver").replace(/\s+/g, " ").slice(0, 60), vehicle: val("ed-vehicle").slice(0, 80),
+              year: val("ed-year").slice(0, 10), plate: val("ed-plate").replace(/\s+/g, " ").toUpperCase().slice(0, 20), division: val("ed-division"),
               oilInterval: nums["ed-oilIv"], milesAtOil: nums["ed-milesAtOil"], tm: prog ? kind : "none",
               inspectionDue: val("ed-insp"), registrationDue: val("ed-reg"), insuranceUntil: val("ed-ins"),
               notes: val("ed-notes").slice(0, 1000), order: isNum(t.order) ? t.order : 99
@@ -2455,7 +2460,10 @@ function openEdit(id) {
           if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { err.textContent = "A VIN has 17 letters and numbers (never I, O or Q). Check it, or leave it blank."; return; }
           body.vin = vin;
           body.color = isColor(val("ed-color")) ? val("ed-color").toLowerCase() : "";
+          body.unit = body.unit.replace(/\s+/g, " ");
           if (!body.unit) { err.textContent = "Give the truck a name."; return; }
+          const clash = trucks.find(x => x.id !== t.id && unitKey(x.unit) === unitKey(body.unit));
+          if (clash) { err.textContent = `"${clash.unit}" is already used by another truck. Pick a different name.`; return; }
             if (body.registrationDue && !/^\d{4}-\d{2}$/.test(body.registrationDue)) { err.textContent = "Registration month should look like 2026-02."; return; }
             if (kind === "cds") {
               body.hrsAtOil = opt("ed-hrsAtOil");
@@ -2469,8 +2477,10 @@ function openEdit(id) {
           const target = isNew
             ? { id: (body.unit.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "truck") + "-" + Math.random().toString(36).slice(2, 6), updatedAt: null }
             : t;
+          const items = isNew ? ["Truck added"] : editItems(t, body);
+          if (!items.length) { closeDialog(); return; }   // nothing changed
           try {
-            saveTruck(target, body, isNew ? { kind: "added", items: ["Truck added"] } : { kind: "edited", items: ["Truck details edited"] }, isNew ? `Added ${label(body)}` : `Saved ${label(body)}`);
+            saveTruck(target, body, { kind: isNew ? "added" : "edited", items }, isNew ? `Added ${label(body)}` : `Saved ${label(body)}`);
             closeDialog(); renderAll();
           } catch (e) { err.textContent = failText(e, "Nothing"); }
         } }))));
