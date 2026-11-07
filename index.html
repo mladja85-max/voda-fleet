@@ -172,6 +172,9 @@ button { font: inherit; color: inherit; }
 .chip-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .sortsel { font: inherit; font-weight: 600; font-size: .88rem; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .toolbar .count { color: var(--muted); font-size: .88rem; margin-left: auto; font-variant-numeric: tabular-nums; }
+.filt-btn { display: none; align-items: center; gap: 6px; white-space: nowrap; }
+.filt-btn[aria-pressed="true"], .toolbar.open .filt-btn { border-color: var(--accent); color: var(--accent); }
+.filt-btn .n { background: var(--accent); color: var(--accent-ink); border-radius: 999px; font-size: .72rem; padding: 0 6px; line-height: 1.5; }
 
 .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 @media (min-width: 1280px) {
@@ -201,6 +204,8 @@ button { font: inherit; color: inherit; }
 .div-chip.cleaning { background: var(--clean-bg); color: var(--clean); }
 .div-chip.restoration { background: var(--accent-soft); color: var(--accent); }
 .div-chip.none { color: var(--muted); border: 1px dashed var(--line); }
+#grid.split .tile-title .div-chip { display: none; }
+.tile-foot .miles { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
 .grp { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; padding: 0 2px 7px; border-bottom: 3px solid var(--line); }
 .grp:first-child { margin-top: 0; }
 .grp-name { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; text-transform: uppercase; letter-spacing: .04em; line-height: 1.1; }
@@ -301,7 +306,14 @@ dialog.drawer {
   border-radius: 0; padding: 0; background: var(--surface); color: var(--ink); overflow: auto;
 }
 dialog.drawer::backdrop { background: rgba(8, 12, 18, .45); }
-.dr-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.dr-top { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); }
+.dr-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 8px; background: var(--surface); }
+.dr-tabs { display: flex; gap: 2px; padding: 0 12px; overflow-x: auto; scrollbar-width: none; }
+.dr-tabs::-webkit-scrollbar { display: none; }
+.dr-tab { all: unset; box-sizing: border-box; cursor: pointer; padding: 9px 10px 8px; font-weight: 700; font-size: .88rem; color: var(--muted); white-space: nowrap; border-bottom: 3px solid transparent; }
+.dr-tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.dr-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+.tab-panel[hidden] { display: none !important; }
 .dr-head .titles { flex: 1; min-width: 0; }
 .title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .icon-btn.sm { width: 30px; height: 30px; border-radius: 8px; flex: none; }
@@ -425,6 +437,13 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   .top-actions .btn { padding: 8px 10px; }
   .search { max-width: none; }
   .toolbar .count { margin-left: 0; }
+  /* Phones: search + Filters on one line; the unit, truckmount and sort options open under it */
+  .toolbar { flex-wrap: wrap; gap: 8px; }
+  .toolbar .search { flex: 1 1 200px; min-width: 0; }
+  .toolbar .filt-btn { display: inline-flex; }
+  .toolbar:not(.open) > .sortsel, .toolbar:not(.open) > #tmOnly, .toolbar:not(.open) > .count { display: none; }
+  .toolbar.open > .sortsel, .toolbar.open > #tmOnly { flex: 1 1 calc(50% - 4px); }
+  .toolbar.open > .count { flex-basis: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .spin svg { animation: none; } }
 
@@ -500,11 +519,12 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   <div id="app" hidden>
     <section class="kpis" id="kpis" aria-label="Fleet summary"></section>
     <section class="tmcheck" id="tmcheck" aria-label="Tuesday TM hrs check" hidden></section>
-    <div class="toolbar">
+    <div class="toolbar" id="toolbar">
       <label class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input id="q" type="search" placeholder="Search name, plate, driver or VIN" autocomplete="off" aria-label="Search name, plate, driver or VIN">
       </label>
+      <button class="chip-btn filt-btn" type="button" id="filtBtn" aria-expanded="false" aria-controls="toolbar">Filters</button>
       <select class="sortsel" id="divSel" aria-label="Filter by unit">
         <option value="">All units</option>
         <option value="Cleaning">Cleaning</option>
@@ -1416,6 +1436,7 @@ function renderGrid() {
     kids.push(...g.items.map(x => tileEl(x.t)));
   }
   grid.replaceChildren(...kids);
+  grid.classList.toggle("split", split);   // the heading names the department, so the tiles don't repeat it
   if (!list.length) {
     grid.append(h("div", { class: "empty-grid" },
       trucks.length ? "No trucks match. " : "No trucks yet. ",
@@ -1425,6 +1446,7 @@ function renderGrid() {
   for (const x of list) updateTile(x.t.id);
   updateGroupHeads();
   $("countText").textContent = `${list.length} of ${scoped().length} trucks${view.division ? " · " + view.division : ""}`;
+  renderFiltBtn();
 }
 
 function quickField(labelText, id, value, mode, truckId, gps, locked) {
@@ -1436,9 +1458,13 @@ function quickField(labelText, id, value, mode, truckId, gps, locked) {
       onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); saveReading(truckId); } } }));
 }
 
+/** Miles on this truck come from One Step GPS, so the tile shows them instead of a box to type in. */
+const gpsMiles = t => !!(t.gps && t.gps.syncing) || t.readingBy === "GPS";
 function tileEl(t) {
   const prog = progOf(t);
   const v = currentValues(t);
+  const milesBox = isAdmin() && !gpsMiles(t);   // miles typed by hand on this truck
+  const quick = milesBox || !!prog;
   const sub = subLine(t);
   const theme = truckTheme(t.color);
   return h("article", { class: "tile" + (theme ? " colored" : ""), id: "tile-" + t.id, "data-status": "none", style: theme || null,
@@ -1450,14 +1476,13 @@ function tileEl(t) {
     h("div", { class: "metrics", id: "met-" + t.id }),
     h("p", { class: "tile-chk", id: "chk-" + t.id }),
     h("p", { class: "tile-gps", id: "gps-" + t.id }),
-    h("div", { class: "quick" + (prog ? "" : " no-tm") + (!isAdmin() && !prog ? " view-only" : "") },
-      quickField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id, t.readingBy === "GPS", !isAdmin()),
+    quick ? h("div", { class: "quick" + (milesBox && prog ? "" : " no-tm") },
+      milesBox ? quickField("Miles now", "m-" + t.id, v.milesStr, "numeric", t.id, false, false) : null,
       prog ? quickField("TM hrs now", "h-" + t.id, v.hrsStr, "decimal", t.id, false) : null,
-      isAdmin() || prog ? h("button", { class: "btn primary small", type: "button", id: "save-" + t.id, onclick: () => saveReading(t.id), text: "Save" }) : null),
+      h("button", { class: "btn primary small", type: "button", id: "save-" + t.id, onclick: () => saveReading(t.id), text: "Save" })) : null,
     h("p", { class: "warn", id: "warn-" + t.id, "aria-live": "polite" }),
     h("div", { class: "tile-foot" },
-      h("span", { class: "left", id: "meta-" + t.id }),
-      h("button", { class: "link", type: "button", onclick: () => openDetails(t.id), text: "Details ›" })));
+      h("span", { class: "left", id: "meta-" + t.id })));
 }
 
 /** A tap anywhere on a tile opens its details, except on the boxes you type in and the buttons.
@@ -1521,6 +1546,7 @@ function saveState(t, v) {
 }
 function metaBits(t, changed) {
   const bits = [];
+  if (!$("m-" + t.id) && isNum(t.milesNow)) bits.push(h("strong", { class: "miles", text: `${fmt(t.milesNow)} mi` }));   // no Miles box on the tile: show them
   if (t.readingAt) bits.push(h("span", { text: `${fmtWhen(t.readingAt)}${t.readingBy ? " · " + t.readingBy : ""}` }));
   else bits.push(h("span", { text: "No saved reading" }));
   if (changed && drafts[t.id]) bits.push(h("span", { text: "· not saved" }));
@@ -1630,9 +1656,11 @@ function previewColor(id, color) {
 }
 drawer.addEventListener("click", e => { if (e.target === drawer) drawer.close(); });
 
-function openDetails(id) {
+function openDetails(id, tab) {
   const t = byId(id); if (!t) return;
   if (svcView.id !== id) Object.assign(svcView, { id, type: "", q: "", all: false });
+  if (openId !== id || !drawer.open) drawerTab = "overview";   // a truck opens on its Overview
+  if (tab) drawerTab = tab;
   openId = id;
   renderDrawer(id);
   if (!drawer.open) { try { drawer.showModal(); } catch (e) { drawer.setAttribute("open", ""); } }
@@ -1712,13 +1740,25 @@ function renameForm(t) {
     h("div", { class: "rn-actions" }, save, h("button", { class: "btn small", type: "button", text: "Cancel", onclick: cancel })));
 }
 
+/* ---------- the truck panel's tabs: Overview · Service history · GPS · Activity ---------- */
+let drawerTab = "overview";
+const tabPanel = (key, el) => el ? (el.classList.add("tab-panel"), el.dataset.tab = key, el) : null;
+function showTab(key, quiet) {
+  drawerTab = key;
+  for (const p of drawer.querySelectorAll(".tab-panel")) p.hidden = p.dataset.tab !== key;
+  for (const b of drawer.querySelectorAll(".dr-tab")) b.setAttribute("aria-selected", String(b.id === "tab-" + key));
+  if (!quiet) drawer.scrollTop = 0;
+}
 function renderDrawer(id) {
   const t = byId(id);
   if (!t) { if (drawer.open) drawer.close(); return; }
   const prog = progOf(t);
   const v = currentValues(t);
   const theme = truckTheme(t.color) || null;
+  const tabs = [["overview", "Overview"], ["service", "Service history"], gpsOn() ? ["gps", "GPS"] : null, ["activity", "Activity"]].filter(Boolean);
+  if (!tabs.some(([k]) => k === drawerTab)) drawerTab = "overview";
   drawer.replaceChildren(
+    h("div", { class: "dr-top" },
     h("div", { class: "dr-head" + (theme ? " colored" : ""), style: theme },
       renameDraft && renameDraft.id === id ? renameForm(t) : h("div", { class: "titles" },
         h("div", { class: "title-row", style: "flex-wrap:wrap" },
@@ -1730,7 +1770,11 @@ function renderDrawer(id) {
       h("span", { class: "pill", id: "d-pill" }),
       h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => drawer.close() },
         h("span", { text: "✕", style: "font-size:15px;line-height:1" }))),
+    h("div", { class: "dr-tabs", role: "tablist", "aria-label": "Truck details" },
+      tabs.map(([k, lbl]) => h("button", { class: "dr-tab", type: "button", role: "tab", id: "tab-" + k, "aria-selected": String(k === drawerTab),
+        onclick: () => showTab(k), text: lbl })))),
     h("div", { class: "dr-body" },
+      h("div", { class: "tab-panel", "data-tab": "overview", style: "display:grid;gap:14px" },
       h("div", { class: "dfields" },
         detailField("Miles now", "dm-" + id, v.milesStr, "numeric", id, !isAdmin()),
         prog ? detailField("TM hrs now", "dh-" + id, v.hrsStr, "decimal", id) : null),
@@ -1743,10 +1787,11 @@ function renderDrawer(id) {
       prog ? h("div", { class: "tc-row", id: "d-chk" }) : null,
       h("div", { id: "d-res", style: "display:grid;gap:10px" }),
       h("div", { class: "chips", id: "d-paper" }),
-      h("p", { class: "meta", id: "d-meta" }),
-      serviceSection(t),
-      gpsSection(t),
-      h("div", { class: "dr-section" }, h("h3", { text: "Recent activity" }), h("ul", { class: "history", id: "d-hist" }))));
+      h("p", { class: "meta", id: "d-meta" })),
+      tabPanel("service", serviceSection(t)),
+      tabPanel("gps", gpsSection(t)),
+      tabPanel("activity", h("div", { class: "dr-section" }, h("h3", { text: "Recent activity" }), h("ul", { class: "history", id: "d-hist" })))));
+  showTab(drawerTab, true);
   updateDrawer(id);
   renderHistory(id);
   renderServices(id);
@@ -2113,6 +2158,16 @@ let qTimer = null;
 $("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { view.q = $("q").value; renderGrid(); }, 120); });
 $("sortSel").addEventListener("change", () => { view.sort = $("sortSel").value; saveView(); renderGrid(); });
 $("divSel").addEventListener("change", () => { view.division = $("divSel").value; if (view.filter !== "all") view.filter = "all"; saveView(); renderAll(); });
+$("filtBtn").addEventListener("click", () => {
+  const open = $("toolbar").classList.toggle("open");
+  $("filtBtn").setAttribute("aria-expanded", String(open));
+});
+/** The Filters button says how many options are changed from the usual (all units, all trucks, most urgent first). */
+function renderFiltBtn() {
+  const n = (view.division ? 1 : 0) + (view.tmOnly ? 1 : 0) + (view.sort !== "urgent" ? 1 : 0);
+  $("filtBtn").replaceChildren(document.createTextNode("Filters"), ...(n ? [h("span", { class: "n", text: String(n) })] : []));
+  $("filtBtn").setAttribute("aria-pressed", String(!!n));
+}
 $("tmOnly").addEventListener("click", () => { view.tmOnly = !view.tmOnly; $("tmOnly").setAttribute("aria-pressed", String(view.tmOnly)); saveView(); renderGrid(); });
 
 /* ---------- dialogs ---------- */
