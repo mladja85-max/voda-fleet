@@ -90,7 +90,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 17;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 18;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2277,8 +2277,16 @@ function suppliesForApp_(inLock, user) {
   const mine = {};
   lists.forEach(function (l) { mine[l.id] = true; });
   const cutoff = new Date(Date.now() - SUP_KEEP_DAYS * 864e5).toISOString();
-  const reqs = supRequests_(ss.getSheetByName(REQ_SHEET)).map(function (x) { return x.rec; })
-    .filter(function (r) { return mine[r.list] && (r.status === "To order" || r.status === "Ordered" || String(r.closedAt || r.updatedAt) >= cutoff); });
+  const allReqs = supRequests_(ss.getSheetByName(REQ_SHEET)).map(function (x) { return x.rec; }).filter(function (r) { return mine[r.list]; });
+  // When each item was last ordered, from the whole history (not only the last few weeks), so everyone can see it.
+  const lastOrdered = {};
+  allReqs.forEach(function (r) {
+    if (!r.orderedAt || r.status === "Removed") return;
+    const cur = lastOrdered[r.productId];
+    if (cur && cur.at >= r.orderedAt) return;
+    lastOrdered[r.productId] = { at: r.orderedAt, qty: r.qty, by: r.orderedBy, status: r.status, receivedAt: r.status === "Received" ? r.closedAt : "" };
+  });
+  const reqs = allReqs.filter(function (r) { return r.status === "To order" || r.status === "Ordered" || String(r.closedAt || r.updatedAt) >= cutoff; });
   const closed = reqs.filter(function (r) { return r.status === "Received" || r.status === "Removed"; })
     .sort(function (a, b) { return String(b.closedAt).localeCompare(String(a.closedAt)); }).slice(0, 150);
   const open = reqs.filter(function (r) { return r.status === "To order" || r.status === "Ordered"; });
@@ -2288,6 +2296,7 @@ function suppliesForApp_(inLock, user) {
     products: prod.list.filter(function (p) { return mine[p.list]; })
       .map(function (p) { return { id: p.id, list: p.list, section: p.section, name: p.name, container: p.container }; }),
     requests: open.concat(closed),
+    lastOrdered: lastOrdered,
     checks: supChecks_(ss.getSheetByName(CHK_SHEET), SUP_CHECKS_PER_LIST).filter(function (c) { return mine[c.list]; })
   };
 }
