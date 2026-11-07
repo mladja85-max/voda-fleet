@@ -90,7 +90,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 18;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 19;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2101,15 +2101,19 @@ function supText_(v, max) { return String(v === null || v === undefined ? "" : v
 function supIso_(v) { return isDate_(v) ? v.toISOString() : String(v === null || v === undefined ? "" : v); }
 function supListOf_(v) { return supText_(v, 40) || DEFAULT_LIST; }   // rows from before there were several checklists
 
-function supReady_() {
+/** The four tabs when they're already set up for this version of the script, or null. No heading checks: fast. */
+function supTabsIfReady_() {
+  if (PropertiesService.getScriptProperties().getProperty("SUP_SCHEMA") !== SUP_SCHEMA) return null;
   const ss = SpreadsheetApp.getActive();
-  return PropertiesService.getScriptProperties().getProperty("SUP_SCHEMA") === SUP_SCHEMA &&
-    !!(ss.getSheetByName(LIST_SHEET) && ss.getSheetByName(SUP_SHEET) && ss.getSheetByName(REQ_SHEET) && ss.getSheetByName(CHK_SHEET));
+  const t = { l: ss.getSheetByName(LIST_SHEET), p: ss.getSheetByName(SUP_SHEET), r: ss.getSheetByName(REQ_SHEET), c: ss.getSheetByName(CHK_SHEET) };
+  return t.l && t.p && t.r && t.c ? t : null;
 }
 
 /** The four checklist tabs, made the first time they're needed (Cleaning supplies starts with the paper list), and
  *  older tabs given any new heading. Call inside the lock. */
 function supSheets_() {
+  const ready = supTabsIfReady_();
+  if (ready) return ready;
   const ss = SpreadsheetApp.getActive();
   const make = function (name, cols, numCols) {
     let s = ss.getSheetByName(name);
@@ -2245,39 +2249,52 @@ function supRequests_(s) {
   }).filter(function (x) { return x.rec.id && x.rec.productId; });
 }
 /** The newest checks, up to `perList` for each checklist, newest first. */
-function supChecks_(s, perList) {
+/** The newest 500 checks, oldest first (one read: enough to spot a list sent twice and to show the latest ones). */
+function supReadChecks_(s) {
   const last = s.getLastRow();
   if (last < 2) return [];
   const from = Math.max(2, last - 499);
-  const count = {};
   return s.getRange(from, 1, last - from + 1, CHK_COLS.length).getValues().map(function (r) {
     return { id: String(r[0] || ""), at: supIso_(r[1]), by: String(r[2] || ""), missing: num_(r[3]) || 0, items: String(r[4] || ""), note: String(r[5] || ""), list: supListOf_(r[6]) };
-  }).filter(function (c) { return c.id; }).reverse().filter(function (c) {
+  }).filter(function (c) { return c.id; });
+}
+/** Up to `perList` checks for each checklist, newest first. */
+function supRecentChecks_(rows, perList) {
+  const count = {};
+  return rows.slice().reverse().filter(function (c) {
     count[c.list] = (count[c.list] || 0) + 1;
     return count[c.list] <= perList;
   });
 }
-function supCheckSeen_(s, checkId) {
-  const last = s.getLastRow();
-  if (last < 2) return false;
-  const from = Math.max(2, last - 199);   // a resend comes right after the first try, so the newest rows are enough
-  return s.getRange(from, 1, last - from + 1, 1).getValues().some(function (r) { return String(r[0]) === checkId; });
+/** Writes changed order rows, one call for each run of rows next to each other ("All ordered" is usually one call). */
+function supWriteReqRows_(s, changed) {
+  changed.sort(function (a, b) { return a.rowIndex - b.rowIndex; });
+  for (let i = 0; i < changed.length;) {
+    let j = i;
+    while (j + 1 < changed.length && changed[j + 1].rowIndex === changed[j].rowIndex + 1) j++;
+    s.getRange(changed[i].rowIndex, 1, j - i + 1, REQ_COLS.length).setValues(changed.slice(i, j + 1).map(function (x) { return supReqRow_(x.rec); }));
+    i = j + 1;
+  }
 }
 
 /** What the app shows this person: the checklists they may see, with their items, everything still to order or on its
  *  way, what closed lately, and the last checks. */
-function suppliesForApp_(inLock, user) {
+function suppliesForApp_(inLock, user, pre) {
+  // pre: what a save already read and changed (tabs, lists, products, reqs, checks), so it isn't read twice.
+  pre = pre || {};
   const lockIf = function (fn) { return inLock ? fn() : withLock_(fn); };
-  if (!supReady_()) lockIf(supSheets_);
-  const ss = SpreadsheetApp.getActive();
-  const ps = ss.getSheetByName(SUP_SHEET);
-  let prod = supProducts_(ps, false);
-  if (prod.missingIds) prod = lockIf(function () { return supProducts_(ps, true); });
-  const lists = supLists_(ss.getSheetByName(LIST_SHEET)).filter(function (l) { return canSee_(user, l.id); });
+  const t = pre.tabs || supTabsIfReady_() || lockIf(supSheets_);
+  let products = pre.products;
+  if (!products) {
+    let prod = supProducts_(t.p, false);
+    if (prod.missingIds) prod = lockIf(function () { return supProducts_(t.p, true); });
+    products = prod.list;
+  }
+  const lists = (pre.lists || supLists_(t.l)).filter(function (l) { return canSee_(user, l.id); });
   const mine = {};
   lists.forEach(function (l) { mine[l.id] = true; });
   const cutoff = new Date(Date.now() - SUP_KEEP_DAYS * 864e5).toISOString();
-  const allReqs = supRequests_(ss.getSheetByName(REQ_SHEET)).map(function (x) { return x.rec; }).filter(function (r) { return mine[r.list]; });
+  const allReqs = (pre.reqs || supRequests_(t.r).map(function (x) { return x.rec; })).filter(function (r) { return mine[r.list]; });
   // When each item was last ordered, from the whole history (not only the last few weeks), so everyone can see it.
   const lastOrdered = {};
   allReqs.forEach(function (r) {
@@ -2293,11 +2310,11 @@ function suppliesForApp_(inLock, user) {
   return {
     ver: supVer_(),
     lists: lists.map(function (l) { return { id: l.id, name: l.name, note: l.note }; }),
-    products: prod.list.filter(function (p) { return mine[p.list]; })
+    products: products.filter(function (p) { return mine[p.list]; })
       .map(function (p) { return { id: p.id, list: p.list, section: p.section, name: p.name, container: p.container }; }),
     requests: open.concat(closed),
     lastOrdered: lastOrdered,
-    checks: supChecks_(ss.getSheetByName(CHK_SHEET), SUP_CHECKS_PER_LIST).filter(function (c) { return mine[c.list]; })
+    checks: supRecentChecks_(pre.checks || supReadChecks_(t.c), SUP_CHECKS_PER_LIST).filter(function (c) { return mine[c.list]; })
   };
 }
 
@@ -2309,17 +2326,25 @@ function supplyReport_(req) {
   const items = Array.isArray(req.items) ? req.items : null;
   const listId = String(req.list || DEFAULT_LIST);
   if (!/^[A-Za-z0-9-]{6,40}$/.test(checkId) || !items || items.length > 300) return { ok: false, error: "bad_request" };
-  const list = supLists_(sh.l).filter(function (l) { return l.id === listId; })[0];
+  const allLists = supLists_(sh.l);
+  const list = allLists.filter(function (l) { return l.id === listId; })[0];
   if (!list) return { ok: false, error: "gone" };
   if (!canSee_(req.user, list.id)) return { ok: false, error: "not_allowed" };
-  if (supCheckSeen_(sh.c, checkId)) return { ok: true, repeat: true, supplies: suppliesForApp_(true, req.user) };
-  const products = {};
-  supProducts_(sh.p, true).list.forEach(function (p) { if (p.list === list.id) products[p.id] = p; });
+  const checks = supReadChecks_(sh.c);
+  const prodList = supProducts_(sh.p, true).list;
   const all = supRequests_(sh.r);
+  const answer = function (fresh) {   // everything the app needs, from what's already in hand (no second read)
+    return suppliesForApp_(true, req.user, { tabs: sh, lists: allLists, products: prodList, checks: checks,
+      reqs: all.map(function (x) { return x.rec; }).concat(fresh || []) });
+  };
+  // Sent twice (an answer lost on a bad signal)? The first one already counts.
+  if (checks.some(function (c) { return c.id === checkId; })) return { ok: true, repeat: true, supplies: answer() };
+  const products = {};
+  prodList.forEach(function (p) { if (p.list === list.id) products[p.id] = p; });
   const now = new Date().toISOString();
   const by = String(req.by || "").slice(0, 60);
   const note = String(req.note || "").trim().slice(0, 500);
-  const lines = [], add = [], seen = {};
+  const lines = [], add = [], fresh = [], updated = [], seen = {};
   let skipped = 0;
   const already = [];
   const admin = !!(req.user && req.user.role === "admin");
@@ -2337,17 +2362,20 @@ function supplyReport_(req) {
     rec.qty = qty;
     rec.reportedAt = now; rec.reportedBy = by;
     rec.updatedAt = now; rec.checkId = checkId;
-    if (open) sh.r.getRange(open.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(rec)]);
-    else add.push(supReqRow_(rec));
+    if (open) updated.push(open);
+    else { const row = supReqRow_(rec); add.push(row); fresh.push(supReqFromRow_(row)); }   // the same shape a fresh read gives
     lines.push({ name: p.name, container: p.container, qty: qty });
   });
+  supWriteReqRows_(sh.r, updated);
   appendRows_(sh.r, REQ_COLS.length, add);
   const text = lines.map(function (l) { return l.name + " x" + l.qty; }).join(", ");
-  appendRows_(sh.c, CHK_COLS.length, [[checkId, now, by, lines.length, text.slice(0, 2000) || "Nothing missing", note, list.id]]);
+  const chk = { id: checkId, at: now, by: by, missing: lines.length, items: text.slice(0, 2000) || "Nothing missing", note: note, list: list.id };
+  appendRows_(sh.c, CHK_COLS.length, [[chk.id, chk.at, chk.by, chk.missing, chk.items, chk.note, chk.list]]);
+  checks.push(chk);
   if (lines.length && req.user && req.user.role !== "admin") {
     try { supplyEmail_(by, list, lines, note, false); } catch (e) { /* an email problem never stops the list from saving */ }
   }
-  return { ok: true, skipped: skipped, already: already, supplies: suppliesForApp_(true, req.user) };
+  return { ok: true, skipped: skipped, already: already, supplies: answer(fresh) };
 }
 
 /** Admin: mark items Ordered / Received / back to To order / Removed, and/or change how many. */
@@ -2362,18 +2390,23 @@ function supplyStatus_(req) {
   const all = supRequests_(sh.r);
   const now = new Date().toISOString();
   const by = String(req.by || "").slice(0, 60);
-  let changed = 0, gone = 0;
+  const byId = {};
+  all.forEach(function (y) { byId[y.rec.id] = y; });
+  const done = [];
+  let gone = 0;
   ids.forEach(function (id) {
-    const x = all.filter(function (y) { return y.rec.id === id; })[0];
+    const x = byId[id];
     if (!x) { gone++; return; }
+    if (done.indexOf(x) !== -1) return;
     const r = x.rec;
     if (qty !== null) r.qty = qty;
     if (status !== null && status !== r.status) supSetStatus_(r, status, now, by);
     r.updatedAt = now;
-    sh.r.getRange(x.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(r)]);
-    changed++;
+    done.push(x);
   });
-  return { ok: true, changed: changed, gone: gone, supplies: suppliesForApp_(true, req.user) };
+  supWriteReqRows_(sh.r, done);
+  return { ok: true, changed: done.length, gone: gone,
+    supplies: suppliesForApp_(true, req.user, { tabs: sh, reqs: all.map(function (y) { return y.rec; }) }) };
 }
 function supSetStatus_(r, status, now, by) {
   if (status === "To order") { r.orderedAt = ""; r.orderedBy = ""; r.closedAt = ""; r.closedBy = ""; }
