@@ -193,6 +193,21 @@ button { font: inherit; color: inherit; }
 .div-chip.cleaning { background: var(--clean-bg); color: var(--clean); }
 .div-chip.restoration { background: var(--accent-soft); color: var(--accent); }
 .div-chip.none { color: var(--muted); border: 1px dashed var(--line); }
+.grp { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; padding: 0 2px 7px; border-bottom: 3px solid var(--line); }
+.grp:first-child { margin-top: 0; }
+.grp-name { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; text-transform: uppercase; letter-spacing: .04em; line-height: 1.1; }
+.grp.restoration { border-bottom-color: var(--accent); }
+.grp.restoration .grp-name { color: var(--accent); }
+.grp.cleaning { border-bottom-color: var(--clean); }
+.grp.cleaning .grp-name { color: var(--clean); }
+.grp.none .grp-name { color: var(--muted); }
+.grp-count { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.grp-stats { display: inline-flex; gap: 6px; }
+.grp-stat { font-size: .74rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.grp-stat.due { background: var(--due-bg); color: var(--due); }
+.grp-stat.soon { background: var(--soon-bg); color: var(--soon); }
+.grp-stat.ok { background: var(--ok-bg); color: var(--ok); }
+.grp-hint { color: var(--muted); font-size: .8rem; }
 .unit { font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; text-transform: uppercase; letter-spacing: .02em; line-height: 1.05; }
 .driver { color: var(--muted); font-weight: 600; }
 .tile-sub { margin: 3px 0 0; padding: 0 14px; color: var(--muted); font-size: .84rem; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -1349,11 +1364,39 @@ function renderCheck() {
     !isAdmin() && left.length ? h("p", { class: "tc-hint", text: "Type the TM hrs on each truck and tap Save, or tap Confirm if they haven't changed. Truck not here? Open it and tap Not available this week." }) : null].filter(Boolean));
 }
 
+const GROUPS = [["Restoration", "restoration"], ["Cleaning", "cleaning"], ["", "none"]];
+const groupOf = t => DIVISIONS.includes(t.division) ? t.division : "";
+/** Each department heading shows how many of its trucks are overdue or due soon (kept current while typing). */
+function updateGroupHeads() {
+  const heads = document.querySelectorAll("#grid .grp");
+  if (!heads.length) return;
+  const list = visibleTrucks();
+  for (const el of heads) {
+    const items = list.filter(x => groupOf(x.t) === el.dataset.group && !x.e.r.empty);
+    const due = items.filter(x => x.e.r.worst === "due").length, soon = items.filter(x => x.e.r.worst === "soon").length;
+    el.querySelector(".grp-stats").replaceChildren(...[
+      due ? h("span", { class: "grp-stat due", text: `${due} overdue` }) : null,
+      soon ? h("span", { class: "grp-stat soon", text: `${soon} due soon` }) : null,
+      !due && !soon && items.length ? h("span", { class: "grp-stat ok", text: "All OK" }) : null].filter(Boolean));
+  }
+}
 function renderGrid() {
   const grid = $("grid");
   if (!loaded) { grid.replaceChildren(h("p", { class: "loading", text: "Loading fleet…" })); return; }
   const list = visibleTrucks();
-  grid.replaceChildren(...list.map(x => tileEl(x.t)));
+  // One section per department (Restoration, then Cleaning, then trucks with no unit), each in the chosen order.
+  const groups = GROUPS.map(([name, cls]) => ({ name, cls, items: list.filter(x => groupOf(x.t) === name) })).filter(g => g.items.length);
+  const split = groups.length > 1;
+  const kids = [];
+  for (const g of groups) {
+    if (split) kids.push(h("div", { class: "grp " + g.cls, id: "grp-" + g.cls, "data-group": g.name, role: "heading", "aria-level": "2" },
+      h("span", { class: "grp-name", text: g.name || "No unit" }),
+      h("span", { class: "grp-count", text: `${g.items.length} truck${g.items.length === 1 ? "" : "s"}` }),
+      h("span", { class: "grp-stats" }),
+      g.name ? null : h("span", { class: "grp-hint", text: "Set the unit with the pencil in the truck's details" })));
+    kids.push(...g.items.map(x => tileEl(x.t)));
+  }
+  grid.replaceChildren(...kids);
   if (!list.length) {
     grid.append(h("div", { class: "empty-grid" },
       trucks.length ? "No trucks match. " : "No trucks yet. ",
@@ -1361,6 +1404,7 @@ function renderGrid() {
                     : h("button", { class: "link", type: "button", text: "Add truck", onclick: () => openEdit(null) })));
   }
   for (const x of list) updateTile(x.t.id);
+  updateGroupHeads();
   $("countText").textContent = `${list.length} of ${scoped().length} trucks${view.division ? " · " + view.division : ""}`;
 }
 
@@ -1407,6 +1451,7 @@ function onType(id, prefix) {
   if (om && om !== document.activeElement) om.value = drafts[id].miles ?? "";
   if (oh && oh !== document.activeElement) oh.value = drafts[id].hrs ?? "";
   updateTile(id);
+  updateGroupHeads();
   if (openId === id && drawer.open) updateDrawer(id);
   renderKpis();
   renderAside();
