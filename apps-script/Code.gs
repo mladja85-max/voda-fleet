@@ -64,6 +64,15 @@
  * To stop the sync: pick "gpsStop" and click Run.
  * Shop: in the app, open a truck parked at the shop > GPS > "Set as shop". Trucks parked there then show "At shop"
  *  instead of the street address. It's kept in the Script Property SHOP_AT; "Remove shop" in the app clears it.
+ *
+ * CLEANING SUPPLIES
+ * The app's Supplies tab is the cleaning products checklist. A technician taps what's missing, sets how many, and sends it.
+ * Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with any
+ * note) is kept on the Supply checks tab. The product list is the Supplies tab: change it in the app (Supplies > Edit
+ * products). The three tabs are made the first time the app opens Supplies, with the products from the paper checklist.
+ * When a technician sends missing items, an email goes to the Script Property SUPPLY_EMAIL if you add one, otherwise to
+ * TM_CHECK_EMAIL, otherwise to the Google account that runs this script. Set SUPPLY_EMAIL to off to stop these emails.
+ * To see one: pick "supplyEmailTest" and click Run.
  */
 
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
@@ -73,7 +82,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 13;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 14;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -194,7 +203,9 @@ function doPost(e) {
         const trucks = readTrucks_().map(function (x) { return x.truck; });
         let gps = null;
         try { gps = gpsForApp_(trucks); } catch (e) { gps = null; }   // GPS details never stop the list from loading
-        return json_({ ok: true, trucks: trucks, gps: gps, me: publicUser_(user), serverTime: new Date().toISOString() });
+        let supplies = null;
+        try { supplies = suppliesForApp_(false); } catch (e) { supplies = null; }   // nor do the cleaning supplies
+        return json_({ ok: true, trucks: trucks, gps: gps, supplies: supplies, me: publicUser_(user), serverTime: new Date().toISOString() });
       }
       case "saveTruck":
         return json_(withLock_(function () { return saveTruck_(req); }));
@@ -212,6 +223,14 @@ function doPost(e) {
         return json_(withLock_(function () { return svcDelete_(req); }));
       case "setShop":
         return json_(setShop_(req));
+      case "supplies":
+        return json_({ ok: true, supplies: suppliesForApp_(false) });
+      case "supplyReport":
+        return json_(withLock_(function () { return supplyReport_(req); }));
+      case "supplyStatus":
+        return json_(withLock_(function () { return supplyStatus_(req); }));
+      case "saveProducts":
+        return json_(withLock_(function () { return saveProducts_(req); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -344,7 +363,8 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin"];
 const ROLES = ["admin", "tech"];
-const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setShop"];
+const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setShop",
+  "supplyStatus", "saveProducts"];
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
 const INVITE_DAYS = 14;      // an invite or reset code works this long
 const MAX_TRIES = 5;         // wrong passcodes in a row before a lock
@@ -1955,4 +1975,334 @@ function setShop_(req) {
   if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return { ok: false, error: "bad_request" };
   p.setProperty("SHOP_AT", lat.toFixed(5) + ", " + lng.toFixed(5));
   return { ok: true, shop: shopAt_() };
+}
+
+/* ---------------- cleaning supplies ---------------- */
+// Supplies: the checklist, one product per row (from the paper "Cleaning products checklist").
+// Supply orders: one row per missing product: To order > Ordered > Received (or Removed).
+// Supply checks: every list a person sends from the app, even "nothing missing".
+
+const SUP_SHEET = "Supplies";
+const SUP_COLS = ["id", "order", "section", "name", "container"];
+const REQ_SHEET = "Supply orders";
+const REQ_COLS = ["id", "productId", "product", "container", "section", "qty", "status",
+  "reportedAt", "reportedBy", "orderedAt", "orderedBy", "closedAt", "closedBy", "updatedAt", "checkId"];
+const CHK_SHEET = "Supply checks";
+const CHK_COLS = ["id", "at", "by", "missing", "items", "note"];
+const REQ_STATUS = ["To order", "Ordered", "Received", "Removed"];
+const SUP_MAX_QTY = 999;
+const SUP_KEEP_DAYS = 45;    // received or removed items stay in the app this long (they stay in the sheet for good)
+const SUP_SEED = [
+  ["Carpet & upholstery", "Procyon Powder", "box"],
+  ["Carpet & upholstery", "Procyon Liquid", "gallon"],
+  ["Carpet & upholstery", "Urine Stain Remover (USOR)", ""],
+  ["Carpet & upholstery", "Gel Break", "quart"],
+  ["Carpet & upholstery", "Pet Zone", "jug"],
+  ["Carpet & upholstery", "Stain 1", "quart"],
+  ["Carpet & upholstery", "Red One", "quart"],
+  ["Carpet & upholstery", "Perky", "gallon"],
+  ["Carpet & upholstery", "T-Rust", "gallon"],
+  ["Carpet & upholstery", "Avenge Pro", "gallon"],
+  ["Carpet & upholstery", "Lemon Fresh", "gallon"],
+  ["Carpet & upholstery", "Defoamer", "jug"],
+  ["Carpet & upholstery", "Maxim Carpet", "gallon"],
+  ["Carpet & upholstery", "Maxim Upholstery", "gallon"],
+  ["Carpet & upholstery", "Liquid Browning", "gallon"],
+  ["Carpet & upholstery", "Traffic Slam", ""],
+  ["Carpet & upholstery", "Fab Set", ""],
+  ["Hard floors", "Squeaky", "gallon"],
+  ["Hard floors", "I.F.T.", "gallon"],
+  ["Hard floors", "Refinisher", "quart"],
+  ["Hard floors", "Disolver", "gallon"],
+  ["Hard floors", "Microfiber mop pads", ""],
+  ["Hard floors", "Polish pads", ""],
+  ["Hard floors", "Maroon pads", ""],
+  ["Tile & grout", "Grout Master", "pail"],
+  ["Tile & grout", "Viper Grout Sealer", "gallon"],
+  ["Job supplies", "Shoe covers", ""],
+  ["Job supplies", "Furniture tape", ""],
+  ["Job supplies", "Styrofoam blocks", ""],
+  ["Job supplies", "Towels", ""],
+  ["Job supplies", "Black pads", ""],
+  ["Job supplies", "Green pads", ""],
+  ["Job supplies", "Stripper", ""],
+  ["Job supplies", "Wax VCT", ""],
+  ["Job supplies", "Vacuum bags", ""],
+  ["Job supplies", "White trash bags", ""]
+];
+
+function supNewId_(prefix) { return (prefix || "p") + "-" + Utilities.getUuid().replace(/-/g, "").slice(0, 10); }
+function supText_(v, max) { return String(v === null || v === undefined ? "" : v).trim().replace(/\s+/g, " ").slice(0, max); }
+function supIso_(v) { return isDate_(v) ? v.toISOString() : String(v === null || v === undefined ? "" : v); }
+
+function supReady_() {
+  const ss = SpreadsheetApp.getActive();
+  return !!(ss.getSheetByName(SUP_SHEET) && ss.getSheetByName(REQ_SHEET) && ss.getSheetByName(CHK_SHEET));
+}
+
+/** The three supply tabs, made the first time they're needed (the checklist starts with the paper list). Call inside the lock. */
+function supSheets_() {
+  const ss = SpreadsheetApp.getActive();
+  const make = function (name, cols, numCols) {
+    let s = ss.getSheetByName(name);
+    if (s) return { s: s, isNew: false };
+    s = ss.insertSheet(name);
+    if (s.getMaxColumns() < cols.length) s.insertColumnsAfter(s.getMaxColumns(), cols.length - s.getMaxColumns());
+    s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    cols.forEach(function (c, i) {
+      if (numCols.indexOf(c) === -1) s.getRange(2, i + 1, Math.max(s.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+    });
+    return { s: s, isNew: true };
+  };
+  const p = make(SUP_SHEET, SUP_COLS, ["order"]);
+  if (p.isNew) {
+    appendRows_(p.s, SUP_COLS.length, SUP_SEED.map(function (x, i) { return [supNewId_(), i + 1, x[0], x[1], x[2]]; }));
+    p.s.autoResizeColumns(1, SUP_COLS.length);
+    supBump_();
+  }
+  const r = make(REQ_SHEET, REQ_COLS, ["qty"]);
+  const c = make(CHK_SHEET, CHK_COLS, ["missing"]);
+  return { p: p.s, r: r.s, c: c.s };
+}
+
+/** Changes whenever the product list is saved from the app, so two people editing it can't overwrite each other. */
+function supVer_() {
+  const p = PropertiesService.getScriptProperties();
+  return p.getProperty("SUPPLIES_VER") || supBump_();
+}
+function supBump_() {
+  const v = new Date().toISOString();
+  PropertiesService.getScriptProperties().setProperty("SUPPLIES_VER", v);
+  return v;
+}
+
+/** Products in checklist order. A row typed straight into the sheet gets an ID when `fix` is true (inside the lock). */
+function supProducts_(s, fix) {
+  const last = s.getLastRow();
+  if (last < 2) return { list: [], missingIds: false };
+  const vals = s.getRange(2, 1, last - 1, SUP_COLS.length).getValues();
+  const out = [];
+  let missingIds = false;
+  const seen = {};
+  vals.forEach(function (r, i) {
+    const name = supText_(r[3], 60);
+    if (!name) return;
+    let id = String(r[0] || "").trim();
+    if (!/^[A-Za-z0-9-]{3,40}$/.test(id) || seen[id]) {
+      missingIds = true;
+      if (!fix) return;
+      id = supNewId_();
+      s.getRange(i + 2, 1).setValue(id);
+    }
+    seen[id] = true;
+    out.push({ id: id, order: num_(r[1]), section: supText_(r[2], 40) || "Other", name: name, container: supText_(r[4], 20), row: i + 2 });
+  });
+  out.sort(function (a, b) {
+    const ao = a.order === null ? 1e9 : a.order, bo = b.order === null ? 1e9 : b.order;
+    return ao - bo || a.row - b.row;
+  });
+  return { list: out, missingIds: missingIds };
+}
+
+function supReqFromRow_(r) {
+  const o = {};
+  REQ_COLS.forEach(function (c, i) { o[c] = c === "qty" ? num_(r[i]) : supIso_(r[i]); });
+  if (REQ_STATUS.indexOf(o.status) === -1) o.status = "To order";
+  return o;
+}
+function supReqRow_(o) {
+  return REQ_COLS.map(function (c) {
+    if (c === "qty") { const n = num_(o.qty); return n === null ? "" : n; }
+    return o[c] === null || o[c] === undefined ? "" : String(o[c]);
+  });
+}
+function supRequests_(s) {
+  const last = s.getLastRow();
+  if (last < 2) return [];
+  return s.getRange(2, 1, last - 1, REQ_COLS.length).getValues().map(function (r, i) {
+    return { rowIndex: i + 2, rec: supReqFromRow_(r) };
+  }).filter(function (x) { return x.rec.id && x.rec.productId; });
+}
+function supChecks_(s, n) {
+  const last = s.getLastRow();
+  if (last < 2) return [];
+  const from = Math.max(2, last - n + 1);
+  return s.getRange(from, 1, last - from + 1, CHK_COLS.length).getValues().map(function (r) {
+    return { id: String(r[0] || ""), at: supIso_(r[1]), by: String(r[2] || ""), missing: num_(r[3]) || 0, items: String(r[4] || ""), note: String(r[5] || "") };
+  }).filter(function (c) { return c.id; }).reverse();
+}
+function supCheckSeen_(s, checkId) {
+  const last = s.getLastRow();
+  if (last < 2) return false;
+  const from = Math.max(2, last - 199);   // a resend comes right after the first try, so the newest rows are enough
+  return s.getRange(from, 1, last - from + 1, 1).getValues().some(function (r) { return String(r[0]) === checkId; });
+}
+
+/** What the app shows: the checklist, everything still to order or on its way, what closed lately, the last checks. */
+function suppliesForApp_(inLock) {
+  const lockIf = function (fn) { return inLock ? fn() : withLock_(fn); };
+  if (!supReady_()) lockIf(supSheets_);
+  const ss = SpreadsheetApp.getActive();
+  const ps = ss.getSheetByName(SUP_SHEET);
+  let prod = supProducts_(ps, false);
+  if (prod.missingIds) prod = lockIf(function () { return supProducts_(ps, true); });
+  const cutoff = new Date(Date.now() - SUP_KEEP_DAYS * 864e5).toISOString();
+  const reqs = supRequests_(ss.getSheetByName(REQ_SHEET)).map(function (x) { return x.rec; })
+    .filter(function (r) { return r.status === "To order" || r.status === "Ordered" || String(r.closedAt || r.updatedAt) >= cutoff; });
+  const closed = reqs.filter(function (r) { return r.status === "Received" || r.status === "Removed"; })
+    .sort(function (a, b) { return String(b.closedAt).localeCompare(String(a.closedAt)); }).slice(0, 60);
+  const open = reqs.filter(function (r) { return r.status === "To order" || r.status === "Ordered"; });
+  return {
+    ver: supVer_(),
+    products: prod.list.map(function (p) { return { id: p.id, section: p.section, name: p.name, container: p.container }; }),
+    requests: open.concat(closed),
+    checks: supChecks_(ss.getSheetByName(CHK_SHEET), 12)
+  };
+}
+
+/** Anyone signed in: the products that are missing and how many (the newest count wins for a product not ordered yet),
+ *  or an empty list for "nothing missing". checkId comes from the phone, so a list sent twice counts once. */
+function supplyReport_(req) {
+  const sh = supSheets_();
+  const checkId = String(req.checkId || "");
+  const items = Array.isArray(req.items) ? req.items : null;
+  if (!/^[A-Za-z0-9-]{6,40}$/.test(checkId) || !items || items.length > 300) return { ok: false, error: "bad_request" };
+  if (supCheckSeen_(sh.c, checkId)) return { ok: true, repeat: true, supplies: suppliesForApp_(true) };
+  const products = {};
+  supProducts_(sh.p, true).list.forEach(function (p) { products[p.id] = p; });
+  const all = supRequests_(sh.r);
+  const now = new Date().toISOString();
+  const by = String(req.by || "").slice(0, 60);
+  const note = String(req.note || "").trim().slice(0, 500);
+  const lines = [], add = [], seen = {};
+  let skipped = 0;
+  items.forEach(function (it) {
+    const p = it && products[String(it.productId || "")];
+    const qty = Math.round(Number(it && it.qty));
+    if (!p || seen[p.id] || !(qty >= 1 && qty <= SUP_MAX_QTY)) { skipped++; return; }
+    seen[p.id] = true;
+    const open = all.filter(function (x) { return x.rec.productId === p.id && x.rec.status === "To order"; })[0];
+    const rec = open ? open.rec : { id: supNewId_("r"), productId: p.id, status: "To order", orderedAt: "", orderedBy: "", closedAt: "", closedBy: "" };
+    rec.product = p.name; rec.container = p.container; rec.section = p.section;
+    rec.qty = qty;
+    rec.reportedAt = now; rec.reportedBy = by;
+    rec.updatedAt = now; rec.checkId = checkId;
+    if (open) sh.r.getRange(open.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(rec)]);
+    else add.push(supReqRow_(rec));
+    lines.push({ name: p.name, container: p.container, qty: qty });
+  });
+  appendRows_(sh.r, REQ_COLS.length, add);
+  const text = lines.map(function (l) { return l.name + " x" + l.qty; }).join(", ");
+  appendRows_(sh.c, CHK_COLS.length, [[checkId, now, by, lines.length, text.slice(0, 2000) || "Nothing missing", note]]);
+  if (lines.length && req.user && req.user.role !== "admin") {
+    try { supplyEmail_(by, lines, note, false); } catch (e) { /* an email problem never stops the list from saving */ }
+  }
+  return { ok: true, skipped: skipped, supplies: suppliesForApp_(true) };
+}
+
+/** Admin: mark items Ordered / Received / back to To order / Removed, and/or change how many. */
+function supplyStatus_(req) {
+  const sh = supSheets_();
+  const ids = (Array.isArray(req.ids) ? req.ids : [req.id]).map(function (x) { return String(x || ""); }).filter(Boolean).slice(0, 500);
+  const status = req.status === undefined || req.status === null ? null : String(req.status);
+  const qty = req.qty === undefined || req.qty === null ? null : Math.round(Number(req.qty));
+  if (!ids.length || (status === null && qty === null)) return { ok: false, error: "bad_request" };
+  if (status !== null && REQ_STATUS.indexOf(status) === -1) return { ok: false, error: "bad_request" };
+  if (qty !== null && !(qty >= 1 && qty <= SUP_MAX_QTY)) return { ok: false, error: "bad_request" };
+  const all = supRequests_(sh.r);
+  const now = new Date().toISOString();
+  const by = String(req.by || "").slice(0, 60);
+  let changed = 0, gone = 0;
+  ids.forEach(function (id) {
+    const x = all.filter(function (y) { return y.rec.id === id; })[0];
+    if (!x) { gone++; return; }
+    const r = x.rec;
+    if (qty !== null) r.qty = qty;
+    if (status !== null && status !== r.status) {
+      if (status === "To order") { r.orderedAt = ""; r.orderedBy = ""; r.closedAt = ""; r.closedBy = ""; }
+      else if (status === "Ordered") { r.orderedAt = now; r.orderedBy = by; r.closedAt = ""; r.closedBy = ""; }
+      else {
+        if (status === "Received" && !r.orderedAt) { r.orderedAt = now; r.orderedBy = by; }
+        r.closedAt = now; r.closedBy = by;
+      }
+      r.status = status;
+    }
+    r.updatedAt = now;
+    sh.r.getRange(x.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(r)]);
+    changed++;
+  });
+  return { ok: true, changed: changed, gone: gone, supplies: suppliesForApp_(true) };
+}
+
+/** Admin: the whole product list from the app's editor (names, containers, sections, order). Items already on the
+ *  order list keep showing, and pick up a product's new name. */
+function saveProducts_(req) {
+  const sh = supSheets_();
+  if (String(req.base || "") !== supVer_()) return { ok: false, error: "conflict", supplies: suppliesForApp_(true) };
+  const list = Array.isArray(req.products) ? req.products : null;
+  if (!list || list.length > 500) return { ok: false, error: "bad_request" };
+  const cur = {};
+  supProducts_(sh.p, true).list.forEach(function (p) { cur[p.id] = p; });
+  const rows = [], used = {}, byId = {};
+  list.forEach(function (x) {
+    if (!x || typeof x !== "object") return;
+    const name = supText_(x.name, 60);
+    if (!name) return;
+    let id = String(x.id || "");
+    if (!cur[id] || used[id]) id = supNewId_();
+    used[id] = true;
+    const p = { id: id, section: supText_(x.section, 40) || "Other", name: name, container: supText_(x.container, 20) };
+    byId[id] = p;
+    rows.push([p.id, rows.length + 1, p.section, p.name, p.container]);
+  });
+  if (!rows.length) return { ok: false, error: "empty_list" };   // never wipe the whole checklist by mistake
+  const s = sh.p;
+  const last = s.getLastRow();
+  if (last > 1) s.getRange(2, 1, last - 1, SUP_COLS.length).clearContent();
+  if (s.getMaxRows() < rows.length + 1) s.insertRowsAfter(s.getMaxRows(), rows.length + 1 - s.getMaxRows() + 50);
+  s.getRange(2, 1, rows.length, SUP_COLS.length).setValues(rows);
+  const now = new Date().toISOString();
+  supRequests_(sh.r).forEach(function (x) {
+    const r = x.rec, p = byId[r.productId];
+    if (!p || (r.status !== "To order" && r.status !== "Ordered")) return;
+    if (r.product === p.name && r.container === p.container && r.section === p.section) return;
+    r.product = p.name; r.container = p.container; r.section = p.section; r.updatedAt = now;
+    sh.r.getRange(x.rowIndex, 1, 1, REQ_COLS.length).setValues([supReqRow_(r)]);
+  });
+  supBump_();
+  return { ok: true, supplies: suppliesForApp_(true) };
+}
+
+/** "2 gallons", "1 box", or just "3" for a product with no container. */
+function supQty_(qty, container) {
+  if (!container) return String(qty);
+  if (qty === 1) return "1 " + container;
+  const w = /(s|x|z|ch|sh)$/i.test(container) ? container + "es" : /[^aeiou]y$/i.test(container) ? container.slice(0, -1) + "ies" : container + "s";
+  return qty + " " + w;
+}
+
+/** The email when a technician sends missing items. */
+function supplyEmail_(by, lines, note, isTest) {
+  const props = PropertiesService.getScriptProperties();
+  const set = String(props.getProperty("SUPPLY_EMAIL") || "").trim();
+  if (/^off$/i.test(set) && !isTest) return "";
+  const to = (/^off$/i.test(set) ? "" : set) || String(props.getProperty("TM_CHECK_EMAIL") || "").trim() || Session.getEffectiveUser().getEmail();
+  if (!to) return "";
+  const n = lines.length;
+  const body = [];
+  if (isTest) body.push("TEST: this is what the email looks like when a technician sends missing supplies.", "");
+  body.push(by + " checked the cleaning supplies. Missing (" + n + "):", "");
+  lines.forEach(function (l) { body.push("• " + l.name + ": " + supQty_(l.qty, l.container)); });
+  if (note) body.push("", "Note: " + note);
+  body.push("", "The full list to order is in the app under Supplies > Order list: " + APP_URL + "#order-list");
+  MailApp.sendEmail({ to: to, subject: ((isTest ? "(Test) " : "") + "Supplies to order: " + n + " item" + (n === 1 ? "" : "s") + " from " + by).slice(0, 250), body: body.join("\n") });
+  return to;
+}
+
+/** Run from the editor to see the supplies email (it goes where the real ones would). */
+function supplyEmailTest() {
+  const to = supplyEmail_("Your technician", [{ name: "Procyon Powder", container: "box", qty: 2 }, { name: "Pet Zone", container: "jug", qty: 1 },
+    { name: "Shoe covers", container: "", qty: 3 }], "Pet Zone is almost empty too.", true);
+  Logger.log(to ? "Test email sent to " + to + "." : "No email address found.");
 }

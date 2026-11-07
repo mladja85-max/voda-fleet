@@ -1,7 +1,7 @@
 {
   "name": "VODA Fleet Maintenance",
   "short_name": "VODA Fleet",
-  "description": "Oil changes and truckmount service for the VODA trucks.",
+  "description": "Oil changes and truckmount service for the VODA trucks, and the cleaning supplies checklist.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

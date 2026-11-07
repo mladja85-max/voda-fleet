@@ -432,6 +432,106 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 10px; font-weight: 600; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); max-width: calc(100% - 32px); }
 
+/* ---- Trucks | Supplies switch ---- */
+.views { display: flex; gap: 4px; padding: 4px; margin-bottom: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 13px; box-shadow: var(--shadow); width: fit-content; max-width: 100%; }
+.view-btn { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 20px; border-radius: 9px;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.view-btn svg { width: 19px; height: 19px; flex: none; }
+.view-btn:hover { color: var(--ink); }
+.view-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.view-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.vbadge { font-family: var(--font-body); font-size: .76rem; font-weight: 700; letter-spacing: 0; min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--soon-bg); color: var(--soon); text-align: center; line-height: 1.45; }
+
+/* ---- cleaning supplies ---- */
+.sup { display: grid; gap: 12px; max-width: 920px; }
+.sup-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sup-top > .btn { margin-left: auto; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--line); }
+.seg-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: .95rem; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.seg-btn[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.seg-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.seg-btn .n { font-size: .74rem; padding: 0 7px; border-radius: 999px; background: var(--line); color: var(--ink); line-height: 1.5; }
+.seg-btn .n.hot { background: var(--soon-bg); color: var(--soon); }
+.sup-last { margin: -4px 0 0; color: var(--muted); font-size: .88rem; }
+.sup-last strong { color: var(--ink); }
+.sup-hint { margin: 0; color: var(--muted); }
+.sup-sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.sup-sec-head { display: flex; align-items: baseline; gap: 10px; padding: 10px 14px 8px; border-left: 6px solid var(--sec); }
+.sup-sec-head h3 { min-width: 0; }
+.sup-sec-head .cnt { margin-left: auto; white-space: nowrap; }
+.sup-sec-head h3 { font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; letter-spacing: .04em; color: var(--sec-text); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sup-sec-head h3 { color: var(--sec-text-dark); } }
+:root[data-theme="dark"] .sup-sec-head h3 { color: var(--sec-text-dark); }
+.sup-sec-head .cnt { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.sup-sec-head .cnt.on { color: var(--soon); font-weight: 700; }
+.sup-list { list-style: none; margin: 0; padding: 0; }
+.sup-item { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-top: 1px solid var(--line); min-height: 54px; }
+.sup-item.marked { background: var(--soon-bg); }
+.sup-tap { all: unset; box-sizing: border-box; cursor: pointer; flex: 1; min-width: 0; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 0 10px; align-items: center; padding: 8px 6px 8px 8px; border-radius: 9px; }
+.sup-tap:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; }
+.sup-box { grid-row: span 2; width: 24px; height: 24px; border-radius: 7px; border: 2px solid color-mix(in srgb, var(--muted) 70%, transparent); display: grid; place-items: center; color: #fff; }
+.marked .sup-box { background: var(--soon); border-color: var(--soon); }
+.sup-box svg { width: 16px; height: 16px; }
+.sup-name { font-weight: 700; font-size: 1.02rem; line-height: 1.25; overflow-wrap: anywhere; }
+.sup-sub { color: var(--muted); font-size: .82rem; display: flex; gap: 4px 8px; flex-wrap: wrap; align-items: center; }
+.sup-sub:empty { display: none; }
+.sup-chip { font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.sup-chip.to { color: var(--soon); border: 1.5px solid var(--soon); }
+.sup-chip.ord { background: var(--accent-soft); color: var(--accent); }
+.step { display: flex; align-items: center; gap: 4px; flex: none; }
+.step .lbl { font-size: .68rem; font-weight: 700; color: var(--soon); text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
+.step button { width: 38px; height: 38px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); font-size: 1.35rem; font-weight: 700; line-height: 1; cursor: pointer; display: grid; place-items: center; color: var(--ink); padding: 0; }
+.step button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.step input { width: 46px; height: 38px; text-align: center; font: inherit; font-weight: 700; font-size: 1.1rem; border-radius: 10px; border: 1.5px solid var(--soon); background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums; padding: 0; }
+.step input:focus { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--soon) 30%, transparent); }
+.sup-note textarea { min-height: 62px; resize: vertical; }
+.sup-bar { position: sticky; bottom: 10px; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; box-shadow: 0 6px 24px rgba(16, 24, 40, .16); }
+.sup-bar.on { border-color: var(--soon); }
+.sup-bar .sum { font-weight: 700; margin-right: auto; }
+.sup-bar .sum.quiet { color: var(--muted); font-weight: 600; }
+.sup-bar .btn { padding: 10px 14px; font-size: .98rem; }
+.sup-notes { display: grid; gap: 6px; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--accent); }
+.sup-notes p { margin: 0; }
+.ord-sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.ord-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; border-left: 6px solid var(--soon); }
+.ord-sec.ord .ord-head { border-left-color: var(--accent); }
+.ord-head h3 { font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; letter-spacing: .04em; margin-right: auto; }
+.ord-head .cnt { color: var(--muted); font-weight: 600; font-size: .9rem; }
+.ord-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.ord-list { list-style: none; margin: 0; padding: 0; }
+.ord-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 12px; align-items: baseline; padding: 10px 14px; border-top: 1px solid var(--line); }
+.ord-name { font-weight: 700; font-size: 1.02rem; overflow-wrap: anywhere; }
+.ord-qty { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ord-sec.to .ord-qty { color: var(--soon); }
+.ord-sec.ord .ord-qty { color: var(--accent); }
+.ord-meta { grid-column: 1 / -1; color: var(--muted); font-size: .84rem; }
+.ord-row.pending .ord-meta { font-style: italic; }
+.ord-acts { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+details.ord-closed summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+details.ord-closed .ord-row { padding-left: 0; padding-right: 0; }
+details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
+.ord-row .st { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 7px; border-radius: 999px; margin-right: 6px; }
+.st.received { background: var(--ok-bg); color: var(--ok); }
+.st.removed { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.sup-empty { text-align: center; }
+.sl-step { display: flex; align-items: center; gap: 6px; }
+.sl-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+/* product editor */
+.dlg.ed { grid-template-columns: minmax(0, 1fr); }
+.ed-sec { gap: 8px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.ed-sec-head { display: flex; gap: 6px; align-items: center; }
+.ed-sec-head input { flex: 1; min-width: 0; font: inherit; font-weight: 700; font-size: 1.02rem; padding: 8px 10px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+.ed-row { display: grid; grid-template-columns: minmax(0, 1fr) 8em; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.ed-row input { width: 100%; font: inherit; padding: 7px 9px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+.ed-row input:first-child { font-weight: 600; }
+.ed-sec-head input:focus, .ed-row input:focus, .ed-acts select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.ed-acts { grid-column: 1 / -1; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ed-acts select { font: inherit; font-size: .85rem; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); flex: 1 1 0; min-width: 0; text-overflow: ellipsis; }
+.ed-acts .btn.danger { flex: none; padding-inline: 8px; }
+.dlg.ed .ed-foot { position: sticky; bottom: 0; background: var(--surface); padding: 10px 0 2px; border-top: 1px solid var(--line); }
+.icon-btn.xs { width: 30px; height: 30px; border-radius: 8px; font-weight: 700; flex: none; }
+.icon-btn:disabled { opacity: .35; cursor: not-allowed; }
+
 /* ---- small screens ---- */
 @media (max-width: 760px) {
   .topbar { padding: 10px 14px; }
@@ -453,7 +553,14 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   .toolbar:not(.open) > .sortsel, .toolbar:not(.open) > #tmOnly, .toolbar:not(.open) > .count { display: none; }
   .toolbar.open > .sortsel, .toolbar.open > #tmOnly { flex: 1 1 calc(50% - 4px); }
   .toolbar.open > .count { flex-basis: 100%; }
+  .views { width: 100%; }
+  .view-btn { flex: 1; padding: 8px 10px; }
+  .sup-top .seg { flex: 1; }
+  .sup-top .seg-btn { flex: 1; justify-content: center; padding: 7px 8px; }
+  .sup-top > .btn { margin-left: 0; }
+  .sup-sec-head h3, .ord-head h3 { font-size: 1.12rem; }
 }
+@media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
 @media (prefers-reduced-motion: reduce) { .spin svg { animation: none; } }
 
 /* ---- report menu + printable report ---- */
@@ -526,6 +633,15 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   <section class="gate" id="gate" hidden></section>
 
   <div id="app" hidden>
+    <nav class="views" aria-label="Trucks or supplies">
+      <button type="button" class="view-btn" id="viewTrucks" aria-pressed="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4.5L22 12.5V16h-8"/><circle cx="6" cy="17.5" r="2"/><circle cx="18" cy="17.5" r="2"/></svg>Trucks
+      </button>
+      <button type="button" class="view-btn" id="viewSupplies" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h6V6l2.5 2.5V20a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V8.5L9 6z"/><path d="M6.5 12h11"/><path d="M6.5 17h11"/></svg>Supplies<span class="vbadge" id="supBadge" hidden></span>
+      </button>
+    </nav>
+    <div id="fleetView">
     <section class="kpis" id="kpis" aria-label="Fleet summary"></section>
     <section class="tmcheck" id="tmcheck" aria-label="Tuesday TM hrs check" hidden></section>
     <div class="toolbar" id="toolbar">
@@ -554,6 +670,8 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
       <summary>How the numbers work</summary>
       <div id="howBody"></div>
     </details>
+    </div>
+    <section class="sup" id="suppliesView" aria-label="Cleaning supplies" hidden></section>
   </div>
 </main>
 
@@ -772,8 +890,8 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 13;                          // the Google script version this app expects
-const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
+const NEEDS_API = 14;                          // the Google script version this app expects (14: cleaning supplies)
+const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like Supplies) won't work. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
 const scriptOld = out => !(out && out.api >= NEEDS_API);
@@ -931,6 +1049,7 @@ async function refresh(quiet) {
     loaded = true;
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     noteApi(out);
+    noteSupplies(out.supplies);
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -1107,8 +1226,8 @@ function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "T
 
 /* ---------- view (filters, search, sort) ---------- */
 const K_VIEW = "voda.view";
-const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "" }, store.get(K_VIEW) || {});
-function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division }); }
+const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "" }, store.get(K_VIEW) || {});
+function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab }); }
 const DIVISIONS = ["Cleaning", "Restoration"];
 const divClass = d => d === "Cleaning" ? "cleaning" : d === "Restoration" ? "restoration" : "none";
 const inScope = t => !view.division || t.division === view.division;
@@ -1197,7 +1316,7 @@ function howList() { return h("ul", null, HOW.map(([b, t]) => h("li", null, h("s
 function showApp(on) {
   for (const id of ["topActions", "syncbar", "app"]) $(id).hidden = !on;
   $("gate").hidden = on;
-  if (!on) { $("grid").replaceChildren(); $("kpis").replaceChildren(); $("aside").replaceChildren(); }
+  if (!on) { $("grid").replaceChildren(); $("kpis").replaceChildren(); $("aside").replaceChildren(); $("suppliesView").replaceChildren(); }
 }
 
 function showNotConfigured() {
@@ -1228,6 +1347,7 @@ function showSignIn(message, mode) {
     trucks = sortTrucks(list.trucks || []); applyPendingTrucks(); noteGps(list.gps); loaded = true; lastSync = new Date(); offline = false;
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     noteApi(list);
+    noteSupplies(list.supplies);
     startApp();
     if (scriptOld(list)) setTimeout(() => setBanner(SCRIPT_OLD), 0);
   };
@@ -1298,7 +1418,7 @@ function signOut(message) {
 
 /** What this person can see and do: technicians get no add/edit/delete controls at all. */
 function applyRole() {
-  $("addTruck").hidden = !isAdmin();
+  applyTab();
   renderSync();
   if (loaded) renderAll();
 }
@@ -1306,7 +1426,7 @@ function applyRole() {
 function startApp() {
   showApp(true);
   setBanner("");
-  $("addTruck").hidden = !isAdmin();
+  applyTab();
   $("howBody").replaceChildren(howList());
   $("q").value = view.q;
   $("sortSel").value = view.sort;
@@ -1356,6 +1476,7 @@ function renderAll() {
   renderCheck();
   renderGrid();
   renderAside();
+  renderSupplies();
   if (openId && drawer.open) renderDrawer(openId);
   if (focused) {
     const el = $(focused);
@@ -2062,6 +2183,8 @@ function jobDone(job, out) {
     }
   } else if (job.action === "deleteService") {
     delete knownBase[job.key];
+  } else if (job.action === "supplyReport" && out) {
+    noteSupplies(out.supplies);
   } else if (job.action === "tmSkip" && out && out.truck) {
     const cur = byId(job.data.id);
     if (cur && !pendingFor(job.key).length) replaceTruck(Object.assign({}, cur, { tmSkip: out.truck.tmSkip || "" }));
@@ -2094,6 +2217,11 @@ function jobFailed(job, e) {
         : `${job.label}: not saved. ${errText(e, "Nothing")}`;
       refresh(true);
     }
+  } else if (job.action === "supplyReport") {
+    queue = queue.filter(j => j.key !== job.key); saveQueue();
+    supRestoreDraft(job);
+    msg = (e.error === "bad_request" ? "The supply list wasn't sent: the Google script needs updating (see the note at the top)."
+      : `The supply list wasn't sent. ${errText(e, "Your marks")}`) + " Your marks are back on the checklist.";
   } else if (job.action === "tmSkip") {
     queue = queue.filter(j => j.key !== job.key); saveQueue();
     msg = e.error === "gone" ? `${job.label} was deleted on another phone.` : `${job.label}: "not available" wasn't saved. ${errText(e, "Nothing")}`;
@@ -2812,6 +2940,460 @@ function openReportMenu() {
 }
 $("reportBtn").addEventListener("click", openReportMenu);
 
+/* ---------- cleaning supplies ----------
+   The paper "Cleaning products checklist" as its own tab. A technician taps what's missing, sets how many, and sends it.
+   It lands on the order list (the Supply orders tab in the Google Sheet); an Admin marks it Ordered, then Received.
+   A list sent with no signal waits on the phone and goes out when the signal is back, like truck readings. */
+const SUP_API = 14;                                   // the Google script version that has Supplies
+const K_SUP = "voda.supplies", K_SUPDRAFT = "voda.supDraft";
+let supplies = store.get(K_SUP);                      // { ver, products, requests, checks }: the sheet's last copy
+let supDraft = Object.assign({ items: {}, note: "" }, store.get(K_SUPDRAFT) || {});   // marked on this phone, not sent yet
+if (!supDraft.items || typeof supDraft.items !== "object") supDraft.items = {};
+const SEC_COLORS = ["#2f7a3f", "#1f4fbf", "#c2571a", "#b4233a", "#7c3aed", "#0d9488", "#92400e", "#475569"];   // the paper's colored blocks, then more
+const supOk = () => apiLevel >= SUP_API;
+const OPEN = r => r.status === "To order" || r.status === "Ordered";
+function saveSupDraft() { store.set(K_SUPDRAFT, supDraft); }
+function noteSupplies(s) {
+  if (!s || !Array.isArray(s.products)) return;
+  supplies = { ver: s.ver || "", products: s.products, requests: Array.isArray(s.requests) ? s.requests : [], checks: Array.isArray(s.checks) ? s.checks : [] };
+  store.set(K_SUP, supplies);
+  const ids = new Set(supplies.products.map(p => p.id));
+  let gone = false;
+  for (const k of Object.keys(supDraft.items)) if (!ids.has(k)) { delete supDraft.items[k]; gone = true; }   // product taken off the list
+  if (gone) saveSupDraft();
+}
+function supPlural(w) { return /(s|x|z|ch|sh)$/i.test(w) ? w + "es" : /[^aeiou]y$/i.test(w) ? w.slice(0, -1) + "ies" : w + "s"; }
+/** "2 gallons", "1 box", or just "3" for a product with no container. */
+function supQty(qty, container) { return !container ? String(qty) : qty === 1 ? "1 " + container : `${qty} ${supPlural(container)}`; }
+/** "today", "yesterday", "Tue Nov 4" */
+function supDay(iso) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d)) return "";
+  const now = clockNow();
+  const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
+  if (days === 0) return "today";
+  if (days === -1) return "yesterday";
+  return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${MONTHS[d.getMonth()]} ${d.getDate()}` + (d.getFullYear() !== now.getFullYear() ? `, ${d.getFullYear()}` : "");
+}
+/** "today 2:31 PM", "yesterday 9:05 AM", "Tue Nov 4" */
+function supWhen(iso) { const day = supDay(iso); return day === "today" || day === "yesterday" ? `${day} ${fmtTime(new Date(iso))}` : day; }
+
+/** A list still on its way, laid over the sheet's copy the same way the script will save it. */
+function supApply(s, job) {
+  const d = job.data;
+  for (const it of d.items) {
+    const p = s.products.find(x => x.id === it.productId);
+    if (!p) continue;
+    const open = s.requests.find(r => r.productId === p.id && r.status === "To order");
+    const rec = { qty: it.qty, reportedAt: job.at, reportedBy: job.by, checkId: d.checkId, pending: true };
+    if (open) Object.assign(open, rec);
+    else s.requests.unshift(Object.assign({ id: `tmp-${d.checkId}-${p.id}`, productId: p.id, product: p.name, container: p.container, section: p.section, status: "To order" }, rec));
+  }
+  if (!s.checks.some(c => c.id === d.checkId)) s.checks.unshift({ id: d.checkId, at: job.at, by: job.by, missing: d.items.length, note: d.note || "", pending: true });
+}
+/** What's on screen: the sheet's copy plus any lists not sent yet. */
+function supNow() {
+  if (!supplies) return null;
+  const s = JSON.parse(JSON.stringify(supplies));
+  for (const j of queue) if (j.action === "supplyReport") supApply(s, j);
+  return s;
+}
+const supMarked = () => Object.entries(supDraft.items).filter(([, q]) => q > 0);
+function supSetQty(id, qty) {
+  qty = Math.max(0, Math.min(999, Math.round(qty) || 0));
+  if (qty) supDraft.items[id] = qty; else delete supDraft.items[id];
+  saveSupDraft();
+}
+/** A list that couldn't be sent: its marks go back on the checklist (anything marked since stays as it is). */
+function supRestoreDraft(job) {
+  const d = job && job.draft;
+  if (!d) return;
+  for (const [k, q] of Object.entries(d.items || {})) if (!supDraft.items[k]) supDraft.items[k] = q;
+  if (!supDraft.note && d.note) supDraft.note = d.note;
+  saveSupDraft();
+}
+function supSections(s) {
+  const out = [];
+  for (const p of s.products) {
+    let g = out.find(x => x.name === p.section);
+    if (!g) out.push(g = { name: p.section, items: [] });
+    g.items.push(p);
+  }
+  out.forEach((g, i) => { g.color = SEC_COLORS[i % SEC_COLORS.length]; });
+  return out;
+}
+const secTheme = hex => `--sec:${hex};--sec-text:${readableOn(hex, "#ffffff")};--sec-text-dark:${readableOn(hex, "#151d27")}`;
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+/* Trucks or Supplies */
+function setTab(tab, sub) {
+  view.tab = tab === "supplies" ? "supplies" : "trucks";
+  if (sub) view.supTab = sub;
+  saveView();
+  applyTab();
+  window.scrollTo(0, 0);
+}
+function applyTab() {
+  const sup = view.tab === "supplies";
+  if (location.hash !== (sup ? "#supplies" : "")) {
+    try { history.replaceState(null, "", sup ? "#supplies" : location.pathname + location.search); } catch (e) { /* only the address bar */ }
+  }
+  $("fleetView").hidden = sup;
+  $("suppliesView").hidden = !sup;
+  $("viewTrucks").setAttribute("aria-pressed", String(!sup));
+  $("viewSupplies").setAttribute("aria-pressed", String(sup));
+  $("reportBtn").hidden = sup;
+  $("addTruck").hidden = sup || !isAdmin();
+  renderSupplies();
+}
+$("viewTrucks").addEventListener("click", () => setTab("trucks"));
+$("viewSupplies").addEventListener("click", () => setTab("supplies"));
+
+function renderSupBadge() {
+  const s = supOk() ? supNow() : null;
+  const n = s ? s.requests.filter(r => r.status === "To order").length : 0;
+  const b = $("supBadge");
+  b.hidden = !n;
+  b.textContent = String(n);
+  b.title = n ? `${n} to order` : "";
+  $("viewSupplies").setAttribute("aria-label", n ? `Supplies, ${n} to order` : "Supplies");
+}
+function supTabNow(s) {
+  if (view.supTab === "check" || view.supTab === "orders") return view.supTab;
+  return isAdmin() && s.requests.some(r => r.status === "To order") ? "orders" : "check";
+}
+function renderSupplies() {
+  renderSupBadge();
+  const box = $("suppliesView");
+  if (view.tab !== "supplies" || !session) return;
+  if (loaded && !supOk()) {
+    box.replaceChildren(h("div", { class: "panel" },
+      h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Supplies needs the newest Google script. In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  const s = supNow();
+  if (!s) {
+    box.replaceChildren(h("p", { class: "loading", text: offline ? "Supplies need a connection the first time. Try again when you're back online." : "Loading supplies…" }));
+    return;
+  }
+  const tab = supTabNow(s);
+  view.supTab = tab;   // stays put while things change underneath (an admin's list emptying out, say)
+  const toOrder = s.requests.filter(r => r.status === "To order").length;
+  const marked = supMarked().length;
+  const seg = (key, text, n, hot) => h("button", { class: "seg-btn", type: "button", role: "tab", id: "supTab-" + key, "aria-selected": String(tab === key),
+    onclick: () => { view.supTab = key; saveView(); renderSupplies(); window.scrollTo(0, 0); } },
+    text, n ? h("span", { class: "n" + (hot ? " hot" : ""), text: String(n) }) : null);
+  const last = s.checks[0];
+  box.replaceChildren(
+    h("div", { class: "sup-top" },
+      h("div", { class: "seg", role: "tablist", "aria-label": "Supplies" }, seg("check", "Checklist", marked, false), seg("orders", "Order list", toOrder, true)),
+      isAdmin() && tab === "check" ? h("button", { class: "btn small", type: "button", id: "supEdit", text: "Edit products", onclick: openProductEditor }) : null),
+    h("p", { class: "sup-last", id: "supLast" }, ...(last
+      ? ["Last check: ", h("strong", { text: supWhen(last.at) }), ` by ${last.by || "someone"} · ${last.missing ? `${last.missing} missing` : "nothing missing"}${last.pending ? " · sending…" : ""}`]
+      : ["No checks yet."])),
+    ...(tab === "orders" ? supOrdersBody(s) : supCheckBody(s)));
+}
+/** Re-draw after a tap, keeping the keyboard focus where it was. */
+function supRerender() {
+  const a = document.activeElement, id = a && a.id;
+  renderSupplies();
+  const el = id && $(id);
+  if (el && el !== document.activeElement) el.focus({ preventScroll: true });
+}
+
+/* the checklist */
+function supCheckBody(s) {
+  const openOf = id => {
+    const l = s.requests.filter(r => r.productId === id && OPEN(r));
+    return l.find(r => r.status === "To order") || l[0] || null;
+  };
+  return [
+    h("p", { class: "sup-hint", text: "Tap anything that's missing or running low and set how many we need. Then tap Send list." }),
+    ...supSections(s).map(g => {
+      const cnt = g.items.filter(p => supDraft.items[p.id]).length;
+      return h("section", { class: "sup-sec", style: secTheme(g.color) },
+        h("div", { class: "sup-sec-head" }, h("h3", { text: g.name }),
+          h("span", { class: "cnt" + (cnt ? " on" : ""), text: cnt ? `${cnt} marked` : `${g.items.length} item${g.items.length === 1 ? "" : "s"}` })),
+        h("ul", { class: "sup-list" }, g.items.map(p => supItem(p, openOf(p.id)))));
+    }),
+    h("div", { class: "field sup-note" },
+      h("label", { for: "supNote", text: "Note for the office (optional)" }),
+      h("textarea", { id: "supNote", rows: "2", maxlength: "500", placeholder: "Anything else, like “need it before Friday”", value: supDraft.note || "",
+        oninput: e => { supDraft.note = e.target.value; saveSupDraft(); } })),
+    supBar(),
+    h("details", { class: "panel how" }, h("summary", { text: "How Supplies works" }),
+      h("ul", null, [
+        ["Check", "tap what's missing or low, set how many we need, then Send list. It goes straight on the order list."],
+        ["Already on the list", "if it isn't ordered yet, the number you send replaces the old one. Once it's ordered, sending it again adds a new line."],
+        ["Nothing missing", "tap Checked: nothing missing, so the office knows the shelf was checked."],
+        ["No signal", "the list waits on this phone and sends itself when you're back online."],
+        ["Admins", "Order list: tap Ordered when you place the order and Received when it arrives. Share copies the list for a text or email to the supplier."],
+        ["Google Sheet", "the order list is the Supply orders tab and every check is on the Supply checks tab."]
+      ].map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))))];
+}
+function supItem(p, open) {
+  const qty = supDraft.items[p.id] || 0;
+  const chip = !open ? null : open.status === "To order"
+    ? h("span", { class: "sup-chip to", text: `On order list: ${supQty(open.qty, p.container)}` })
+    : h("span", { class: "sup-chip ord", text: `Ordered ${supDay(open.orderedAt)}` });
+  const tap = h("button", { class: "sup-tap", type: "button", id: "sp-" + p.id, "aria-pressed": String(!!qty),
+    onclick: () => { supSetQty(p.id, qty ? 0 : (open && open.status === "To order" ? open.qty : 1)); supRerender(); } },
+    h("span", { class: "sup-box", "aria-hidden": "true" }),
+    h("span", { class: "sup-name", text: p.name }),
+    h("span", { class: "sup-sub" }, p.container ? h("span", { text: p.container }) : null, chip));
+  if (qty) tap.querySelector(".sup-box").innerHTML = CHECK_SVG;
+  const input = qty ? h("input", { id: "sq-" + p.id, type: "text", inputmode: "numeric", pattern: "[0-9]*", maxlength: "3", value: String(qty), "aria-label": `How many ${p.name}`,
+    onfocus: e => e.target.select(),
+    oninput: e => { const v = parseInt(e.target.value.replace(/\D/g, ""), 10); if (v > 0) { supSetQty(p.id, v); supBarUpdate(); } },
+    onchange: e => { e.target.value = String(supDraft.items[p.id] || 1); } }) : null;
+  return h("li", { class: "sup-item" + (qty ? " marked" : ""), "data-p": p.id }, tap,
+    qty ? h("div", { class: "step" },
+      h("span", { class: "lbl", text: "Need" }),
+      h("button", { type: "button", id: "sm-" + p.id, "aria-label": qty === 1 ? `Unmark ${p.name}` : `One less ${p.name}`, text: "−", onclick: () => { supSetQty(p.id, (supDraft.items[p.id] || 1) - 1); supRerender(); } }),
+      input,
+      h("button", { type: "button", id: "sa-" + p.id, "aria-label": `One more ${p.name}`, text: "+", onclick: () => { supSetQty(p.id, (supDraft.items[p.id] || 0) + 1); supRerender(); } })) : null);
+}
+function supBar() {
+  const n = supMarked().length;
+  return h("div", { class: "sup-bar" + (n ? " on" : ""), id: "supBar" }, ...(n
+    ? [h("span", { class: "sum", text: `${n} item${n === 1 ? "" : "s"} marked` }),
+       h("button", { class: "btn ghost", type: "button", id: "supClear", text: "Clear", onclick: ev => {
+         const b = ev.currentTarget;
+         if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to clear"; return; }
+         supDraft = { items: {}, note: supDraft.note || "" }; saveSupDraft(); supRerender();
+       } }),
+       h("button", { class: "btn primary", type: "button", id: "supSend", text: "Send list", onclick: () => supSend(false) })]
+    : [h("span", { class: "sum quiet", text: "Nothing marked" }),
+       h("button", { class: "btn", type: "button", id: "supNone", text: "Checked: nothing missing", onclick: () => supSend(true) })]));
+}
+function supBarUpdate() {
+  const bar = $("supBar");
+  if (bar) bar.replaceWith(supBar());
+  const n = supMarked().length, t = $("supTab-check");
+  if (t) t.replaceChildren("Checklist", ...(n ? [h("span", { class: "n", text: String(n) })] : []));
+}
+function supSend(nothing) {
+  if (!session) return;
+  if (!supOk()) { toast("Supplies need the Google script updated first (see the note at the top)."); return; }
+  const items = nothing ? [] : supMarked().map(([productId, qty]) => ({ productId, qty }));
+  if (!nothing && !items.length) return;
+  const checkId = "c-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  const note = String(supDraft.note || "").trim().slice(0, 500);
+  enqueue({ action: "supplyReport", key: "sup:" + checkId, at: new Date().toISOString(), by: session.name,
+    data: { checkId, items, note }, draft: JSON.parse(JSON.stringify(supDraft)),
+    okMsg: nothing ? "Saved: nothing missing" : `Sent: ${items.length} item${items.length === 1 ? "" : "s"} on the order list` });
+  supDraft = { items: {}, note: "" };
+  saveSupDraft();
+  if (!navigator.onLine) toast("No signal. The list will send itself when you're back online.");
+  renderSupplies();
+  window.scrollTo(0, 0);
+}
+
+/* the order list */
+function supOrdersBody(s) {
+  const pos = new Map(s.products.map((p, i) => [p.id, i]));
+  const byList = (a, b) => (pos.has(a.productId) ? pos.get(a.productId) : 1e6) - (pos.has(b.productId) ? pos.get(b.productId) : 1e6);
+  const toOrder = s.requests.filter(r => r.status === "To order").sort(byList);
+  const ordered = s.requests.filter(r => r.status === "Ordered").sort(byList);
+  const closed = s.requests.filter(r => r.status === "Received" || r.status === "Removed");
+  const admin = isAdmin();
+  const notes = s.checks.filter(c => c.note && s.requests.some(r => r.checkId === c.id && OPEN(r)));
+  const out = [];
+  if (!toOrder.length) out.push(h("div", { class: "panel sup-empty", id: "supEmpty" },
+    h("p", { class: "empty-ok", text: "Nothing to order right now ✓" }),
+    ordered.length ? null : h("p", { class: "meta", text: "When someone sends missing items from the checklist, they show up here." })));
+  if (notes.length) out.push(h("div", { class: "sup-notes", id: "supNotes" }, notes.map(c => h("p", null, h("strong", { text: `${c.by}, ${supDay(c.at)}: ` }), c.note))));
+  if (toOrder.length) {
+    const ready = toOrder.filter(r => !r.pending);
+    out.push(h("section", { class: "ord-sec to", id: "ordTo" },
+      h("div", { class: "ord-head" }, h("h3", { text: "To order" }), h("span", { class: "cnt", text: String(toOrder.length) }),
+        h("div", { class: "ord-tools" },
+          h("button", { class: "btn small", type: "button", id: "supShare", text: "Share list", onclick: () => supShare(s) }),
+          admin && ready.length > 1 ? h("button", { class: "btn small", type: "button", id: "supAllOrdered", text: "All ordered", onclick: ev => {
+            const b = ev.currentTarget;
+            if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = `Tap again: mark all ${ready.length} ordered`; return; }
+            supChange({ ids: ready.map(r => r.id), status: "Ordered" }, `${ready.length} items marked ordered`);
+          } }) : null)),
+      h("ul", { class: "ord-list" }, toOrder.map(r => ordRow(r, admin)))));
+  }
+  if (ordered.length) out.push(h("section", { class: "ord-sec ord", id: "ordOn" },
+    h("div", { class: "ord-head" }, h("h3", { text: "Ordered, on the way" }), h("span", { class: "cnt", text: String(ordered.length) })),
+    h("ul", { class: "ord-list" }, ordered.map(r => ordRow(r, admin)))));
+  if (closed.length) out.push(h("details", { class: "panel ord-closed", id: "ordClosed" },
+    h("summary", { text: `Received or removed lately (${closed.length})` }),
+    h("ul", { class: "ord-list" }, closed.map(r => ordRow(r, admin)))));
+  return out;
+}
+function ordRow(r, admin) {
+  const meta = r.status === "To order" ? `Asked by ${r.reportedBy || "?"} · ${supWhen(r.reportedAt)}${r.pending ? " · sending…" : ""}`
+    : r.status === "Ordered" ? `Ordered ${supWhen(r.orderedAt)}${r.orderedBy ? " by " + r.orderedBy : ""} · asked by ${r.reportedBy || "?"} ${supDay(r.reportedAt)}`
+    : `${supWhen(r.closedAt)}${r.closedBy ? " by " + r.closedBy : ""}`;
+  const btn = (text, cls, onclick) => h("button", { class: "btn small" + (cls ? " " + cls : ""), type: "button", text, onclick });
+  const acts = !admin || r.pending ? null
+    : r.status === "To order" ? [btn("✓ Ordered", "primary", () => supChange({ ids: [r.id], status: "Ordered" }, `${r.product}: ordered`)), btn("Change", "", () => openSupLine(r.id))]
+    : r.status === "Ordered" ? [btn("✓ Received", "primary", () => supChange({ ids: [r.id], status: "Received" }, `${r.product}: received`)), btn("Change", "", () => openSupLine(r.id))]
+    : [btn("Undo", "ghost", () => supChange({ ids: [r.id], status: r.status === "Received" ? "Ordered" : "To order" }, `${r.product}: back on the list`))];
+  return h("li", { class: "ord-row" + (r.pending ? " pending" : ""), "data-r": r.id },
+    h("span", { class: "ord-name" }, r.status === "Received" || r.status === "Removed" ? h("span", { class: "st " + r.status.toLowerCase(), text: r.status }) : null, r.product),
+    h("span", { class: "ord-qty", text: supQty(r.qty, r.container) }),
+    h("span", { class: "ord-meta", text: meta }),
+    acts ? h("div", { class: "ord-acts" }, acts) : null);
+}
+/** Admin changes go straight to the sheet. The screen changes at once and goes back if the sheet says no. */
+async function supChange(data, okMsg) {
+  if (!supplies || !session) return;
+  const before = JSON.stringify(supplies);
+  const now = new Date().toISOString(), by = session.name;
+  for (const r of supplies.requests) {
+    if (!data.ids.includes(r.id)) continue;
+    if (data.qty) r.qty = data.qty;
+    if (data.status && data.status !== r.status) {
+      if (data.status === "To order") Object.assign(r, { orderedAt: "", orderedBy: "", closedAt: "", closedBy: "" });
+      else if (data.status === "Ordered") Object.assign(r, { orderedAt: now, orderedBy: by, closedAt: "", closedBy: "" });
+      else {
+        if (data.status === "Received" && !r.orderedAt) Object.assign(r, { orderedAt: now, orderedBy: by });
+        Object.assign(r, { closedAt: now, closedBy: by });
+      }
+      r.status = data.status;
+    }
+  }
+  supRerender();
+  try {
+    const out = await api("supplyStatus", data);
+    noteSupplies(out.supplies);
+    if (okMsg) toast(okMsg);
+  } catch (e) {
+    supplies = JSON.parse(before);
+    store.set(K_SUP, supplies);
+    if (e && e.supplies) noteSupplies(e.supplies);
+    toast(e && e.error === "offline" ? "No connection. Nothing changed; try again when you're back online."
+      : e && e.error === "bad_request" ? "That didn't save: the Google script needs updating (see the note at the top)." : errText(e));
+  }
+  supRerender();
+}
+function supOrderText(s) {
+  const pos = new Map(s.products.map((p, i) => [p.id, i]));
+  const list = s.requests.filter(r => r.status === "To order")
+    .sort((a, b) => (pos.has(a.productId) ? pos.get(a.productId) : 1e6) - (pos.has(b.productId) ? pos.get(b.productId) : 1e6));
+  const d = clockNow();
+  const lines = [`VODA cleaning supplies to order (${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()})`];
+  let sec = null;
+  for (const r of list) {
+    if (r.section !== sec) { sec = r.section; lines.push("", (sec || "Other") + ":"); }
+    lines.push(`• ${r.product}: ${supQty(r.qty, r.container)}`);
+  }
+  return lines.join("\n");
+}
+async function supShare(s) {
+  const text = supOrderText(s);
+  if (navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+  try { await navigator.clipboard.writeText(text); toast("Copied. Paste it into a text or email."); }
+  catch (e) {
+    openDialog(h("h3", { id: "dlgTitle", text: "Order list" }), h("p", { text: "Copy this and paste it into a text or email." }),
+      h("textarea", { class: "report", readonly: true, value: text }),
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
+  }
+}
+/** Admin: one line on the order list: how many, and where it stands. */
+function openSupLine(id) {
+  const s = supNow(), r = s && s.requests.find(x => x.id === id);
+  if (!r) return;
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const qIn = h("input", { id: "sl-qty", type: "text", inputmode: "numeric", pattern: "[0-9]*", maxlength: "3", value: String(r.qty || 1), style: "width:70px;text-align:center;font-weight:700;font-size:1.15rem" });
+  const qtyNow = () => parseInt(String(qIn.value).replace(/\D/g, ""), 10);
+  const bump = d => { const q = qtyNow() || 0; qIn.value = String(Math.max(1, Math.min(999, q + d))); };
+  const go = (status, msg) => {
+    const q = qtyNow();
+    if (!(q >= 1 && q <= 999)) { err.textContent = "How many: 1 to 999."; return; }
+    const data = { ids: [id] };
+    if (q !== r.qty) data.qty = q;
+    if (status && status !== r.status) data.status = status;
+    closeDialog();
+    if (data.qty || data.status) supChange(data, msg || `${r.product}: saved`);
+  };
+  const b = (text, cls, onclick, idv) => h("button", { class: "btn" + (cls ? " " + cls : ""), type: "button", id: idv || null, text, onclick });
+  openDialog(
+    h("h3", { id: "dlgTitle", text: r.product }),
+    h("p", { text: `${r.status}${r.status === "Ordered" ? " " + supDay(r.orderedAt) : ""} · asked by ${r.reportedBy || "?"} ${supWhen(r.reportedAt)}` }),
+    h("div", { class: "field" }, h("label", { for: "sl-qty", text: `How many${r.container ? ` (${supPlural(r.container)})` : ""}` }),
+      h("div", { class: "sl-step step" }, h("button", { type: "button", "aria-label": "One less", text: "−", onclick: () => bump(-1) }), qIn,
+        h("button", { type: "button", "aria-label": "One more", text: "+", onclick: () => bump(1) }))),
+    err,
+    h("div", { class: "sl-acts" },
+      r.status === "To order" ? b("✓ Mark ordered", "primary", () => go("Ordered", `${r.product}: ordered`), "sl-ordered") : null,
+      r.status === "Ordered" ? b("✓ Mark received", "primary", () => go("Received", `${r.product}: received`), "sl-received") : null,
+      r.status === "Ordered" ? b("Not ordered after all", "", () => go("To order", `${r.product}: back to To order`), "sl-back") : null),
+    h("div", { class: "dlg-foot" },
+      b("Remove from list", "ghost danger", () => go("Removed", `${r.product}: removed from the list`), "sl-remove"),
+      h("div", { class: "right" }, b("Cancel", "", closeDialog), b("Save", "primary", () => go(null), "sl-save"))));
+}
+
+/** Admin: the product list (names, containers, sections, order), saved all at once. */
+function openProductEditor() {
+  const s = supNow();
+  if (!s) return;
+  const base = s.ver;
+  const secs = supSections(s).map(g => ({ name: g.name, items: g.items.map(p => ({ id: p.id, name: p.name, container: p.container })) }));
+  const err = h("p", { class: "dlg-err", role: "alert", id: "ed-err" });
+  const ib = (text, label, disabled, onclick) => h("button", { class: "icon-btn xs", type: "button", "aria-label": label, title: label, disabled, text, onclick });
+  const move = (list, i, d) => { list.splice(i + d, 0, list.splice(i, 1)[0]); };
+  const draw = focusId => {
+    const top = dlg.scrollTop;
+    openDialog(
+      h("h3", { id: "dlgTitle", text: "Edit products" }),
+      h("p", { text: "Rename, move, add or remove products. Everyone's checklist changes when you tap Save. Items already on the order list stay there." }),
+      ...secs.map((g, si) => h("fieldset", { class: "ed-sec" },
+        h("div", { class: "ed-sec-head" },
+          h("input", { id: `ed-s-${si}`, type: "text", value: g.name, maxlength: "40", "aria-label": "Section name", placeholder: "Section name", oninput: e => { g.name = e.target.value; } }),
+          ib("↑", "Move section up", si === 0, () => { move(secs, si, -1); draw(); }),
+          ib("↓", "Move section down", si === secs.length - 1, () => { move(secs, si, 1); draw(); })),
+        ...g.items.map((p, ii) => h("div", { class: "ed-row", "data-row": `${si}-${ii}` },
+          h("input", { id: `ed-n-${si}-${ii}`, type: "text", value: p.name, maxlength: "60", placeholder: "Product name", "aria-label": "Product name", oninput: e => { p.name = e.target.value; } }),
+          h("input", { id: `ed-c-${si}-${ii}`, type: "text", value: p.container, maxlength: "20", placeholder: "gallon, box…", "aria-label": `Container for ${p.name || "this product"}`, oninput: e => { p.container = e.target.value; } }),
+          h("div", { class: "ed-acts" },
+            ib("↑", `Move ${p.name || "product"} up`, ii === 0, () => { move(g.items, ii, -1); draw(); }),
+            ib("↓", `Move ${p.name || "product"} down`, ii === g.items.length - 1, () => { move(g.items, ii, 1); draw(); }),
+            secs.length > 1 ? (() => {
+              const sel = h("select", { "aria-label": `Section for ${p.name || "product"} (pick another to move it)`, title: "Move to another section", onchange: e => { const to = Number(e.target.value); if (to !== si) { secs[to].items.push(g.items.splice(ii, 1)[0]); draw(); } } },
+                secs.map((x, k) => h("option", { value: String(k), text: x.name || `Section ${k + 1}` })));
+              sel.value = String(si);
+              return sel;
+            })() : null,
+            h("button", { class: "btn small ghost danger", type: "button", text: "Remove", onclick: () => { g.items.splice(ii, 1); draw(); } })))),
+        h("div", null, h("button", { class: "btn small", type: "button", id: `ed-add-${si}`, text: "+ Add product", onclick: () => { g.items.push({ id: "", name: "", container: "" }); draw(`ed-n-${si}-${g.items.length - 1}`); } })))),
+      h("div", null, h("button", { class: "btn small", type: "button", id: "ed-add-sec", text: "+ Add section", onclick: () => { secs.push({ name: "", items: [{ id: "", name: "", container: "" }] }); draw(`ed-s-${secs.length - 1}`); } })),
+      err,
+      h("div", { class: "dlg-foot ed-foot" }, h("div", { class: "right" },
+        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+        h("button", { class: "btn primary", type: "button", id: "ed-save", text: "Save", onclick: async ev => {
+          const products = [];
+          for (const g of secs) for (const p of g.items) {
+            const name = p.name.trim().replace(/\s+/g, " ");
+            if (name) products.push({ id: p.id, name, container: p.container.trim(), section: g.name.trim().replace(/\s+/g, " ") || "Other" });
+          }
+          if (!products.length) { err.textContent = "The checklist needs at least one product."; return; }
+          const btn = ev.currentTarget;
+          btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+          try {
+            const out = await api("saveProducts", { base, products });
+            noteSupplies(out.supplies);
+            closeDialog();
+            toast("Products saved");
+            renderSupplies();
+          } catch (e) {
+            if (e && e.error === "conflict") { noteSupplies(e.supplies); renderSupplies(); err.textContent = "Someone else changed the product list while you were editing, so this wasn't saved. Close this and open Edit products again to see their version."; }
+            else err.textContent = e && e.error === "offline" ? "No connection. Nothing was saved; try again when you're back online." : errText(e);
+            btn.disabled = false; btn.textContent = "Save";
+          }
+        } }))));
+    dlg.firstChild.classList.add("ed");
+    dlg.scrollTop = top;
+    if (focusId && $(focusId)) $(focusId).focus();
+  };
+  draw();
+}
+
 /* ---------- install as an app ---------- */
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -2846,6 +3428,8 @@ window.addEventListener("online", () => { if (session && CONFIGURED) { refresh(t
 setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true); }, 90000);
 
 renderInstall();
+if (location.hash === "#order-list") { view.tab = "supplies"; view.supTab = "orders"; saveView(); }   // the link in the supplies email
+else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {
