@@ -192,6 +192,8 @@ button { font: inherit; color: inherit; }
 .tile[data-status="soon"]::before { background: var(--soon); }
 .tile[data-status="ok"]::before { background: var(--ok); }
 .tile.flash { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
+.tile { cursor: pointer; }
+.tile input:not([readonly]) { cursor: text; }
 .tile-head { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 14px 14px 0; cursor: pointer; }
 .tile-title { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; min-width: 0; }
 .plate { font-weight: 700; font-size: .8rem; letter-spacing: .07em; padding: 1px 6px; border: 1.5px solid var(--muted); border-radius: 5px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1439,7 +1441,8 @@ function tileEl(t) {
   const v = currentValues(t);
   const sub = subLine(t);
   const theme = truckTheme(t.color);
-  return h("article", { class: "tile" + (theme ? " colored" : ""), id: "tile-" + t.id, "data-status": "none", style: theme || null },
+  return h("article", { class: "tile" + (theme ? " colored" : ""), id: "tile-" + t.id, "data-status": "none", style: theme || null,
+      onpointerdown: ev => { ev.currentTarget._typing = isTyping(ev.currentTarget); }, onclick: ev => tileTap(ev, t.id) },
     h("button", { class: "tile-head", type: "button", onclick: () => openDetails(t.id), title: "Open details" },
       h("span", { class: "tile-title" }, idBits(t)),
       h("span", { class: "pill", id: "pill-" + t.id, text: "No reading" })),
@@ -1457,6 +1460,18 @@ function tileEl(t) {
       h("button", { class: "link", type: "button", onclick: () => openDetails(t.id), text: "Details ›" })));
 }
 
+/** A tap anywhere on a tile opens its details, except on the boxes you type in and the buttons.
+ *  A tap that only closes the keyboard (while typing a reading) doesn't open anything. */
+const isTyping = tile => { const a = document.activeElement; return !!a && tile.contains(a) && a.tagName === "INPUT" && !a.readOnly; };
+function tileTap(ev, id) {
+  const tile = ev.currentTarget, el = ev.target;
+  if (tile._typing) { tile._typing = false; return; }
+  if (el.closest("button, a, select, textarea")) return;
+  const box = el.tagName === "INPUT" ? el : el.tagName === "LABEL" && el.htmlFor ? $(el.htmlFor) : el.closest("label") && el.closest("label").htmlFor ? $(el.closest("label").htmlFor) : null;
+  if (box && !box.readOnly) return;   // the Miles / TM hrs boxes stay for quick entry
+  if (box) ev.preventDefault();        // a locked box: open the details instead of focusing it
+  openDetails(id);
+}
 function onType(id, prefix) {
   const t = byId(id); if (!t) return;
   const m = $(prefix + "m-" + id), hr = $(prefix + "h-" + id);
