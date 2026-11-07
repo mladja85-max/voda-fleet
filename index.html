@@ -281,6 +281,28 @@ details.tasks ul { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-
 .gps-list .warnc { color: var(--soon); font-weight: 700; }
 .gps-list small { display: block; color: var(--muted); }
 .code-link { color: var(--due); font-weight: 700; }
+/* service history */
+.svc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.svc-head h3 { margin: 0; }
+.svc-actions { display: flex; gap: 6px; }
+.svc-q { width: 100%; font: inherit; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); margin-bottom: 8px; }
+.svc-q:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.svc-filters { margin-bottom: 6px; }
+.chip-btn.sm { padding: 4px 10px; font-size: .8rem; }
+.chip-btn.warn-chip { color: var(--soon); border-color: var(--soon); }
+.svc-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.svc-item { all: unset; box-sizing: border-box; display: grid; gap: 3px; width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.svc-item:hover { border-color: var(--accent); }
+.svc-item:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.svc-item.flagged { border-color: var(--soon); }
+.svc-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.svc-tag { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.svc-cost { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.svc-what { white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.svc-meta { color: var(--muted); font-size: .84rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.svc-check { color: var(--soon); font-weight: 700; font-size: .84rem; }
+.dlg .svc-flag { padding: 9px 12px; border-radius: 10px; background: var(--soon-bg); color: var(--soon); font-weight: 600; }
+.svc-typegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px 10px; }
 /* color picker */
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .sw { all: unset; box-sizing: border-box; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0, 0, 0, .14); position: relative; display: grid; place-items: center; }
@@ -623,7 +645,7 @@ let lastSync = null;
 let offline = false;
 let refreshing = false;
 let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
-const NEEDS_API = 6;                           // the Google script version this app expects
+const NEEDS_API = 7;                           // the Google script version this app expects
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -923,7 +945,8 @@ const HOW = [
   ["Miles", "come from One Step GPS every 15 minutes for trucks set up in the GPS tab."],
   ["Check engine and GPS offline", "also come from One Step GPS. They move a truck up the list but don't change its oil or service countdowns."],
   ["Van engine hours", "from One Step GPS are shown for reference only. TM hours are always the ones you type in."],
-  ["After an oil change or service", "open the truck and tap Log oil change / service so the countdown restarts."]
+  ["After an oil change or service", "open the truck and tap Log oil change / service so the countdown restarts. It's added to the truck's service history too."],
+  ["Service history", "everything done to a truck, in its details. Add tires, brakes, repairs and the like with + Add record; tap a record to fix it."]
 ];
 function howList() { return h("ul", null, HOW.map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))); }
 
@@ -1256,10 +1279,12 @@ drawer.addEventListener("click", e => { if (e.target === drawer) drawer.close();
 
 function openDetails(id) {
   const t = byId(id); if (!t) return;
+  if (svcView.id !== id) Object.assign(svcView, { id, type: "", q: "", all: false });
   openId = id;
   renderDrawer(id);
   if (!drawer.open) { try { drawer.showModal(); } catch (e) { drawer.setAttribute("open", ""); } }
   if (!historyCache[id]) loadHistory(id);
+  if (!svcCache[id]) loadServices(id);
 }
 
 function detailField(labelText, id, value, mode, truckId) {
@@ -1366,10 +1391,12 @@ function renderDrawer(id) {
       h("div", { id: "d-res", style: "display:grid;gap:10px" }),
       h("div", { class: "chips", id: "d-paper" }),
       h("p", { class: "meta", id: "d-meta" }),
+      serviceSection(t),
       gpsSection(t),
-      h("div", { class: "dr-section" }, h("h3", { text: "Recent history" }), h("ul", { class: "history", id: "d-hist" }))));
+      h("div", { class: "dr-section" }, h("h3", { text: "Recent activity" }), h("ul", { class: "history", id: "d-hist" }))));
   updateDrawer(id);
   renderHistory(id);
+  renderServices(id);
 }
 
 function updateDrawer(id) {
@@ -1454,6 +1481,99 @@ function gpsSection(t) {
   return h("div", { class: "dr-section", id: "d-gps" }, head, h("dl", { class: "gps-list" }, items));
 }
 
+/* ---------- service history ---------- */
+const SVC_TYPES = ["Oil change", "TM service", "TM repair", "Tires", "Brakes", "Inspection", "Repair", "Other"];
+const svcCache = {};                                        // truck id -> { loading, rows, error }
+const svcView = { id: null, type: "", q: "", all: false };  // filters for the open truck
+const isoDay = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
+function fmtDay(s) { if (!isoDay(s)) return "No date"; const [y, m, d] = s.split("-").map(Number); return `${MONTHS[m - 1]} ${d}, ${y}`; }
+function todayIso() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function money(n) { return "$" + n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); }
+const svcTypes = r => String(r.type || "Other").split(/\s*,\s*/).filter(Boolean);
+const svcSorted = rows => rows.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+/** A best guess at the type from the words, for new records saved without one ticked. */
+function svcGuessType(what) {
+  const s = String(what || "").toLowerCase(), out = [];
+  if (/oil/.test(s) && !/truck-?\s?mount|\btm\b|blower|pump oil/.test(s)) out.push("Oil change");
+  if (/truck-?\s?mount|\btm\b|\b(50|100|200|400|500|1000)\s*(hrs?|hours)\b/.test(s)) out.push("TM service");
+  if (/tire|align/.test(s)) out.push("Tires");
+  if (/brake|rotor|\bpads?\b/.test(s)) out.push("Brakes");
+  if (/inspection|safety|emission/.test(s)) out.push("Inspection");
+  return out.length ? out : ["Repair"];
+}
+function loadServices(id) {
+  svcCache[id] = { loading: true, rows: [] };
+  renderServices(id);
+  api("services", { truckId: id }).then(out => { svcCache[id] = { rows: out.services || [] }; renderServices(id); })
+    .catch(e => { svcCache[id] = { error: e || {}, rows: [] }; renderServices(id); });
+}
+function serviceSection(t) {
+  return h("div", { class: "dr-section", id: "d-svc" },
+    h("div", { class: "svc-head" }, h("h3", { text: "Service history" }),
+      h("div", { class: "svc-actions" },
+        h("button", { class: "btn small", type: "button", id: "svc-csv", text: "Download", onclick: () => downloadServices(t.id) }),
+        h("button", { class: "btn small primary", type: "button", id: "svc-add", text: "+ Add record", onclick: () => openServiceRecord(t.id, null) }))),
+    h("input", { type: "search", id: "svc-q", class: "svc-q", placeholder: "Search records (shop, part, miles…)", value: svcView.q, autocomplete: "off", "aria-label": "Search service records",
+      oninput: e => { svcView.q = e.target.value; svcView.all = false; renderServices(t.id); } }),
+    h("div", { id: "d-svc-body" }));
+}
+function svcFiltered(id) {
+  const rows = svcSorted((svcCache[id] || {}).rows || []);
+  const q = svcView.q.trim().toLowerCase();
+  let list = rows;
+  if (svcView.type === "check") list = list.filter(r => r.check);
+  else if (svcView.type) list = list.filter(r => svcTypes(r).includes(svcView.type));
+  if (q) list = list.filter(r => [r.what, r.shop, r.type, r.payment, r.date, fmtDay(r.date), r.miles, r.tmHrs, r.cost].join(" ").toLowerCase().includes(q));
+  return { rows, list };
+}
+function renderServices(id) {
+  const body = $("d-svc-body"); if (!body || openId !== id) return;
+  const c = svcCache[id];
+  if (!c || c.loading) { body.replaceChildren(h("p", { class: "meta", text: "Loading service history…" })); return; }
+  if (c.error) {
+    body.replaceChildren(h("p", { class: "meta", text: c.error.error === "bad_request" ? "Service history needs the updated Google script (see the yellow note at the top)." : "Service history couldn't load right now. Pull to refresh or reopen the truck." }));
+    return;
+  }
+  const { rows, list } = svcFiltered(id);
+  if (!rows.length) { body.replaceChildren(h("p", { class: "meta", text: "No service records yet. Logging an oil change or service adds one, or use + Add record." })); return; }
+  const counts = {};
+  rows.forEach(r => svcTypes(r).forEach(k => { counts[k] = (counts[k] || 0) + 1; }));
+  const nCheck = rows.filter(r => r.check).length;
+  const chip = (key, text) => h("button", { class: "chip-btn sm" + (key === "check" ? " warn-chip" : ""), type: "button", "aria-pressed": String(svcView.type === key),
+    onclick: () => { svcView.type = svcView.type === key ? "" : key; svcView.all = false; renderServices(id); } }, text);
+  const byYear = {};
+  list.forEach(r => { if (isNum(r.cost) && isoDay(r.date)) { const y = r.date.slice(0, 4); byYear[y] = (byYear[y] || 0) + r.cost; } });
+  const years = Object.keys(byYear).sort().reverse().slice(0, 3);
+  const shown = svcView.all ? list : list.slice(0, 12);
+  body.replaceChildren(
+    h("div", { class: "chips svc-filters" }, chip("", `All ${rows.length}`), SVC_TYPES.filter(k => counts[k]).map(k => chip(k, `${k} ${counts[k]}`)),
+      nCheck ? chip("check", `To check ${nCheck}`) : null),
+    years.length ? h("p", { class: "meta", id: "svc-costs", text: "Costs on record: " + years.map(y => `${y} ${money(Math.round(byYear[y] * 100) / 100)}`).join(" · ") }) : null,
+    list.length ? h("ul", { class: "svc-list", id: "svc-list" }, shown.map(r => svcItem(id, r))) : h("p", { class: "meta", text: "No records match." }),
+    list.length > shown.length ? h("button", { class: "btn small", type: "button", id: "svc-more", text: `Show all ${list.length}`, onclick: () => { svcView.all = true; renderServices(id); } }) : null);
+}
+function svcItem(id, r) {
+  const meta = [isNum(r.miles) ? `${fmt(r.miles)} mi` : null, isNum(r.tmHrs) ? `${fmt(r.tmHrs)} TM hrs` : null, r.shop || null].filter(Boolean).join(" · ");
+  return h("li", null, h("button", { class: "svc-item" + (r.check ? " flagged" : ""), type: "button", "data-id": r.id, onclick: () => openServiceRecord(id, r) },
+    h("span", { class: "svc-top" }, h("strong", { text: fmtDay(r.date) }), svcTypes(r).map(k => h("span", { class: "svc-tag", text: k })),
+      isNum(r.cost) ? h("span", { class: "svc-cost", text: money(r.cost) }) : null),
+    h("span", { class: "svc-what", text: r.what || "(nothing written)" }),
+    meta ? h("span", { class: "svc-meta", text: meta }) : null,
+    r.payment ? h("span", { class: "svc-meta", text: "Payment: " + r.payment }) : null,
+    r.check ? h("span", { class: "svc-check", text: "Check: " + r.check }) : null));
+}
+function downloadServices(id) {
+  const t = byId(id); if (!t) return;
+  const c = svcCache[id];
+  if (!c || c.loading || c.error) { toast("Service history isn't loaded yet."); return; }
+  const { list } = svcFiltered(id);
+  const lines = [["Date", "Type", "What was done", "Miles", "TM hrs", "Shop", "Cost", "Payment", "Check", "Source"]].concat(
+    list.map(r => [r.date, r.type, r.what, isNum(r.miles) ? r.miles : "", isNum(r.tmHrs) ? r.tmHrs : "", r.shop, isNum(r.cost) ? r.cost : "", r.payment, r.check, r.source]));
+  const name = String(t.unit || "truck").replace(/[^A-Za-z0-9]+/g, "-");
+  downloadFile(`VODA-Service-${name}-${todayIso()}.csv`, "\ufeff" + lines.map(row => row.map(csvCell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+  toast(`Downloaded ${list.length} service record${list.length === 1 ? "" : "s"}.`);
+}
+
 function loadHistory(id) {
   historyCache[id] = { loading: true, rows: [] };
   renderHistory(id);
@@ -1489,6 +1609,7 @@ saveTruck = async function (t, body, log) {
   delete historyCache[t.id];
   if (openId === t.id && drawer.open) setTimeout(() => loadHistory(t.id), 0);
   if (body && body.color && out && out.color === undefined) setBanner(SCRIPT_OLD);   // an old script drops the color
+  if (log && log.kind === "service") { delete svcCache[t.id]; if (openId === t.id && drawer.open) setTimeout(() => loadServices(t.id), 0); }
   return out;
 };
 
@@ -1553,6 +1674,85 @@ function textField(labelText, id, value, type, hint, placeholder) {
     hint ? h("span", { class: "hint", text: hint }) : null);
 }
 const val = id => { const el = $(id); return el ? el.value.trim() : ""; };
+/** Shop box that suggests the shops already in the service history. */
+function shopField(id, value) {
+  const shops = [...new Set(Object.values(svcCache).flatMap(c => (c.rows || []).map(x => x.shop)))].filter(Boolean).sort();
+  return h("div", { class: "field" }, h("label", { for: id, text: "Shop (optional)" }),
+    h("input", { id, type: "text", list: id + "-list", autocomplete: "off", value: value || "", placeholder: "Shop name" }),
+    h("datalist", { id: id + "-list" }, shops.map(x => h("option", { value: x }))));
+}
+
+/** Add, fix or delete one service record. Saving a flagged record marks it as checked. */
+function openServiceRecord(truckId, rec) {
+  const t = byId(truckId); if (!t) return;
+  const isNew = !rec;
+  const v = currentValues(t);
+  const r = rec || { truckId, date: todayIso(), type: "", what: "", miles: isNum(v.miles) ? v.miles : t.milesNow,
+    tmHrs: progOf(t) ? (isNum(v.hrs) ? v.hrs : t.hrsNow) : null, shop: "", cost: null, payment: "" };
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const types = isNew ? [] : svcTypes(r);
+  let armed = false;
+  const keep = list => { svcCache[truckId] = { rows: list }; renderServices(truckId); };
+  const rows = () => ((svcCache[truckId] || {}).rows || []).slice();
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `${isNew ? "Add service record" : "Service record"} · ${label(t)}` }),
+    rec && rec.check ? h("p", { class: "svc-flag", id: "sr-flag", text: `Flagged: ${rec.check} Saving marks it as checked.` }) : null,
+    h("div", { class: "grid2" },
+      textField("Date", "sr-date", isoDay(r.date) ? r.date : "", "date"),
+      numField("Miles", "sr-miles", r.miles),
+      progOf(t) || isNum(r.tmHrs) ? numField("TM hrs", "sr-hrs", r.tmHrs, null, "decimal") : null,
+      shopField("sr-shop", r.shop),
+      numField("Cost $", "sr-cost", r.cost, null, "decimal")),
+    h("fieldset", null, h("legend", { text: "Type" }),
+      h("div", { class: "svc-typegrid" }, SVC_TYPES.map(k => h("label", { class: "check" },
+        h("input", { type: "checkbox", name: "sr-type", value: k, checked: types.includes(k) }), h("span", { text: k })))),
+      isNew ? h("p", { class: "hint", text: "Leave blank and the app picks from what you write." }) : null),
+    h("div", { class: "field" }, h("label", { for: "sr-what", text: "What was done" }),
+      h("textarea", { id: "sr-what", rows: "4", value: r.what || "", placeholder: "Oil change, front brake pads, 2 new tires…" })),
+    textField("Payment note (optional)", "sr-pay", r.payment, "text", null, "Paid by check 7/30"),
+    !isNew && (r.source || r.by) ? h("p", { class: "hint", text: [r.source ? "From: " + r.source : "", r.by ? "by " + r.by : ""].filter(Boolean).join(" · ") }) : null,
+    err,
+    h("div", { class: "dlg-foot" },
+      isNew ? null : h("button", { class: "btn ghost danger", type: "button", id: "sr-del", text: "Delete record", onclick: async () => {
+        const b = $("sr-del");
+        if (!armed) { armed = true; b.textContent = "Tap again to delete"; return; }
+        b.disabled = true;
+        try {
+          await api("deleteService", { id: rec.id, base: rec.updatedAt || "" });
+          keep(rows().filter(x => x.id !== rec.id));
+          closeDialog(); toast("Service record deleted");
+        } catch (e) {
+          if (e && e.error === "conflict" && e.service) { keep(rows().map(x => x.id === rec.id ? e.service : x)); err.textContent = "Someone else just changed this record. Close this and check it before deleting."; }
+          else err.textContent = svcErr(e);
+          b.disabled = false;
+        }
+      } }),
+      h("div", { class: "right" },
+        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+        h("button", { class: "btn primary", type: "button", id: "sr-save", text: "Save", onclick: async () => {
+          const miles = parseNum(val("sr-miles")), hrs = $("sr-hrs") ? parseNum(val("sr-hrs")) : r.tmHrs, cost = parseNum(val("sr-cost").replace(/^\$/, ""));
+          if ([miles, hrs, cost].some(n => Number.isNaN(n))) { err.textContent = "Miles, TM hrs and cost take numbers only."; return; }
+          const what = val("sr-what"), date = val("sr-date");
+          if (!what && !date) { err.textContent = "Add a date or what was done."; return; }
+          if (date && !isoDay(date)) { err.textContent = "Pick a date, or leave it empty."; return; }
+          let tps = [...dlg.querySelectorAll('input[name="sr-type"]:checked')].map(x => x.value);
+          if (!tps.length) tps = svcGuessType(what);
+          const body = { id: isNew ? "" : rec.id, truckId, date, type: tps.join(", "), what: what.slice(0, 2000), miles, tmHrs: hrs,
+            shop: val("sr-shop").slice(0, 60), cost, payment: val("sr-pay").slice(0, 300) };
+          const btn = $("sr-save"); btn.disabled = true; btn.textContent = "Saving…";
+          try {
+            const out = await api("saveService", { service: body, base: isNew ? "" : rec.updatedAt || "" });
+            keep(isNew ? rows().concat([out.service]) : rows().map(x => x.id === rec.id ? out.service : x));
+            closeDialog(); toast(isNew ? "Service record added" : "Service record saved");
+          } catch (e) {
+            if (e && e.error === "conflict" && e.service) { keep(rows().map(x => x.id === rec.id ? e.service : x)); err.textContent = "Someone else just changed this record. The latest version is in the list now; close this and check it."; }
+            else if (e && e.error === "gone") { keep(rows().filter(x => x.id !== rec.id)); err.textContent = "This record was deleted on another phone."; }
+            else err.textContent = svcErr(e);
+            btn.disabled = false; btn.textContent = "Save";
+          }
+        } }))));
+}
+function svcErr(e) { return e && e.error === "bad_request" ? "The Google script needs updating first (see the yellow note at the top)." : errText(e, "Nothing"); }
 
 function openService(id) {
   const t = byId(id); if (!t) return;
@@ -1590,7 +1790,11 @@ function openService(id) {
       h("label", { class: "check" }, truckOil, h("span", null, "Truck oil changed", h("small", { text: `Restarts the ${fmt(t.oilInterval)} mi countdown${t.tm === "cds" ? " (miles and TM hrs)" : ""}` }))),
       tmOil ? h("label", { class: "check" }, tmOil, h("span", null, "TM engine oil changed", h("small", { text: `Restarts the ${fmt(isNum(t.tmOilInterval) ? t.tmOilInterval : DEFAULT_TM_OIL_HRS)} hr countdown` }))) : null),
     tierRadios,
-    h("div", { class: "field" }, h("label", { for: "sv-note", text: "Note (optional)" }), h("textarea", { id: "sv-note", rows: "2", placeholder: "Shop, cost, anything else" })),
+    h("div", { class: "grid2" },
+      shopField("sv-shop", ""),
+      numField("Cost $ (optional)", "sv-cost", null, null, "decimal")),
+    h("div", { class: "field" }, h("label", { for: "sv-note", text: "Note (optional)" }), h("textarea", { id: "sv-note", rows: "2", placeholder: "Anything else worth knowing" })),
+    h("p", { class: "hint", text: "This is also added to the truck's service history." }),
     err,
     h("div", { class: "dlg-foot" },
       h("div", { class: "right" },
@@ -1603,6 +1807,8 @@ function openService(id) {
           if (!isNum(miles)) { err.textContent = "Enter the miles at service."; return; }
           if (prog && (doTm || level || (doOil && t.tm === "cds")) && !isNum(hrs)) { err.textContent = "Enter the TM hrs at service."; return; }
           if (!doOil && !doTm && !level) { err.textContent = "Tick at least one thing that was done."; return; }
+          const cost = parseNum(val("sv-cost").replace(/^\$/, ""));
+          if (Number.isNaN(cost)) { err.textContent = "Cost should be a number, like 84.80."; return; }
           const body = plain(t);
           const done = [];
           if (doOil) { body.milesAtOil = miles; if (t.tm === "cds") body.hrsAtOil = hrs; done.push("Truck oil change"); }
@@ -1618,7 +1824,8 @@ function openService(id) {
           body.readingBy = session ? session.name : "";
           const btn = $("sv-save"); btn.disabled = true; btn.textContent = "Saving…";
           try {
-            await saveTruck(t, body, { kind: "service", miles, hrs: prog ? hrs : null, items: done, note: val("sv-note").slice(0, 500) });
+            await saveTruck(t, body, { kind: "service", miles, hrs: prog ? hrs : null, items: done, note: val("sv-note").slice(0, 500),
+              shop: val("sv-shop").slice(0, 60), cost: isNum(cost) ? cost : null });
             delete drafts[t.id]; saveDrafts();
             closeDialog();
             renderAll();
