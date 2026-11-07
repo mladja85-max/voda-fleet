@@ -492,7 +492,8 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .sup-sub:empty { display: none; }
 .sup-chip { font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
 .sup-chip.to { color: var(--soon); border: 1.5px solid var(--soon); }
-.sup-chip.ord { background: var(--accent-soft); color: var(--accent); }
+.sup-chip.ord { background: var(--accent-soft); color: var(--accent); white-space: normal; }
+.sup-lastord { flex-basis: 100%; font-size: .8rem; color: var(--muted); }
 .step { display: flex; align-items: center; gap: 4px; flex: none; }
 .step .lbl { font-size: .68rem; font-weight: 700; color: var(--soon); text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
 .step button { width: 38px; height: 38px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); font-size: 1.35rem; font-weight: 700; line-height: 1; cursor: pointer; display: grid; place-items: center; color: var(--ink); padding: 0; }
@@ -910,7 +911,7 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 17;                          // the Google script version this app expects (17: technicians can't change the order list)
+const NEEDS_API = 18;                          // the Google script version this app expects (18: when each item was last ordered)
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like Checklists) won't work. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -3012,7 +3013,8 @@ function noteSupplies(s) {
   const lists = Array.isArray(s.lists) ? s.lists : [{ id: DEFAULT_LIST, name: "Cleaning supplies" }];   // a copy from before checklists
   const withList = x => Object.assign({}, x, { list: x.list || DEFAULT_LIST });
   supplies = { ver: s.ver || "", lists, products: s.products.map(withList),
-    requests: (Array.isArray(s.requests) ? s.requests : []).map(withList), checks: (Array.isArray(s.checks) ? s.checks : []).map(withList) };
+    requests: (Array.isArray(s.requests) ? s.requests : []).map(withList), checks: (Array.isArray(s.checks) ? s.checks : []).map(withList),
+    lastOrdered: s.lastOrdered && typeof s.lastOrdered === "object" ? s.lastOrdered : {} };
   store.set(K_SUP, supplies);
   const ids = new Set(supplies.products.map(p => p.id));
   let gone = false;
@@ -3077,8 +3079,28 @@ function curList(s) {
 /** One checklist's share of everything. */
 function supScope(s, list) {
   const mine = x => x.list === list.id;
-  return { ver: s.ver, list, products: s.products.filter(mine), requests: s.requests.filter(mine), checks: s.checks.filter(mine) };
+  return { ver: s.ver, list, products: s.products.filter(mine), requests: s.requests.filter(mine), checks: s.checks.filter(mine), lastOrdered: s.lastOrdered || {} };
 }
+/** When each item was last ordered (how many, by whom, received yet): the script's full history, plus anything newer on
+ *  screen (an admin's tap a moment ago). Lines that were taken off the list don't count. */
+function supLastOrdered(sc) {
+  const out = {};
+  const put = (pid, x) => { if (x && x.at && (!out[pid] || String(x.at) > String(out[pid].at))) out[pid] = x; };
+  for (const [pid, x] of Object.entries(sc.lastOrdered || {})) put(pid, x);
+  for (const r of sc.requests) {
+    if (r.orderedAt && r.status !== "Removed") put(r.productId, { at: r.orderedAt, qty: r.qty, by: r.orderedBy, status: r.status, receivedAt: r.status === "Received" ? r.closedAt : "" });
+  }
+  return out;
+}
+/** "3 days ago", "2 weeks ago"; nothing for today or yesterday (those already say so). */
+function supAgo(iso) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d)) return "";
+  const now = clockNow();
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+  return days < 2 ? "" : days < 14 ? `${days} days ago` : days < 60 ? `${Math.round(days / 7)} weeks ago` : `${Math.round(days / 30)} months ago`;
+}
+const supDayAgo = iso => { const a = supAgo(iso); return supDay(iso) + (a ? ` (${a})` : ""); };
 /** Technicians: items waiting on the order list can't be marked again; only an Admin changes or removes them. */
 const supLocked = sc => new Set(isAdmin() ? [] : sc.requests.filter(r => r.status === "To order").map(r => r.productId));
 function supMarkedIn(sc) {
@@ -3218,6 +3240,7 @@ function supRerender() {
 
 /* the checklist */
 function supCheckBody(sc) {
+  const lastOf = supLastOrdered(sc);
   const openOf = id => {
     const l = sc.requests.filter(r => r.productId === id && OPEN(r));
     return l.find(r => r.status === "To order") || l[0] || null;
@@ -3230,7 +3253,7 @@ function supCheckBody(sc) {
       return h("section", { class: "sup-sec", style: secTheme(g.color) },
         h("div", { class: "sup-sec-head" }, h("h3", { text: g.name }),
           h("span", { class: "cnt" + (cnt ? " on" : ""), text: cnt ? `${cnt} marked` : `${g.items.length} item${g.items.length === 1 ? "" : "s"}` })),
-        h("ul", { class: "sup-list" }, g.items.map(p => supItem(p, openOf(p.id)))));
+        h("ul", { class: "sup-list" }, g.items.map(p => supItem(p, openOf(p.id), lastOf[p.id]))));
     }),
     h("div", { class: "field sup-note" },
       h("label", { for: "supNote", text: "Note for the office (optional)" }),
@@ -3240,6 +3263,7 @@ function supCheckBody(sc) {
     h("details", { class: "panel how" }, h("summary", { text: "How checklists work" }),
       h("ul", null, [
         ["Check", "tap what's missing or low, set how many we need, then Send list. It goes straight on this checklist's order list."],
+        ["Last ordered", "every item shows when it was last ordered and how many, and whether it has arrived. The Order list has the full dates."],
         ["Already on the list", "an item waiting to be ordered can't be marked again by a technician, and only an admin can change or remove anything on the order list. Once it's ordered, it can be sent again if more is needed."],
         ["Nothing missing", "tap Checked: nothing missing, so the office knows it was checked."],
         ["No signal", "the list waits on this phone and sends itself when you're back online."],
@@ -3247,12 +3271,15 @@ function supCheckBody(sc) {
         ["Google Sheet", "checklists are on the Checklists and Supplies tabs, the order lists on Supply orders, and every check on Supply checks."]
       ].map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))))];
 }
-function supItem(p, open) {
+function supItem(p, open, last) {
   const locked = !isAdmin() && !!open && open.status === "To order";
   const qty = locked ? 0 : supDraft.items[p.id] || 0;
   const chip = !open ? null : open.status === "To order"
     ? h("span", { class: "sup-chip to", text: `On order list: ${supQty(open.qty, p.container)}` })
-    : h("span", { class: "sup-chip ord", text: `Ordered ${supDay(open.orderedAt)}` });
+    : h("span", { class: "sup-chip ord", text: `Ordered ${supDayAgo(open.orderedAt)}: ${supQty(open.qty, p.container)}, on the way` });
+  // When it was last ordered, unless the blue "Ordered … on the way" tag already says so.
+  const lastText = last && !(open && open.status === "Ordered")
+    ? `Last ordered ${supDayAgo(last.at)}: ${supQty(last.qty, p.container)}${last.receivedAt ? ` · received ${supDay(last.receivedAt)}` : last.status === "Ordered" ? ", on the way" : ""}` : "";
   const tap = h("button", { class: "sup-tap", type: "button", id: "sp-" + p.id, "aria-pressed": String(!!qty), "aria-disabled": locked ? "true" : null,
     title: locked ? "Already on the order list" : null,
     onclick: () => {
@@ -3261,7 +3288,8 @@ function supItem(p, open) {
     } },
     h("span", { class: "sup-box", "aria-hidden": "true" }),
     h("span", { class: "sup-name", text: p.name }),
-    h("span", { class: "sup-sub" }, p.container ? h("span", { text: p.container }) : null, chip));
+    h("span", { class: "sup-sub" }, p.container ? h("span", { text: p.container }) : null, chip,
+      lastText ? h("span", { class: "sup-lastord", text: lastText }) : null));
   if (qty) tap.querySelector(".sup-box").innerHTML = CHECK_SVG;
   const input = qty ? h("input", { id: "sq-" + p.id, type: "text", inputmode: "numeric", pattern: "[0-9]*", maxlength: "3", value: String(qty), "aria-label": `How many ${p.name}`,
     onfocus: e => e.target.select(),
@@ -3348,14 +3376,15 @@ function supOrdersBody(sc) {
     h("div", { class: "ord-head" }, h("h3", { text: "Ordered, on the way" }), h("span", { class: "cnt", text: String(ordered.length) })),
     h("ul", { class: "ord-list" }, ordered.map(r => ordRow(r, admin)))));
   if (closed.length) out.push(h("details", { class: "panel ord-closed", id: "ordClosed" },
-    h("summary", { text: `Received or removed lately (${closed.length})` }),
+    h("summary", { text: `History: received or removed (${closed.length})` }),
     h("ul", { class: "ord-list" }, closed.map(r => ordRow(r, admin)))));
   return out;
 }
 function ordRow(r, admin) {
   const meta = r.status === "To order" ? `Asked by ${r.reportedBy || "?"} · ${supWhen(r.reportedAt)}${r.pending ? " · sending…" : ""}`
-    : r.status === "Ordered" ? `Ordered ${supWhen(r.orderedAt)}${r.orderedBy ? " by " + r.orderedBy : ""} · asked by ${r.reportedBy || "?"} ${supDay(r.reportedAt)}`
-    : `${supWhen(r.closedAt)}${r.closedBy ? " by " + r.closedBy : ""}`;
+    : r.status === "Ordered" ? `Ordered ${supDayAgo(r.orderedAt)}${r.orderedBy ? " by " + r.orderedBy : ""} · asked by ${r.reportedBy || "?"} ${supDay(r.reportedAt)}`
+    : r.status === "Received" ? `Received ${supDay(r.closedAt)}${r.closedBy ? " by " + r.closedBy : ""} · ordered ${supDayAgo(r.orderedAt)} · asked by ${r.reportedBy || "?"} ${supDay(r.reportedAt)}`
+    : `Removed ${supDay(r.closedAt)}${r.closedBy ? " by " + r.closedBy : ""} · asked by ${r.reportedBy || "?"} ${supDay(r.reportedAt)}`;
   const btn = (text, cls, onclick) => h("button", { class: "btn small" + (cls ? " " + cls : ""), type: "button", text, onclick });
   const acts = !admin || r.pending ? null
     : r.status === "To order" ? [btn("✓ Ordered", "primary", () => supChange({ ids: [r.id], status: "Ordered" }, `${r.product}: ordered`)), btn("Change", "", () => openSupLine(r.id))]
