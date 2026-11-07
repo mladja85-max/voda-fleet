@@ -18,7 +18,7 @@
  * This file is kept in the voda-fleet GitHub repository (apps-script/Code.gs) so every change comes as a pull request.
  * After merging a change: open Apps Script, replace Code.gs with this file, Ctrl+S, then deploy a New version as above.
  *
- * In the Trucks tab, don't rename or move columns A to AH. You can add your own columns to the right.
+ * In the Trucks tab, don't rename or move columns A to AI. You can add your own columns to the right.
  *
  * ACCOUNTS
  * Everyone signs in to the app with their own username and passcode (4 to 6 characters, their choice).
@@ -67,18 +67,18 @@
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "oilInterval", "milesAtOil", "milesNow", "tm", "cdsMilesPerHr", "hrsAtOil",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
-  "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color", "hrsAt", "hrsBy", "tmSkip"];
+  "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color", "hrsAt", "hrsBy", "tmSkip", "tier200"];
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 10;        // the app warns when the deployed web app is older than it expects
-const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip); older sheets get them automatically
+const API_VERSION = 11;        // the app warns when the deployed web app is older than it expects
+const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
 const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
-  "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000"];
-const TIERS = ["100", "400", "500", "1000", "2000"];
+  "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000", "tier200"];
+const TIERS = ["100", "200", "400", "500", "1000", "2000"];   // 200: the Apex 570's engine oil and filter (Sapphire manual)
 const TM_KINDS = ["none", "cds", "legend", "apex"];
 const LOG_COLS = ["at", "truckId", "unit", "kind", "miles", "hrs", "items", "note", "by"];
 
@@ -940,7 +940,7 @@ function ensureTruckCols_(sheet) {
     if (head === TRUCK_COLS[i]) continue;
     if (head.trim() !== "") sheet.insertColumnBefore(i + 1);   // your own column there moves one to the right
     sheet.getRange(1, i + 1).setValue(TRUCK_COLS[i]).setFontWeight("bold");
-    sheet.getRange(2, i + 1, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+    if (NUM_COLS.indexOf(TRUCK_COLS[i]) === -1) sheet.getRange(2, i + 1, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
     if (TRUCK_COLS[i] === "hrsAt") addedHrsAt = true;
   }
   if (addedHrsAt) backfillHrsAt_(sheet);

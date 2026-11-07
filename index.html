@@ -517,7 +517,6 @@ const SOON_MILES = 500;   // from the sheet: yellow when under 500 mi left
 const SOON_HRS = 20;      // from the sheet: yellow within 20 TM hrs of the next service
 const COMBINE_HRS = 20;   // services due within 20 hrs of each other are done together
 const DEFAULT_CDS_MILES_PER_HR = 15;
-const DEFAULT_TM_OIL_HRS = 100;
 
 const PROGRAMS = {
   cds: { name: "CDS 4.6 / 4.8", selfPowered: false, tiers: [
@@ -544,7 +543,7 @@ const PROGRAMS = {
       "Transmission fluid – change",
       "Drive shaft – grease U-joints and splines" ] } ] },
   legend: { name: "Legend GT", selfPowered: true, tiers: [
-    { h: 100, oil: "tm", tasks: [
+    { h: 100, tasks: [
       "Vacuum relief valve – check, adjust up to 13″ Hg if needed",
       "O-rings – lubricate (o-ring lubricant only, Legend Brands P/N 13-003)",
       "Belts – check for wear, re-tension, check pulley alignment",
@@ -564,13 +563,17 @@ const PROGRAMS = {
       "All belts – replace",
       "Vacuum pump – drain, flush and replace gear end oil" ] } ] },
   apex: { name: "Apex 570", selfPowered: true, tiers: [
-    { h: 100, oil: "tm", tasks: [
+    { h: 100, tasks: [
       "Vacuum relief valve – check, adjust up to 13″ Hg if needed",
       "Pressure regulator – lubricate o-rings (Sapphire Scientific P/N 13-003)",
       "Belts – re-tension all belts",
       "Battery terminals – clean",
-      "Spark plugs – check (OEM only)",
-      "Engine oil and filter – change" ] },
+      "Spark plugs – check (OEM only)" ] },
+    // Sapphire's Apex 570 manual (Rev M): engine oil and filter every 200 hrs, never longer. Until a 200-hr service is
+    // logged, the last 100-hr service counts as the last oil change (it used to include one).
+    { h: 200, since: 100, tasks: [
+      "Engine oil and filter – change (OEM filter only)",
+      "Engine air filter – check" ] },
     { h: 500, tasks: [
       "Pressure pump – change crankcase oil",
       "Engine – replace in-line fuel filter",
@@ -591,8 +594,23 @@ const stMiles = left => left <= 0 ? "due" : left < SOON_MILES ? "soon" : "ok";
 const stHrs = left => left <= 0 ? "due" : left <= SOON_HRS ? "soon" : "ok";
 const worstOf = list => list.reduce((w, s) => RANK[s] > RANK[w] ? s : w, "ok");
 
+/** When a service was last done: saved hrs, or (for a newly added service) the one it used to be part of, or the last round number. */
+function lastDone(t, tr, hrs) {
+  const saved = t.tiers ? t.tiers[String(tr.h)] : undefined;
+  if (isNum(saved)) return saved;
+  const before = tr.since && t.tiers ? t.tiers[String(tr.since)] : undefined;
+  return isNum(before) ? before : Math.floor(hrs / tr.h) * tr.h;
+}
+/** The services a logged service counts for at those hrs: itself, the smaller ones that fit into it, and any already due. */
+function servicesCovered(t, level, hrs) {
+  const prog = PROGRAMS[t.tm];
+  if (!prog || !level) return [];
+  return prog.tiers.filter(tr => tr.h === level ||
+    (tr.h < level && (level % tr.h === 0 || (isNum(hrs) && lastDone(t, tr, hrs) + tr.h <= hrs + COMBINE_HRS)))).map(tr => tr.h);
+}
+
 function compute(t, miles, hrs) {
-  const r = { oil: null, tmOil: null, service: null, worst: "ok", empty: true };
+  const r = { oil: null, service: null, worst: "ok", empty: true };
   const prog = PROGRAMS[t.tm] || null;
 
   if (isNum(miles) && isNum(t.milesAtOil) && isNum(t.oilInterval)) {
@@ -608,23 +626,20 @@ function compute(t, miles, hrs) {
     r.oil = { driven, tmHrs, tmMiles, factor, used, left, interval: t.oilInterval, status: stMiles(left) };
   }
 
+  // The truckmount's own engine oil is one of its services (Legend GT every 100 hrs, Apex 570 every 200 hrs), not a separate countdown.
   if (prog && isNum(hrs)) {
-    if (prog.selfPowered && isNum(t.tmOilHrs)) {
-      const iv = isNum(t.tmOilInterval) ? t.tmOilInterval : DEFAULT_TM_OIL_HRS;
-      const dueAt = t.tmOilHrs + iv;
-      const left = dueAt - hrs;
-      r.tmOil = { dueAt, left, since: hrs - t.tmOilHrs, interval: iv, status: stHrs(left) };
-    }
     const tiers = prog.tiers.map(tr => {
-      const saved = t.tiers ? t.tiers[String(tr.h)] : undefined;
-      const last = isNum(saved) ? saved : Math.floor(hrs / tr.h) * tr.h;
+      const last = lastDone(t, tr, hrs);
       return { h: tr.h, oil: tr.oil || null, tasks: tr.tasks, last, dueAt: last + tr.h };
     });
     const soonest = Math.min(...tiers.map(x => x.dueAt));
-    const level = Math.max(...tiers.filter(x => x.dueAt <= soonest + COMBINE_HRS).map(x => x.h));
-    const doNow = tiers.filter(x => x.h <= level);
+    const due = tiers.filter(x => x.dueAt <= soonest + COMBINE_HRS);
+    const level = Math.max(...due.map(x => x.h));
+    // What to do now: everything due, plus the smaller services that fit into this one (a 500-hr includes the 100-hr,
+    // not the 200-hr).
+    const doNow = tiers.filter(x => due.includes(x) || (x.h < level && level % x.h === 0));
     const laterMap = new Map();
-    for (const x of tiers.filter(x => x.h > level)) {
+    for (const x of tiers.filter(x => !doNow.includes(x))) {
       laterMap.set(x.dueAt, Math.max(laterMap.get(x.dueAt) || 0, x.h));
     }
     const later = [...laterMap.entries()].sort((a, b) => a[0] - b[0]).map(([at, lv]) => ({ at, level: lv }));
@@ -632,7 +647,7 @@ function compute(t, miles, hrs) {
     r.service = { dueAt: soonest, left, level, doNow, later, status: stHrs(left) };
   }
 
-  const parts = [r.oil, r.tmOil, r.service].filter(Boolean);
+  const parts = [r.oil, r.service].filter(Boolean);
   r.empty = parts.length === 0;
   r.worst = worstOf(parts.map(x => x.status));
   return r;
@@ -685,7 +700,7 @@ let lastSync = null;
 let offline = false;
 let refreshing = false;
 let gpsHealth = null;                          // { lastOk, lastTry, error } when One Step GPS is set up
-const NEEDS_API = 10;                          // the Google script version this app expects
+const NEEDS_API = 11;                          // the Google script version this app expects
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like truck colors) won't save. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -986,7 +1001,6 @@ function serviceText(s) {
 function issueLines(t, r) {
   const out = [];
   if (r.oil && r.oil.status !== "ok") out.push({ status: r.oil.status, text: r.oil.left > 0 ? `truck oil change in ${fmt(r.oil.left)} mi` : r.oil.left === 0 ? "truck oil change due now" : `truck oil change overdue by ${fmt(-r.oil.left)} mi` });
-  if (r.tmOil && r.tmOil.status !== "ok") out.push({ status: r.tmOil.status, text: r.tmOil.left > 0 ? `TM engine oil in ${fmt(r.tmOil.left)} hrs` : r.tmOil.left === 0 ? "TM engine oil due now" : `TM engine oil overdue by ${fmt(-r.tmOil.left)} hrs` });
   if (r.service && r.service.status !== "ok") out.push({ status: r.service.status, text: `TM ${serviceText(r.service)} (at ${fmt(r.service.dueAt)} hrs)` });
   return out.concat(gpsAlerts(t));
 }
@@ -1097,7 +1111,7 @@ const unitKey = u => String(u || "").trim().toLowerCase().replace(/\s+/g, " ");
 const HOW = [
   ["Truck oil", "oil interval minus miles driven since the last oil change. Yellow under 500 mi, red at 0."],
   ["CDS trucks", "the CDS runs off the van engine, so each TM hour since the oil change counts as 15 miles."],
-  ["Legend GT and Apex 570", "the truckmount has its own engine, so its oil is tracked in TM hours (every 100 hrs)."],
+  ["Legend GT and Apex 570", "the truckmount has its own engine. Its engine oil and filter is one of the TM services: Legend GT in the 100-hr service, Apex 570 every 200 hrs (Sapphire's manual)."],
   ["TM service", "from the 100 / 400 / 500 / 1000 / 2000-hr charts. Yellow within 20 hrs. A bigger service includes the smaller one's items."],
   ["Miles", "come from One Step GPS every 15 minutes for trucks set up in the GPS tab."],
   ["Check engine and GPS offline", "also come from One Step GPS. They move a truck up the list but don't change its oil or service countdowns."],
@@ -1242,7 +1256,6 @@ function evalTruck(t) {
 function urgency(r) {
   const parts = [];
   if (r.oil) parts.push(r.oil.left / Math.max(1, r.oil.interval));
-  if (r.tmOil) parts.push(r.tmOil.left / Math.max(1, r.tmOil.interval));
   if (r.service) parts.push(r.service.left / 100);
   return parts.length ? Math.min(...parts) : 9;
 }
@@ -1446,7 +1459,6 @@ function updateTile(id) {
   const parts = [];
   if (r.empty) parts.push(h("p", { class: "no-reading", text: "Enter the readings to see what's due." }));
   if (r.oil) parts.push(metric(t.tm === "cds" ? "Truck oil · CDS" : "Truck oil", oilText(r.oil), r.oil.status, r.oil.used / r.oil.interval));
-  if (r.tmOil) parts.push(metric("TM oil", hrsLeftText(r.tmOil.left), r.tmOil.status, r.tmOil.since / r.tmOil.interval));
   if (r.service) parts.push(metric("TM service", shortService(r.service), r.service.status, 1 - r.service.left / 100));
   $("met-" + id).replaceChildren(...parts);
   tile.dataset.status = r.empty ? "none" : r.worst;
@@ -1472,7 +1484,7 @@ function updateTile(id) {
   $("gps-" + id).replaceChildren(...gpsLine(t));
   $("chk-" + id).replaceChildren(...checkFlag(t));
   const stale = staleHrs(tmCheck(t));
-  if (stale && (r.tmOil || r.service || (r.oil && t.tm === "cds"))) $("met-" + id).append(h("p", { class: "stale", text: `Based on TM hrs from ${shortDate(stale)}` }));
+  if (stale && (r.service || (r.oil && t.tm === "cds"))) $("met-" + id).append(h("p", { class: "stale", text: `Based on TM hrs from ${shortDate(stale)}` }));
 }
 /** The tile's tag for the Tuesday TM hrs check. */
 function checkFlag(t) {
@@ -1679,13 +1691,6 @@ function updateDrawer(id) {
       h("div", { class: "metric-line" }, h("span", { class: "metric-label", text: t.tm === "cds" ? "Truck oil (miles + TM hrs)" : "Truck oil" }), h("span", { class: "metric-value", text: oilText(o) })),
       meter(o.used / o.interval), h("p", { class: "drow-detail", text: detail })));
   }
-  if (r.tmOil) {
-    const o = r.tmOil;
-    out.push(h("div", { class: "drow " + o.status },
-      h("div", { class: "metric-line" }, h("span", { class: "metric-label", text: "TM engine oil" }), h("span", { class: "metric-value", text: hrsLeftText(o.left) })),
-      meter(o.since / o.interval),
-      h("p", { class: "drow-detail", text: `${fmt(o.since)} of ${fmt(o.interval)} hrs since the change at ${fmt(t.tmOilHrs)} · due at ${fmt(o.dueAt)} hrs` })));
-  }
   if (r.service) {
     const s = r.service;
     const laterTxt = s.later.length ? " · Then " + s.later.map(x => `${x.level}-hr at ${fmt(x.at)}`).join(", ") : "";
@@ -1715,7 +1720,7 @@ function updateDrawer(id) {
   const chk = $("d-chk"), c = tmCheck(t);
   if (chk && c) chk.replaceChildren(...checkRow(t, c));
   const stale = staleHrs(c);
-  if (stale && (r.tmOil || r.service || (r.oil && t.tm === "cds"))) res.append(h("p", { class: "stale", text: `These TM numbers are based on hours from ${fmtWhen(stale.toISOString())}. Enter today's TM hrs to update them.` }));
+  if (stale && (r.service || (r.oil && t.tm === "cds"))) res.append(h("p", { class: "stale", text: `These TM numbers are based on hours from ${fmtWhen(stale.toISOString())}. Enter today's TM hrs to update them.` }));
   $("d-meta").textContent = t.readingAt
     ? `Last saved reading: ${fmtWhen(t.readingAt)}${t.readingBy ? " by " + t.readingBy : ""}${drafts[id] && st.changed ? " · not saved yet" : ""}`
     : "No saved reading yet";
@@ -2137,22 +2142,24 @@ function openService(id) {
   const err = h("p", { class: "dlg-err", role: "alert" });
 
   const truckOil = h("input", { type: "checkbox", id: "sv-oil", checked: !!(r.oil && r.oil.status !== "ok") });
-  const tmOil = prog && prog.selfPowered ? h("input", { type: "checkbox", id: "sv-tmoil", checked: !!(r.tmOil && r.tmOil.status !== "ok") }) : null;
   const preLevel = r.service && r.service.status !== "ok" ? r.service.level : 0;
   const chosenLevel = () => Number((dlg.querySelector('input[name="sv-level"]:checked') || {}).value || 0);
   const syncOil = () => {
     const chosen = chosenLevel();
     if (!prog || !chosen) return;
-    const includesOil = prog.tiers.filter(x => x.h <= chosen).map(x => x.oil).filter(Boolean);
+    const covered = servicesCovered(t, chosen, parseNum(val("sv-hrs")));
+    const includesOil = prog.tiers.filter(x => covered.includes(x.h)).map(x => x.oil).filter(Boolean);
     if (includesOil.includes("truck")) truckOil.checked = true;
-    if (includesOil.includes("tm") && tmOil) tmOil.checked = true;
   };
   const tierRadios = prog ? h("fieldset", null,
     h("legend", { text: "TM service done" }),
     h("label", { class: "check" }, h("input", { type: "radio", name: "sv-level", value: "0", checked: preLevel === 0, onchange: syncOil }), h("span", { text: "None" })),
     prog.tiers.map((x, i) => h("label", { class: "check" },
       h("input", { type: "radio", name: "sv-level", value: String(x.h), checked: preLevel === x.h, onchange: syncOil }),
-      h("span", null, `${x.h}-hr service`, i > 0 ? h("small", { text: `Includes the ${prog.tiers.slice(0, i).map(y => y.h + "-hr").join(" and ")} items` }) : null)))) : null;
+      h("span", null, `${x.h}-hr service`, (() => {
+        const inc = prog.tiers.filter(y => y.h < x.h && x.h % y.h === 0).map(y => y.h + "-hr");
+        return inc.length ? h("small", { text: `Includes the ${inc.length > 1 ? inc.slice(0, -1).join(", ") + " and " + inc[inc.length - 1] : inc[0]} items` }) : null;
+      })())))) : null;
 
   openDialog(
     h("h3", { id: "dlgTitle", text: `Log oil change / service · ${label(t)}` }),
@@ -2162,8 +2169,7 @@ function openService(id) {
       prog ? numField("TM hrs at service", "sv-hrs", isNum(v.hrs) ? v.hrs : t.hrsNow, null, "decimal") : null),
     h("fieldset", null,
       h("legend", { text: "Oil" }),
-      h("label", { class: "check" }, truckOil, h("span", null, "Truck oil changed", h("small", { text: `Restarts the ${fmt(t.oilInterval)} mi countdown${t.tm === "cds" ? " (miles and TM hrs)" : ""}` }))),
-      tmOil ? h("label", { class: "check" }, tmOil, h("span", null, "TM engine oil changed", h("small", { text: `Restarts the ${fmt(isNum(t.tmOilInterval) ? t.tmOilInterval : DEFAULT_TM_OIL_HRS)} hr countdown` }))) : null),
+      h("label", { class: "check" }, truckOil, h("span", null, "Truck oil changed", h("small", { text: `Restarts the ${fmt(t.oilInterval)} mi countdown${t.tm === "cds" ? " (miles and TM hrs)" : ""}` })))),
     tierRadios,
     h("div", { class: "grid2" },
       shopField("sv-shop", ""),
@@ -2178,19 +2184,18 @@ function openService(id) {
           const miles = parseNum(val("sv-miles"));
           const hrs = prog ? parseNum(val("sv-hrs")) : null;
           const level = prog ? chosenLevel() : 0;
-          const doOil = truckOil.checked, doTm = tmOil ? tmOil.checked : false;
+          const doOil = truckOil.checked;
           if (!isNum(miles)) { err.textContent = "Enter the miles at service."; return; }
-          if (prog && (doTm || level || (doOil && t.tm === "cds")) && !isNum(hrs)) { err.textContent = "Enter the TM hrs at service."; return; }
-          if (!doOil && !doTm && !level) { err.textContent = "Tick at least one thing that was done."; return; }
+          if (prog && (level || (doOil && t.tm === "cds")) && !isNum(hrs)) { err.textContent = "Enter the TM hrs at service."; return; }
+          if (!doOil && !level) { err.textContent = "Tick at least one thing that was done."; return; }
           const cost = parseNum(val("sv-cost").replace(/^\$/, ""));
           if (Number.isNaN(cost)) { err.textContent = "Cost should be a number, like 84.80."; return; }
           const body = plain(t);
           const done = [];
           if (doOil) { body.milesAtOil = miles; if (t.tm === "cds") body.hrsAtOil = hrs; done.push("Truck oil change"); }
-          if (doTm) { body.tmOilHrs = hrs; done.push("TM engine oil change"); }
           if (level) {
             body.tiers = Object.assign({}, body.tiers || {});
-            for (const x of prog.tiers) if (x.h <= level) body.tiers[String(x.h)] = hrs;
+            for (const hh of servicesCovered(t, level, hrs)) body.tiers[String(hh)] = hrs;
             done.push(`TM ${level}-hr service`);
           }
           if (!isNum(body.milesNow) || miles >= body.milesNow) body.milesNow = miles;
@@ -2214,7 +2219,7 @@ function openEdit(id) {
   const isNew = !id;
   const t = isNew
     ? { id: null, unit: "", driver: "", vehicle: "", year: "", plate: "", oilInterval: 5000, milesAtOil: null, milesNow: null, tm: "none",
-        cdsMilesPerHr: DEFAULT_CDS_MILES_PER_HR, hrsAtOil: null, tmOilInterval: DEFAULT_TM_OIL_HRS, tmOilHrs: null, hrsNow: null, tiers: {},
+        cdsMilesPerHr: DEFAULT_CDS_MILES_PER_HR, hrsAtOil: null, hrsNow: null, tiers: {},
         inspectionDue: "", registrationDue: "", insuranceUntil: "", notes: "", division: view.division || "", vin: "", color: "", order: (trucks.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1) }
     : byId(id);
   if (!t) return;
@@ -2230,14 +2235,11 @@ function openEdit(id) {
       tmBox.append(h("div", { class: "grid2" },
         numField("TM hrs at last truck oil change", "ed-hrsAtOil", t.hrsAtOil, null, "decimal"),
         numField("Miles counted per TM hr", "ed-factor", isNum(t.cdsMilesPerHr) ? t.cdsMilesPerHr : DEFAULT_CDS_MILES_PER_HR, "Your sheet uses 15", "decimal")));
-    } else {
-      tmBox.append(h("div", { class: "grid2" },
-        numField("TM hrs at last TM oil change", "ed-tmOilHrs", t.tmOilHrs, null, "decimal"),
-        numField("TM oil every (hrs)", "ed-tmOilIv", isNum(t.tmOilInterval) ? t.tmOilInterval : DEFAULT_TM_OIL_HRS)));
     }
     tmBox.append(h("fieldset", null,
       h("legend", { text: "Last TM service done at (hrs)" }),
-      h("p", { class: "hint", text: "Leave blank if unknown: the app assumes it was done at the last round number." }),
+      h("p", { class: "hint", text: "Leave blank if unknown: the app assumes it was done at the last round number." +
+        prog.tiers.filter(x => x.since).map(x => ` A blank ${x.h}-hr counts from the last ${x.since}-hr service.`).join("") }),
       h("div", { class: "grid2" }, prog.tiers.map(x => numField(`${x.h}-hr service`, "ed-tier-" + x.h, t.tiers ? t.tiers[String(x.h)] : null, null, "decimal")))));
   };
 
@@ -2326,9 +2328,6 @@ function openEdit(id) {
             if (kind === "cds") {
               body.hrsAtOil = opt("ed-hrsAtOil");
               const f = opt("ed-factor"); body.cdsMilesPerHr = isNum(f) ? f : DEFAULT_CDS_MILES_PER_HR;
-            } else if (prog) {
-              body.tmOilHrs = opt("ed-tmOilHrs");
-              const iv = opt("ed-tmOilIv"); body.tmOilInterval = isNum(iv) && iv > 0 ? iv : DEFAULT_TM_OIL_HRS;
             }
             body.tiers = {};
             if (prog) for (const x of prog.tiers) { const n = opt("ed-tier-" + x.h); if (isNum(n)) body.tiers[String(x.h)] = n; }
@@ -2534,7 +2533,7 @@ function csvCell(v) {
 }
 function buildCsv() {
   const head = ["Name", "Plate", "Unit", "Driver", "Vehicle", "Year", "Status", "Miles now", "Miles saved by", "Oil change every (mi)", "Miles since oil change",
-    "Truck oil miles left", "Truckmount", "TM hrs now", "TM oil hrs left", "Next TM service", "TM service due at (hrs)", "TM service hrs left",
+    "Truck oil miles left", "Truckmount", "TM hrs now", "Next TM service", "TM service due at (hrs)", "TM service hrs left",
     "Safety inspection due", "Registration due", "Insurance until", "Paperwork issues", "Last reading",
     "VIN", "Check engine", "Fuel %", "GPS status", "Last GPS report", "Location", "Van engine hrs (reference only)",
     "TM hrs last entered", "TM hrs check this week"];
@@ -2548,7 +2547,6 @@ function buildCsv() {
       isNum(e.v.miles) ? e.v.miles : "", t.readingBy || "",
       t.oilInterval, r.oil ? Math.round(r.oil.used) : "", r.oil ? Math.round(r.oil.left) : "",
       prog ? prog.name : "", prog && isNum(e.v.hrs) ? e.v.hrs : "",
-      r.tmOil ? Math.round(r.tmOil.left) : "",
       r.service ? `${r.service.level}-hr` : "", r.service ? r.service.dueAt : "", r.service ? Math.round(r.service.left) : "",
       get("Safety inspection"), get("Registration"), get("Insurance"),
       e.pwBad.map(p => `${p.label} ${p.status === "due" ? "past due" : "due soon"}`).join("; "),
@@ -2607,7 +2605,7 @@ function buildPrintReport() {
     h("p", { class: "pr-sub", text: `Report · ${st.text} · ${view.division ? view.division + " · " : ""}${rows.length} trucks` }),
     h("div", { class: "pr-sum" }, h("span", { text: `${nDue} overdue` }), h("span", { text: `${nSoon} due soon` }), h("span", { text: `${nOk} OK` })),
     h("table", null,
-      h("thead", null, h("tr", null, ["Truck", "Status", "Miles now", "Truck oil", "TM hrs", "TM oil", "Next TM service", "Paperwork", "Last reading"].map(x => h("th", { text: x })))),
+      h("thead", null, h("tr", null, ["Truck", "Status", "Miles now", "Truck oil", "TM hrs", "Next TM service", "Paperwork", "Last reading"].map(x => h("th", { text: x })))),
       h("tbody", null, rows.map(({ t, e }) => {
         const { r } = e;
         const prog = progOf(t);
@@ -2619,7 +2617,6 @@ function buildPrintReport() {
           td(isNum(e.v.miles) ? fmt(e.v.miles) : "", "num nw"),
           td(r.oil ? oilText(r.oil) : "", "nw"),
           td(prog && isNum(e.v.hrs) ? fmt(e.v.hrs) : "", "num nw"),
-          td(r.tmOil ? hrsLeftText(r.tmOil.left) : "", "nw"),
           td(r.service ? `${serviceText(r.service)} (at ${fmt(r.service.dueAt)})` : ""),
           td(e.pwBad.map(p => `${p.label} ${p.status === "due" ? "past due" : "soon"}`).join(", ")),
           td(t.readingAt ? `${fmtWhen(t.readingAt)}${t.readingBy ? " · " + t.readingBy : ""}` : ""));
