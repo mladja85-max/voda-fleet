@@ -451,7 +451,8 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .list-chips::-webkit-scrollbar { display: none; }
 .list-chip { all: unset; box-sizing: border-box; cursor: pointer; flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px;
   border: 1.5px solid var(--line); background: var(--surface); font-weight: 700; font-size: .92rem; color: var(--ink); white-space: nowrap; }
-.list-chip[aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.list-chip[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.list-chip:active { transform: scale(.97); }
 .list-chip .n { font-size: .74rem; padding: 0 7px; border-radius: 999px; background: var(--soon-bg); color: var(--soon); line-height: 1.5; }
 .list-chip.new { border-style: dashed; color: var(--accent); }
 .list-chip:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
@@ -461,7 +462,12 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .sup-top > .btn { margin-left: auto; }
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--line); }
 .seg-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: .95rem; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.seg-btn[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+/* the picked option is filled in VODA blue, so it's clear what's selected */
+.seg-btn { transition: background-color .15s ease, color .15s ease; }
+.seg-btn:hover:not([aria-selected="true"]) { color: var(--ink); }
+.seg-btn:active { transform: scale(.97); }
+.seg-btn[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
+.seg-btn[aria-selected="true"] .n { background: rgba(255, 255, 255, .24); color: inherit; }
 .seg-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
 .seg-btn .n { font-size: .74rem; padding: 0 7px; border-radius: 999px; background: var(--line); color: var(--ink); line-height: 1.5; }
 .seg-btn .n.hot { background: var(--soon-bg); color: var(--soon); }
