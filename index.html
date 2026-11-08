@@ -582,12 +582,13 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-row > button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -3px; }
 .lb-place { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-family: var(--font-display); font-size: 1.6rem; font-weight: 700;
   background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); grid-row: span 2; }
-.lb-row.p1 .lb-place { background: #f5c542; color: #3b2a00; border-color: #e0ad1f; }
-.lb-row.p2 .lb-place { background: #cfd6de; color: #24303d; border-color: #b6c0cb; }
-.lb-row.p3 .lb-place { background: #d99a62; color: #3a1d06; border-color: #c4834a; }
-.lb-row.p1 { border-left: 5px solid #e0ad1f; }
-.lb-row.p2 { border-left: 5px solid #b6c0cb; }
-.lb-row.p3 { border-left: 5px solid #c4834a; }
+/* places: gold for the winner, then VODA blue and VODA drop blue */
+.lb-row.p1 .lb-place { background: #f2b705; color: #3b2a00; border-color: #dba500; }
+.lb-row.p2 .lb-place { background: #1f4fbf; color: #fff; border-color: #1a43a6; }
+.lb-row.p3 .lb-place { background: #1f8fc7; color: #fff; border-color: #1a7fb3; }
+.lb-row.p1 { border-left: 5px solid #dba500; }
+.lb-row.p2 { border-left: 5px solid #1f4fbf; }
+.lb-row.p3 { border-left: 5px solid #1f8fc7; }
 .lb-name { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .lb-name strong { font-family: var(--font-display); font-size: 1.35rem; letter-spacing: .02em; text-transform: uppercase; }
 .lb-unit { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
@@ -731,9 +732,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbs-step.s1 .lbs-block { height: min(64%, 420px); }
 .lbs-step.s2 .lbs-block { height: min(48%, 310px); }
 .lbs-step.s3 .lbs-block { height: min(36%, 240px); }
-.lbs-step.g1 .lbs-block { background: linear-gradient(180deg, #ffd96a, #e3a91c); color: #3b2a00; }
-.lbs-step.g2 .lbs-block { background: linear-gradient(180deg, #e6ebf0, #aeb9c5); color: #1f2a36; }
-.lbs-step.g3 .lbs-block { background: linear-gradient(180deg, #eab07a, #b8743c); color: #3a1d06; }
+.lbs-step.g1 .lbs-block { background: linear-gradient(180deg, #ffd34d, #f2b705); color: #3b2a00; }
+.lbs-step.g2 .lbs-block { background: linear-gradient(180deg, #3d6fe0, #1f4fbf); color: #fff; }
+.lbs-step.g3 .lbs-block { background: linear-gradient(180deg, #3fb3e6, #1f8fc7); color: #fff; }
 .lbs-step.g1 .who { color: #ffd96a; }
 .lbs-crown { width: clamp(30px, 4.5vw, 60px); height: auto; color: #ffd96a; filter: drop-shadow(0 4px 10px rgba(255, 200, 60, .4)); }
 .lbs-rest { list-style: none; margin: 0; padding: 0 0 1vh; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 1vh 2vw; }
@@ -879,7 +880,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .lb-team .nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* three tabs (Trucks, Checklists, Leaderboard) on a phone: drop the icons so the bar fits the screen */
-@media (max-width: 430px) { .view-btn { min-width: 0; padding: 6px 4px; letter-spacing: .01em; } .view-btn svg { display: none; } }
+@media (max-width: 430px) { .view-btn { flex: 1 1 auto; min-width: 0; padding: 6px 8px; letter-spacing: .01em; } .view-btn svg { display: none; } }
+@media (max-width: 370px) { .view-btn { padding: 6px 5px; font-size: .9rem; letter-spacing: 0; } }
 @media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
 @media (max-width: 380px) { .topbar, .top-actions, .sync { gap: 6px; } .topbar { padding: 8px 10px; } .brand { gap: 8px; } .brand h1 { font-size: 1.15rem; } }
 @media (max-width: 480px) { .sup-bar .sum.quiet { display: none; } .sup-bar #supNone { flex: 1; } }
