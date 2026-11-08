@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VODA Prime</title>
-<meta name="description" content="VODA Prime: truck maintenance and checklists for VODA Cleaning &amp; Restoration.">
+<meta name="description" content="VODA Prime: truck maintenance, checklists and the team leaderboard for VODA Cleaning &amp; Restoration.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -562,6 +562,141 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .icon-btn.xs { width: 30px; height: 30px; border-radius: 8px; font-weight: 700; flex: none; }
 .icon-btn:disabled { opacity: .35; cursor: not-allowed; }
 
+/* ---- leaderboard ---- */
+.lb { display: grid; gap: 12px; max-width: 980px; }
+.lb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.lb-title { font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .03em; margin-right: auto; }
+.lb-top select { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+.lb-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lb-sub { margin: -4px 0 0; color: var(--muted); font-size: .88rem; }
+.lb-sub strong { color: var(--ink); }
+.lb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.lb-row { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.lb-row > button { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 14px; padding: 12px 14px; }
+.lb-row > button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -3px; }
+.lb-place { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-family: var(--font-display); font-size: 1.6rem; font-weight: 700;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); grid-row: span 2; }
+.lb-row.p1 .lb-place { background: #f5c542; color: #3b2a00; border-color: #e0ad1f; }
+.lb-row.p2 .lb-place { background: #cfd6de; color: #24303d; border-color: #b6c0cb; }
+.lb-row.p3 .lb-place { background: #d99a62; color: #3a1d06; border-color: #c4834a; }
+.lb-row.p1 { border-left: 5px solid #e0ad1f; }
+.lb-row.p2 { border-left: 5px solid #b6c0cb; }
+.lb-row.p3 { border-left: 5px solid #c4834a; }
+.lb-name { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.lb-name strong { font-family: var(--font-display); font-size: 1.35rem; letter-spacing: .02em; text-transform: uppercase; }
+.lb-unit { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.lb-unit.Cleaning { color: var(--clean); }
+.lb-unit.Restoration { color: var(--accent); }
+.lb-stats { grid-column: 2; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.lb-stats b { color: var(--ink); font-weight: 700; }
+.lb-right { grid-row: span 2; display: grid; justify-items: end; gap: 2px; text-align: right; }
+.lb-score { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lb-score small { font-family: var(--font-body); font-size: .72rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-right: 4px; }
+.lb-move { font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.lb-move.up { color: var(--ok); }
+.lb-move.down { color: var(--due); }
+.lb-move.same { color: var(--muted); }
+.lb-detail { border-top: 1px solid var(--line); padding: 10px 14px 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; background: var(--surface-2); }
+.lb-detail[hidden] { display: none; }
+.lb-m { display: grid; gap: 1px; }
+.lb-m span { font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.lb-m b { font-variant-numeric: tabular-nums; font-size: 1.02rem; }
+.lb-m i { font-style: normal; font-size: .78rem; font-weight: 700; color: var(--muted); margin-left: 6px; }
+.lb-m i.r1 { color: var(--ok); }
+.lb-detail .lb-foot { grid-column: 1 / -1; margin: 0; font-size: .8rem; color: var(--muted); }
+.lb-empty { text-align: center; padding: 28px 16px; }
+.lb-notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: .85rem; display: grid; gap: 3px; }
+.lb-notes.warn { color: var(--soon); font-weight: 600; }
+.lb-how { font-size: .9rem; }
+.lb-how p { margin: 0 0 6px; color: var(--muted); }
+.lb-table { width: 100%; border-collapse: collapse; font-size: .86rem; font-variant-numeric: tabular-nums; }
+.lb-table th, .lb-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.lb-table th:first-child, .lb-table td:first-child { text-align: left; }
+.lb-table th { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+.lb-scroll { overflow-x: auto; }
+.lb-src { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: var(--surface-2); }
+.lb-src h4 { font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; letter-spacing: .03em; }
+.lb-src .or { font-size: .8rem; color: var(--muted); }
+.lb-src input[type="file"] { font: inherit; font-size: .85rem; max-width: 100%; }
+.lb-src .lb-status { margin: 0; font-size: .85rem; font-weight: 600; color: var(--muted); }
+.lb-src .lb-status.ok { color: var(--ok); }
+.lb-src .lb-status.bad { color: var(--due); }
+.lb-team { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; background: var(--surface-2); }
+.lb-team-top { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.lb-team-top .field { flex: 1 1 140px; }
+.lb-team .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lb-team .field input, .lb-team .field select { padding: 7px 9px; }
+.lb-week-bar { height: 8px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; margin-top: 4px; }
+.lb-week-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+
+/* ---- leaderboard: presentation ---- */
+.lbshow { position: fixed; inset: 0; z-index: 100; background: radial-gradient(120% 90% at 50% 0%, #1d2d42 0%, #0d151f 62%, #090f16 100%); color: #eef3f8;
+  display: grid; grid-template-rows: 1fr auto; font-family: var(--font-body); user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+.lbshow[hidden] { display: none; }
+.lbs-stage:focus { outline: none; }
+.lbs-stage { position: relative; overflow: hidden; display: grid; padding: max(3vh, 14px) max(4vw, 16px) 0; min-height: 0; }
+.lbs-slide { display: grid; grid-template-rows: auto 1fr auto; gap: 2vh; min-height: 0; animation: lbsIn .35s ease both; }
+@keyframes lbsIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.lbs-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lbs-kicker { margin: 0; color: #8fb1d9; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: clamp(.8rem, 1.6vw, 1.15rem); }
+.lbs-head h2 { font-family: var(--font-display); font-size: clamp(2rem, 6vw, 4.6rem); line-height: 1; text-transform: uppercase; letter-spacing: .03em; margin: .1em 0 0; }
+.lbs-logo { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; letter-spacing: .08em; color: #8fb1d9; font-size: clamp(.9rem, 1.6vw, 1.2rem); text-transform: uppercase; }
+.lbs-logo svg { width: clamp(26px, 3vw, 40px); height: auto; }
+.lbs-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: clamp(8px, 2vw, 28px); min-height: 0; padding-top: 1vh; }
+.lbs-step { display: grid; justify-items: center; align-content: end; gap: .6vh; min-width: 0; text-align: center; }
+.lbs-step .who { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: clamp(1.4rem, 4.2vw, 3.6rem); line-height: 1;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lbs-step .stat { color: #b9cbe0; font-size: clamp(.8rem, 1.7vw, 1.3rem); font-variant-numeric: tabular-nums; }
+.lbs-step .move { font-weight: 700; font-size: clamp(.8rem, 1.5vw, 1.15rem); }
+.lbs-step .move.up { color: #5fd38d; } .lbs-step .move.down { color: #ff8a7a; } .lbs-step .move.same { color: #8fa3b8; }
+.lbs-block { width: 100%; border-radius: 16px 16px 4px 4px; display: grid; place-items: center; align-content: center; gap: .2em; font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(2.4rem, 8vw, 6.5rem); line-height: 1; box-shadow: inset 0 2px 0 rgba(255, 255, 255, .35), 0 12px 30px rgba(0, 0, 0, .35); }
+.lbs-block small { font-family: var(--font-body); font-size: clamp(.7rem, 1.3vw, 1rem); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+.lbs-step.s1 .lbs-block { height: clamp(120px, 38vh, 420px); }
+.lbs-step.s2 .lbs-block { height: clamp(90px, 28vh, 310px); }
+.lbs-step.s3 .lbs-block { height: clamp(70px, 21vh, 240px); }
+.lbs-step.g1 .lbs-block { background: linear-gradient(180deg, #ffd96a, #e3a91c); color: #3b2a00; }
+.lbs-step.g2 .lbs-block { background: linear-gradient(180deg, #e6ebf0, #aeb9c5); color: #1f2a36; }
+.lbs-step.g3 .lbs-block { background: linear-gradient(180deg, #eab07a, #b8743c); color: #3a1d06; }
+.lbs-step.g1 .who { color: #ffd96a; }
+.lbs-crown { width: clamp(30px, 4.5vw, 60px); height: auto; color: #ffd96a; filter: drop-shadow(0 4px 10px rgba(255, 200, 60, .4)); }
+.lbs-rest { list-style: none; margin: 0; padding: 0 0 1vh; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 1vh 2vw; }
+.lbs-rest li { display: flex; align-items: center; gap: 12px; padding: .9vh 1.2vw; border-radius: 12px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08);
+  font-size: clamp(.95rem, 1.8vw, 1.4rem); }
+.lbs-rest .pl { font-family: var(--font-display); font-weight: 700; font-size: 1.4em; color: #8fb1d9; min-width: 1.4em; text-align: center; }
+.lbs-rest .nm { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 1.15em; }
+.lbs-rest .st { margin-left: auto; color: #b9cbe0; font-variant-numeric: tabular-nums; font-size: .82em; text-align: right; line-height: 1.25; }
+.lbs-rest .st small { display: block; font-size: .82em; font-weight: 700; color: #8fa3b8; letter-spacing: .04em; text-transform: uppercase; }
+.lbs-rest .move { font-weight: 700; font-size: .8em; white-space: nowrap; }
+.lbs-rest .move.up { color: #5fd38d; } .lbs-rest .move.down { color: #ff8a7a; }
+.lbs-slide.lbs-title { display: grid; grid-template-rows: none; place-items: center; align-content: center; text-align: center; gap: 2.4vh; }
+.lbs-title svg { width: clamp(70px, 12vw, 150px); height: auto; }
+.lbs-title h1 { font-family: var(--font-display); font-size: clamp(2.6rem, 9vw, 7rem); line-height: .95; text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+.lbs-title p { margin: 0; color: #b9cbe0; font-size: clamp(1rem, 2.4vw, 1.8rem); }
+.lbs-week { display: grid; gap: 1vh; align-content: start; min-height: 0; overflow: auto; }
+.lbs-wrow { display: grid; grid-template-columns: minmax(5em, 9em) 1fr auto; align-items: center; gap: 1.5vw; font-size: clamp(.9rem, min(1.8vw, 2.6vh), 1.45rem); }
+.lbs-wrow .nm { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 1.15em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbs-wrow .bar { height: clamp(12px, 2.6vh, 30px); border-radius: 99px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.lbs-wrow .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #3d7bff, #7ea6ff); }
+.lbs-wrow.Cleaning .bar i { background: linear-gradient(90deg, #14a394, #4fd1c0); }
+.lbs-wrow .v { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 6.5em; text-align: right; }
+.lbs-wrow .v small { display: block; font-weight: 500; color: #8fa3b8; font-size: .7em; }
+.lbs-wgroup { font-size: clamp(.8rem, 1.5vw, 1.1rem); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8fb1d9; margin-top: .6vh; }
+.lbs-bar { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 16px max(10px, env(safe-area-inset-bottom)); }
+.lbs-bar button { all: unset; cursor: pointer; box-sizing: border-box; min-width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: #cfe0f3; font-weight: 700; padding: 0 12px; }
+.lbs-bar button:hover, .lbs-bar button:focus-visible { background: rgba(255, 255, 255, .1); }
+.lbs-bar svg { width: 24px; height: 24px; }
+.lbs-dots { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.lbs-dots button { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 99px; background: rgba(255, 255, 255, .25); }
+.lbs-dots button[aria-current="true"] { background: #ffd96a; width: 26px; }
+.lbs-close { position: absolute; top: 10px; right: 10px; }
+@media (orientation: portrait) and (max-width: 760px) {
+  .lbs-head .lbs-logo { display: none; }
+  .lbs-podium { gap: 6px; }
+  .lbs-step .stat { font-size: .78rem; }
+  .lbs-rest li { padding: 8px 10px; }
+}
+
 /* ---- small screens ---- */
 @media (max-width: 760px) {
   .topbar { padding: 10px 14px; }
@@ -604,6 +739,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .sup-top .seg-btn { flex: 1; justify-content: center; padding: 7px 8px; }
   .sup-top > .btn { margin-left: 0; }
   .sup-sec-head h3, .ord-head h3 { font-size: 1.12rem; }
+  .view-btn { padding: 6px 6px; gap: 5px; font-size: .98rem; letter-spacing: .02em; }
+  .view-btn svg { width: 16px; height: 16px; }
+  .lb-bar .seg { flex: 1 1 100%; }
+  .lb-bar .seg-btn { flex: 1; justify-content: center; padding: 7px 6px; font-size: .9rem; }
+  .lb-top .btn { padding: 7px 11px; }
+  .lb-row > button { gap: 2px 10px; padding: 10px 12px; }
+  .lb-place { width: 40px; height: 40px; font-size: 1.4rem; }
+  .lb-name strong { font-size: 1.2rem; }
+  .lb-team .nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
 @media (max-width: 380px) { .topbar, .top-actions, .sync { gap: 6px; } .topbar { padding: 8px 10px; } .brand { gap: 8px; } .brand h1 { font-size: 1.15rem; } }
@@ -680,12 +824,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   <section class="gate" id="gate" hidden></section>
 
   <div id="app" hidden>
-    <nav class="views" id="views" aria-label="Trucks or checklists">
+    <nav class="views" id="views" aria-label="Sections">
       <button type="button" class="view-btn" id="viewTrucks" aria-pressed="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4.5L22 12.5V16h-8"/><circle cx="6" cy="17.5" r="2"/><circle cx="18" cy="17.5" r="2"/></svg>Trucks
       </button>
       <button type="button" class="view-btn" id="viewSupplies" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="4" width="15" height="18" rx="2"/><path d="M9 4V2.5h6V4"/><path d="M8.5 13l2.5 2.5 4.5-5"/></svg>Checklists<span class="vbadge" id="supBadge" hidden></span>
+      </button>
+      <button type="button" class="view-btn" id="viewLeaderboard" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>Leaderboard
       </button>
     </nav>
     <div id="fleetView">
@@ -719,9 +866,10 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
     </details>
     </div>
     <section class="sup" id="suppliesView" aria-label="Checklists" hidden></section>
+    <section class="lb" id="lbView" aria-label="Leaderboard" hidden></section>
     <section class="panel" id="noAccess" hidden>
       <h2>Nothing here yet</h2>
-      <p class="meta">An admin hasn't given you Trucks or a checklist yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
+      <p class="meta">An admin hasn't given you Trucks, a checklist or the Leaderboard yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
     </section>
   </div>
 </main>
@@ -730,6 +878,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 <dialog id="dlg" aria-labelledby="dlgTitle"></dialog>
 <section id="printReport" aria-hidden="true"></section>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="lbshow" id="lbShow" role="dialog" aria-modal="true" aria-label="Leaderboard presentation" hidden>
+  <div class="lbs-stage" id="lbsStage" tabindex="-1"></div>
+  <div class="lbs-bar">
+    <button type="button" id="lbsPrev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div class="lbs-dots" id="lbsDots"></div>
+    <button type="button" id="lbsNext" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button type="button" id="lbsClose">Close</button>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -900,6 +1057,444 @@ function fmtMonth(s) { const d = endOfMonth(s); return d ? `${MONTHS[d.getMonth(
 function fmt(n) { return isNum(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "–"; }
 // </logic>
 
+// <leaderboard-logic>
+/* ---------- Leaderboard: reading the two Google Sheets and ranking the teams ----------
+   The same rules as the "5. REVENUE PER TRUCK" sheet's ranking (rows 147-227), with the year-to-date numbers added up
+   from each month instead of chained from sheet to sheet:
+   - Teams are ranked inside their unit (Cleaning, Restoration) and across the whole company.
+   - For every number, the highest gets rank 1 (ties share a rank). A team's score is its ranks added up; the lowest
+     score is #1. Equal scores share a place and the next team takes the next number (1, 1, 2), as in the sheet.
+   - Month: per job, daily per truck, total revenue, sale per job, sales, reviews.
+   - Year to date (from January 1): sales, total revenue, per job, daily per truck, reviews. */
+const LB_MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const LB_GROUPS = ["Cleaning", "Restoration"];
+const LB_MONTH_METRICS = [
+  { key: "perJob", label: "Per job", short: "Per job", money: true },
+  { key: "perDay", label: "Daily per truck", short: "Per day", money: true },
+  { key: "revenue", label: "Total revenue", short: "Revenue", money: true },
+  { key: "salePerJob", label: "Sale per job", short: "Sale/job", money: true },
+  { key: "sales", label: "Technician sales", short: "Sales", money: true },
+  { key: "reviews", label: "Reviews", short: "Reviews", money: false }];
+const LB_YTD_METRICS = [
+  { key: "sales", label: "Technician sales", short: "Sales", money: true },
+  { key: "revenue", label: "Total revenue", short: "Revenue", money: true },
+  { key: "perJob", label: "Per job", short: "Per job", money: true },
+  { key: "perDay", label: "Daily per truck", short: "Per day", money: true },
+  { key: "reviews", label: "Reviews", short: "Reviews", money: false }];
+// How the sheets spell some names
+const LB_ALIASES = { chriss: "Chris", dereck: "Derek", hary: "Harry", jhon: "John", fredy: "Freddy" };
+
+/** "JOHN'S TEAM", "John's Jobs", "Hary Jobs", " John " → "John". Empty for headings and blanks. */
+function lbName(raw) {
+  let s = String(raw == null ? "" : raw).replace(/\s+/g, " ").trim();
+  if (!s || typeof raw === "number") return "";
+  s = s.replace(/(['’`]s)?\s+(team|jobs?|truck)$/i, "").replace(/['’`]s$/i, "").trim();
+  if (!/^[a-z][a-z .-]{0,30}$/i.test(s)) return "";
+  const k = s.toLowerCase();
+  if (LB_ALIASES[k]) return LB_ALIASES[k];
+  return k.replace(/(^|[ .-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+}
+const lbMonthKey = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
+/** "November 2026" or "Nov 2026" → 11 when the year matches, else 0. */
+function lbSheetMonth(name, year) {
+  const m = /^\s*([a-z]+)\.?\s+(\d{4})\s*$/i.exec(String(name || ""));
+  if (!m || Number(m[2]) !== Number(year)) return 0;
+  const w = m[1].toLowerCase();
+  const i = LB_MONTH_NAMES.findIndex(n => n === w || (w.length >= 3 && n.startsWith(w)) || (w === "sept" && n === "september"));
+  return i + 1;
+}
+const lbNum = v => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+const lbText = v => (v == null ? "" : String(v)).replace(/\s+/g, " ").trim();
+const lbIsNum = v => typeof v === "number" && Number.isFinite(v);
+/** A day in a sheet: an Excel day number, "2026-11-02", or a date. → "2026-11-02" or "". */
+function lbDay(v) {
+  if (lbIsNum(v)) {
+    if (v < 30000 || v > 80000) return "";
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5);
+    return d.toISOString().slice(0, 10);
+  }
+  if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ""));
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
+}
+function lbAddDays(day, n) {
+  const d = new Date(day + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const lbColName = c => { let s = ""; for (let n = c; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
+const lbMoneyText = n => "$" + Math.round(n).toLocaleString("en-US");
+
+/** A tab from either source: { name, rows: [[...], ...] } (row 1 = rows[0]). get(r, c) is 1-based. */
+function lbTab(tab) {
+  const rows = tab.rows || [];
+  return { name: tab.name, rows, get: (r, c) => { const row = rows[r - 1]; return row ? row[c - 1] : undefined; }, height: rows.length };
+}
+const lbFindRows = (t, col, test, from, to) => {
+  const out = [];
+  for (let r = from || 1; r <= Math.min(to || t.height, t.height); r++) if (test(t.get(r, col), r)) out.push(r);
+  return out;
+};
+const lbIs = (v, word) => lbText(v).toUpperCase() === word;
+
+/* ---- "5. REVENUE PER TRUCK" ---- */
+/** Each month tab: the 8 truck columns (jobs, work days, revenue, # of techs), week blocks ending in "Weekly Totals",
+ *  the CLEANING and RESTORATION team lists, and the REVIEWS table. */
+function lbParseRevenue(tabs, year) {
+  const out = { kind: "revenue", months: {}, reviews: {}, notes: [], warnings: [] };
+  const monthTabs = tabs.map(lbTab).map(t => ({ t, m: lbSheetMonth(t.name, year) })).filter(x => x.m).sort((a, b) => a.m - b.m);
+  for (const { t, m } of monthTabs) {
+    const key = lbMonthKey(year, m);
+    const mname = LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase());
+    // truck columns: E, I, M, ... while row 2 says "... jobs"
+    const slots = [];
+    for (let c = 5; c < 200; c += 4) {
+      const head = lbText(t.get(2, c)), next = lbText(t.get(2, c + 1));
+      if (!/jobs?$/i.test(head) && !(head === "" && /work\s*days?/i.test(next))) break;
+      slots.push({ col: c, team: lbName(head) });
+    }
+    if (!slots.length) { out.warnings.push(`${mname}: no truck columns found (row 2 should say "John's Jobs", ...). Skipped.`); continue; }
+    // names from the summary list under "SMILE" when a column heading is blank
+    const smile = lbFindRows(t, 1, v => lbIs(v, "SMILE"))[0];
+    if (smile) slots.forEach((s, i) => { if (!s.team) s.team = lbName(t.get(smile + 1 + i, 1)); });
+    // units
+    const unitOf = {};
+    for (const g of LB_GROUPS) {
+      const r0 = lbFindRows(t, 1, (v, r) => lbIs(v, g.toUpperCase()) && /per job/i.test(lbText(t.get(r, 2))))[0];
+      if (!r0) continue;
+      for (let r = r0 + 1; r <= r0 + 6; r++) { const n = lbName(t.get(r, 1)); if (n && !unitOf[n]) unitOf[n] = g; }
+    }
+    // weeks
+    const totals = slots.map(() => ({ jobs: 0, workDays: 0, revenue: 0 }));
+    const weeks = [];
+    const textCells = [];
+    for (const r of lbFindRows(t, 1, v => lbIs(v, "WEEKLY TOTALS"))) {
+      const first = r - 7;
+      let start = "";
+      for (let i = 0; i < 7 && !start; i++) {
+        const d = lbDay(t.get(first + i, 1));
+        if (d && Math.abs(Number(d.slice(0, 4)) - year) <= 1) start = lbAddDays(d, -i);
+      }
+      const wk = slots.map(() => ({ jobs: 0, workDays: 0, revenue: 0, any: false }));
+      for (let i = 0; i < 7; i++) {
+        const row = first + i;
+        slots.forEach((s, k) => {
+          [["jobs", 0], ["workDays", 1], ["revenue", 2]].forEach(([f, off]) => {
+            const v = t.get(row, s.col + off);
+            if (lbIsNum(v)) { wk[k][f] += v; wk[k].any = true; }
+            else if (lbText(v) !== "" && !(f === "revenue" && /^-+$/.test(lbText(v)))) textCells.push(`${lbColName(s.col + off)}${row}`);
+          });
+        });
+      }
+      slots.forEach((s, k) => {
+        totals[k].jobs += wk[k].jobs; totals[k].workDays += wk[k].workDays; totals[k].revenue += wk[k].revenue;
+        if (start && s.team && wk[k].any) weeks.push({ week: start, team: s.team, jobs: wk[k].jobs, workDays: wk[k].workDays, revenue: wk[k].revenue });
+      });
+    }
+    if (textCells.length) out.warnings.push(`${mname}: ${textCells.length} cell${textCells.length > 1 ? "s" : ""} with text instead of a number were skipped (${textCells.slice(0, 4).join(", ")}${textCells.length > 4 ? ", ..." : ""}).`);
+    const teams = [];
+    slots.forEach((s, k) => {
+      const tot = totals[k];
+      if (!s.team) {
+        if (tot.revenue || tot.jobs) out.warnings.push(`${mname}: truck column ${lbColName(s.col)} has ${lbMoneyText(tot.revenue)} but no name, so it isn't counted. Put the team's name in row 2.`);
+        return;
+      }
+      teams.push({ team: s.team, group: unitOf[s.team] || "", jobs: tot.jobs, workDays: tot.workDays, revenue: tot.revenue });
+    });
+    out.months[key] = { teams, weeks };
+  }
+  // reviews: the newest month tab's REVIEWS tables (team names down the side, JAN..DEC with A/B/C under each); the one
+  // filled in most recently counts first, an older one only for names that aren't in it
+  for (const { t } of monthTabs.slice().reverse()) {
+    const found = lbReviewTables(t, year);
+    if (!found.length) continue;
+    // the table kept up to date first (the one with the latest month filled in)
+    const newest = tbl => Object.values(tbl).reduce((m, ms) => Object.keys(ms).reduce((a, k) => (ms[k] && k > a ? k : a), m), "");
+    found.sort((a, b) => newest(b).localeCompare(newest(a)));
+    for (const tbl of found) for (const [name, months] of Object.entries(tbl)) if (!out.reviews[name]) out.reviews[name] = months;
+    break;
+  }
+  return out;
+}
+function lbReviewTables(t, year) {
+  const tables = [];
+  for (let r = 1; r <= t.height; r++) {
+    const row = t.rows[r - 1] || [];
+    for (let c = 1; c <= row.length; c++) {
+      if (!lbIs(row[c - 1], "REVIEWS") || !lbIs(t.get(r, c + 1), "JAN")) continue;
+      const tbl = {};
+      for (let rr = r + 2; rr <= Math.min(t.height, r + 20); rr++) {
+        if (lbIs(t.get(rr, c + 1), "JAN")) break;
+        const name = lbName(t.get(rr, c));
+        if (!name) continue;
+        const months = {};
+        for (let m = 0; m < 12; m++) {
+          let n = 0, any = false;
+          for (let k = 0; k < 3; k++) { const v = t.get(rr, c + 1 + m * 3 + k); if (lbIsNum(v)) { n += v; any = true; } }
+          if (any) months[lbMonthKey(year, m + 1)] = n;
+        }
+        tbl[name] = months;
+      }
+      tables.push(tbl);
+    }
+  }
+  return tables;
+}
+
+/* ---- "2. TECHNICIAN MONTHLY SALES" ---- */
+/** Each month tab's top table: TECH. | ... | JOBS | PER JOB | MTD. A row with no name but sales (the 7th and 8th rows)
+ *  belongs to the 7th and 8th truck that month, the same way the revenue sheet reads it. */
+function lbParseSales(tabs, year, slotNames) {
+  const out = { kind: "sales", months: {}, notes: [], warnings: [] };
+  for (const t of tabs.map(lbTab)) {
+    const m = lbSheetMonth(t.name, year);
+    if (!m) continue;
+    const key = lbMonthKey(year, m);
+    const mname = LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase());
+    const hr = lbFindRows(t, 1, v => lbIs(v, "TECH."), 1, 8)[0];
+    if (!hr) { out.warnings.push(`${mname}: no "TECH." table at the top. Skipped.`); continue; }
+    const row = t.rows[hr - 1] || [];
+    const jobsCol = row.findIndex(v => lbIs(v, "JOBS")) + 1, mtdCol = row.findIndex(v => lbIs(v, "MTD")) + 1;
+    if (!jobsCol || !mtdCol) { out.warnings.push(`${mname}: the "JOBS" or "MTD" column is missing. Skipped.`); continue; }
+    const teams = {};
+    for (let r = hr + 1; r <= hr + 12; r++) {
+      const label = lbText(t.get(r, 1));
+      if (/total/i.test(label)) break;
+      const pos = r - hr - 1;
+      const sales = lbNum(t.get(r, mtdCol)), saleJobs = lbNum(t.get(r, jobsCol));
+      let team = lbName(label);
+      if (!team && (sales || saleJobs)) {
+        const slot = slotNames && slotNames[key] ? slotNames[key][pos] : "";
+        if (slot && pos >= 6) { team = slot; out.notes.push(`${mname}: ${lbMoneyText(sales)} of sales on the unnamed row ${r} counted for ${slot}, the same way your revenue sheet reads it.`); }
+        else out.warnings.push(`${mname}: ${lbMoneyText(sales)} of sales on row ${r} has no name, so it isn't counted.`);
+      }
+      if (team) { const x = teams[team] || (teams[team] = { sales: 0, saleJobs: 0 }); x.sales += sales; x.saleJobs += saleJobs; }
+    }
+    out.months[key] = teams;
+  }
+  return out;
+}
+/** The 8 truck names per month, in sheet order (for the sales rows with no name). */
+function lbSlotNames(tabs, year) {
+  const out = {};
+  for (const t of tabs.map(lbTab)) {
+    const m = lbSheetMonth(t.name, year);
+    if (!m) continue;
+    const smile = lbFindRows(t, 1, v => lbIs(v, "SMILE"))[0];
+    const names = [];
+    for (let i = 0, c = 5; i < 8; i++, c += 4) names.push(lbName(t.get(2, c)) || (smile ? lbName(t.get(smile + 1 + i, 1)) : ""));
+    out[lbMonthKey(year, m)] = names;
+  }
+  return out;
+}
+
+/** One record per team per month from either or both sheets. `existing` (records already saved) only fills in a
+ *  team's unit when the sheet doesn't list it under CLEANING or RESTORATION. Reviews count for teams that lead a truck
+ *  in the year. */
+function lbCombine(rev, sales, year, existing) {
+  const records = {}, weeks = [], notes = [], months = new Set();
+  const rec = (key, team) => records[key + "|" + team] || (records[key + "|" + team] = { month: key, team, group: "", jobs: 0, workDays: 0, revenue: 0, sales: 0, saleJobs: 0, reviews: 0 });
+  const truckTeams = new Set();
+  const lastUnit = {};
+  for (const r of (existing || []).slice().sort((a, b) => a.month.localeCompare(b.month))) if (r.group) { lastUnit[r.team] = r.group; truckTeams.add(r.team); }
+  if (rev) {
+    for (const [key, mo] of Object.entries(rev.months)) {
+      months.add(key);
+      for (const x of mo.teams) { Object.assign(rec(key, x.team), { group: x.group, jobs: x.jobs, workDays: x.workDays, revenue: x.revenue }); truckTeams.add(x.team); }
+      for (const w of mo.weeks) weeks.push(Object.assign({ month: key }, w));
+    }
+    for (const r of Object.values(records).sort((a, b) => a.month.localeCompare(b.month))) if (r.group) lastUnit[r.team] = r.group;
+    const missing = new Set();
+    for (const r of Object.values(records)) if (!r.group) {
+      if (lastUnit[r.team]) r.group = lastUnit[r.team];
+      else missing.add(r.team);
+    }
+    for (const t of missing) notes.push(`${t} isn't listed under CLEANING or RESTORATION, so ${t} isn't ranked. Pick the unit in Edit numbers.`);
+  }
+  if (sales) for (const [key, teams] of Object.entries(sales.months)) {
+    months.add(key);
+    for (const [team, x] of Object.entries(teams)) {
+      if (!truckTeams.has(team) && !(x.sales || x.saleJobs)) continue;
+      Object.assign(rec(key, team), { sales: x.sales, saleJobs: x.saleJobs });
+    }
+  }
+  const skipped = [];
+  if (rev) for (const [name, ms] of Object.entries(rev.reviews)) {
+    if (!truckTeams.has(name)) { if (Object.values(ms).some(Boolean)) skipped.push(name); continue; }
+    for (const [key, n] of Object.entries(ms)) if (key.startsWith(year + "-")) rec(key, name).reviews = n;
+  }
+  if (skipped.length) notes.push(`Reviews for ${skipped.join(", ")} aren't used: ${skipped.length > 1 ? "they don't" : "doesn't"} lead a truck this year.`);
+  return { records: Object.values(records).sort((a, b) => a.month.localeCompare(b.month) || a.team.localeCompare(b.team)), weeks, notes, months: [...months].sort() };
+}
+
+/* ---- ranking ---- */
+const lbRound = v => Math.round((Number(v) || 0) * 100) / 100;
+/** Highest = 1; equal numbers share a rank, like the sheet's RANK (5, 9, 9, 1 → 3, 1, 1, 4). `dense` numbers the
+ *  places the way the sheet's position columns do, with no gap after a tie (1, 1, 2). */
+function lbRanks(values, lowFirst, dense) {
+  const r = values.map(lbRound);
+  if (dense) { const u = [...new Set(r)].sort((a, b) => (lowFirst ? a - b : b - a)); return r.map(v => u.indexOf(v) + 1); }
+  return r.map(v => 1 + r.filter(x => (lowFirst ? x < v : x > v)).length);
+}
+const lbDiv = (a, b) => (b ? a / b : 0);
+function lbMetrics(t) {
+  return { revenue: t.revenue, jobs: t.jobs, workDays: t.workDays, sales: t.sales, saleJobs: t.saleJobs, reviews: t.reviews,
+    perJob: lbDiv(t.revenue, t.jobs), perDay: lbDiv(t.revenue, t.workDays), salePerJob: lbDiv(t.sales, t.saleJobs) };
+}
+/** One table: each team's numbers, rank per number, score and place. */
+function lbTable(rows, metrics) {
+  const ranks = {};
+  for (const m of metrics) {
+    const rk = lbRanks(rows.map(x => x.values[m.key]));
+    rows.forEach((x, i) => { (ranks[x.team] || (ranks[x.team] = {}))[m.key] = rk[i]; });
+  }
+  const scores = rows.map(x => metrics.reduce((s, m) => s + ranks[x.team][m.key], 0));
+  const places = lbRanks(scores, true, true);
+  return rows.map((x, i) => Object.assign({}, x, { ranks: ranks[x.team], score: scores[i], place: places[i] }))
+    .sort((a, b) => a.place - b.place || b.values.revenue - a.values.revenue || a.team.localeCompare(b.team));
+}
+/** Standings for a month (1-12) and the year to date through that month. Both rank the teams that had a truck that
+ *  month, in that month's unit; the year to date adds up everything each of them did since January 1. */
+function lbStandings(records, year, month) {
+  const key = lbMonthKey(year, month);
+  const inMonth = records.filter(r => r.month === key && LB_GROUPS.includes(r.group));
+  const ytdSum = {};
+  for (const r of records) {
+    if (!r.month.startsWith(year + "-") || r.month > key) continue;
+    const s = ytdSum[r.team] || (ytdSum[r.team] = { revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0, months: 0 });
+    for (const f of ["revenue", "jobs", "workDays", "sales", "saleJobs", "reviews"]) s[f] += Number(r[f]) || 0;
+    if (LB_GROUPS.includes(r.group)) s.months++;
+  }
+  const monthRows = inMonth.map(r => ({ team: r.team, group: r.group, values: lbMetrics(r) }));
+  const ytdRows = inMonth.map(r => ({ team: r.team, group: r.group, values: Object.assign(lbMetrics(ytdSum[r.team]), { months: ytdSum[r.team].months }) }));
+  const build = (rows, metrics) => ({
+    Cleaning: lbTable(rows.filter(x => x.group === "Cleaning"), metrics),
+    Restoration: lbTable(rows.filter(x => x.group === "Restoration"), metrics),
+    Company: lbTable(rows, metrics) });
+  return { key, month: build(monthRows, LB_MONTH_METRICS), ytd: build(ytdRows, LB_YTD_METRICS) };
+}
+/** The newest month of `year` that has a truck team, or 0. */
+function lbLatestMonth(records, year) {
+  let best = 0;
+  for (const r of records) if (r.group && r.month.startsWith(year + "-") && (r.revenue || r.jobs || r.workDays)) best = Math.max(best, Number(r.month.slice(5)));
+  return best;
+}
+/** Each team's revenue for one week (Monday), both parts added when the week crosses into a new month. */
+function lbWeek(weeks, start, records) {
+  const unit = {};
+  for (const r of records || []) if (r.group) unit[r.team] = r.group;
+  const by = {};
+  for (const w of weeks) {
+    if (w.week !== start) continue;
+    const x = by[w.team] || (by[w.team] = { team: w.team, group: unit[w.team] || "", revenue: 0, jobs: 0, workDays: 0 });
+    x.revenue += w.revenue; x.jobs += w.jobs; x.workDays += w.workDays;
+  }
+  const rows = Object.values(by).map(x => Object.assign(x, { perJob: lbDiv(x.revenue, x.jobs), perDay: lbDiv(x.revenue, x.workDays) }));
+  const ranks = lbRanks(rows.map(x => x.revenue));
+  rows.forEach((x, i) => { x.place = ranks[i]; });
+  return rows.sort((a, b) => a.place - b.place || a.team.localeCompare(b.team));
+}
+/** The newest Monday with numbers, on or before `today` ("2026-11-08"). */
+function lbLatestWeek(weeks, today) {
+  let best = "";
+  for (const w of weeks) if (w.week <= today && w.week > best && (w.revenue || w.jobs)) best = w.week;
+  return best;
+}
+/* ---- reading an Excel file in the browser (no add-ons: the phone's own unzip) ---- */
+async function lbInflate(bytes) {
+  const ds = new DecompressionStream("deflate-raw");
+  const stream = new Blob([bytes]).stream().pipeThrough(ds);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+function lbXmlText(s) {
+  return s.replace(/&(lt|gt|amp|quot|apos|#\d+|#x[0-9a-f]+);/gi, (m, e) => {
+    const k = e.toLowerCase();
+    if (k === "lt") return "<"; if (k === "gt") return ">"; if (k === "amp") return "&"; if (k === "quot") return '"'; if (k === "apos") return "'";
+    return String.fromCodePoint(k[1] === "x" ? parseInt(k.slice(2), 16) : parseInt(k.slice(1), 10));
+  });
+}
+/** The tabs `want(name)` picks from an .xlsx file, as { name, rows } with each cell's saved value. */
+async function lbReadXlsx(buf, want) {
+  const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 70000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error("not_xlsx");
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const files = {};
+  const dec = new TextDecoder();
+  for (let i = 0; i < count; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error("not_xlsx");
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    files[dec.decode(u8.subarray(p + 46, p + 46 + nlen))] = { method, csize, off };
+    p += 46 + nlen + xlen + clen;
+  }
+  const read = async name => {
+    const f = files[name];
+    if (!f) return null;
+    const start = f.off + 30 + dv.getUint16(f.off + 26, true) + dv.getUint16(f.off + 28, true);
+    const raw = u8.subarray(start, start + f.csize);
+    return dec.decode(f.method === 8 ? await lbInflate(raw) : raw);
+  };
+  const wb = await read("xl/workbook.xml");
+  const rels = await read("xl/_rels/workbook.xml.rels");
+  if (!wb || !rels) throw new Error("not_xlsx");
+  const target = {};
+  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+    const id = /\bId="([^"]+)"/.exec(m[0]), tg = /\bTarget="([^"]+)"/.exec(m[0]);
+    if (id && tg) target[id[1]] = tg[1].replace(/^\/?xl\//, "").replace(/^\//, "");
+  }
+  let shared = null;
+  const tabs = [];
+  for (const m of wb.matchAll(/<sheet\b[^>]*>/g)) {
+    const nm = /\bname="([^"]*)"/.exec(m[0]), rid = /\br:id="([^"]+)"/.exec(m[0]);
+    if (!nm || !rid) continue;
+    const name = lbXmlText(nm[1]);
+    if (!want(name)) continue;
+    if (!shared) {
+      shared = [];
+      const ss = await read("xl/sharedStrings.xml");
+      if (ss) for (const si of ss.matchAll(/<si>([\s\S]*?)<\/si>/g)) shared.push(lbXmlText([...si[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join("")));
+    }
+    const xml = await read("xl/" + target[rid[1]]);
+    if (!xml) continue;
+    const rows = [];
+    for (const c of xml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const ref = /\br="([A-Z]+)(\d+)"/.exec(c[1]);
+      if (!ref || c[2] == null) continue;
+      const type = (/\bt="([^"]+)"/.exec(c[1]) || [])[1] || "n";
+      let v;
+      if (type === "inlineStr") v = lbXmlText([...c[2].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join(""));
+      else {
+        const vv = /<v>([\s\S]*?)<\/v>/.exec(c[2]);
+        if (!vv) continue;
+        if (type === "s") v = shared[Number(vv[1])];
+        else if (type === "str" || type === "e") v = lbXmlText(vv[1]);
+        else if (type === "b") v = vv[1] === "1";
+        else { v = Number(vv[1]); if (!Number.isFinite(v)) v = vv[1]; }
+      }
+      let col = 0;
+      for (const ch of ref[1]) col = col * 26 + ch.charCodeAt(0) - 64;
+      const r = Number(ref[2]);
+      (rows[r - 1] || (rows[r - 1] = []))[col - 1] = v;
+    }
+    for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = [];
+    tabs.push({ name, rows });
+  }
+  return tabs;
+}
+/** Which of the two sheets this is, from its month tabs. */
+function lbKindOf(tabs) {
+  for (const t of tabs.map(lbTab)) {
+    if (lbFindRows(t, 1, v => lbIs(v, "WEEKLY TOTALS"), 1, 40).length) return "revenue";
+    if (lbFindRows(t, 1, v => lbIs(v, "TECH."), 1, 8).length) return "sales";
+  }
+  return "";
+}
+// </leaderboard-logic>
+
+
 /* ---------- config, storage ---------- */
 const CFG = window.VODA_CONFIG || {};
 const API_URL = String(CFG.scriptUrl || "").trim();
@@ -941,8 +1536,8 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 20;                          // the Google script version this app expects (20: moving accounts, weekly backup)
-const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like Checklists) won't work. " +
+const NEEDS_API = 21;                          // the Google script version this app expects (21: the leaderboard)
+const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like the Leaderboard) won't work. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
 const scriptOld = out => !(out && out.api >= NEEDS_API);
@@ -1054,9 +1649,9 @@ function currentValues(t) {
 // The sheet lets one save in at a time. When it's busy (say, right after everyone's phones reopen), a request can time out
 // waiting its turn before it changes anything, so it's safe to try again a couple of times before giving up.
 const isBusy = e => !!(e && e.error === "server" && /lock timeout|holding the lock/i.test(String(e.message || "")));
-async function api(action, data) {
+async function api(action, data, ms) {
   for (let attempt = 0; ; attempt++) {
-    try { return await apiOnce(action, data); }
+    try { return await apiOnce(action, data, ms); }
     catch (e) {
       if (!isBusy(e)) throw e;
       if (attempt >= 2) throw { error: "busy" };
@@ -1064,10 +1659,10 @@ async function api(action, data) {
     }
   }
 }
-async function apiOnce(action, data) {
+async function apiOnce(action, data, ms) {
   if (!navigator.onLine) throw { error: "offline" };
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30000);
+  const timer = setTimeout(() => ctrl.abort(), ms || 30000);
   try {
     const res = await fetch(API_URL, {
       method: "POST",
@@ -1124,6 +1719,7 @@ async function refresh(quiet) {
     noteApi(out);
     noteSupplies(out.supplies);
     if (roleChanged) applyRole();   // what this person may see changed
+    if (view.tab === "leaderboard" && !dlg.open && !lbShowState) lbLoad();
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -2834,7 +3430,7 @@ async function openUsers() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
     h("p", { text: apiLevel >= SUP_API
-      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours) and each checklist (they can send what's missing)."
+      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings) and Leaderboard import (they import and fix the numbers)."
       : "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
     h("fieldset", null, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
@@ -2846,7 +3442,7 @@ async function openUsers() {
         if (!name) { err.textContent = "Enter their name."; return; }
         const data = { name, role: roleSel.value };
         if (inviteChips && roleSel.value !== "admin") {
-          if (!inviteAccess.length) { err.textContent = "Tick at least one thing they'll see (Trucks or a checklist)."; return; }
+          if (!inviteAccess.length) { err.textContent = "Tick at least one thing they'll see (Trucks, a checklist or the Leaderboard)."; return; }
           data.access = inviteAccess.slice();
         }
         const out = await call("invite", data);
@@ -3089,7 +3685,8 @@ const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
-  if (isAdmin() || userAccess().some(a => a !== "trucks")) out.push("supplies");
+  if (isAdmin() || userAccess().some(a => a !== "trucks" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
+  if (canSeeLb()) out.push("leaderboard");
   return out;
 }
 
@@ -3195,7 +3792,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = tab === "supplies" ? "supplies" : "trucks";
+  view.tab = tab === "supplies" || tab === "leaderboard" ? tab : "trucks";
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -3204,25 +3801,31 @@ function setTab(tab, sub) {
 function applyTab() {
   const tabs = allowedTabs();
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
-  const sup = view.tab === "supplies", trk = view.tab === "trucks";
+  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  if (location.hash !== (sup ? "#supplies" : "")) {
-    try { history.replaceState(null, "", sup ? "#supplies" : location.pathname + location.search); } catch (e) { /* only the address bar */ }
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : "";
+  if (location.hash !== hash) {
+    try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
   $("views").hidden = tabs.length < 2;
   $("viewTrucks").hidden = !tabs.includes("trucks");
   $("viewSupplies").hidden = !tabs.includes("supplies");
+  $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
+  $("lbView").hidden = !lb;
   $("noAccess").hidden = tabs.length > 0;
   $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
+  $("viewLeaderboard").setAttribute("aria-pressed", String(lb));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
   renderSupplies();
+  if (lb) { renderLeaderboard(); if (loaded && !lbLoading) lbLoad(); }
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
+$("viewLeaderboard").addEventListener("click", () => setTab("leaderboard"));
 
 function renderSupBadge() {
   const s = supOk() ? supNow() : null;
@@ -3686,7 +4289,8 @@ function openChecklistEditor(listId) {
 /** Admin: Trucks and checklist toggles for one technician (or for an invite). */
 function accessChips(selected, onchange, idPrefix) {
   const lists = (supplies && supplies.lists) || [];
-  const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]));
+  const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]),
+    apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard import"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -3699,6 +4303,513 @@ function accessChips(selected, onchange, idPrefix) {
         onchange(next.slice(), name, on);
       } }, name)));
 }
+
+/* ---------- leaderboard ---------- */
+const LB_API = 21;                                     // the Google script version with the leaderboard
+const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; imports and fixes the numbers
+const K_LB = "voda.lb", K_LB_VIEW = "voda.lbView";
+let lbData = store.get(K_LB);                          // { records, weeks, snap, links, last, canImport, at }
+let lbLoading = false, lbErr = "", lbOld = false;
+const lbView = Object.assign({ per: "month", group: "Cleaning", month: 0, open: "" }, store.get(K_LB_VIEW) || {});
+const lbSaveView = () => store.set(K_LB_VIEW, { per: lbView.per, group: lbView.group, month: lbView.month });
+const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
+const canImportLb = () => isAdmin() || userAccess().includes("leaderboard-import");
+const lbYear = () => clockNow().getFullYear();
+const lbRecords = () => (lbData && Array.isArray(lbData.records) ? lbData.records.map(r => Object.assign({}, r, { group: r.unit || r.group || "" })) : []);
+const lbWeeks = () => (lbData && Array.isArray(lbData.weeks) ? lbData.weeks : []);
+const lbMoney = n => "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
+const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
+const LB_PER = { month: "This month", ytd: "Year to date", week: "This week" };
+const lbMonthLong = m => LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase());
+const lbDayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Monday of this week, as "2026-11-02". */
+function lbThisMonday() { const d = clockNow(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return lbDayKey(x); }
+function lbWeekText(start) {
+  const a = new Date(start + "T12:00:00"), b = new Date(start + "T12:00:00"); b.setDate(b.getDate() + 6);
+  return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}`;
+}
+/** The month on screen: the one picked, or the newest with numbers. */
+function lbMonthShown() {
+  const recs = lbRecords(), y = lbYear();
+  const latest = lbLatestMonth(recs, y);
+  if (lbView.month && recs.some(r => r.month === lbMonthKey(y, lbView.month) && r.group)) return lbView.month;
+  return latest || clockNow().getMonth() + 1;
+}
+/** Places right now, for the snapshot that shows next week's arrows. */
+function lbPlaces(st) {
+  const out = {};
+  for (const per of ["month", "ytd"]) for (const g of ["Cleaning", "Restoration", "Company"]) {
+    out[per + ":" + g] = Object.fromEntries(st[per][g].map(x => [x.team, x.place]));
+  }
+  return out;
+}
+/** Up or down since last week's import (only for the newest month, and the month view only within the same month). */
+function lbMove(per, group, team, place, key) {
+  const s = lbData && lbData.snap;
+  if (!s || !s.prev || !s.cur || s.cur.month !== key) return null;
+  if (per === "month" && s.prev.month !== key) return null;
+  if (per === "ytd" && String(s.prev.month).slice(0, 4) !== key.slice(0, 4)) return null;
+  const was = ((s.prev.places || {})[per + ":" + group] || {})[team];
+  return was ? was - place : null;
+}
+function lbMoveEl(n, cls) {
+  if (n == null) return null;
+  if (n > 0) return h("span", { class: `${cls} up`, title: `Up ${n} since last week`, text: `▲ ${n}` });
+  if (n < 0) return h("span", { class: `${cls} down`, title: `Down ${-n} since last week`, text: `▼ ${-n}` });
+  return null;   // same place as last week: nothing to show
+}
+
+async function lbLoad() {
+  if (lbLoading || !session || !canSeeLb()) return;
+  lbLoading = true;
+  if (view.tab === "leaderboard") renderLeaderboard();
+  try {
+    const out = await api("leaderboard");
+    lbData = { records: out.records || [], weeks: out.weeks || [], snap: out.snap || null, links: out.links || null, last: out.last || null, canImport: !!out.canImport, at: new Date().toISOString() };
+    store.set(K_LB, lbData);
+    lbErr = ""; lbOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { lbLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    lbOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < LB_API);
+    lbErr = lbOld ? "" : errText(e, "Nothing");
+  } finally {
+    lbLoading = false;
+    if (view.tab === "leaderboard") renderLeaderboard();
+  }
+}
+
+function renderLeaderboard() {
+  const box = $("lbView");
+  if (!box || view.tab !== "leaderboard" || !session) return;
+  if (lbOld || (apiLevel && apiLevel < LB_API && !lbData)) {
+    box.replaceChildren(h("div", { class: "panel" },
+      h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "The Leaderboard needs the newest Google script. In the VODA Prime Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  if (!lbData) {
+    box.replaceChildren(h("p", { class: "loading", text: lbErr || (offline ? "The Leaderboard needs a connection the first time. Try again when you're back online." : "Loading the leaderboard…") }));
+    if (!lbLoading && !lbErr) lbLoad();
+    return;
+  }
+  const y = lbYear(), recs = lbRecords();
+  const month = lbMonthShown(), key = lbMonthKey(y, month);
+  const has = recs.some(r => r.month.startsWith(y + "-") && r.group);
+  const monthsWith = [...new Set(recs.filter(r => r.group && r.month.startsWith(y + "-")).map(r => Number(r.month.slice(5))))].sort((a, b) => a - b);
+  const imp = canImportLb();
+  const top = h("div", { class: "lb-top" },
+    h("h2", { class: "lb-title", text: "Leaderboard" }),
+    has && lbView.per !== "week" ? h("select", { id: "lbMonth", "aria-label": "Month", onchange: e => { lbView.month = Number(e.target.value); lbSaveView(); renderLeaderboard(); } },
+      monthsWith.map(m => h("option", { value: String(m), text: `${lbMonthLong(m)} ${y}`, selected: m === month }))) : null,
+    has ? h("button", { class: "btn primary", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Present") : null,
+    imp ? h("button", { class: "btn", type: "button", id: "lbImport", onclick: () => openLbImport() }, "Import") : null,
+    imp && has ? h("button", { class: "btn ghost", type: "button", id: "lbEdit", onclick: () => openLbEdit(month) }, "Edit numbers") : null);
+  if (!has) {
+    box.replaceChildren(top, h("div", { class: "panel lb-empty" },
+      h("h2", { text: `No ${y} numbers yet` }),
+      h("p", { class: "meta", text: imp
+        ? "Tap Import and paste the links to your two Google Sheets (5. Revenue per truck and 2. Technician monthly sales), or choose Excel copies. The app reads every month since January 1 and ranks the teams."
+        : "An admin hasn't imported this year's numbers yet." }),
+      imp ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbImport() }, "Import numbers")) : null),
+      ...(lbErr ? [h("p", { class: "dlg-err", text: lbErr })] : []));
+    return;
+  }
+  const seg = (items, cur, onpick, label) => h("div", { class: "seg", role: "tablist", "aria-label": label },
+    items.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(cur === k), "data-k": k, onclick: () => onpick(k) }, t)));
+  const bar = h("div", { class: "lb-bar" },
+    seg(Object.entries(LB_PER), lbView.per, k => { lbView.per = k; lbSaveView(); renderLeaderboard(); }, "Period"),
+    lbView.per !== "week" ? seg([["Cleaning", "Cleaning"], ["Restoration", "Restoration"], ["Company", "Whole company"]], lbView.group, k => { lbView.group = k; lbSaveView(); renderLeaderboard(); }, "Unit") : null);
+  const last = lbData.last && lbData.last.at ? h("p", { class: "lb-sub" }, "Numbers updated ", h("strong", { text: `${fmtWhen(lbData.last.at)} ${fmtTime(new Date(lbData.last.at))}` }), lbData.last.by ? ` by ${lbData.last.by}` : "",
+    lbView.per === "ytd" ? ` · ${lbYtdText(month)}` : "") : null;
+  let body;
+  if (lbView.per === "week") body = lbWeekList();
+  else {
+    const st = lbStandings(recs, y, month);
+    const rows = st[lbView.per][lbView.group];
+    const metrics = lbView.per === "month" ? LB_MONTH_METRICS : LB_YTD_METRICS;
+    body = rows.length ? h("ol", { class: "lb-list", id: "lbList" }, rows.map(x => lbRowEl(x, metrics, key)))
+      : h("p", { class: "meta", text: `No ${lbView.group} teams in ${lbMonthLong(month)}.` });
+  }
+  box.replaceChildren(...[top, bar, last, body, lbErr ? h("p", { class: "dlg-err", text: lbErr }) : null, lbHowEl()].filter(Boolean));
+}
+function lbRowEl(x, metrics, key) {
+  const v = x.values, per = lbView.per;
+  const id = `${per}:${lbView.group}:${x.team}`;
+  const open = lbView.open === id;
+  const detail = h("div", { class: "lb-detail", hidden: !open },
+    metrics.map(m => h("div", { class: "lb-m" }, h("span", { text: m.label }), h("b", null, lbFmt(m, v[m.key]), h("i", { class: x.ranks[m.key] === 1 ? "r1" : "", text: `#${x.ranks[m.key]}` })))),
+    h("p", { class: "lb-foot", text: `${lbMoney(v.revenue)} revenue · ${fmt(v.jobs)} jobs · ${fmt(v.workDays)} work days · ${lbMoney(v.sales)} technician sales on ${fmt(v.saleJobs)} jobs · ${fmt(v.reviews)} reviews` +
+      (per === "ytd" && v.months < monthsSoFar(key) ? ` · counts from ${x.team}'s first month (${v.months} month${v.months === 1 ? "" : "s"})` : "") }));
+  return h("li", { class: `lb-row p${x.place}`, "data-team": x.team },
+    h("button", { type: "button", "aria-expanded": String(open), onclick: e => {
+      lbView.open = open ? "" : id;
+      const li = e.currentTarget.parentElement;
+      li.querySelector(".lb-detail").hidden = !!open;
+      e.currentTarget.setAttribute("aria-expanded", String(!open));
+      if (!open) for (const o of document.querySelectorAll(".lb-row .lb-detail")) if (o !== li.querySelector(".lb-detail")) { o.hidden = true; o.parentElement.querySelector("button").setAttribute("aria-expanded", "false"); }
+    } },
+      h("span", { class: "lb-place", "aria-label": `Place ${x.place}`, text: String(x.place) }),
+      h("span", { class: "lb-name" }, h("strong", { text: x.team }), lbView.group === "Company" ? h("span", { class: `lb-unit ${x.group}`, text: x.group }) : null),
+      h("span", { class: "lb-right" }, h("span", { class: "lb-score" }, h("small", { text: "Score" }), String(x.score)), lbMoveEl(lbMove(per, lbView.group, x.team, x.place, key), "lb-move")),
+      h("span", { class: "lb-stats" }, h("b", { text: lbMoney(v.revenue) }), ` · ${lbMoney(v.perJob)}/job · ${lbMoney(v.perDay)}/day`)),
+    detail);
+}
+const monthsSoFar = key => Number(key.slice(5));
+/** "Jan 1 – Nov 8" this month, "Jan 1 – Oct 31" for a month gone by. */
+function lbYtdText(month) {
+  const now = clockNow(), y = lbYear();
+  const end = month === now.getMonth() + 1 ? now : new Date(y, month, 0);
+  return `Jan 1 – ${MONTHS[end.getMonth()]} ${end.getDate()}`;
+}
+function lbWeekList() {
+  const weeks = lbWeeks(), recs = lbRecords();
+  const start = lbLatestWeek(weeks, lbDayKey(clockNow()));
+  if (!start) return h("p", { class: "meta", text: "No week numbers yet. They come with the import from 5. Revenue per truck." });
+  const rows = lbWeek(weeks, start, recs);
+  const max = Math.max(1, ...rows.map(r => r.revenue));
+  const groups = ["Cleaning", "Restoration"].map(g => [g, rows.filter(r => r.group === g)]).filter(([, r]) => r.length);
+  return h("div", { class: "lb", id: "lbWeek" },
+    h("p", { class: "lb-sub" }, "Week of ", h("strong", { text: lbWeekText(start) }), start === lbThisMonday() ? " (this week so far)" : ""),
+    groups.map(([g, list]) => h("div", { class: "panel" }, h("h2", { text: g }),
+      h("ol", { class: "lb-list" }, lbRanks(list.map(r => r.revenue)).map((p, i) => [p, list[i]]).sort((a, b) => a[0] - b[0]).map(([p, r]) =>
+        h("li", { class: `lb-row p${p}`, "data-team": r.team }, h("div", { style: "display:grid;grid-template-columns:auto 1fr auto;gap:4px 14px;align-items:center;padding:10px 14px" },
+          h("span", { class: "lb-place", text: String(p) }),
+          h("span", { class: "lb-name" }, h("strong", { text: r.team })),
+          h("span", { class: "lb-right" }, h("span", { class: "lb-score", text: lbMoney(r.revenue) })),
+          h("span", { class: "lb-stats" }, `${fmt(r.jobs)} jobs · ${lbMoney(r.perJob)}/job · ${lbMoney(r.perDay)}/day`,
+            h("div", { class: "lb-week-bar" }, h("i", { style: `width:${Math.round(r.revenue / max * 100)}%` }))))))))));
+}
+function lbHowEl() {
+  return h("details", { class: "panel lb-how" }, h("summary", { text: "How the ranking works" }),
+    h("p", { text: "Teams are ranked inside Cleaning, inside Restoration, and across the whole company, the same way the 5. Revenue per truck sheet does it." }),
+    h("p", { text: "This month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews." }),
+    h("p", { text: "On each number the best team gets 1, the next 2, and so on (a tie shares the number). Those add up to the score: the lowest score is #1." }),
+    h("p", { text: "Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Sale per job = technician sales ÷ the jobs with a sale. The year to date adds up each month, so a team that took over a truck later in the year counts from its first month." }),
+    h("p", { text: "▲ and ▼ show a move up or down since last week's import." }));
+}
+
+/* ---- import ---- */
+function openLbImport() {
+  const y = lbYear();
+  const links = (lbData && lbData.links) || {};
+  const err = h("p", { class: "dlg-err" });
+  const preview = h("div", { class: "lb", id: "lbPreview" });
+  let parsed = null;
+  const src = (kind, title, hint) => {
+    const status = h("p", { class: "lb-status", id: `lbSt-${kind}` });
+    return { kind, status, el: h("div", { class: "lb-src" },
+      h("h4", { text: title }),
+      h("p", { class: "hint", text: hint }),
+      h("div", { class: "field" }, h("label", { for: `lbUrl-${kind}`, text: "Google Sheets link" }),
+        h("input", { id: `lbUrl-${kind}`, type: "url", inputmode: "url", autocomplete: "off", placeholder: "https://docs.google.com/spreadsheets/d/…", value: links[kind] || "" })),
+      h("div", { class: "field" }, h("label", { for: `lbFile-${kind}`, class: "or", text: "or an Excel copy (.xlsx)" }),
+        h("input", { id: `lbFile-${kind}`, type: "file", accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })),
+      status) };
+  };
+  const A = src("revenue", "5. Revenue per truck", "Jobs, work days and revenue by truck for each week, and the reviews table.");
+  const B = src("sales", "2. Technician monthly sales", "Up sale, add-on, rugs and additional service per technician (MTD and jobs).");
+  const readOne = async s => {
+    const file = $(`lbFile-${s.kind}`).files[0], url = val(`lbUrl-${s.kind}`);
+    if (!file && !url) return null;
+    s.status.className = "lb-status"; s.status.textContent = file ? `Reading ${file.name}…` : "Reading the Google Sheet…";
+    try {
+      let tabs, title;
+      if (file) { tabs = await lbReadXlsx(await file.arrayBuffer(), n => lbSheetMonth(n, y) > 0); title = file.name; }
+      else { const out = await api("lbFetch", { url, kind: s.kind, year: y }, 90000); tabs = out.tabs; title = out.title; }
+      if (!tabs.length) throw { lb: `No ${y} month tabs (like "January ${y}") in ${title}.` };
+      s.status.className = "lb-status ok"; s.status.textContent = `${title}: ${tabs.length} month${tabs.length === 1 ? "" : "s"} read.`;
+      return { tabs, title, kind: lbKindOf(tabs) };
+    } catch (e) {
+      s.status.className = "lb-status bad";
+      s.status.textContent = e && e.lb ? e.lb
+        : e && e.error === "lb_link" ? "That isn't a Google Sheets link. Open the sheet, tap Share > Copy link, and paste it here."
+        : e && e.error === "lb_no_access" ? `VODA Prime can't open that sheet. In Google Sheets tap Share and add ${e.account || "the VODA Prime Google account"} as a Viewer, then try again.`
+        : e && e.message === "not_xlsx" ? "That file isn't an Excel file. In Google Sheets: File > Download > Microsoft Excel (.xlsx)."
+        : errText(e, "Nothing");
+      throw e;
+    }
+  };
+  const readBtn = h("button", { class: "btn primary", type: "button", id: "lbRead", text: "Read the sheets", onclick: async () => {
+    err.textContent = ""; preview.replaceChildren(); saveBtn.hidden = true; parsed = null;
+    readBtn.disabled = true;
+    try {
+      let a = null, b = null, failed = false;
+      try { a = await readOne(A); } catch (e) { failed = true; }
+      try { b = await readOne(B); } catch (e) { failed = true; }
+      if (!a && !b) { if (!failed) err.textContent = "Paste a link or choose a file for at least one of the two sheets."; return; }
+      // a sheet put in the other box still counts
+      if ((a && a.kind === "sales") || (b && b.kind === "revenue")) [a, b] = [b && b.kind === "revenue" ? b : (a && a.kind === "revenue" ? a : null), a && a.kind === "sales" ? a : (b && b.kind === "sales" ? b : null)];
+      for (const x of [a, b]) if (x && !x.kind) { err.textContent = `${x.title} doesn't look like either sheet (no "Weekly Totals" rows or "TECH." table).`; return; }
+      const rev = a ? lbParseRevenue(a.tabs, y) : null;
+      const sales = b ? lbParseSales(b.tabs, y, a ? lbSlotNames(a.tabs, y) : null) : null;
+      const all = lbCombine(rev, sales, y, lbRecords().map(r => ({ month: r.month, team: r.team, group: r.group })));
+      parsed = { rev, sales, all, revMonths: rev ? Object.keys(rev.months) : [], salesMonths: sales ? Object.keys(sales.months) : [] };
+      lbPreview(preview, parsed, y);
+      saveBtn.hidden = !all.records.length;
+    } finally { readBtn.disabled = false; }
+  } });
+  const saveBtn = h("button", { class: "btn primary", type: "button", id: "lbSave", hidden: true, text: "Save to VODA Prime", onclick: async () => {
+    if (!parsed) return;
+    err.textContent = ""; saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+    try {
+      const { all, revMonths, salesMonths } = parsed;
+      let out = null;
+      const mine = recs => recs.map(r => ({ month: r.month, team: r.team, unit: r.group, revenue: r.revenue, jobs: r.jobs, workDays: r.workDays, sales: r.sales, saleJobs: r.saleJobs, reviews: r.reviews }));
+      const after = lbAfter(all, revMonths, salesMonths);
+      const snap = lbSnapFor(after);
+      const what = [revMonths.length ? "revenue" : "", salesMonths.length ? "sales" : ""].filter(Boolean).join(" and ");
+      if (revMonths.length) out = await api("lbSave", { months: revMonths, fields: ["unit", "revenue", "jobs", "workDays", "reviews"], records: mine(all.records.filter(r => revMonths.includes(r.month))),
+        weekMonths: revMonths, weeks: all.weeks, snap: salesMonths.length ? null : snap, what: "Imported " + what });
+      if (salesMonths.length) out = await api("lbSave", { months: salesMonths, fields: ["sales", "saleJobs"], records: mine(all.records.filter(r => salesMonths.includes(r.month))), snap, what: "Imported " + what });
+      lbTake(out);
+      closeDialog();
+      toast(`Leaderboard updated: ${what} for ${[...new Set(revMonths.concat(salesMonths))].length} months`);
+      renderLeaderboard();
+    } catch (e) { err.textContent = errText(e, "Nothing"); }
+    finally { saveBtn.disabled = false; saveBtn.textContent = "Save to VODA Prime"; }
+  } });
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Import numbers" }),
+    h("p", { text: `Reads every ${y} month tab (January ${y} on) and adds each team's month up. Each import replaces the months it reads; nothing in your sheets is changed.` }),
+    A.el, B.el,
+    h("p", { class: "hint", text: "A link works once the sheet is shared with the Google account VODA Prime runs on (Viewer is enough). The links are remembered for next week." }),
+    err, preview,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }), readBtn, saveBtn)));
+}
+/** What the saved records will look like after this import (the months read replace what's there). */
+function lbAfter(all, revMonths, salesMonths) {
+  const keep = lbRecords().map(r => Object.assign({}, r));
+  const by = {};
+  for (const r of keep) by[r.month + "|" + r.team.toLowerCase()] = r;
+  for (const r of keep) {
+    if (revMonths.includes(r.month)) Object.assign(r, { group: "", revenue: 0, jobs: 0, workDays: 0, reviews: 0 });
+    if (salesMonths.includes(r.month)) Object.assign(r, { sales: 0, saleJobs: 0 });
+  }
+  for (const n of all.records) {
+    const k = n.month + "|" + n.team.toLowerCase();
+    const r = by[k] || (by[k] = keep[keep.push({ month: n.month, team: n.team, group: "", revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0 }) - 1]);
+    if (revMonths.includes(n.month)) Object.assign(r, { group: n.group, revenue: n.revenue, jobs: n.jobs, workDays: n.workDays, reviews: n.reviews });
+    if (salesMonths.includes(n.month)) Object.assign(r, { sales: n.sales, saleJobs: n.saleJobs });
+  }
+  return keep;
+}
+function lbSnapFor(records) {
+  const y = lbYear(), m = lbLatestMonth(records, y);
+  if (!m) return null;
+  return { week: lbThisMonday(), month: lbMonthKey(y, m), places: lbPlaces(lbStandings(records, y, m)) };
+}
+function lbTake(out) {
+  if (!out) return;
+  lbData = { records: out.records || [], weeks: out.weeks || [], snap: out.snap || null, links: out.links || (lbData && lbData.links) || null, last: out.last || null, canImport: !!out.canImport, at: new Date().toISOString() };
+  store.set(K_LB, lbData);
+}
+function lbPreview(box, p, y) {
+  const { all, rev, sales } = p;
+  const months = all.months.filter(k => k.startsWith(y + "-"));
+  const sum = (k, f) => all.records.filter(r => r.month === k).reduce((s, r) => s + (Number(r[f]) || 0), 0);
+  const teams = k => all.records.filter(r => r.month === k && r.group).map(r => r.team);
+  const warns = [].concat(rev ? rev.warnings : [], sales ? sales.warnings : []);
+  const notes = [].concat(sales ? sales.notes : [], all.notes);
+  const latest = lbLatestMonth(all.records, y);
+  const st = latest ? lbStandings(lbAfter(all, p.revMonths, p.salesMonths), y, latest) : null;
+  box.replaceChildren(...[
+    h("h4", { text: `Found ${months.length} month${months.length === 1 ? "" : "s"}` }),
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table" },
+      h("thead", null, h("tr", null, ["Month", "Teams", "Revenue", "Jobs", "Sales", "Reviews"].map(t => h("th", { text: t })))),
+      h("tbody", null, months.map(k => h("tr", null,
+        h("td", { text: lbMonthLong(Number(k.slice(5))) }), h("td", { text: rev ? String(teams(k).length) : "–", title: teams(k).join(", ") }),
+        h("td", { text: rev ? lbMoney(sum(k, "revenue")) : "–" }), h("td", { text: rev ? fmt(sum(k, "jobs")) : "–" }),
+        h("td", { text: sales ? lbMoney(sum(k, "sales")) : "–" }), h("td", { text: rev ? fmt(sum(k, "reviews")) : "–" })))))),
+    warns.length ? h("ul", { class: "lb-notes warn" }, warns.map(t => h("li", { text: t }))) : null,
+    notes.length ? h("ul", { class: "lb-notes" }, notes.map(t => h("li", { text: t }))) : null,
+    st ? h("p", { class: "hint", text: `${lbMonthLong(latest)} after saving: ` + ["Cleaning", "Restoration"].map(g => `${g} #1 ${st.month[g].filter(x => x.place === 1).map(x => x.team).join(" & ") || "–"}`).join(", ") +
+      `. Year to date: ` + ["Cleaning", "Restoration"].map(g => `${g} #1 ${st.ytd[g].filter(x => x.place === 1).map(x => x.team).join(" & ") || "–"}`).join(", ") + "." }) : null].filter(Boolean));
+}
+
+/* ---- typing or fixing numbers ---- */
+const LB_EDIT_FIELDS = [["revenue", "Revenue $"], ["jobs", "Jobs"], ["workDays", "Work days"], ["sales", "Tech sales $"], ["saleJobs", "Sale jobs"], ["reviews", "Reviews"]];
+function openLbEdit(monthNum) {
+  const y = lbYear();
+  const err = h("p", { class: "dlg-err" });
+  const list = h("div", { class: "lb", id: "lbEditList" });
+  let month = monthNum || lbMonthShown();
+  const rowsFor = m => {
+    const k = lbMonthKey(y, m);
+    let rows = lbRecords().filter(r => r.month === k && (r.group || LB_EDIT_FIELDS.some(([f]) => r[f])));
+    if (!rows.length) {   // a new month starts with last month's teams
+      const prev = lbRecords().filter(r => r.month === lbMonthKey(y, m - 1) && r.group);
+      rows = prev.map(r => ({ month: k, team: r.team, group: r.group, revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0 }));
+    }
+    return rows.sort((a, b) => (a.group || "z").localeCompare(b.group || "z") || a.team.localeCompare(b.team));
+  };
+  const card = r => {
+    const el = h("div", { class: "lb-team", "data-team": r.team || "" },
+      h("div", { class: "lb-team-top" },
+        h("div", { class: "field" }, h("label", { text: "Team" }), h("input", { class: "lb-in-team", type: "text", maxlength: "40", value: r.team || "", placeholder: "Name", autocomplete: "off" })),
+        h("div", { class: "field" }, h("label", { text: "Unit" }), h("select", { class: "lb-in-unit" },
+          h("option", { value: "", text: "Not ranked" }), LB_GROUPS.map(g => h("option", { value: g, text: g, selected: r.group === g })))),
+        h("button", { class: "btn small ghost danger", type: "button", text: "Remove", onclick: () => el.remove() })),
+      h("div", { class: "nums" }, LB_EDIT_FIELDS.map(([f, label]) => h("div", { class: "field" }, h("label", { text: label }),
+        h("input", { class: "lb-in-num", "data-f": f, type: "text", inputmode: "decimal", value: r[f] ? String(Math.round(r[f] * 100) / 100) : "", placeholder: "0", autocomplete: "off" })))));
+    return el;
+  };
+  const draw = () => { list.replaceChildren(...rowsFor(month).map(card)); };
+  const monthSel = h("select", { id: "lbEditMonth", onchange: e => { month = Number(e.target.value); draw(); } },
+    Array.from({ length: 12 }, (_, i) => h("option", { value: String(i + 1), text: `${lbMonthLong(i + 1)} ${y}`, selected: i + 1 === month })));
+  draw();
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Edit numbers" }),
+    h("p", { text: "Each team's totals for the whole month so far. Saving replaces this month's numbers; the next import from your sheets replaces them again." }),
+    h("div", { class: "field" }, h("label", { for: "lbEditMonth", text: "Month" }), monthSel),
+    list,
+    h("div", null, h("button", { class: "btn", type: "button", id: "lbAddTeam", text: "+ Add team", onclick: () => list.append(card({ team: "", group: "" })) })),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "lbEditSave", text: "Save", onclick: async ev => {
+        err.textContent = "";
+        const k = lbMonthKey(y, month), seen = new Set(), records = [];
+        for (const el of list.querySelectorAll(".lb-team")) {
+          const team = lbName(el.querySelector(".lb-in-team").value);
+          const raw = el.querySelector(".lb-in-team").value.trim();
+          if (!raw) continue;
+          if (!team) { err.textContent = `"${raw}" can't be a team name (letters only).`; return; }
+          if (seen.has(team.toLowerCase())) { err.textContent = `${team} is in the list twice.`; return; }
+          seen.add(team.toLowerCase());
+          const r = { month: k, team, unit: el.querySelector(".lb-in-unit").value };
+          for (const inp of el.querySelectorAll(".lb-in-num")) {
+            const n = parseNum(inp.value);
+            if (Number.isNaN(n)) { err.textContent = `${team}: "${inp.value}" isn't a number.`; inp.focus(); return; }
+            r[inp.dataset.f] = n || 0;
+          }
+          records.push(r);
+        }
+        const btn = ev.currentTarget;
+        btn.disabled = true;
+        try {
+          const after = lbRecords().filter(x => x.month !== k).concat(records.map(r => Object.assign({}, r, { group: r.unit })));
+          const out = await api("lbSave", { months: [k], fields: ["unit"].concat(LB_EDIT_FIELDS.map(x => x[0])), records, snap: lbSnapFor(after), what: `Edited ${lbMonthLong(month)}` });
+          lbTake(out);
+          closeDialog();
+          toast(`${lbMonthLong(month)} saved`);
+          lbView.month = month; lbSaveView();
+          renderLeaderboard();
+        } catch (e) { err.textContent = errText(e, "Nothing"); }
+        finally { btn.disabled = false; }
+      } }))));
+}
+
+/* ---- presenting (full screen, on a phone, laptop or TV) ---- */
+const LB_LOGO = '<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2b3c"/><path d="M256 92 C318 180 384 248 384 318 A128 128 0 0 1 128 318 C128 248 194 180 256 92 Z" fill="#2fa4da"/><path d="M196 318 L240 362 L320 272" fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>';   // the app icon
+const LB_CROWN = '<svg class="lbs-crown" viewBox="0 0 48 32" aria-hidden="true"><path fill="currentColor" d="M2 8l10 9 12-15 12 15 10-9-4 22H6z"/></svg>';
+let lbShowState = null;
+/** A fixed SVG from this file (never from the sheets). */
+function lbSvg(markup) { const t = document.createElement("template"); t.innerHTML = markup; return t.content.firstElementChild; }
+function lbSlides() {
+  const y = lbYear(), recs = lbRecords(), month = lbMonthShown(), key = lbMonthKey(y, month);
+  const st = lbStandings(recs, y, month);
+  const mname = `${lbMonthLong(month)} ${y}`;
+  const slides = [];
+  const wk = lbLatestWeek(lbWeeks(), lbDayKey(clockNow()));
+  slides.push(() => h("section", { class: "lbs-slide lbs-title" },
+    lbSvg(LB_LOGO), h("h1", null, "VODA", h("br"), "Leaderboard"),
+    h("p", { text: wk ? `Week of ${lbWeekText(wk)}, ${y}` : mname }),
+    h("p", { text: `${lbMonthLong(month)} so far · Year to date since January 1` })));
+  for (const per of ["month", "ytd"]) for (const g of ["Cleaning", "Restoration", "Company"]) {
+    const rows = st[per][g];
+    if (!rows.length) continue;
+    slides.push(() => lbPodium(rows, per, g, per === "month" ? `${mname} · month to date` : `${y} · year to date`, key));
+  }
+  if (wk) slides.push(() => lbWeekSlide(wk));
+  return slides;
+}
+function lbStat(x, per) {
+  const v = x.values;
+  return per === "month" || per === "ytd" ? `${lbMoney(v.revenue)} · ${lbMoney(v.perJob)}/job` : "";
+}
+function lbPodium(rows, per, g, kicker, key) {
+  const top = rows.slice(0, 3), rest = rows.slice(3);
+  const step = (x, pos) => x ? h("div", { class: `lbs-step ${pos} g${Math.min(3, x.place)}`, "data-team": x.team },
+    x.place === 1 ? lbSvg(LB_CROWN) : null,
+    h("div", { class: "who", text: x.team }),
+    h("div", { class: "stat", text: lbStat(x, per) }),
+    lbMoveEl(lbMove(per, g, x.team, x.place, key), "move"),
+    h("div", { class: "lbs-block" }, String(x.place), h("small", { text: `Score ${x.score}` }))) : h("div");
+  return h("section", { class: "lbs-slide" },
+    h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: kicker }), h("h2", { text: g === "Company" ? "Whole company" : g })),
+      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
+    h("div", { class: "lbs-podium" }, step(top[1], "s2"), step(top[0], "s1"), step(top[2], "s3")),
+    rest.length ? h("ol", { class: "lbs-rest" }, rest.map(x => h("li", { "data-team": x.team },
+      h("span", { class: "pl", text: String(x.place) }), h("span", { class: "nm", text: x.team }),
+      lbMoveEl(lbMove(per, g, x.team, x.place, key), "move"),
+      h("span", { class: "st" }, lbStat(x, per), h("small", { text: `Score ${x.score}` }))))) : h("div"));
+}
+function lbWeekSlide(start) {
+  const rows = lbWeek(lbWeeks(), start, lbRecords());
+  const max = Math.max(1, ...rows.map(r => r.revenue));
+  return h("section", { class: "lbs-slide" },
+    h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: `Week of ${lbWeekText(start)}` }), h("h2", { text: "Revenue this week" })),
+      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
+    h("div", { class: "lbs-week" }, ["Cleaning", "Restoration"].map(g => {
+      const list = rows.filter(r => r.group === g).sort((a, b) => b.revenue - a.revenue);
+      return list.length ? [h("div", { class: "lbs-wgroup", text: g }), list.map(r => h("div", { class: `lbs-wrow ${g}`, "data-team": r.team },
+        h("span", { class: "nm", text: r.team }), h("span", { class: "bar" }, h("i", { style: `width:${Math.max(2, Math.round(r.revenue / max * 100))}%` })),
+        h("span", { class: "v" }, lbMoney(r.revenue), h("small", { text: `${fmt(r.jobs)} jobs · ${lbMoney(r.perJob)}/job` }))))] : null;
+    })), h("div"));
+}
+function lbPresent() {
+  const slides = lbSlides();
+  const show = $("lbShow"), stage = $("lbsStage"), dots = $("lbsDots");
+  lbShowState = { i: 0, slides, wake: null };
+  const go = i => {
+    const s = lbShowState;
+    if (!s) return;
+    s.i = Math.max(0, Math.min(s.slides.length - 1, i));
+    stage.replaceChildren(s.slides[s.i]());
+    for (const [k, d] of [...dots.children].entries()) d.setAttribute("aria-current", String(k === s.i));
+    $("lbsPrev").disabled = s.i === 0; $("lbsNext").disabled = s.i === s.slides.length - 1;
+  };
+  dots.replaceChildren(...slides.map((_, k) => h("button", { type: "button", "aria-label": `Slide ${k + 1}`, onclick: () => go(k) })));
+  lbShowState.go = go;
+  show.hidden = false;
+  document.body.style.overflow = "hidden";
+  try { if (document.documentElement.requestFullscreen && !isTouch()) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) { /* not on this phone */ }
+  try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(l => { if (lbShowState) lbShowState.wake = l; else l.release(); }).catch(() => {}); } catch (e) { /* screen may dim */ }
+  go(0);
+  stage.focus({ preventScroll: true });
+}
+function lbPresentEnd() {
+  if (!lbShowState) return;
+  try { if (lbShowState.wake) lbShowState.wake.release(); } catch (e) { /* already released */ }
+  lbShowState = null;
+  $("lbShow").hidden = true;
+  $("lbsStage").replaceChildren();
+  document.body.style.overflow = "";
+  try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); } catch (e) { /* fine */ }
+}
+$("lbsPrev").addEventListener("click", () => lbShowState && lbShowState.go(lbShowState.i - 1));
+$("lbsNext").addEventListener("click", () => lbShowState && lbShowState.go(lbShowState.i + 1));
+$("lbsClose").addEventListener("click", lbPresentEnd);
+document.addEventListener("keydown", e => {
+  if (!lbShowState) return;
+  const onButton = e.target && e.target.tagName === "BUTTON";
+  if (e.key === "ArrowRight" || e.key === "PageDown" || ((e.key === " " || e.key === "Enter") && !onButton)) { e.preventDefault(); lbShowState.go(lbShowState.i + 1); }
+  else if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); lbShowState.go(lbShowState.i - 1); }
+  else if (e.key === "Home") lbShowState.go(0);
+  else if (e.key === "End") lbShowState.go(lbShowState.slides.length - 1);
+  else if (e.key === "Escape") lbPresentEnd();
+});
+(() => {
+  const st = $("lbsStage");
+  let x0 = null, y0 = null, t0 = 0;
+  st.addEventListener("pointerdown", e => { x0 = e.clientX; y0 = e.clientY; t0 = Date.now(); });
+  st.addEventListener("pointerup", e => {
+    if (!lbShowState || x0 == null) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) lbShowState.go(lbShowState.i + (dx < 0 ? 1 : -1));
+    else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && Date.now() - t0 < 500) lbShowState.go(lbShowState.i + (e.clientX > window.innerWidth / 3 ? 1 : -1));
+  });
+})();
 
 /* ---------- install as an app ---------- */
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -3738,6 +4849,7 @@ if (/^#order-list(\/|$)/.test(location.hash)) {   // the link in the checklist e
   view.tab = "supplies"; view.supTab = "orders"; view.list = decodeURIComponent(location.hash.slice(12)) || view.list; saveView();
 }
 else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
+else if (location.hash === "#leaderboard") { view.tab = "leaderboard"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {

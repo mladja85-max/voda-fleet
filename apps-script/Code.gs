@@ -96,10 +96,19 @@
  *     URL into config.js in GitHub. Phones switch over the next time the app opens.
  * Changed your mind before step 4? Run "moveCancel" in the old sheet: it un-pauses it and turns its jobs back on.
  *
+ * LEADERBOARD (weekly team standings)
+ * The app's Leaderboard section ranks the teams the same way the "5. REVENUE PER TRUCK" sheet does, from January 1 of this
+ * year: inside Cleaning, inside Restoration and across the company, for the month and the year to date. Each week, Admins (or
+ * whoever has "Leaderboard import" ticked) tap Import: the app reads "5. REVENUE PER TRUCK" and "2. TECHNICIAN MONTHLY SALES"
+ * straight from their Google Sheets links, or from Excel copies, and saves one row per team per month in the Leaderboard tab
+ * (week totals in Leaderboard weeks). For the links, share both sheets with the Google account this script runs as (Viewer
+ * is enough). Numbers can also be typed or fixed in the app (Leaderboard > Edit numbers). Don't edit these tabs by hand.
+ *
  * WHO SEES WHAT
  * Admins see everything. Each technician sees only what an Admin ticks for him in the app (Settings > Users and invites):
- * Trucks and/or any of the checklists. Technicians from before this choice keep Trucks only. This script refuses anything
- * a technician isn't given, whatever the app sends.
+ * Trucks, any of the checklists, Leaderboard (sees the standings) and Leaderboard import (imports and fixes the numbers).
+ * Technicians from before this choice keep Trucks only. This script refuses anything a technician isn't given, whatever the
+ * app sends.
  */
 
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
@@ -109,7 +118,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 20;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 21;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -266,6 +275,15 @@ function doPost(e) {
         return json_(withLock_(function () { return deleteChecklist_(req); }));
       case "mergeChecklist":
         return json_(withLock_(function () { return mergeChecklist_(req); }));
+      case "leaderboard":
+        if (!canLb_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(lbRead_(user));
+      case "lbFetch":
+        if (!canLbImport_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(lbFetch_(req));
+      case "lbSave":
+        if (!canLbImport_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return lbSave_(req); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -2648,7 +2666,8 @@ function supplyEmailTest() {
 }
 
 /* ---------------- who sees what ---------------- */
-// Users tab, column M (access): what a technician sees, comma-separated: "trucks" and/or checklist IDs.
+// Users tab, column M (access): what a technician sees, comma-separated: "trucks", "leaderboard", "leaderboard-import"
+// and/or checklist IDs.
 // Empty means Trucks only (how every technician worked before checklists). "-" means nothing yet. Admins see everything.
 
 const ACCESS_DEFAULT = ["trucks"];
@@ -2660,11 +2679,200 @@ function parseAccess_(s) {
 }
 function accessText_(arr) { return arr && arr.length ? arr.join(",") : "-"; }
 function canSee_(user, section) { return !!user && (user.role === "admin" || parseAccess_(user.access).indexOf(section) !== -1); }
-/** Only "trucks" and checklists that exist. */
+/** Only "trucks", the leaderboard and checklists that exist. */
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+}
+
+/* ---------------- leaderboard ---------------- */
+// The weekly team standings (see LEADERBOARD at the top). The app reads Mike's two Google Sheets ("5. REVENUE PER TRUCK" and
+// "2. TECHNICIAN MONTHLY SALES") or Excel copies of them, adds up each team's month, and saves one row per team per month
+// here; the ranking itself is worked out in the app from these rows.
+
+const LB_SHEET = "Leaderboard";
+const LB_COLS = ["month", "team", "unit", "revenue", "jobs", "workDays", "sales", "saleJobs", "reviews", "updatedAt", "by"];
+const LB_NUMS = ["revenue", "jobs", "workDays", "sales", "saleJobs", "reviews"];
+const LB_WEEK_SHEET = "Leaderboard weeks";
+const LB_WEEK_COLS = ["week", "month", "team", "revenue", "jobs", "workDays"];
+const LB_ACCESS = ["leaderboard", "leaderboard-import"];   // sees the standings; imports and edits the numbers (and sees them)
+const LB_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const LB_FETCH = { revenue: { rows: 260, cols: 76 }, sales: { rows: 16, cols: 12 } };   // what the app reads from each month tab
+
+function canLb_(user) { return canSee_(user, "leaderboard") || canSee_(user, "leaderboard-import"); }
+function canLbImport_(user) { return canSee_(user, "leaderboard-import"); }
+
+/** The two tabs, made the first time they're needed. Months, weeks and names are kept as plain text. */
+function lbSheets_() {
+  const ss = SpreadsheetApp.getActive();
+  const make = function (name, cols, textCols) {
+    let s = ss.getSheetByName(name);
+    if (!s) {
+      s = ss.insertSheet(name);
+      if (s.getMaxColumns() < cols.length) s.insertColumnsAfter(s.getMaxColumns(), cols.length - s.getMaxColumns());
+      s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+      s.setFrozenRows(1);
+    }
+    textCols.forEach(function (c) { s.getRange(2, cols.indexOf(c) + 1, Math.max(s.getMaxRows() - 1, 1), 1).setNumberFormat("@"); });
+    return s;
+  };
+  return { m: make(LB_SHEET, LB_COLS, ["month", "team", "unit", "updatedAt", "by"]), w: make(LB_WEEK_SHEET, LB_WEEK_COLS, ["week", "month", "team"]) };
+}
+function lbSheetsIfThere_() {
+  const ss = SpreadsheetApp.getActive();
+  return { m: ss.getSheetByName(LB_SHEET), w: ss.getSheetByName(LB_WEEK_SHEET) };
+}
+function lbRows_(s, cols) {
+  if (!s || s.getLastRow() < 2) return [];
+  return s.getRange(2, 1, s.getLastRow() - 1, cols.length).getValues().map(function (r) {
+    const o = {};
+    cols.forEach(function (c, i) { o[c] = r[i]; });
+    return o;
+  });
+}
+function lbMonthText_(v) {
+  if (isDate_(v)) return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM");
+  const m = /^(\d{4})-(\d{1,2})/.exec(String(v || "").trim());
+  return m ? m[1] + "-" + ("0" + m[2]).slice(-2) : "";
+}
+function lbDayText_(v, tz) {
+  if (isDate_(v)) return Utilities.formatDate(v, tz || Session.getScriptTimeZone(), "yyyy-MM-dd");
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || "").trim());
+  return m ? m[1] + "-" + m[2] + "-" + m[3] : "";
+}
+/** A team name: letters, spaces, dots, apostrophes and dashes only (so nothing can turn into a formula). */
+function lbTeam_(v) {
+  const t = supText_(v, 40);
+  return /^[A-Za-z][A-Za-z .'-]*$/.test(t) ? t : "";
+}
+function lbRecord_(o) {
+  const r = { month: lbMonthText_(o.month), team: lbTeam_(o.team), unit: DIVISIONS.indexOf(String(o.unit || "")) !== -1 ? String(o.unit) : "" };
+  LB_NUMS.forEach(function (f) { r[f] = num_(o[f]) || 0; });
+  return r;
+}
+function lbWeekRow_(o) {
+  return { week: lbDayText_(o.week), month: lbMonthText_(o.month), team: lbTeam_(o.team),
+    revenue: num_(o.revenue) || 0, jobs: num_(o.jobs) || 0, workDays: num_(o.workDays) || 0 };
+}
+
+/** Everything the app needs to draw the standings. */
+function lbRead_(user) {
+  const t = lbSheetsIfThere_();
+  const p = PropertiesService.getScriptProperties();
+  const records = lbRows_(t.m, LB_COLS).map(function (o) {
+    const r = lbRecord_(o);
+    r.updatedAt = supIso_(o.updatedAt); r.by = String(o.by || "");
+    return r;
+  }).filter(function (r) { return r.month && r.team; });
+  const weeks = lbRows_(t.w, LB_WEEK_COLS).map(lbWeekRow_).filter(function (w) { return w.week && w.team; });
+  let snap = null, links = null;
+  try { snap = JSON.parse(p.getProperty("LB_SNAP") || "null"); } catch (e) { snap = null; }
+  if (canLbImport_(user)) { try { links = JSON.parse(p.getProperty("LB_LINKS") || "null"); } catch (e) { links = null; } }
+  let last = null;
+  try { last = JSON.parse(p.getProperty("LB_LAST") || "null"); } catch (e) { last = null; }
+  return { ok: true, records: records, weeks: weeks, snap: snap, links: links, last: last, canImport: canLbImport_(user) };
+}
+
+/** "November 2026" → 11 when the year matches. */
+function lbTabMonth_(name, year) {
+  const m = /^\s*([a-z]+)\.?\s+(\d{4})\s*$/i.exec(String(name || ""));
+  if (!m || Number(m[2]) !== Number(year)) return 0;
+  const w = m[1].toLowerCase();
+  for (let i = 0; i < 12; i++) if (LB_MONTHS[i] === w || (w.length >= 3 && LB_MONTHS[i].indexOf(w) === 0) || (w === "sept" && i === 8)) return i + 1;
+  return 0;
+}
+
+/** Reads one of Mike's Google Sheets by its link: the month tabs of `year`, values only (what the cells show). The sheet
+ *  has to be shared with the Google account this script runs as. The link is remembered for next time. */
+function lbFetch_(req) {
+  const kind = req.kind === "sales" ? "sales" : "revenue";
+  const year = Number(req.year) || new Date().getFullYear();
+  const m = /\/spreadsheets\/d\/([a-zA-Z0-9_-]{20,})/.exec(String(req.url || "")) || /^([a-zA-Z0-9_-]{30,})$/.exec(String(req.url || "").trim());
+  if (!m) return { ok: false, error: "lb_link" };
+  let ss;
+  try { ss = SpreadsheetApp.openById(m[1]); }
+  catch (e) { return { ok: false, error: "lb_no_access", account: Session.getEffectiveUser().getEmail() }; }
+  const tz = ss.getSpreadsheetTimeZone();
+  const lim = LB_FETCH[kind];
+  const tabs = [];
+  ss.getSheets().forEach(function (sh) {
+    if (!lbTabMonth_(sh.getName(), year)) return;
+    const nr = Math.min(sh.getLastRow(), lim.rows), nc = Math.min(sh.getLastColumn(), lim.cols);
+    if (nr < 1 || nc < 1) { tabs.push({ name: sh.getName(), rows: [] }); return; }
+    const rows = sh.getRange(1, 1, nr, nc).getValues().map(function (r) {
+      const out = r.map(function (v) {
+        if (isDate_(v)) return lbDayText_(v, tz);
+        if (typeof v === "number") return isFinite(v) ? v : null;
+        if (typeof v === "boolean") return v;
+        const t = String(v);
+        return t === "" ? null : t;
+      });
+      while (out.length && out[out.length - 1] === null) out.pop();
+      return out;
+    });
+    tabs.push({ name: sh.getName(), rows: rows });
+  });
+  const p = PropertiesService.getScriptProperties();
+  let links = {};
+  try { links = JSON.parse(p.getProperty("LB_LINKS") || "{}") || {}; } catch (e) { links = {}; }
+  links[kind] = String(req.url).trim().slice(0, 300);
+  p.setProperty("LB_LINKS", JSON.stringify(links));
+  return { ok: true, kind: kind, title: ss.getName(), tabs: tabs };
+}
+
+/** Saves imported or typed numbers. For each month in req.months, the fields in req.fields are replaced: teams not sent
+ *  get 0 there (and a team left with nothing at all is removed). Week rows of req.weekMonths are replaced the same way.
+ *  req.snap (the places right after this save) is kept so next week's standings can show who moved up or down. */
+function lbSave_(req) {
+  const months = (Array.isArray(req.months) ? req.months : []).map(lbMonthText_).filter(Boolean);
+  const fields = (Array.isArray(req.fields) ? req.fields : []).filter(function (f) { return f === "unit" || LB_NUMS.indexOf(f) !== -1; });
+  const incoming = (Array.isArray(req.records) ? req.records : []).map(lbRecord_).filter(function (r) { return r.month && r.team && months.indexOf(r.month) !== -1; });
+  if (!fields.length && !Array.isArray(req.weekMonths)) return { ok: false, error: "bad_request" };
+  if (incoming.length > 2000) return { ok: false, error: "bad_request" };
+  const t = lbSheets_();
+  const now = new Date().toISOString();
+  const rows = lbRows_(t.m, LB_COLS).map(function (o) { const r = lbRecord_(o); r.updatedAt = supIso_(o.updatedAt); r.by = String(o.by || ""); return r; })
+    .filter(function (r) { return r.month && r.team; });
+  const key = function (r) { return r.month + "|" + r.team.toLowerCase(); };
+  const byKey = {};
+  rows.forEach(function (r) { byKey[key(r)] = r; });
+  rows.forEach(function (r) {
+    if (months.indexOf(r.month) === -1) return;
+    fields.forEach(function (f) { r[f] = f === "unit" ? "" : 0; });
+  });
+  incoming.forEach(function (n) {
+    let r = byKey[key(n)];
+    if (!r) { r = lbRecord_({ month: n.month, team: n.team }); rows.push(r); byKey[key(n)] = r; }
+    fields.forEach(function (f) { r[f] = n[f]; });
+    r.team = n.team;
+    r.updatedAt = now; r.by = req.by;
+  });
+  const keep = rows.filter(function (r) { return r.unit || LB_NUMS.some(function (f) { return r[f]; }); })
+    .sort(function (a, b) { return a.month < b.month ? -1 : a.month > b.month ? 1 : a.team.localeCompare(b.team); });
+  const write = function (s, cols, list) {
+    if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, cols.length).clearContent();
+    appendRows_(s, cols.length, list.map(function (r) { return cols.map(function (c) { return r[c] === undefined ? "" : r[c]; }); }));
+  };
+  write(t.m, LB_COLS, keep);
+  if (Array.isArray(req.weekMonths)) {
+    const wm = req.weekMonths.map(lbMonthText_).filter(Boolean);
+    const weeks = lbRows_(t.w, LB_WEEK_COLS).map(lbWeekRow_).filter(function (w) { return w.week && w.team && wm.indexOf(w.month) === -1; })
+      .concat((Array.isArray(req.weeks) ? req.weeks : []).map(lbWeekRow_).filter(function (w) { return w.week && w.team && wm.indexOf(w.month) !== -1; }))
+      .sort(function (a, b) { return a.week < b.week ? -1 : a.week > b.week ? 1 : a.team.localeCompare(b.team); });
+    write(t.w, LB_WEEK_COLS, weeks);
+  }
+  const p = PropertiesService.getScriptProperties();
+  if (req.snap && typeof req.snap === "object" && /^\d{4}-\d{2}-\d{2}$/.test(String(req.snap.week || ""))) {
+    let snap = null;
+    try { snap = JSON.parse(p.getProperty("LB_SNAP") || "null"); } catch (e) { snap = null; }
+    const cur = { week: String(req.snap.week), month: lbMonthText_(req.snap.month), places: req.snap.places || {}, at: now };
+    const next = { prev: snap && snap.cur && snap.cur.week !== cur.week ? snap.cur : (snap ? snap.prev : null), cur: cur };
+    const text = JSON.stringify(next);
+    if (text.length < 8000) p.setProperty("LB_SNAP", text);
+  }
+  p.setProperty("LB_LAST", JSON.stringify({ at: now, by: req.by, what: supText_(req.what, 120) }));
+  return lbRead_(req.user);
 }
 
 /* ---------------- weekly backup ---------------- */

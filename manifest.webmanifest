@@ -1,7 +1,7 @@
 {
   "name": "VODA Prime",
   "short_name": "VODA Prime",
-  "description": "VODA Cleaning & Restoration: truck maintenance and checklists.",
+  "description": "VODA Cleaning & Restoration: truck maintenance, checklists and the team leaderboard.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
