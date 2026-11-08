@@ -687,6 +687,10 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .lb-card { padding: 9px 10px; }
   .lb-team .nums { grid-template-columns: 1fr; }
 }
+.lb-teams-more { display: flex; flex-wrap: wrap; gap: 4px; }
+.lb-move-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lb-move-check { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; }
+.lb-move-prev { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: .9rem; }
 .lb-bar select { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
 .lb-table tbody th, .lb-table tfoot th, .lb-table thead th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
 .lb-grid tbody th { position: sticky; left: 0; background: var(--surface); z-index: 1; }
@@ -1418,6 +1422,46 @@ function lbCleanMonth(d, key) {
   if (d && d.rby) out.rby = String(d.rby).slice(0, 60);
   return out;
 }
+/** Moves one name's numbers to another name for the months fromKey..toKey (a sheet whose names weren't updated on
+ *  time). Truck days, technician sales and reviews move; a day or month where the other name already has numbers
+ *  stays as it was and is counted in `kept`. → { months: { key: new doc } (only months that changed), moved, kept } */
+function lbMoveNumbers(docs, from, to, fromKey, toKey) {
+  const out = { months: {}, moved: { truckDays: 0, revenue: 0, saleDays: 0, sales: 0, reviews: 0 }, kept: 0 };
+  const isFrom = n => n.toLowerCase() === String(from).toLowerCase();
+  const toName = lbTeamName(to);
+  if (!toName || isFrom(toName)) return out;
+  for (const key of Object.keys(docs || {}).filter(k => lbYm(k) && k >= fromKey && (!toKey || k <= toKey)).sort()) {
+    const doc = lbCleanMonth(docs[key] || {}, key);
+    let changed = false;
+    for (const d of Object.values(doc.days)) {
+      for (const p of ["t", "s"]) {
+        const part = d[p];
+        if (!part) continue;
+        const src = Object.keys(part).find(isFrom);
+        if (!src) continue;
+        if (part[toName] && lbEntry(part[toName], p === "t" ? LB_TRUCK.length : LB_SALE.length).length) { out.kept++; continue; }
+        const e = part[src];
+        if (p === "t") { out.moved.truckDays++; out.moved.revenue += e[2] || 0; }
+        else { out.moved.saleDays++; out.moved.sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0); }
+        part[toName] = e; delete part[src]; changed = true;
+      }
+    }
+    const rsrc = Object.keys(doc.reviews).find(isFrom);
+    if (rsrc) {
+      const v = doc.reviews[rsrc], has = doc.reviews[toName];
+      if (v && has) out.kept++;                      // both have reviews that month: leave both
+      else {
+        if (v) { doc.reviews[toName] = v; out.moved.reviews += v; }
+        delete doc.reviews[rsrc];
+        changed = true;
+      }
+    }
+    if (changed) out.months[key] = doc;
+  }
+  return out;
+}
+/** The month before "2026-06" → "2026-05" ("" before January of year 1). */
+const lbPrevMonth = key => { const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7)); return m > 1 ? lbMonthKey(y, m - 1) : lbMonthKey(y - 1, 12); };
 
 /* ---- ranking ---- */
 const lbRound = v => Math.round((Number(v) || 0) * 100) / 100;
@@ -1676,13 +1720,17 @@ function lbHistory(revTabs, salesTabs, year) {
   };
   put(rev.days, "t");
   put(sales.days, "s");
-  const skipped = new Set();
+  // every team's reviews are kept for every month (they count only in the months the team is on the board, so moving a
+  // team's From month in Teams brings its earlier reviews in); names that aren't a team are left out
+  const off = new Set(), notTeam = new Set();
   for (const [name, ms] of Object.entries(rev.reviews)) for (const [key, n] of Object.entries(ms)) {
     if (!key.startsWith(year + "-") || key > lastKey) continue;
-    if (lbUnitIn(config, name, key)) doc(key).reviews[name] = n;
-    else if (n) skipped.add(name);
+    if (!lbTeamOf(config, name)) { if (n) notTeam.add(name); continue; }
+    doc(key).reviews[name] = n;
+    if (n && !lbUnitIn(config, name, key)) off.add(name);
   }
-  if (skipped.size) notes.push(`Reviews for months a team wasn't on the board aren't counted (${[...skipped].join(", ")}).`);
+  if (off.size) notes.push(`Reviews from months before a team's truck are kept but not counted (${[...off].join(", ")}). To count them, move the team's From month in Teams.`);
+  if (notTeam.size) notes.push(`Reviews for ${[...notTeam].join(", ")} aren't used: not a team on the board.`);
   for (const t of config.teams) {
     const off = sales.days && Object.entries(sales.days).filter(([day, by]) => by[t.name] && !lbUnitIn(config, t.name, day.slice(0, 7)));
     if (off && off.length) notes.push(`${t.name} has technician sales in months ${t.name} wasn't on the board; they're kept but not ranked.`);
@@ -5125,7 +5173,9 @@ function openLbTeams() {
     h("div", { class: "field" }, h("label", { for: "lbGoal", text: "Technician sales goal per month $" }), h("input", { id: "lbGoal", type: "text", inputmode: "decimal", value: String(cfg.goal) })),
     err,
     h("div", { class: "dlg-foot" },
-      h("button", { class: "btn ghost", type: "button", id: "lbLoadXl", onclick: () => openLbHistory() }, "Load from Excel…"),
+      h("div", { class: "lb-teams-more" },
+        h("button", { class: "btn ghost", type: "button", id: "lbMoveBtn", onclick: () => openLbMove() }, "Move numbers…"),
+        h("button", { class: "btn ghost", type: "button", id: "lbLoadXl", onclick: () => openLbHistory() }, "Load from Excel…")),
       h("div", { class: "right" },
         h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
         h("button", { class: "btn primary", type: "button", id: "lbTeamsSave", text: "Save", onclick: async () => {
@@ -5153,6 +5203,75 @@ function openLbTeams() {
             renderLeaderboard();
           } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
         } }))));
+}
+/** Moves one name's numbers to another from a month on: for when the sheet kept the old driver's name on a truck. */
+function openLbMove() {
+  const y = lbYear(), cfg = lbCleanConfig(lbData.config);
+  const names = new Set(cfg.teams.map(t => t.name));
+  for (const d of Object.values(lbData.months || {})) {
+    for (const x of Object.values(d.days || {})) for (const part of ["t", "s"]) for (const [n, a] of Object.entries((x && x[part]) || {})) if (lbEntry(a, 5).length) names.add(n);
+    for (const [n, v] of Object.entries(d.reviews || {})) if (lbVal(v)) names.add(n);
+  }
+  const all = [...names].sort();
+  const nowKey = lbMonthKey(y, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 12);
+  const months = Array.from({ length: Number(nowKey.slice(5)) }, (_, i) => lbMonthKey(y, i + 1));
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const prev = h("p", { class: "lb-move-prev", id: "lbMovePrev", role: "status" });
+  const sel = (id, opts, val) => h("select", { id, onchange: () => show() }, opts.map(([v, t]) => h("option", { value: v, text: t, selected: v === val })));
+  let plan = null, armed = false;
+  const show = () => {
+    armed = false; $("lbMoveGo").textContent = "Move";
+    const from = val("lbMvFrom"), to = val("lbMvTo"), start = val("lbMvStart"), end = val("lbMvEnd");
+    err.textContent = "";
+    if (!from || !to || from.toLowerCase() === to.toLowerCase()) { plan = null; prev.textContent = "Pick two different names."; return; }
+    if (end && end < start) { plan = null; prev.textContent = "Through is before Starting."; return; }
+    plan = Object.assign(lbMoveNumbers(lbData.months, from, to, start, end), { from, to, start, end });
+    const mv = plan.moved;
+    const span = `${lbMonthLong(Number(start.slice(5)))}${end ? (end === start ? "" : ` – ${lbMonthLong(Number(end.slice(5)))}`) : " on"}`;
+    prev.textContent = Object.keys(plan.months).length
+      ? `${span}: ${mv.truckDays} truck day${mv.truckDays === 1 ? "" : "s"} (${lbMoney(mv.revenue)}), ${mv.saleDays} sales day${mv.saleDays === 1 ? "" : "s"} (${lbMoney(mv.sales)}) and ${fmt(mv.reviews)} reviews move from ${from} to ${to}.` +
+        (plan.kept ? ` ${plan.kept} day${plan.kept === 1 ? "" : "s"} where ${to} already has numbers stay as they are.` : "")
+      : `${from} has no numbers ${span === "" ? "" : "from " + span} to move.`;
+    const ft = cfg.teams.find(t => t.name.toLowerCase() === from.toLowerCase()), tt = cfg.teams.find(t => t.name.toLowerCase() === to.toLowerCase());
+    const bits = [];
+    if (ft && (!ft.to || ft.to >= start) && (!ft.from || ft.from < start) && !end) bits.push(`${ft.name}'s last month becomes ${lbMonthLong(Number(lbPrevMonth(start).slice(5)))}`);
+    if (tt && tt.from && tt.from > start) bits.push(`${tt.name} starts in ${lbMonthLong(Number(start.slice(5)))}`);
+    $("lbMvRosterTxt").textContent = bits.length ? `Also in Teams: ${bits.join(", ")}` : "Teams stays as it is";
+    $("lbMvRoster").disabled = !bits.length;
+  };
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Move numbers to another name" }),
+    h("p", { class: "hint", text: "For when the sheet kept the old name on a truck after someone else took it over. Truck days, technician sales and reviews move to the other name for the months you pick." }),
+    h("div", { class: "lb-move-grid" },
+      h("div", { class: "field" }, h("label", { for: "lbMvFrom", text: "Numbers now under" }), sel("lbMvFrom", all.map(n => [n, n]), all.includes("Kenneth") ? "Kenneth" : all[0])),
+      h("div", { class: "field" }, h("label", { for: "lbMvTo", text: "Belong to" }), sel("lbMvTo", cfg.teams.map(t => [t.name, t.name]), cfg.teams.some(t => t.name === "Harry") ? "Harry" : (cfg.teams[0] || {}).name)),
+      h("div", { class: "field" }, h("label", { for: "lbMvStart", text: "Starting" }), sel("lbMvStart", months.map(k => [k, `${lbMonthLong(Number(k.slice(5)))} ${y}`]), months.includes(lbMonthKey(y, 6)) ? lbMonthKey(y, 6) : months[0])),
+      h("div", { class: "field" }, h("label", { for: "lbMvEnd", text: "Through" }), sel("lbMvEnd", [["", "Now"]].concat(months.map(k => [k, `${lbMonthLong(Number(k.slice(5)))} ${y}`])), ""))),
+    h("label", { class: "check lb-move-check" }, h("input", { type: "checkbox", id: "lbMvRoster", checked: true }), h("span", { id: "lbMvRosterTxt" })),
+    prev, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => openLbTeams(), text: "Back" }),
+      h("button", { class: "btn primary", type: "button", id: "lbMoveGo", text: "Move", onclick: async () => {
+        if (!plan || !Object.keys(plan.months).length) { err.textContent = "Nothing to move."; return; }
+        const b = $("lbMoveGo");
+        if (!armed) { armed = true; b.textContent = "Tap again to move"; return; }
+        b.disabled = true; b.textContent = "Moving…";
+        try {
+          const writes = Object.entries(plan.months).map(([key, data]) => ({ key, data }));
+          if ($("lbMvRoster").checked && !$("lbMvRoster").disabled) {
+            const teams = cfg.teams.map(t => Object.assign({}, t));
+            const ft = teams.find(t => t.name.toLowerCase() === plan.from.toLowerCase()), tt = teams.find(t => t.name.toLowerCase() === plan.to.toLowerCase());
+            if (ft && (!ft.to || ft.to >= plan.start) && (!ft.from || ft.from < plan.start) && !plan.end) ft.to = lbPrevMonth(plan.start);
+            if (tt && tt.from && tt.from > plan.start) tt.from = plan.start;
+            writes.unshift({ key: "config", data: { teams, goal: cfg.goal } });
+          }
+          for (let i = 0; i < writes.length; i += 6) await api("lbPut", { year: y, writes: writes.slice(i, i + 6) });
+          await lbLoad();
+          closeDialog();
+          toast(`Numbers moved to ${plan.to}`);
+        } catch (x) { err.textContent = errText(x, "Not everything"); b.disabled = false; b.textContent = "Move"; armed = false; }
+      } }))));
+  show();
 }
 /** One-time: this year's numbers from Excel copies of the two old sheets (they replace what's typed in the app). */
 function openLbHistory() {
