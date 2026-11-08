@@ -1942,6 +1942,43 @@ function lbPdf(jpegs, width, height, title) {
   add(`trailer\n<< /Size ${count} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return lbConcat(parts);
 }
+/* MP4 (H.264) for the TV video: samples are the encoder's frames in order, [{data, dur, key}], dur in timescale
+ *  units; avcC is the encoder's H.264 settings. One track, the index first so it can also play while it loads. */
+const lbU32 = n => new Uint8Array([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
+const lbU16 = n => new Uint8Array([(n >>> 8) & 255, n & 255]);
+const lbAscii = t => new TextEncoder().encode(t);
+function lbMp4Box(type, ...parts) { const body = lbConcat(parts); return lbConcat([lbU32(8 + body.length), lbAscii(type), body]); }
+const lbMp4Full = (type, version, flags, ...parts) => lbMp4Box(type, new Uint8Array([version, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255]), ...parts);
+function lbMp4(samples, o) {
+  const zeros = n => new Uint8Array(n), u32s = a => lbConcat(a.map(lbU32));
+  const matrix = u32s([0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000]);
+  const total = samples.reduce((t, x) => t + x.dur, 0), movieMs = Math.round(total * 1000 / o.timescale);
+  const runs = [];
+  for (const x of samples) { const last = runs[runs.length - 1]; if (last && last[1] === x.dur) last[0]++; else runs.push([1, x.dur]); }
+  const keys = samples.map((x, i) => (x.key ? i + 1 : 0)).filter(Boolean);
+  const moov = offset => lbMp4Box("moov",
+    lbMp4Full("mvhd", 0, 0, u32s([0, 0, 1000, movieMs, 0x10000]), lbU16(0x100), zeros(10), matrix, zeros(24), lbU32(2)),
+    lbMp4Box("trak",
+      lbMp4Full("tkhd", 0, 3, u32s([0, 0, 1, 0, movieMs]), zeros(8), zeros(8), matrix, lbU32(o.width * 65536), lbU32(o.height * 65536)),
+      lbMp4Box("mdia",
+        lbMp4Full("mdhd", 0, 0, u32s([0, 0, o.timescale, total]), lbU16(0x55c4), lbU16(0)),
+        lbMp4Full("hdlr", 0, 0, lbU32(0), lbAscii("vide"), zeros(12), lbAscii("VideoHandler"), zeros(1)),
+        lbMp4Box("minf",
+          lbMp4Full("vmhd", 0, 1, zeros(8)),
+          lbMp4Box("dinf", lbMp4Full("dref", 0, 0, lbU32(1), lbMp4Full("url ", 0, 1))),
+          lbMp4Box("stbl",
+            lbMp4Full("stsd", 0, 0, lbU32(1), lbMp4Box("avc1", zeros(6), lbU16(1), zeros(16), lbU16(o.width), lbU16(o.height),
+              u32s([0x480000, 0x480000, 0]), lbU16(1), zeros(32), lbU16(0x18), lbU16(0xffff), lbMp4Box("avcC", o.avcC))),
+            lbMp4Full("stts", 0, 0, lbU32(runs.length), u32s(runs.flat())),
+            lbMp4Full("stss", 0, 0, lbU32(keys.length), u32s(keys)),
+            lbMp4Full("stsc", 0, 0, u32s([1, 1, samples.length, 1])),
+            lbMp4Full("stsz", 0, 0, lbU32(0), lbU32(samples.length), u32s(samples.map(x => x.data.length))),
+            lbMp4Full("stco", 0, 0, lbU32(1), lbU32(offset)))))));
+  const ftyp = lbMp4Box("ftyp", lbAscii("isom"), lbU32(0x200), lbAscii("isomiso2avc1mp41"));
+  const size = moov(0).length;
+  const data = samples.map(x => x.data);
+  return lbConcat([ftyp, moov(ftyp.length + size + 8), lbU32(8 + data.reduce((t, d) => t + d.length, 0)), lbAscii("mdat"), ...data]);
+}
 // </leaderboard-logic>
 
 
@@ -5623,8 +5660,8 @@ function lbFontCss() {
     .catch(() => { lbFontCssP = null; return ""; });
   return lbFontCssP;
 }
-/** One slide as JPEG bytes, laid out for a 1920 x 1080 TV whatever size this screen is. */
-async function lbSlidePicture(slide, fontCss) {
+/** One slide drawn on a 1920 x 1080 canvas, laid out for a TV whatever size this screen is. */
+async function lbSlideCanvas(slide, fontCss) {
   const css = [...document.querySelectorAll("style")].map(x => x.textContent).join("\n");
   const box = h("div", { class: "lbshow lbs-export", style: `position:relative;inset:auto;width:${LB_PIC_W}px;height:${LB_PIC_H}px;grid-template-rows:minmax(0,1fr)` },
     h("div", { class: "lbs-stage" }, slide));
@@ -5639,8 +5676,126 @@ async function lbSlidePicture(slide, fontCss) {
   const g = c.getContext("2d");
   g.fillStyle = "#0d151f"; g.fillRect(0, 0, LB_PIC_W, LB_PIC_H);
   g.drawImage(img, 0, 0, LB_PIC_W, LB_PIC_H);
+  return c;
+}
+/** One slide as JPEG bytes. */
+async function lbSlidePicture(slide, fontCss) {
+  const c = await lbSlideCanvas(slide, fontCss);
   const blob = await new Promise((res, rej) => c.toBlob(b => (b ? res(b) : rej(new Error("no picture"))), "image/jpeg", 0.92));
   return new Uint8Array(await blob.arrayBuffer());
+}
+/* ---- the TV video: each slide for 5 seconds, with a short fade between them ---- */
+const LB_FPS = 30, LB_SLIDE_SECS = 5, LB_FADE = 12; // fade frames (0.4 s)
+const lbVideoSecs = n => n * LB_SLIDE_SECS;
+/** The H.264 setting this phone can encode at 1920 x 1080, or null. */
+async function lbVideoConfig() {
+  if (typeof VideoEncoder === "undefined" || typeof VideoFrame === "undefined") return null;
+  for (const codec of ["avc1.640028", "avc1.4d0028", "avc1.42e028"]) {
+    const cfg = { codec, width: LB_PIC_W, height: LB_PIC_H, bitrate: 8000000, framerate: LB_FPS, avc: { format: "avc" } };
+    try { if ((await VideoEncoder.isConfigSupported(cfg)).supported) return cfg; } catch (e) { /* try the next */ }
+  }
+  return null;
+}
+/** Draw frame f of a slide (fading in from the previous one) onto the mixing canvas. */
+function lbVideoFrame(g, prev, cur, f) {
+  g.globalAlpha = 1;
+  if (prev && f < LB_FADE) { g.drawImage(prev, 0, 0); g.globalAlpha = (f + 1) / (LB_FADE + 1); }
+  g.drawImage(cur, 0, 0);
+  g.globalAlpha = 1;
+}
+/** Fast way: the phone's video encoder, frame by frame (much quicker than playing it), into an MP4. */
+async function lbVideoEncoded(cfg, slides, fonts, say) {
+  const samples = [];
+  let desc = null, fault = null;
+  const enc = new VideoEncoder({
+    output: (chunk, meta) => {
+      const d = meta && meta.decoderConfig && meta.decoderConfig.description;
+      if (d && !desc) desc = new Uint8Array(ArrayBuffer.isView(d) ? d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength) : d.slice(0));
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      samples.push({ data, ts: chunk.timestamp, key: chunk.type === "key" });
+    },
+    error: e => { fault = e; } });
+  enc.configure(cfg);
+  const mix = document.createElement("canvas");
+  mix.width = LB_PIC_W; mix.height = LB_PIC_H;
+  const g = mix.getContext("2d");
+  const per = LB_FPS * LB_SLIDE_SECS, us = 1e6 / LB_FPS;
+  let prev = null, n = 0;
+  try {
+    for (let i = 0; i < slides.length; i++) {
+      if (!say(`Making slide ${i + 1} of ${slides.length}…`)) return null;
+      const cur = await lbSlideCanvas(slides[i](), fonts);
+      const still = new VideoFrame(cur, { timestamp: 0 });
+      for (let f = 0; f < per; f++, n++) {
+        if (fault) throw fault;
+        const timestamp = Math.round(n * us);
+        let frame;
+        if (prev && f < LB_FADE) { lbVideoFrame(g, prev, cur, f); frame = new VideoFrame(mix, { timestamp, duration: Math.round(us) }); }
+        else frame = new VideoFrame(still, { timestamp, duration: Math.round(us) });
+        enc.encode(frame, { keyFrame: f === 0 || (!!prev && f === LB_FADE) });
+        frame.close();
+        while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 2));
+      }
+      still.close();
+      prev = cur;
+    }
+    say("Putting the video together…");
+    await enc.flush();
+  } finally { try { enc.close(); } catch (e) { /* closed */ } }
+  if (fault) throw fault;
+  if (!desc || !samples.length) throw new Error("the video encoder gave nothing back");
+  for (let k = 1; k < samples.length; k++) if (samples[k].ts <= samples[k - 1].ts) throw new Error("frames came back out of order");
+  const t = x => Math.round(x * LB_FPS * 1000 / 1e6), end = t(n * us);
+  const list = samples.map((x, k) => ({ data: x.data, key: x.key, dur: (k + 1 < samples.length ? t(samples[k + 1].ts) : end) - t(x.ts) }));
+  return { data: lbMp4(list, { width: LB_PIC_W, height: LB_PIC_H, timescale: LB_FPS * 1000, avcC: desc }), type: "video/mp4", ext: "mp4" };
+}
+/** Backup way for phones without the encoder: play the slides on a hidden canvas and record it, in real time. */
+async function lbVideoRecorded(slides, fonts, say) {
+  const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find(x => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(x));
+  if (!type) throw new Error("this phone can't make videos");
+  const pics = [];
+  for (let i = 0; i < slides.length; i++) {
+    if (!say(`Making slide ${i + 1} of ${slides.length}…`)) return null;
+    pics.push(await lbSlidePicture(slides[i](), fonts));
+  }
+  const toCanvas = async jpg => { const b = await createImageBitmap(new Blob([jpg], { type: "image/jpeg" })); return b; };
+  const c = document.createElement("canvas");
+  c.width = LB_PIC_W; c.height = LB_PIC_H;
+  const g = c.getContext("2d");
+  let cur = await toCanvas(pics[0]), prev = null;
+  lbVideoFrame(g, null, cur, 0);
+  const stream = c.captureStream(LB_FPS);
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8000000 });
+  const parts = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+  const stopped = new Promise(r => { rec.onstop = r; });
+  const total = lbVideoSecs(slides.length);
+  rec.start(1000);
+  const t0 = performance.now();
+  let next = pics.length > 1 ? toCanvas(pics[1]) : null, shown = 0, cancelled = false;
+  while (true) {
+    const el = (performance.now() - t0) / 1000;
+    if (el >= total) break;
+    const i = Math.min(pics.length - 1, Math.floor(el / LB_SLIDE_SECS));
+    if (i !== shown) { prev = cur; cur = await next; shown = i; next = i + 1 < pics.length ? toCanvas(pics[i + 1]) : null; }
+    lbVideoFrame(g, prev, cur, Math.floor((el - i * LB_SLIDE_SECS) * LB_FPS));
+    if (!say(`Recording the video… ${Math.floor(el)} of ${total} seconds. Keep this screen open.`)) { cancelled = true; break; }
+    await new Promise(r => setTimeout(r, 1000 / LB_FPS));
+  }
+  rec.stop();
+  await stopped;
+  stream.getTracks().forEach(x => x.stop());
+  if (cancelled) return null;
+  const mp4 = type.startsWith("video/mp4");
+  return { data: new Uint8Array(await new Blob(parts, { type }).arrayBuffer()), type: mp4 ? "video/mp4" : "video/webm", ext: mp4 ? "mp4" : "webm" };
+}
+async function lbVideo(slides, fonts, say) {
+  const cfg = await lbVideoConfig();
+  if (cfg) {
+    try { return await lbVideoEncoded(cfg, slides, fonts, say); } catch (e) { /* fall back to recording it */ }
+  }
+  return lbVideoRecorded(slides, fonts, say);
 }
 function lbFileDate() {
   const d = clockNow();
@@ -5654,12 +5809,21 @@ function openLbDownload() {
   const make = kind => async () => {
     if (busy) return;
     busy = true;
-    const btns = [$("lbDlPdf"), $("lbDlPics")];
+    const btns = [$("lbDlPdf"), $("lbDlPics"), $("lbDlVideo")];
     btns.forEach(b => { b.disabled = true; });
     const base = `VODA Leaderboard ${lbFileDate()}`;
     try {
       status.textContent = "Getting ready…";
       const fonts = await lbFontCss();
+      if (kind === "video") {
+        const say = t => { if (!$("lbDlStatus")) return false; status.textContent = t; return true; };
+        const v = await lbVideo(s.slides, fonts, say);
+        if (!v) return; // closed
+        const vname = `${base}.${v.ext}`;
+        downloadFile(vname, v.data, v.type);
+        status.textContent = `Downloaded “${vname}” (${lbVideoSecs(s.slides.length)} seconds, ${s.slides.length} slides).`;
+        return;
+      }
       const pics = [];
       for (let i = 0; i < s.slides.length; i++) {
         if (!$("lbDlStatus")) return; // closed
@@ -5690,7 +5854,9 @@ function openLbDownload() {
       h("button", { class: "lb-dl-opt", type: "button", id: "lbDlPdf", onclick: make("pdf") },
         h("strong", { text: "PDF" }), h("span", { text: "One file with every slide. Best for a laptop or computer on the TV, or to cast from your phone." })),
       h("button", { class: "lb-dl-opt", type: "button", id: "lbDlPics", onclick: make("zip") },
-        h("strong", { text: "Pictures" }), h("span", { text: "One picture per slide (JPG), in a .zip. Best for a USB stick: most TVs play pictures as a slideshow." }))),
+        h("strong", { text: "Pictures" }), h("span", { text: "One picture per slide (JPG), in a .zip. Best for a USB stick: most TVs play pictures as a slideshow." })),
+      h("button", { class: "lb-dl-opt", type: "button", id: "lbDlVideo", onclick: make("video") },
+        h("strong", { text: "Video" }), h("span", { text: `Every slide for ${LB_SLIDE_SECS} seconds (${lbVideoSecs(s.slides.length)} seconds in all), as an MP4. Plays on almost any TV from a USB stick, or cast it from your phone.` }))),
     status,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", id: "lbDlClose", text: "Close", onclick: () => closeDialog() }))));
 }
