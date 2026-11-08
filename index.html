@@ -117,6 +117,10 @@ button { font: inherit; color: inherit; }
 .btn:hover:not(:disabled) { border-color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--accent); }
+/* Present: the same gold as 1st place */
+.btn.gold { background: #f2b705; border-color: #dba500; color: #3b2a00; font-weight: 700; }
+.btn.gold:hover:not(:disabled) { background: #e5ab00; border-color: #c99700; }
+.btn.gold:active { transform: scale(.97); }
 .btn.danger { color: var(--due); }
 .btn.small { padding: 6px 10px; font-size: .85rem; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -4854,7 +4858,7 @@ function renderLeaderboard() {
   const cfg = lbCfg();
   const top = h("div", { class: "lb-top" },
     h("h2", { class: "lb-title", text: "Leaderboard" }),
-    lbView.tab === "standings" && cfg.teams.length ? h("button", { class: "btn primary", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Present") : null,
+    lbView.tab === "standings" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Present") : null,
     edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Teams") : null);
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
     Object.entries(LB_TABS).filter(([k]) => k !== "enter" || edit).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
