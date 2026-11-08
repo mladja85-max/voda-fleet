@@ -1261,14 +1261,15 @@ function lbEntry(arr, n) {
 }
 const lbMondayOf = day => { const d = new Date(day + "T00:00:00Z"); return lbAddDays(day, -((d.getUTCDay() + 6) % 7)); };
 const lbDaysIn = key => new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
-/** Days left in the month, today included (as the sales sheet's DAYS LEFT). 0 for a month gone by. */
+/** Working days left in the month, today included: Monday to Saturday (Sundays off). 0 for a month gone by. */
 function lbDaysLeft(key, today) {
   const tm = today.slice(0, 7);
   if (key < tm) return 0;
-  if (key > tm) return lbDaysIn(key);
-  return lbDaysIn(key) - Number(today.slice(8, 10)) + 1;
+  const from = key > tm ? 1 : Number(today.slice(8, 10));
+  let n = 0;
+  for (let d = from; d <= lbDaysIn(key); d++) if (new Date(`${key}-${String(d).padStart(2, "0")}T00:00:00Z`).getUTCDay() !== 0) n++;
+  return n;
 }
-
 /** Everything the screens show, from the roster and the month documents ({ "2026-11": doc, ... }).
  *  opts.today ("2026-11-08") ends the months shown; opts.until counts only the days up to then (for "a week ago").
  *  → { records: one per team per month (zeros for a team on the board with nothing typed yet), weeks, newest } */
@@ -4675,7 +4676,7 @@ function lbQueue(key, patch) {
   lbSaveState = "pending";
   lbShowSave();
   clearTimeout(lbSaveTimer);
-  lbSaveTimer = setTimeout(lbFlush, 900);
+  lbSaveTimer = setTimeout(lbFlush, 250);
 }
 async function lbFlush() {
   clearTimeout(lbSaveTimer);
@@ -4687,7 +4688,7 @@ async function lbFlush() {
     const out = await api("lbPut", { year: lbYear(), writes });
     for (const [k, d] of Object.entries(out.months || {})) lbData.months[k] = lbMerge(lbClone(d), lbClone(lbPending[k] || {}));
     if (out.names) lbData.names = Object.assign(lbData.names || {}, out.names);
-    lbSaveState = "saved"; lbSaveErr = "";
+    lbSaveState = Object.keys(lbPending).length ? "pending" : "saved"; lbSaveErr = "";
   } catch (e) {
     for (const w of writes) lbPending[w.key] = lbMerge(w.patch, lbPending[w.key] || {});
     lbSaveState = "error"; lbSaveErr = errText(e, "The numbers");
@@ -4704,7 +4705,7 @@ function lbShowSave() {
   if (!el) return;
   el.className = "lb-save " + lbSaveState;
   if (lbSaveState === "error") el.replaceChildren(h("span", { text: `Not saved yet. ${lbSaveErr}` }), " ", h("button", { class: "btn small", type: "button", onclick: () => lbFlush(), text: "Try again" }));
-  else el.textContent = lbSaveState === "pending" || lbSaveState === "saving" ? "Saving…" : lbSaveState === "saved" ? "All changes saved" : "Numbers save by themselves as you type.";
+  else el.textContent = lbSaveState === "pending" || lbSaveState === "saving" ? "Saving…" : lbSaveState === "saved" ? "All changes saved" : "Numbers save as you type.";
 }
 
 /* ---- the screen ---- */
@@ -4892,7 +4893,7 @@ function lbEnterEl() {
 }
 /** One number box. */
 const lbBox = (label, value, data, hint) => h("label", { class: "lb-box" + (hint ? " has-hint" : "") }, h("span", { text: label }),
-  h("input", Object.assign({ type: "text", inputmode: "decimal", autocomplete: "off", enterkeyhint: "next", value: value == null ? "" : String(value) }, data)),
+  h("input", Object.assign({ type: "text", inputmode: "decimal", autocomplete: "off", enterkeyhint: "next", value: value == null ? "" : String(value), onchange: () => lbFlush() }, data)),
   hint ? h("small", { text: hint }) : null);
 function lbCard(t, part, day, fields, arr, foot) {
   return h("div", { class: "lb-card" + (t.off ? " off" : ""), "data-team": t.name, "data-part": part },
@@ -5013,7 +5014,7 @@ function lbStatusEl() {
   const goal = cfg.goal;
   const sales = h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
-    h("p", { class: "lb-sub", text: left ? `Goal ${lbMoney(goal)} each · ${left} day${left === 1 ? "" : "s"} left in ${lbMonthLong(month)}` : `Goal ${lbMoney(goal)} each` }),
+    h("p", { class: "lb-sub", text: left ? `Goal ${lbMoney(goal)} each · ${left} working day${left === 1 ? "" : "s"} left in ${lbMonthLong(month)} (Monday to Saturday)` : `Goal ${lbMoney(goal)} each` }),
     table(["Tech", "Month to date", "Left to goal", "Need per day", "Jobs", "Per job", "Up sale", "Add-on", "Rugs in plant", "Additional"], board.map(t => {
       const r = recOf(t.name), g = lbGoal(r, goal, left);
       return [t.name, lbMoney(r.sales), g.done ? "Done" : lbMoney(g.left), g.done || !left ? "–" : lbMoney(g.perDay), fmt(r.saleJobs), lbMoney(lbDiv(r.sales, r.saleJobs)), lbMoney(r.up), lbMoney(r.addon), lbMoney(r.rugs), lbMoney(r.extra)];
