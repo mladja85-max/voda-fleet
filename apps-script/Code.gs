@@ -102,7 +102,9 @@
  * whoever has "Leaderboard import" ticked) tap Import: the app reads "5. REVENUE PER TRUCK" and "2. TECHNICIAN MONTHLY SALES"
  * straight from their Google Sheets links, or from Excel copies, and saves one row per team per month in the Leaderboard tab
  * (week totals in Leaderboard weeks). For the links, share both sheets with the Google account this script runs as (Viewer
- * is enough). Numbers can also be typed or fixed in the app (Leaderboard > Edit numbers). Don't edit these tabs by hand.
+ * is enough). Numbers can also be typed in the app (Leaderboard > Edit numbers): they are kept apart from the sheets'
+ * numbers (column "manual"), win over them, and survive every import. Reviews are 5-star reviews only. Don't edit these
+ * tabs by hand.
  *
  * WHO SEES WHAT
  * Admins see everything. Each technician sees only what an Admin ticks for him in the app (Settings > Users and invites):
@@ -2692,7 +2694,9 @@ function cleanAccess_(raw) {
 // here; the ranking itself is worked out in the app from these rows.
 
 const LB_SHEET = "Leaderboard";
-const LB_COLS = ["month", "team", "unit", "revenue", "jobs", "workDays", "sales", "saleJobs", "reviews", "updatedAt", "by"];
+const LB_COLS = ["month", "team", "unit", "revenue", "jobs", "workDays", "sales", "saleJobs", "reviews", "updatedAt", "by", "manual"];
+// manual: numbers typed in the app (JSON, for example {"jobs":12}). They win over the sheets' numbers and an import never
+// changes them; unit "none" there means "not ranked this month".
 const LB_NUMS = ["revenue", "jobs", "workDays", "sales", "saleJobs", "reviews"];
 const LB_WEEK_SHEET = "Leaderboard weeks";
 const LB_WEEK_COLS = ["week", "month", "team", "revenue", "jobs", "workDays"];
@@ -2710,14 +2714,15 @@ function lbSheets_() {
     let s = ss.getSheetByName(name);
     if (!s) {
       s = ss.insertSheet(name);
-      if (s.getMaxColumns() < cols.length) s.insertColumnsAfter(s.getMaxColumns(), cols.length - s.getMaxColumns());
-      s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
       s.setFrozenRows(1);
     }
+    if (s.getMaxColumns() < cols.length) s.insertColumnsAfter(s.getMaxColumns(), cols.length - s.getMaxColumns());
+    const head = s.getRange(1, 1, 1, cols.length).getValues()[0];
+    if (head.some(function (h, i) { return String(h) !== cols[i]; })) s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
     textCols.forEach(function (c) { s.getRange(2, cols.indexOf(c) + 1, Math.max(s.getMaxRows() - 1, 1), 1).setNumberFormat("@"); });
     return s;
   };
-  return { m: make(LB_SHEET, LB_COLS, ["month", "team", "unit", "updatedAt", "by"]), w: make(LB_WEEK_SHEET, LB_WEEK_COLS, ["week", "month", "team"]) };
+  return { m: make(LB_SHEET, LB_COLS, ["month", "team", "unit", "updatedAt", "by", "manual"]), w: make(LB_WEEK_SHEET, LB_WEEK_COLS, ["week", "month", "team"]) };
 }
 function lbSheetsIfThere_() {
   const ss = SpreadsheetApp.getActive();
@@ -2749,8 +2754,20 @@ function lbTeam_(v) {
 function lbRecord_(o) {
   const r = { month: lbMonthText_(o.month), team: lbTeam_(o.team), unit: DIVISIONS.indexOf(String(o.unit || "")) !== -1 ? String(o.unit) : "" };
   LB_NUMS.forEach(function (f) { r[f] = num_(o[f]) || 0; });
+  r.manual = lbManual_(o.manual);
   return r;
 }
+/** Typed numbers: only the six numbers and the unit (a unit, or "none" for not ranked). From the sheet (JSON text) or the app. */
+function lbManual_(v) {
+  let m = v;
+  if (typeof m === "string") { try { m = m ? JSON.parse(m) : {}; } catch (e) { m = {}; } }
+  const out = {};
+  if (!m || typeof m !== "object") return out;
+  LB_NUMS.forEach(function (f) { const n = num_(m[f]); if (n !== null) out[f] = n; });
+  if (m.unit === "none" || DIVISIONS.indexOf(String(m.unit)) !== -1) out.unit = String(m.unit);
+  return out;
+}
+const lbHasManual_ = function (r) { return !!(r.manual && Object.keys(r.manual).length); };
 function lbWeekRow_(o) {
   return { week: lbDayText_(o.week), month: lbMonthText_(o.month), team: lbTeam_(o.team),
     revenue: num_(o.revenue) || 0, jobs: num_(o.jobs) || 0, workDays: num_(o.workDays) || 0 };
@@ -2826,7 +2843,7 @@ function lbFetch_(req) {
  *  req.snap (the places right after this save) is kept so next week's standings can show who moved up or down. */
 function lbSave_(req) {
   const months = (Array.isArray(req.months) ? req.months : []).map(lbMonthText_).filter(Boolean);
-  const fields = (Array.isArray(req.fields) ? req.fields : []).filter(function (f) { return f === "unit" || LB_NUMS.indexOf(f) !== -1; });
+  const fields = (Array.isArray(req.fields) ? req.fields : []).filter(function (f) { return f === "unit" || f === "manual" || LB_NUMS.indexOf(f) !== -1; });
   const incoming = (Array.isArray(req.records) ? req.records : []).map(lbRecord_).filter(function (r) { return r.month && r.team && months.indexOf(r.month) !== -1; });
   if (!fields.length && !Array.isArray(req.weekMonths)) return { ok: false, error: "bad_request" };
   if (incoming.length > 2000) return { ok: false, error: "bad_request" };
@@ -2839,7 +2856,7 @@ function lbSave_(req) {
   rows.forEach(function (r) { byKey[key(r)] = r; });
   rows.forEach(function (r) {
     if (months.indexOf(r.month) === -1) return;
-    fields.forEach(function (f) { r[f] = f === "unit" ? "" : 0; });
+    fields.forEach(function (f) { r[f] = f === "unit" ? "" : f === "manual" ? {} : 0; });
   });
   incoming.forEach(function (n) {
     let r = byKey[key(n)];
@@ -2848,11 +2865,11 @@ function lbSave_(req) {
     r.team = n.team;
     r.updatedAt = now; r.by = req.by;
   });
-  const keep = rows.filter(function (r) { return r.unit || LB_NUMS.some(function (f) { return r[f]; }); })
+  const keep = rows.filter(function (r) { return r.unit || lbHasManual_(r) || LB_NUMS.some(function (f) { return r[f]; }); })
     .sort(function (a, b) { return a.month < b.month ? -1 : a.month > b.month ? 1 : a.team.localeCompare(b.team); });
   const write = function (s, cols, list) {
     if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, cols.length).clearContent();
-    appendRows_(s, cols.length, list.map(function (r) { return cols.map(function (c) { return r[c] === undefined ? "" : r[c]; }); }));
+    appendRows_(s, cols.length, list.map(function (r) { return cols.map(function (c) { return r[c] === undefined ? "" : c === "manual" ? (lbHasManual_(r) ? JSON.stringify(r.manual) : "") : r[c]; }); }));
   };
   write(t.m, LB_COLS, keep);
   if (Array.isArray(req.weekMonths)) {
