@@ -4307,6 +4307,7 @@ function accessChips(selected, onchange, idPrefix) {
 /* ---------- leaderboard ---------- */
 const LB_API = 21;                                     // the Google script version with the leaderboard
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; imports and fixes the numbers
+const LB_LINKS = typeof LB_LINKS_OFF === "undefined";   // reading the sheets by link needs VODA Prime's Google script (the test page has none)
 const K_LB = "voda.lb", K_LB_VIEW = "voda.lbView";
 let lbData = store.get(K_LB);                          // { records, weeks, snap, links, last, canImport, at }
 let lbLoading = false, lbErr = "", lbOld = false;
@@ -4408,7 +4409,8 @@ function renderLeaderboard() {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
       h("h2", { text: `No ${y} numbers yet` }),
       h("p", { class: "meta", text: imp
-        ? "Tap Import and paste the links to your two Google Sheets (5. Revenue per truck and 2. Technician monthly sales), or choose Excel copies. The app reads every month since January 1 and ranks the teams."
+        ? (LB_LINKS ? "Tap Import and paste the links to your two Google Sheets (5. Revenue per truck and 2. Technician monthly sales), or choose Excel copies. The app reads every month since January 1 and ranks the teams."
+          : "Tap Import and choose Excel copies of your two sheets (5. Revenue per truck and 2. Technician monthly sales). The app reads every month since January 1 and ranks the teams.")
         : "An admin hasn't imported this year's numbers yet." }),
       imp ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbImport() }, "Import numbers")) : null),
       ...(lbErr ? [h("p", { class: "dlg-err", text: lbErr })] : []));
@@ -4500,16 +4502,16 @@ function openLbImport() {
     return { kind, status, el: h("div", { class: "lb-src" },
       h("h4", { text: title }),
       h("p", { class: "hint", text: hint }),
-      h("div", { class: "field" }, h("label", { for: `lbUrl-${kind}`, text: "Google Sheets link" }),
-        h("input", { id: `lbUrl-${kind}`, type: "url", inputmode: "url", autocomplete: "off", placeholder: "https://docs.google.com/spreadsheets/d/…", value: links[kind] || "" })),
-      h("div", { class: "field" }, h("label", { for: `lbFile-${kind}`, class: "or", text: "or an Excel copy (.xlsx)" }),
+      LB_LINKS ? h("div", { class: "field" }, h("label", { for: `lbUrl-${kind}`, text: "Google Sheets link" }),
+        h("input", { id: `lbUrl-${kind}`, type: "url", inputmode: "url", autocomplete: "off", placeholder: "https://docs.google.com/spreadsheets/d/…", value: links[kind] || "" })) : null,
+      h("div", { class: "field" }, h("label", { for: `lbFile-${kind}`, class: LB_LINKS ? "or" : "", text: LB_LINKS ? "or an Excel copy (.xlsx)" : "Excel copy (.xlsx)" }),
         h("input", { id: `lbFile-${kind}`, type: "file", accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })),
       status) };
   };
   const A = src("revenue", "5. Revenue per truck", "Jobs, work days and revenue by truck for each week, and the reviews table.");
   const B = src("sales", "2. Technician monthly sales", "Up sale, add-on, rugs and additional service per technician (MTD and jobs).");
   const readOne = async s => {
-    const file = $(`lbFile-${s.kind}`).files[0], url = val(`lbUrl-${s.kind}`);
+    const file = $(`lbFile-${s.kind}`).files[0], url = LB_LINKS ? val(`lbUrl-${s.kind}`) : "";
     if (!file && !url) return null;
     s.status.className = "lb-status"; s.status.textContent = file ? `Reading ${file.name}…` : "Reading the Google Sheet…";
     try {
@@ -4536,7 +4538,7 @@ function openLbImport() {
       let a = null, b = null, failed = false;
       try { a = await readOne(A); } catch (e) { failed = true; }
       try { b = await readOne(B); } catch (e) { failed = true; }
-      if (!a && !b) { if (!failed) err.textContent = "Paste a link or choose a file for at least one of the two sheets."; return; }
+      if (!a && !b) { if (!failed) err.textContent = LB_LINKS ? "Paste a link or choose a file for at least one of the two sheets." : "Choose the Excel file for at least one of the two sheets."; return; }
       // a sheet put in the other box still counts
       if ((a && a.kind === "sales") || (b && b.kind === "revenue")) [a, b] = [b && b.kind === "revenue" ? b : (a && a.kind === "revenue" ? a : null), a && a.kind === "sales" ? a : (b && b.kind === "sales" ? b : null)];
       for (const x of [a, b]) if (x && !x.kind) { err.textContent = `${x.title} doesn't look like either sheet (no "Weekly Totals" rows or "TECH." table).`; return; }
@@ -4572,7 +4574,8 @@ function openLbImport() {
     h("h3", { id: "dlgTitle", text: "Import numbers" }),
     h("p", { text: `Reads every ${y} month tab (January ${y} on) and adds each team's month up. Each import replaces the months it reads; nothing in your sheets is changed.` }),
     A.el, B.el,
-    h("p", { class: "hint", text: "A link works once the sheet is shared with the Google account VODA Prime runs on (Viewer is enough). The links are remembered for next week." }),
+    h("p", { class: "hint", text: LB_LINKS ? "A link works once the sheet is shared with the Google account VODA Prime runs on (Viewer is enough). The links are remembered for next week."
+      : "In Google Sheets: File > Download > Microsoft Excel (.xlsx). On a phone: ⋮ > Share & export > Save as > Excel. Then choose the file here." }),
     err, preview,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }), readBtn, saveBtn)));
 }
