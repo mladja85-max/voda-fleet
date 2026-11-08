@@ -626,11 +626,71 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-team-top .field { flex: 1 1 140px; }
 .lb-team .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .lb-team .field input, .lb-team .field select { padding: 7px 9px; }
-.lb-typed { margin-left: 6px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 5px; }
-.lb-team .field.typed input { border-color: var(--accent); }
-.lb-team input[readonly] { background: transparent; border-color: transparent; padding-left: 0; font-weight: 700; }
 .lb-week-bar { height: 8px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; margin-top: 4px; }
 .lb-week-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.lb-tabs { justify-self: start; max-width: 100%; overflow-x: auto; }
+.lb-daybar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lb-daybar input[type="date"], .lb-daybar select { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+.lb-daybar .btn.small { min-width: 38px; justify-content: center; font-size: 1.1rem; line-height: 1; }
+.lb-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; max-width: 520px; }
+.lb-wd { all: unset; box-sizing: border-box; cursor: pointer; display: grid; justify-items: center; gap: 1px; padding: 6px 0 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; font-variant-numeric: tabular-nums; position: relative; }
+.lb-wd small { font-size: .7rem; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+.lb-wd.has::after { content: ""; position: absolute; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.lb-wd.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.lb-wd.on small { color: inherit; opacity: .85; }
+.lb-wd:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.lb-enter { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; }
+.lb-enter > .lb-sub, .lb-enter > .hint, .lb-enter > .meta { grid-column: 1 / -1; margin: 0; }
+.lb-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; display: grid; gap: 8px; }
+.lb-card.off { border-style: dashed; }
+.lb-card.bad { border-color: var(--due); }
+.lb-card-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lb-card-head strong { font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; letter-spacing: .02em; }
+.lb-boxes { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lb-boxes.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.lb-boxes.n5 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.lb-boxes.n5 .lb-box { grid-column: span 2; }
+.lb-boxes.n5 .lb-box:nth-child(n+4) { grid-column: span 3; }
+.lb-boxes.n1 { grid-template-columns: minmax(0, 200px); }
+.lb-box { display: grid; gap: 3px; min-width: 0; }
+.lb-box span { font-size: .74rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-box input { width: 100%; min-width: 0; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 9px; }
+.lb-box input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.lb-card.bad input { border-color: var(--due); }
+.lb-card-foot { margin: 0; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lb-save { position: sticky; bottom: 0; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: .86rem; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lb-save.saved { color: var(--ok); }
+.lb-save.error { color: var(--due); border-color: var(--due); }
+.lb-grid { border-collapse: separate; border-spacing: 2px; font-size: .72rem; font-variant-numeric: tabular-nums; }
+.lb-grid th { font-weight: 600; color: var(--muted); padding: 0 2px; text-align: center; }
+.lb-grid tbody th { text-align: left; color: var(--ink); font-weight: 700; padding-right: 8px; white-space: nowrap; font-size: .8rem; }
+.lb-grid th.sun { color: var(--due); }
+.lb-grid td { padding: 0; }
+.lb-grid td > * { all: unset; box-sizing: border-box; display: block; width: 18px; height: 18px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); cursor: pointer; }
+.lb-grid td > i { cursor: default; }
+.lb-grid td.sun > * { background: color-mix(in srgb, var(--line) 60%, transparent); }
+.lb-grid td.future > * { opacity: .35; cursor: default; }
+.lb-grid td.t > *, .lb-key.t { background: color-mix(in srgb, var(--ok) 45%, var(--surface)); border-color: transparent; }
+.lb-grid td.s > *, .lb-key.s { background: color-mix(in srgb, var(--accent) 40%, var(--surface)); border-color: transparent; }
+.lb-grid td.t.s > *, .lb-key.ts { background: var(--ok); border-color: transparent; }
+.lb-grid td > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lb-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-left: 6px; }
+.lb-table tfoot th, .lb-table tfoot td { font-weight: 700; border-bottom: 0; }
+.lb-table tbody th, .lb-table tfoot th { font-weight: 700; text-align: left; color: var(--ink); text-transform: none; letter-spacing: 0; font-size: .86rem; }
+.lb-teams { display: grid; gap: 8px; }
+.lb-team .t-label { font-family: var(--font-display); font-size: 1.2rem; text-transform: uppercase; letter-spacing: .02em; margin-right: auto; }
+.lb-team-top { justify-content: space-between; }
+@media (max-width: 520px) {
+  .lb-boxes { gap: 6px; }
+  .lb-box span { font-size: .7rem; }
+  .lb-box input { padding: 8px 7px; }
+  .lb-card { padding: 9px 10px; }
+  .lb-team .nums { grid-template-columns: 1fr; }
+}
+.lb-bar select { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+.lb-table tbody th, .lb-table tfoot th, .lb-table thead th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.lb-grid tbody th { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.lb-grid td.today > * { outline: 2px solid var(--accent); outline-offset: 0; }
 
 /* ---- leaderboard: presentation ---- */
 .lbshow { position: fixed; inset: 0; z-index: 100; background: radial-gradient(120% 90% at 50% 0%, #1d2d42 0%, #0d151f 62%, #090f16 100%); color: #eef3f8;
@@ -1061,16 +1121,21 @@ function fmt(n) { return isNum(n) ? n.toLocaleString("en-US", { maximumFractionD
 // </logic>
 
 // <leaderboard-logic>
-/* ---------- Leaderboard: reading the two Google Sheets and ranking the teams ----------
-   The same rules as the "5. REVENUE PER TRUCK" sheet's ranking (rows 147-227), with the year-to-date numbers added up
-   from each month instead of chained from sheet to sheet:
+/* ---------- Leaderboard: the numbers typed in each day, added up and ranked ----------
+   The numbers are typed into the app the way they were typed into the two sheets:
+   - each truck's day: jobs, work day, revenue, # of techs ("5. Revenue per truck")
+   - each technician's day: up sale, add-on sale, rugs in plant, additional service, jobs ("2. Technician monthly sales")
+   - each team's 5-star reviews for the month (4 and 3 stars aren't counted)
+   Saved as a roster ({ teams: [{ name, unit, from: "2026-01", to: "" }], goal }) and one document per month:
+   { days: { "2026-11-02": { t: { John: [jobs, workDays, revenue, techs] }, s: { John: [up, addon, rugs, extra, jobs] },
+     at, by } }, reviews: { John: 5 }, rat, rby }. A blank box is null.
+   The ranking is the "5. REVENUE PER TRUCK" sheet's (rows 147-227):
    - Teams are ranked inside their unit (Cleaning, Restoration) and across the whole company.
    - For every number, the highest gets rank 1 (ties share a rank). A team's score is its ranks added up; the lowest
      score is #1. Equal scores share a place and the next team takes the next number (1, 1, 2), as in the sheet.
-   - Month: per job, daily per truck, total revenue, sale per job, sales, reviews.
-   - Year to date (from January 1): sales, total revenue, per job, daily per truck, reviews, counted only from the month
-     a team is on the board.
-   - Reviews are 5-star reviews only. Numbers typed in the app (`manual`) take the place of the sheet's. */
+   - Month: per job, daily per truck, total revenue, sale per job, technician sales, reviews.
+   - Year to date (from January 1): technician sales, total revenue, per job, daily per truck, reviews, counted only
+     from the months a team is on the board (the roster's from and to months). */
 const LB_MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const LB_GROUPS = ["Cleaning", "Restoration"];
 const LB_MONTH_METRICS = [
@@ -1086,6 +1151,19 @@ const LB_YTD_METRICS = [
   { key: "perJob", label: "Per job", short: "Per job", money: true },
   { key: "perDay", label: "Daily per truck", short: "Per day", money: true },
   { key: "reviews", label: "Reviews", short: "Reviews", money: false }];
+/** What is typed for a truck's day and for a technician's day, in the order they're saved. */
+const LB_TRUCK = [
+  { key: "jobs", label: "Jobs" },
+  { key: "workDays", label: "Work day" },
+  { key: "revenue", label: "Revenue", money: true },
+  { key: "techs", label: "# of techs" }];
+const LB_SALE = [
+  { key: "up", label: "Up sale", money: true },
+  { key: "addon", label: "Add-on sale", money: true },
+  { key: "rugs", label: "Rugs in plant", money: true },
+  { key: "extra", label: "Additional service", money: true },
+  { key: "saleJobs", label: "Jobs" }];
+const LB_GOAL = 3000;   // each technician's monthly sales goal (the sheet's MONTHLY NEED)
 // How the sheets spell some names
 const LB_ALIASES = { chriss: "Chris", dereck: "Derek", hary: "Harry", jhon: "John", fredy: "Freddy" };
 
@@ -1099,6 +1177,7 @@ function lbName(raw) {
   if (LB_ALIASES[k]) return LB_ALIASES[k];
   return k.replace(/(^|[ .-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
 }
+
 const lbMonthKey = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
 /** "November 2026" or "Nov 2026" → 11 when the year matches, else 0. */
 function lbSheetMonth(name, year) {
@@ -1142,210 +1221,150 @@ const lbFindRows = (t, col, test, from, to) => {
 };
 const lbIs = (v, word) => lbText(v).toUpperCase() === word;
 
-/* ---- "5. REVENUE PER TRUCK" ---- */
-/** Each month tab: the 8 truck columns (jobs, work days, revenue, # of techs), week blocks ending in "Weekly Totals",
- *  the CLEANING and RESTORATION team lists, and the REVIEWS table. Every day counts in the month of its own date, so a
- *  day typed on the neighbouring month's tab (Sunday Feb 1 on the January tab) still lands in its own month, and days
- *  from another year (Dec 29-31 on the January tab) are left out. */
-function lbParseRevenue(tabs, year) {
-  const out = { kind: "revenue", months: {}, reviews: {}, notes: [], warnings: [] };
-  const monthTabs = tabs.map(lbTab).map(t => ({ t, m: lbSheetMonth(t.name, year) })).filter(x => x.m).sort((a, b) => a.m - b.m);
-  const acc = {}, wk = {}, seen = {};
-  const cap = s => s.replace(/^./, c => c.toUpperCase());
-  const recOf = (key, team, group) => {
-    const mo = acc[key] || (acc[key] = {});
-    const r = mo[team] || (mo[team] = { team, group: "", jobs: 0, workDays: 0, revenue: 0 });
-    if (!r.group && group) r.group = group;
-    return r;
-  };
-  const mondayOf = day => { const d = new Date(day + "T00:00:00Z"); return lbAddDays(day, -((d.getUTCDay() + 6) % 7)); };
-  for (const { t, m } of monthTabs) {
-    const key = lbMonthKey(year, m);
-    const mname = cap(LB_MONTH_NAMES[m - 1]);
-    // truck columns: E, I, M, ... while row 2 says "... jobs"
-    const slots = [];
-    for (let c = 5; c < 200; c += 4) {
-      const head = lbText(t.get(2, c)), next = lbText(t.get(2, c + 1));
-      if (!/jobs?$/i.test(head) && !(head === "" && /work\s*days?/i.test(next))) break;
-      slots.push({ col: c, team: lbName(head) });
-    }
-    if (!slots.length) { out.warnings.push(`${mname}: no truck columns found (row 2 should say "John's Jobs", ...). Skipped.`); continue; }
-    // names from the summary list under "SMILE" when a column heading is blank
-    const smile = lbFindRows(t, 1, v => lbIs(v, "SMILE"))[0];
-    if (smile) slots.forEach((s, i) => { if (!s.team) s.team = lbName(t.get(smile + 1 + i, 1)); });
-    // units
-    const unitOf = {};
-    for (const g of LB_GROUPS) {
-      const r0 = lbFindRows(t, 1, (v, r) => lbIs(v, g.toUpperCase()) && /per job/i.test(lbText(t.get(r, 2))))[0];
-      if (!r0) continue;
-      for (let r = r0 + 1; r <= r0 + 6; r++) { const n = lbName(t.get(r, 1)); if (n && !unitOf[n]) unitOf[n] = g; }
-    }
-    for (const s of slots) if (s.team) recOf(key, s.team, unitOf[s.team]);   // every team on this tab's board, even with no numbers yet
-    const textCells = [], unnamed = slots.map(() => 0), moved = [], other = [];
-    for (const r of lbFindRows(t, 1, v => lbIs(v, "WEEKLY TOTALS"))) {
-      const first = r - 7;
-      // the week's Monday: what most of the dates in column A agree on (a typed-in wrong date doesn't move the week)
-      const votes = {};
-      for (let i = 0; i < 7; i++) { const d = lbDay(t.get(first + i, 1)); if (d && Math.abs(Number(d.slice(0, 4)) - year) <= 1) { const mo = mondayOf(lbAddDays(d, -i)); votes[mo] = (votes[mo] || 0) + 1; } }
-      const start = Object.keys(votes).sort((x, y) => votes[y] - votes[x] || x.localeCompare(y))[0] || "";
-      for (let i = 0; i < 7; i++) {
-        const row = first + i;
-        const day = start ? lbAddDays(start, i) : "";
-        const dkey = day ? day.slice(0, 7) : key;
-        slots.forEach((s, k) => {
-          const v = { jobs: 0, workDays: 0, revenue: 0 };
-          let any = false, typed = false;   // any: a number other than 0; typed: any number at all (a $0 day still shows the team that week)
-          [["jobs", 0], ["workDays", 1], ["revenue", 2]].forEach(([f, off]) => {
-            const x = t.get(row, s.col + off);
-            if (lbIsNum(x)) { v[f] += x; typed = true; if (x) any = true; }
-            else if (lbText(x) !== "" && !(f === "revenue" && /^-+$/.test(lbText(x)))) textCells.push(`${lbColName(s.col + off)}${row}`);
-          });
-          if (!typed) return;
-          if (!s.team) { unnamed[k] += v.revenue; return; }
-          if (day && Number(day.slice(0, 4)) !== year) { if (any) other.push(day); return; }
-          const seenKey = day + "|" + s.team;
-          if (any && day && seen[seenKey] && seen[seenKey] !== t.name) out.warnings.push(`${s.team} has numbers for ${day} on both the ${seen[seenKey]} and the ${t.name} tab; both are counted. Delete one of them in the sheet.`);
-          if (any && day) seen[seenKey] = t.name;
-          if (any && dkey !== key) moved.push(`${s.team} ${cap(LB_MONTH_NAMES[Number(day.slice(5, 7)) - 1]).slice(0, 3)} ${Number(day.slice(8))} (${lbMoneyText(v.revenue)})`);
-          const rec = recOf(dkey, s.team, unitOf[s.team]);
-          rec.jobs += v.jobs; rec.workDays += v.workDays; rec.revenue += v.revenue;
-          if (start) {
-            const wkey = start + "|" + dkey + "|" + s.team;
-            const w = wk[wkey] || (wk[wkey] = { week: start, month: dkey, team: s.team, jobs: 0, workDays: 0, revenue: 0 });
-            w.jobs += v.jobs; w.workDays += v.workDays; w.revenue += v.revenue;
-          }
-        });
-      }
-    }
-    if (textCells.length) out.warnings.push(`${mname}: ${textCells.length} cell${textCells.length > 1 ? "s" : ""} with text instead of a number were skipped (${textCells.slice(0, 4).join(", ")}${textCells.length > 4 ? ", ..." : ""}).`);
-    slots.forEach((s, k) => { if (unnamed[k]) out.warnings.push(`${mname}: truck column ${lbColName(s.col)} has ${lbMoneyText(unnamed[k])} but no name, so it isn't counted. Put the team's name in row 2.`); });
-    if (moved.length) out.notes.push(`On the ${t.name} tab, counted in their own month: ${moved.join(", ")}.`);
-    if (other.length) out.notes.push(`${t.name}: days from another year (${[...new Set(other)].join(", ")}) aren't counted.`);
-  }
-  for (const [key, mo] of Object.entries(acc)) {
-    if (!key.startsWith(year + "-")) continue;
-    out.months[key] = { teams: Object.values(mo).sort((a, b) => a.team.localeCompare(b.team)), weeks: Object.values(wk).filter(w => w.month === key) };
-  }
-  // reviews: the REVIEWS table that starts in column A (team names down the side, JAN..DEC with A/B/C under each)
-  // on the newest month tab that has one. Only column A (5-star reviews) counts.
-  for (const { t } of monthTabs.slice().reverse()) {
-    const found = lbReviewTables(t, year);
-    if (!found.length) continue;
-    const newest = tbl => Object.values(tbl.rows).reduce((m, ms) => Object.keys(ms).reduce((a, k) => (ms[k] && k > a ? k : a), m), "");
-    found.sort((a, b) => (a.col === 1 ? 0 : 1) - (b.col === 1 ? 0 : 1) || newest(b).localeCompare(newest(a)));
-    out.reviews = found[0].rows;
-    break;
+
+
+/* ---- the roster and the typed days ---- */
+/** A team name as saved: letters, spaces, ' and - (no dots: they'd split a saved field name). */
+const lbTeamName = v => { const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return /^[A-Za-z][A-Za-z '-]{0,29}$/.test(s) ? s : ""; };
+const lbYm = v => (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(v || "")) ? String(v) : "");
+const lbIsDay = v => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(v || ""));
+/** The roster, cleaned: each team once, a unit, the months it's on the board ("" = open). */
+function lbCleanConfig(c) {
+  const out = { teams: [], goal: LB_GOAL };
+  const g = c && Number(c.goal);
+  if (g > 0 && g < 1e7) out.goal = g;
+  const seen = new Set();
+  for (const t of (c && Array.isArray(c.teams) ? c.teams : [])) {
+    const name = lbTeamName(t && t.name);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    let from = lbYm(t.from), to = lbYm(t.to);
+    if (from && to && to < from) to = from;
+    out.teams.push({ name, unit: LB_GROUPS.includes(t.unit) ? t.unit : LB_GROUPS[0], from, to });
   }
   return out;
 }
-function lbReviewTables(t, year) {
-  const tables = [];
-  for (let r = 1; r <= t.height; r++) {
-    const row = t.rows[r - 1] || [];
-    for (let c = 1; c <= row.length; c++) {
-      if (!lbIs(row[c - 1], "REVIEWS") || !lbIs(t.get(r, c + 1), "JAN")) continue;
-      const tbl = {};
-      for (let rr = r + 2; rr <= Math.min(t.height, r + 20); rr++) {
-        if (lbIs(t.get(rr, c + 1), "JAN")) break;
-        const name = lbName(t.get(rr, c));
-        if (!name) continue;
-        const months = {};
-        for (let m = 0; m < 12; m++) {
-          const v = t.get(rr, c + 1 + m * 3);   // A = 5 stars (B = 4 stars and C = 3 stars don't count)
-          if (lbIsNum(v)) months[lbMonthKey(year, m + 1)] = v;
-        }
-        tbl[name] = months;
-      }
-      tables.push({ row: r, col: c, rows: tbl });
-    }
-  }
-  return tables;
+const lbOnBoard = (t, key) => (!t.from || t.from <= key) && (!t.to || key <= t.to);
+/** The roster entry for a name (any capitals), or null. */
+const lbTeamOf = (cfg, name) => cfg.teams.find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
+/** The unit a team is ranked in that month ("2026-11"), or "" when it isn't on the board then. */
+function lbUnitIn(cfg, name, key) { const t = lbTeamOf(cfg, name); return t && lbOnBoard(t, key) ? t.unit : ""; }
+/** The teams on the board that month, Cleaning first, in roster order. */
+const lbBoard = (cfg, key) => LB_GROUPS.flatMap(g => cfg.teams.filter(t => t.unit === g && lbOnBoard(t, key)));
+const lbVal = v => (typeof v === "number" && Number.isFinite(v) ? v : null);
+/** One entry as saved: n numbers, null for a blank box. [] when every box is blank. */
+function lbEntry(arr, n) {
+  const out = [];
+  let any = false;
+  for (let i = 0; i < n; i++) { const v = lbVal(Array.isArray(arr) ? arr[i] : null); out.push(v); if (v != null) any = true; }
+  return any ? out : [];
+}
+const lbMondayOf = day => { const d = new Date(day + "T00:00:00Z"); return lbAddDays(day, -((d.getUTCDay() + 6) % 7)); };
+const lbDaysIn = key => new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
+/** Days left in the month, today included (as the sales sheet's DAYS LEFT). 0 for a month gone by. */
+function lbDaysLeft(key, today) {
+  const tm = today.slice(0, 7);
+  if (key < tm) return 0;
+  if (key > tm) return lbDaysIn(key);
+  return lbDaysIn(key) - Number(today.slice(8, 10)) + 1;
 }
 
-/* ---- "2. TECHNICIAN MONTHLY SALES" ---- */
-/** Each month tab's top table: TECH. | ... | JOBS | PER JOB | MTD. A row with no name but sales (the 7th and 8th rows)
- *  belongs to the 7th and 8th truck that month, the same way the revenue sheet reads it. */
-function lbParseSales(tabs, year, slotNames) {
-  const out = { kind: "sales", months: {}, notes: [], warnings: [] };
-  for (const t of tabs.map(lbTab)) {
-    const m = lbSheetMonth(t.name, year);
-    if (!m) continue;
-    const key = lbMonthKey(year, m);
-    const mname = LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase());
-    const hr = lbFindRows(t, 1, v => lbIs(v, "TECH."), 1, 8)[0];
-    if (!hr) { out.warnings.push(`${mname}: no "TECH." table at the top. Skipped.`); continue; }
-    const row = t.rows[hr - 1] || [];
-    const jobsCol = row.findIndex(v => lbIs(v, "JOBS")) + 1, mtdCol = row.findIndex(v => lbIs(v, "MTD")) + 1;
-    if (!jobsCol || !mtdCol) { out.warnings.push(`${mname}: the "JOBS" or "MTD" column is missing. Skipped.`); continue; }
-    const teams = {};
-    for (let r = hr + 1; r <= hr + 12; r++) {
-      const label = lbText(t.get(r, 1));
-      if (/total/i.test(label)) break;
-      const pos = r - hr - 1;
-      const sales = lbNum(t.get(r, mtdCol)), saleJobs = lbNum(t.get(r, jobsCol));
-      let team = lbName(label);
-      if (!team && (sales || saleJobs)) {
-        const slot = slotNames && slotNames[key] ? slotNames[key][pos] : "";
-        if (slot && pos >= 6) { team = slot; out.notes.push(`${mname}: ${lbMoneyText(sales)} of sales on the unnamed row ${r} counted for ${slot}, the same way your revenue sheet reads it.`); }
-        else out.warnings.push(`${mname}: ${lbMoneyText(sales)} of sales on row ${r} has no name, so it isn't counted.`);
+/** Everything the screens show, from the roster and the month documents ({ "2026-11": doc, ... }).
+ *  opts.today ("2026-11-08") ends the months shown; opts.until counts only the days up to then (for "a week ago").
+ *  → { records: one per team per month (zeros for a team on the board with nothing typed yet), weeks, newest } */
+function lbBuild(cfgIn, docs, year, opts) {
+  const cfg = lbCleanConfig(cfgIn);
+  const o = opts || {};
+  const until = lbIsDay(o.until) ? o.until : "";
+  const today = lbIsDay(o.today) ? o.today : until || `${year}-12-31`;
+  const nameOf = n => { const t = lbTeamOf(cfg, n); return t ? t.name : lbTeamName(n); };
+  const recs = {}, weeks = {};
+  let newest = "";
+  const rec = (key, team) => recs[key + "|" + team] || (recs[key + "|" + team] = { month: key, team, group: lbUnitIn(cfg, team, key),
+    revenue: 0, jobs: 0, workDays: 0, techs: 0, sales: 0, up: 0, addon: 0, rugs: 0, extra: 0, saleJobs: 0, reviews: 0,
+    truckDays: 0, saleDays: 0, last: "" });
+  const add = (r, k, v) => { if (v != null) r[k] += v; };
+  const keys = Object.keys(docs || {}).filter(k => lbYm(k) && k.startsWith(year + "-")).sort();
+  for (const key of keys) {
+    const doc = docs[key] || {};
+    const days = doc.days && typeof doc.days === "object" ? doc.days : {};
+    for (const day of Object.keys(days).sort()) {
+      if (!lbIsDay(day) || !day.startsWith(year + "-") || (until && day > until)) continue;
+      const d = days[day] || {}, dkey = day.slice(0, 7);
+      let typed = false;
+      for (const [n, arr] of Object.entries(d.t && typeof d.t === "object" ? d.t : {})) {
+        const team = nameOf(n), e = lbEntry(arr, LB_TRUCK.length);
+        if (!team || !e.length) continue;
+        typed = true;
+        const r = rec(dkey, team);
+        LB_TRUCK.forEach((f, i) => add(r, f.key, e[i]));
+        r.truckDays++;
+        if (day > r.last) r.last = day;
+        const wk = lbMondayOf(day) + "|" + dkey + "|" + team;
+        const w = weeks[wk] || (weeks[wk] = { week: lbMondayOf(day), month: dkey, team, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
+        add(w, "jobs", e[0]); add(w, "workDays", e[1]); add(w, "revenue", e[2]);
       }
-      if (team) { const x = teams[team] || (teams[team] = { sales: 0, saleJobs: 0 }); x.sales += sales; x.saleJobs += saleJobs; }
+      for (const [n, arr] of Object.entries(d.s && typeof d.s === "object" ? d.s : {})) {
+        const team = nameOf(n), e = lbEntry(arr, LB_SALE.length);
+        if (!team || !e.length) continue;
+        typed = true;
+        const r = rec(dkey, team);
+        LB_SALE.forEach((f, i) => add(r, f.key, e[i]));
+        r.sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0);
+        r.saleDays++;
+        if (day > r.last) r.last = day;
+      }
+      if (typed && day <= today && day > newest) newest = day;
     }
-    out.months[key] = teams;
+    if (until && key > until.slice(0, 7)) continue;
+    for (const [n, v] of Object.entries(doc.reviews && typeof doc.reviews === "object" ? doc.reviews : {})) {
+      const team = nameOf(n);
+      if (team && lbVal(v) != null) rec(key, team).reviews = v;
+    }
   }
-  return out;
+  // every team on the board gets a row each month up to now, even before anything is typed
+  const lastKey = [today.slice(0, 7), newest.slice(0, 7)].sort().pop();
+  for (let m = 1; m <= 12; m++) {
+    const key = lbMonthKey(year, m);
+    if (key > lastKey) break;
+    for (const t of lbBoard(cfg, key)) rec(key, t.name);
+  }
+  return {
+    cfg,
+    records: Object.values(recs).filter(r => r.month <= lastKey).sort((a, b) => a.month.localeCompare(b.month) || a.team.localeCompare(b.team)),
+    weeks: Object.values(weeks).sort((a, b) => a.week.localeCompare(b.week) || a.team.localeCompare(b.team)),
+    newest };
 }
-/** The 8 truck names per month, in sheet order (for the sales rows with no name). */
-function lbSlotNames(tabs, year) {
-  const out = {};
-  for (const t of tabs.map(lbTab)) {
-    const m = lbSheetMonth(t.name, year);
-    if (!m) continue;
-    const smile = lbFindRows(t, 1, v => lbIs(v, "SMILE"))[0];
-    const names = [];
-    for (let i = 0, c = 5; i < 8; i++, c += 4) names.push(lbName(t.get(2, c)) || (smile ? lbName(t.get(smile + 1 + i, 1)) : ""));
-    out[lbMonthKey(year, m)] = names;
-  }
-  return out;
+/** A sales goal line: month to date, what's left of the goal and what that needs per day. */
+function lbGoal(r, goal, daysLeft) {
+  const left = Math.max(0, goal - (r.sales || 0));
+  return { mtd: r.sales || 0, left, perDay: left && daysLeft ? left / daysLeft : 0, done: (r.sales || 0) >= goal };
 }
-
-/** One record per team per month from either or both sheets. `existing` (records already saved) only fills in a
- *  team's unit when the sheet doesn't list it under CLEANING or RESTORATION. Reviews count for teams that lead a truck
- *  in the year. */
-function lbCombine(rev, sales, year, existing) {
-  const records = {}, weeks = [], notes = [], months = new Set();
-  const rec = (key, team) => records[key + "|" + team] || (records[key + "|" + team] = { month: key, team, group: "", jobs: 0, workDays: 0, revenue: 0, sales: 0, saleJobs: 0, reviews: 0 });
-  const truckTeams = new Set();
-  const lastUnit = {};
-  for (const r of (existing || []).slice().sort((a, b) => a.month.localeCompare(b.month))) if (r.group) { lastUnit[r.team] = r.group; truckTeams.add(r.team); }
-  if (rev) {
-    for (const [key, mo] of Object.entries(rev.months)) {
-      months.add(key);
-      for (const x of mo.teams) { Object.assign(rec(key, x.team), { group: x.group, jobs: x.jobs, workDays: x.workDays, revenue: x.revenue }); truckTeams.add(x.team); }
-      for (const w of mo.weeks) weeks.push(Object.assign({ month: key }, w));
+/** A day's entry for saving: n boxes typed as text ("1,250", "", "0.5") → numbers and nulls, [] when all blank. */
+function lbFromBoxes(texts, n) {
+  return lbEntry(texts.map(s => { const t = String(s == null ? "" : s).replace(/[$,\s]/g, ""); if (t === "") return null; const v = Number(t); return Number.isFinite(v) ? v : null; }), n);
+}
+/** A month document, cleaned the way the server saves it: that month's days only, team names, numbers, who saved. */
+function lbCleanMonth(d, key) {
+  const out = { days: {}, reviews: {} };
+  const days = d && d.days && typeof d.days === "object" ? d.days : {};
+  for (const day of Object.keys(days)) {
+    if (!lbIsDay(day) || day.slice(0, 7) !== key) continue;
+    const x = days[day] && typeof days[day] === "object" ? days[day] : {}, y = {};
+    for (const [p, n] of [["t", LB_TRUCK.length], ["s", LB_SALE.length]]) {
+      const m = {};
+      for (const [team, a] of Object.entries(x[p] && typeof x[p] === "object" ? x[p] : {})) { const nm = lbTeamName(team), e = lbEntry(a, n); if (nm && e.length) m[nm] = e; }
+      if (Object.keys(m).length) y[p] = m;
     }
-    for (const r of Object.values(records).sort((a, b) => a.month.localeCompare(b.month))) if (r.group) lastUnit[r.team] = r.group;
-    const missing = new Set();
-    for (const r of Object.values(records)) if (!r.group) {
-      if (lastUnit[r.team]) r.group = lastUnit[r.team];
-      else missing.add(r.team);
-    }
-    for (const t of missing) notes.push(`${t} isn't listed under CLEANING or RESTORATION, so ${t} isn't ranked. Pick the unit in Edit numbers.`);
+    if (!y.t && !y.s) continue;
+    if (x.at) y.at = String(x.at).slice(0, 30);
+    if (x.by) y.by = String(x.by).slice(0, 60);
+    out.days[day] = y;
   }
-  if (sales) for (const [key, teams] of Object.entries(sales.months)) {
-    months.add(key);
-    for (const [team, x] of Object.entries(teams)) {
-      if (!truckTeams.has(team) && !(x.sales || x.saleJobs)) continue;
-      Object.assign(rec(key, team), { sales: x.sales, saleJobs: x.saleJobs });
-    }
-  }
-  const skipped = [];
-  if (rev) for (const [name, ms] of Object.entries(rev.reviews)) {
-    if (!truckTeams.has(name)) { if (Object.values(ms).some(Boolean)) skipped.push(name); continue; }
-    for (const [key, n] of Object.entries(ms)) if (key.startsWith(year + "-")) rec(key, name).reviews = n;
-  }
-  if (skipped.length) notes.push(`Reviews for ${skipped.join(", ")} aren't used: ${skipped.length > 1 ? "they don't" : "doesn't"} lead a truck this year.`);
-  return { records: Object.values(records).sort((a, b) => a.month.localeCompare(b.month) || a.team.localeCompare(b.team)), weeks, notes, months: [...months].sort() };
+  for (const [team, v] of Object.entries(d && d.reviews && typeof d.reviews === "object" ? d.reviews : {})) { const nm = lbTeamName(team); if (nm && lbVal(v) != null) out.reviews[nm] = v; }
+  if (d && d.rat) out.rat = String(d.rat).slice(0, 30);
+  if (d && d.rby) out.rby = String(d.rby).slice(0, 60);
+  return out;
 }
 
 /* ---- ranking ---- */
@@ -1396,34 +1415,23 @@ function lbStandings(records, year, month) {
     Company: lbTable(rows, metrics) });
   return { key, month: build(monthRows, LB_MONTH_METRICS), ytd: build(ytdRows, LB_YTD_METRICS) };
 }
-const LB_FIELDS = ["revenue", "jobs", "workDays", "sales", "saleJobs", "reviews"];
-/** Saved rows with the numbers typed in the app (r.manual) in place of the sheet's; unit "none" = not ranked that month. */
-function lbEffective(records) {
-  return (records || []).map(r => {
-    const m = r.manual && typeof r.manual === "object" ? r.manual : {};
-    const x = Object.assign({}, r, { group: r.unit != null ? r.unit : (r.group || "") });
-    for (const f of LB_FIELDS) if (typeof m[f] === "number") x[f] = m[f];
-    if (typeof m.unit === "string") x.group = m.unit === "none" ? "" : m.unit;
-    return x;
-  });
-}
-/** The newest month of `year` that has a truck team, or 0. */
+/** The newest month of `year` with numbers for a team on the board, or 0. */
 function lbLatestMonth(records, year) {
   let best = 0;
-  for (const r of records) if (r.group && r.month.startsWith(year + "-") && (r.revenue || r.jobs || r.workDays)) best = Math.max(best, Number(r.month.slice(5)));
+  for (const r of records) if (r.group && r.month.startsWith(year + "-") && (r.revenue || r.jobs || r.workDays || r.sales)) best = Math.max(best, Number(r.month.slice(5)));
   return best;
 }
-/** Each team's revenue for one week (Monday), both parts added when the week crosses into a new month. */
-function lbWeek(weeks, start, records) {
-  const unit = {};
-  for (const r of records || []) if (r.group) unit[r.team] = r.group;
+/** Each team's revenue for one week (Monday), both parts added when the week crosses into a new month. Only teams on
+ *  the board that week are ranked. */
+function lbWeek(weeks, start) {
   const by = {};
   for (const w of weeks) {
     if (w.week !== start) continue;
-    const x = by[w.team] || (by[w.team] = { team: w.team, group: unit[w.team] || "", revenue: 0, jobs: 0, workDays: 0 });
+    const x = by[w.team] || (by[w.team] = { team: w.team, group: "", revenue: 0, jobs: 0, workDays: 0 });
+    if (w.group) x.group = w.group;
     x.revenue += w.revenue; x.jobs += w.jobs; x.workDays += w.workDays;
   }
-  const rows = Object.values(by).map(x => Object.assign(x, { perJob: lbDiv(x.revenue, x.jobs), perDay: lbDiv(x.revenue, x.workDays) }));
+  const rows = Object.values(by).filter(x => x.group).map(x => Object.assign(x, { perJob: lbDiv(x.revenue, x.jobs), perDay: lbDiv(x.revenue, x.workDays) }));
   const ranks = lbRanks(rows.map(x => x.revenue));
   rows.forEach((x, i) => { x.place = ranks[i]; });
   return rows.sort((a, b) => a.place - b.place || a.team.localeCompare(b.team));
@@ -1434,6 +1442,202 @@ function lbLatestWeek(weeks, today) {
   for (const w of weeks) if (w.week <= today && w.week > best && (w.revenue || w.jobs)) best = w.week;
   return best;
 }
+/** Places a week before the newest typed day, for the ▲ ▼ beside each team: { until, st } or null. */
+function lbWeekAgo(cfg, docs, year, newest) {
+  if (!newest) return null;
+  const until = lbAddDays(newest, -7);
+  if (!until.startsWith(year + "-")) return null;
+  const b = lbBuild(cfg, docs, year, { until, today: until });
+  return { until, st: lbStandings(b.records, year, Number(until.slice(5, 7))) };
+}
+
+
+/* ---- this year's history from the two sheets (Excel copies), turned into typed days ---- */
+/** "5. REVENUE PER TRUCK": each month tab's 8 truck columns (jobs, work days, revenue, # of techs) in week blocks
+ *  ending in "Weekly Totals", the CLEANING and RESTORATION lists and the REVIEWS table in column A (5 stars only).
+ *  Every day lands on its own date: a day typed on the neighbouring month's tab (Sunday Feb 1 on the January tab)
+ *  counts in its own month, and days from another year (Dec 29-31 on the January tab) are left out. */
+function lbRevenueDays(tabs, year) {
+  const out = { days: {}, board: {}, slots: {}, reviews: {}, notes: [], warnings: [] };
+  const monthTabs = tabs.map(lbTab).map(t => ({ t, m: lbSheetMonth(t.name, year) })).filter(x => x.m).sort((a, b) => a.m - b.m);
+  const cap = s => s.replace(/^./, c => c.toUpperCase());
+  const seen = {};
+  for (const { t, m } of monthTabs) {
+    const key = lbMonthKey(year, m), mname = cap(LB_MONTH_NAMES[m - 1]);
+    const slots = [];
+    for (let c = 5; c < 200; c += 4) {
+      const head = lbText(t.get(2, c)), next = lbText(t.get(2, c + 1));
+      if (!/jobs?$/i.test(head) && !(head === "" && /work\s*days?/i.test(next))) break;
+      slots.push({ col: c, team: lbName(head) });
+    }
+    if (!slots.length) { out.warnings.push(`${mname}: no truck columns found (row 2 should say "John's Jobs", ...). Skipped.`); continue; }
+    const smile = lbFindRows(t, 1, v => lbIs(v, "SMILE"))[0];
+    if (smile) slots.forEach((s, i) => { if (!s.team) s.team = lbName(t.get(smile + 1 + i, 1)); });
+    const unitOf = {};
+    for (const g of LB_GROUPS) {
+      const r0 = lbFindRows(t, 1, (v, r) => lbIs(v, g.toUpperCase()) && /per job/i.test(lbText(t.get(r, 2))))[0];
+      if (!r0) continue;
+      for (let r = r0 + 1; r <= r0 + 6; r++) { const n = lbName(t.get(r, 1)); if (n && !unitOf[n]) unitOf[n] = g; }
+    }
+    out.slots[key] = slots.map(s => s.team);
+    out.board[key] = slots.filter(s => s.team).map(s => ({ team: s.team, unit: unitOf[s.team] || "" }));
+    const textCells = [], unnamed = slots.map(() => 0), moved = [], other = [];
+    for (const r of lbFindRows(t, 1, v => lbIs(v, "WEEKLY TOTALS"))) {
+      const first = r - 7;
+      // the week's Monday: what most of the dates in column A agree on (a typed-in wrong date doesn't move the week)
+      const votes = {};
+      for (let i = 0; i < 7; i++) { const d = lbDay(t.get(first + i, 1)); if (d && Math.abs(Number(d.slice(0, 4)) - year) <= 1) { const mo = lbMondayOf(lbAddDays(d, -i)); votes[mo] = (votes[mo] || 0) + 1; } }
+      const start = Object.keys(votes).sort((x, y) => votes[y] - votes[x] || x.localeCompare(y))[0] || "";
+      if (!start) continue;
+      for (let i = 0; i < 7; i++) {
+        const row = first + i, day = lbAddDays(start, i);
+        slots.forEach((s, k) => {
+          const v = [null, null, null, null];
+          let any = false;
+          for (let f = 0; f < 4; f++) {
+            const x = t.get(row, s.col + f);
+            if (lbIsNum(x)) { v[f] = x; if (x && f < 3) any = true; }
+            else if (lbText(x) !== "" && !(f === 2 && /^-+$/.test(lbText(x)))) textCells.push(`${lbColName(s.col + f)}${row}`);
+          }
+          if (v[0] == null && v[1] == null && v[2] == null) return;   // # of techs alone isn't a day's numbers
+          if (!s.team) { unnamed[k] += v[2] || 0; return; }
+          if (!day.startsWith(year + "-")) { if (any) other.push(day); return; }
+          const sk = day + "|" + s.team;
+          if (any && seen[sk] && seen[sk] !== t.name) out.warnings.push(`${s.team} has numbers for ${day} on both the ${seen[sk]} and the ${t.name} tab; both are added together.`);
+          if (any) seen[sk] = t.name;
+          if (any && day.slice(0, 7) !== key) moved.push(`${s.team} ${cap(LB_MONTH_NAMES[Number(day.slice(5, 7)) - 1]).slice(0, 3)} ${Number(day.slice(8))} (${lbMoneyText(v[2] || 0)})`);
+          const dd = out.days[day] || (out.days[day] = {});
+          const was = dd[s.team];
+          dd[s.team] = was ? was.map((a, f) => (a == null && v[f] == null ? null : (a || 0) + (v[f] || 0))) : v;
+        });
+      }
+    }
+    if (textCells.length) out.warnings.push(`${mname}: ${textCells.length} cell${textCells.length > 1 ? "s" : ""} with text instead of a number were skipped (${textCells.slice(0, 4).join(", ")}${textCells.length > 4 ? ", ..." : ""}).`);
+    slots.forEach((s, k) => { if (unnamed[k]) out.warnings.push(`${mname}: truck column ${lbColName(s.col)} has ${lbMoneyText(unnamed[k])} but no name, so it isn't counted.`); });
+    if (moved.length) out.notes.push(`On the ${t.name} tab, counted in their own month: ${moved.join(", ")}.`);
+    if (other.length) out.notes.push(`${t.name}: days from another year (${[...new Set(other)].join(", ")}) aren't counted.`);
+  }
+  // reviews: the REVIEWS table that starts in column A on the newest month tab that has one; column A of each month
+  // (5 stars) only
+  for (const { t } of monthTabs.slice().reverse()) {
+    const found = lbReviewTables(t, year).filter(x => x.col === 1);
+    if (!found.length) continue;
+    const newest = tbl => Object.values(tbl.rows).reduce((mx, ms) => Object.keys(ms).reduce((a, k) => (ms[k] && k > a ? k : a), mx), "");
+    found.sort((a, b) => newest(b).localeCompare(newest(a)));
+    out.reviews = found[0].rows;
+    break;
+  }
+  return out;
+}
+function lbReviewTables(t, year) {
+  const tables = [];
+  for (let r = 1; r <= t.height; r++) {
+    const row = t.rows[r - 1] || [];
+    for (let c = 1; c <= row.length; c++) {
+      if (!lbIs(row[c - 1], "REVIEWS") || !lbIs(t.get(r, c + 1), "JAN")) continue;
+      const tbl = {};
+      for (let rr = r + 2; rr <= Math.min(t.height, r + 20); rr++) {
+        if (lbIs(t.get(rr, c + 1), "JAN")) break;
+        const name = lbName(t.get(rr, c));
+        if (!name) continue;
+        const months = {};
+        for (let m = 0; m < 12; m++) {
+          const v = t.get(rr, c + 1 + m * 3);   // A = 5 stars (B = 4 stars and C = 3 stars don't count)
+          if (lbIsNum(v)) months[lbMonthKey(year, m + 1)] = v;
+        }
+        tbl[name] = months;
+      }
+      tables.push({ row: r, col: c, rows: tbl });
+    }
+  }
+  return tables;
+}
+/** "2. TECHNICIAN MONTHLY SALES": each month tab's day blocks (Date | Type of sale | the 8 technicians, then Up Sale,
+ *  Add-on sale, Rug in plant, Additional service, Jobs). A technician column with no name (the 7th and 8th) belongs to
+ *  the 7th and 8th truck that month, the same way the revenue sheet reads it. */
+function lbSalesDays(tabs, year, slots) {
+  const out = { days: {}, notes: [], warnings: [] };
+  const CATS = [/^up/i, /^add-?on/i, /^rug/i, /^additional/i, /^jobs?$/i];
+  for (const t of tabs.map(lbTab)) {
+    const m = lbSheetMonth(t.name, year);
+    if (!m) continue;
+    const key = lbMonthKey(year, m), mname = LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase());
+    let typeCol = 0, heads = [];
+    for (let c = 1; c <= 60 && !heads.length; c++) { heads = lbFindRows(t, c, v => lbIs(v, "TYPE OF SALE"), 20); if (heads.length) typeCol = c; }
+    if (!heads.length) { out.warnings.push(`${mname}: no day blocks ("Type of sale") found. Skipped.`); continue; }
+    const used = new Set(), unnamed = {};
+    heads.forEach((h, idx) => {
+      let dn = lbIsNum(t.get(h, typeCol - 1)) ? t.get(h, typeCol - 1) : lbIsNum(t.get(h + 1, typeCol - 1)) ? t.get(h + 1, typeCol - 1) : idx + 1;
+      dn = Math.round(dn);
+      if (dn < 1 || dn > lbDaysIn(key)) return;
+      if (used.has(dn)) { out.warnings.push(`${mname}: day ${dn} has two blocks; the second one is skipped.`); return; }
+      used.add(dn);
+      const day = `${key}-${String(dn).padStart(2, "0")}`;
+      const rows = [];
+      for (let r = h + 1; r <= h + 7; r++) {
+        const label = lbText(t.get(r, typeCol));
+        if (/^total/i.test(label) || lbIs(label, "TYPE OF SALE")) break;
+        const ci = CATS.findIndex(re => re.test(label));
+        if (ci >= 0) rows[ci] = r;
+      }
+      for (let p = 0; p < 8; p++) {
+        const col = typeCol + 1 + p;
+        const v = CATS.map((_, ci) => (rows[ci] && lbIsNum(t.get(rows[ci], col)) ? t.get(rows[ci], col) : null));
+        if (v.every(x => x == null)) continue;
+        let team = lbName(t.get(h, col));
+        if (!team && p >= 6 && slots && slots[key]) team = slots[key][p] || "";
+        if (!team) { if (v.some(Boolean)) unnamed[p] = (unnamed[p] || 0) + (v[0] || 0) + (v[1] || 0) + (v[2] || 0) + (v[3] || 0); continue; }
+        if (!lbName(t.get(h, col))) out.notes.push(`${mname}: the unnamed technician column ${lbColName(col)} counted for ${team}.`);
+        const dd = out.days[day] || (out.days[day] = {});
+        const was = dd[team];
+        dd[team] = was ? was.map((a, f) => (a == null && v[f] == null ? null : (a || 0) + (v[f] || 0))) : v;
+      }
+    });
+    for (const [p, amt] of Object.entries(unnamed)) out.warnings.push(`${mname}: ${lbMoneyText(amt)} of sales in technician column ${lbColName(typeCol + 1 + Number(p))} has no name, so it isn't counted.`);
+  }
+  out.notes = [...new Set(out.notes)];
+  return out;
+}
+/** The roster and month documents for the app, from the two workbooks' tabs. */
+function lbHistory(revTabs, salesTabs, year) {
+  const rev = lbRevenueDays(revTabs, year);
+  const sales = salesTabs ? lbSalesDays(salesTabs, year, rev.slots) : { days: {}, notes: [], warnings: [] };
+  const keys = Object.keys(rev.board).sort();
+  const lastKey = keys[keys.length - 1] || "";
+  const on = {}, unit = {};
+  for (const key of keys) for (const b of rev.board[key]) { (on[b.team] || (on[b.team] = [])).push(key); if (b.unit) unit[b.team] = b.unit; }
+  const notes = rev.notes.concat(sales.notes), warnings = rev.warnings.concat(sales.warnings);
+  const teams = Object.keys(on).map(name => {
+    const ms = on[name];
+    if (!unit[name]) warnings.push(`${name} isn't listed under CLEANING or RESTORATION, so ${name} was put in ${LB_GROUPS[0]}. Change it in Teams.`);
+    return { name, unit: unit[name] || LB_GROUPS[0], from: ms[0], to: ms[ms.length - 1] === lastKey ? "" : ms[ms.length - 1] };
+  }).sort((a, b) => LB_GROUPS.indexOf(a.unit) - LB_GROUPS.indexOf(b.unit) || a.from.localeCompare(b.from) || a.name.localeCompare(b.name));
+  const config = lbCleanConfig({ teams, goal: LB_GOAL });
+  const months = {};
+  const doc = key => months[key] || (months[key] = { days: {}, reviews: {} });
+  const put = (src, part) => {
+    for (const [day, by] of Object.entries(src)) {
+      if (!day.startsWith(year + "-")) continue;
+      const d = doc(day.slice(0, 7)).days[day] || (doc(day.slice(0, 7)).days[day] = {});
+      for (const [team, v] of Object.entries(by)) (d[part] || (d[part] = {}))[team] = v;
+    }
+  };
+  put(rev.days, "t");
+  put(sales.days, "s");
+  const skipped = new Set();
+  for (const [name, ms] of Object.entries(rev.reviews)) for (const [key, n] of Object.entries(ms)) {
+    if (!key.startsWith(year + "-") || key > lastKey) continue;
+    if (lbUnitIn(config, name, key)) doc(key).reviews[name] = n;
+    else if (n) skipped.add(name);
+  }
+  if (skipped.size) notes.push(`Reviews for months a team wasn't on the board aren't counted (${[...skipped].join(", ")}).`);
+  for (const t of config.teams) {
+    const off = sales.days && Object.entries(sales.days).filter(([day, by]) => by[t.name] && !lbUnitIn(config, t.name, day.slice(0, 7)));
+    if (off && off.length) notes.push(`${t.name} has technician sales in months ${t.name} wasn't on the board; they're kept but not ranked.`);
+  }
+  return { config, months, notes, warnings };
+}
+
 /* ---- reading an Excel file in the browser (no add-ons: the phone's own unzip) ---- */
 async function lbInflate(bytes) {
   const ds = new DecompressionStream("deflate-raw");
@@ -1570,7 +1774,7 @@ function atShop(t) {
   const s = shopLoc(), g = t && t.gps;
   return !!(s && g && !g.offline && g.status !== "Driving" && isNum(g.lat) && isNum(g.lng) && distM(s.lat, s.lng, g.lat, g.lng) <= (s.radius || 150));
 }
-const NEEDS_API = 21;                          // the Google script version this app expects (21: the leaderboard)
+const NEEDS_API = 22;                          // the Google script version this app expects (22: leaderboard numbers typed in the app)
 const SCRIPT_OLD = "The Google script behind this app is out of date, so new things (like the Leaderboard) won't work. " +
   "In the Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. " +
   "Then Deploy > Manage deployments > pencil > Version: New version > Deploy.";
@@ -1753,7 +1957,7 @@ async function refresh(quiet) {
     noteApi(out);
     noteSupplies(out.supplies);
     if (roleChanged) applyRole();   // what this person may see changed
-    if (view.tab === "leaderboard" && !dlg.open && !lbShowState) lbLoad();
+    if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping()) lbLoad();
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -3464,7 +3668,7 @@ async function openUsers() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
     h("p", { text: apiLevel >= SUP_API
-      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings) and Leaderboard import (they import and fix the numbers)."
+      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings) and Leaderboard numbers (they type each day's numbers and set up the teams)."
       : "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
     h("fieldset", null, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
@@ -4324,7 +4528,7 @@ function openChecklistEditor(listId) {
 function accessChips(selected, onchange, idPrefix) {
   const lists = (supplies && supplies.lists) || [];
   const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]),
-    apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard import"]] : []);
+    apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -4339,70 +4543,110 @@ function accessChips(selected, onchange, idPrefix) {
 }
 
 /* ---------- leaderboard ---------- */
-const LB_API = 21;                                     // the Google script version with the leaderboard
-const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; imports and fixes the numbers
-const LB_LINKS = typeof LB_LINKS_OFF === "undefined";   // reading the sheets by link needs VODA Prime's Google script (the test page has none)
-const K_LB = "voda.lb", K_LB_VIEW = "voda.lbView";
-let lbData = store.get(K_LB);                          // { records, weeks, snap, links, last, canImport, at }
+const LB_API = 22;                                     // the Google script version with typed-in leaderboard numbers
+const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
+const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
+let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
 let lbLoading = false, lbErr = "", lbOld = false;
-const lbView = Object.assign({ per: "month", group: "Cleaning", month: 0, open: "" }, store.get(K_LB_VIEW) || {});
-const lbSaveView = () => store.set(K_LB_VIEW, { per: lbView.per, group: lbView.group, month: lbView.month });
+const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, open: "", day: "", part: "trucks" }, store.get(K_LB_VIEW) || {});
+const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, part: lbView.part });
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
-const canImportLb = () => isAdmin() || userAccess().includes("leaderboard-import");
+const canEditLb = () => isAdmin() || userAccess().includes("leaderboard-import");
 const lbYear = () => clockNow().getFullYear();
-const lbRaw = () => (lbData && Array.isArray(lbData.records) ? lbData.records : []);   // as saved: the sheets' numbers, with typed ones in r.manual
-const lbRecords = () => lbEffective(lbRaw());                                         // what the ranking uses
-const lbWeeks = () => (lbData && Array.isArray(lbData.weeks) ? lbData.weeks : []);
-const lbMoney = n => "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
+const lbDayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const lbToday = () => lbDayKey(clockNow());
+const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0)).toLocaleString("en-US");
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
 const LB_PER = { month: "This month", ytd: "Year to date", week: "This week" };
+const LB_TABS = { standings: "Standings", enter: "Enter numbers", status: "Status" };
 const lbMonthLong = m => LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase());
-const lbDayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const LB_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const lbDate = day => new Date(day + "T12:00:00");
+const lbDayText = day => { const d = lbDate(day); return `${LB_WD[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 /** Monday of this week, as "2026-11-02". */
-function lbThisMonday() { const d = clockNow(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return lbDayKey(x); }
+const lbThisMonday = () => lbMondayOf(lbToday());
 function lbWeekText(start) {
-  const a = new Date(start + "T12:00:00"), b = new Date(start + "T12:00:00"); b.setDate(b.getDate() + 6);
+  const a = lbDate(start), b = lbDate(lbAddDays(start, 6));
   return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}`;
 }
+const lbWho = by => (by && lbData && lbData.names && lbData.names[by]) || (by && !/^[a-z0-9_-]{16,}$/i.test(by) ? by : "");
+const lbClone = v => JSON.parse(JSON.stringify(v));
+/** Deep-merges b into a (lists and numbers replace), the way the server saves a change. */
+function lbMerge(a, b) {
+  for (const [k, v] of Object.entries(b || {})) {
+    if (v && typeof v === "object" && !Array.isArray(v)) { if (!a[k] || typeof a[k] !== "object" || Array.isArray(a[k])) a[k] = {}; lbMerge(a[k], v); }
+    else a[k] = v;
+  }
+  return a;
+}
+
+/* ---- what's on screen, worked out once per change ---- */
+let lbCache = null;
+function lbB() {
+  if (!lbData) return null;
+  const today = lbToday();
+  if (lbCache && lbCache.src === lbData && lbCache.today === today && lbCache.v === lbData.v) return lbCache;
+  const b = lbBuild(lbData.config, lbData.months, lbYear(), { today });
+  lbCache = Object.assign(b, { src: lbData, today, v: lbData.v, ago: undefined });
+  return lbCache;
+}
+const lbRecords = () => (lbB() ? lbB().records : []);
+const lbCfg = () => (lbB() ? lbB().cfg : lbCleanConfig(null));
+function lbAgo() {
+  const b = lbB();
+  if (!b) return null;
+  if (b.ago === undefined) b.ago = lbWeekAgo(lbData.config, lbData.months, lbYear(), b.newest);
+  return b.ago;
+}
+function lbTouch() { if (lbData) { lbData.v = (lbData.v || 0) + 1; store.set(K_LB, lbData); } }
 /** The month on screen: the one picked, or the newest with numbers. */
-function lbMonthShown() {
+function lbMonthShown(pick) {
   const recs = lbRecords(), y = lbYear();
   const latest = lbLatestMonth(recs, y);
-  if (lbView.month && recs.some(r => r.month === lbMonthKey(y, lbView.month) && r.group)) return lbView.month;
+  if (pick && recs.some(r => r.month === lbMonthKey(y, pick) && r.group)) return pick;
   return latest || clockNow().getMonth() + 1;
 }
-/** Places right now, for the snapshot that shows next week's arrows. */
-function lbPlaces(st) {
-  const out = {};
-  for (const per of ["month", "ytd"]) for (const g of ["Cleaning", "Restoration", "Company"]) {
-    out[per + ":" + g] = Object.fromEntries(st[per][g].map(x => [x.team, x.place]));
-  }
-  return out;
-}
-/** Up or down since last week's import (only for the newest month, and the month view only within the same month). */
+/** Up or down since a week before the newest typed day (the newest month only; the month view only within it). */
 function lbMove(per, group, team, place, key) {
-  const s = lbData && lbData.snap;
-  if (!s || !s.prev || !s.cur || s.cur.month !== key) return null;
-  if (per === "month" && s.prev.month !== key) return null;
-  if (per === "ytd" && String(s.prev.month).slice(0, 4) !== key.slice(0, 4)) return null;
-  const was = ((s.prev.places || {})[per + ":" + group] || {})[team];
-  return was ? was - place : null;
+  const b = lbB();
+  if (!b || !b.newest || b.newest.slice(0, 7) !== key) return null;
+  const ago = lbAgo();
+  if (!ago || (per === "month" && ago.until.slice(0, 7) !== key)) return null;
+  const was = (ago.st[per][group] || []).find(x => x.team === team);
+  return was ? was.place - place : null;
 }
 function lbMoveEl(n, cls) {
   if (n == null) return null;
-  if (n > 0) return h("span", { class: `${cls} up`, title: `Up ${n} since last week`, text: `▲ ${n}` });
-  if (n < 0) return h("span", { class: `${cls} down`, title: `Down ${-n} since last week`, text: `▼ ${-n}` });
-  return null;   // same place as last week: nothing to show
+  if (n > 0) return h("span", { class: `${cls} up`, title: `Up ${n} since a week ago`, text: `▲ ${n}` });
+  if (n < 0) return h("span", { class: `${cls} down`, title: `Down ${-n} since a week ago`, text: `▼ ${-n}` });
+  return null;   // same place as a week ago: nothing to show
+}
+/** The newest save: { at, by } from the days, reviews and roster. */
+function lbLastSave() {
+  let best = { at: "", by: "" };
+  const see = (at, by) => { if (at && at > best.at) best = { at, by }; };
+  if (!lbData) return best;
+  see(lbData.config && lbData.config.at, lbData.config && lbData.config.by);
+  for (const d of Object.values(lbData.months || {})) {
+    see(d.rat, d.rby);
+    for (const x of Object.values(d.days || {})) see(x && x.at, x && x.by);
+  }
+  return best;
 }
 
+/* ---- loading and saving ---- */
+let lbPending = {};                     // month key → changes not saved yet
+let lbSaving = false, lbSaveTimer = null, lbSaveState = "", lbSaveErr = "";
 async function lbLoad() {
   if (lbLoading || !session || !canSeeLb()) return;
   lbLoading = true;
   if (view.tab === "leaderboard") renderLeaderboard();
   try {
-    const out = await api("leaderboard");
-    lbData = { records: out.records || [], weeks: out.weeks || [], snap: out.snap || null, links: out.links || null, last: out.last || null, canImport: !!out.canImport, at: new Date().toISOString() };
-    store.set(K_LB, lbData);
+    const out = await api("leaderboard", { year: lbYear() });
+    const months = out.months || {};
+    for (const [k, p] of Object.entries(lbPending)) months[k] = lbMerge(months[k] || {}, lbClone(p));   // keep what's still being saved
+    lbData = { config: out.config || { teams: [] }, months, names: out.names || {}, canEdit: !!out.canEdit, year: lbYear(), at: new Date().toISOString(), v: 0 };
+    lbTouch();
     lbErr = ""; lbOld = false;
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { lbLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -4410,10 +4654,53 @@ async function lbLoad() {
     lbErr = lbOld ? "" : errText(e, "Nothing");
   } finally {
     lbLoading = false;
-    if (view.tab === "leaderboard") renderLeaderboard();
+    if (view.tab === "leaderboard" && !lbTyping()) renderLeaderboard();
   }
 }
+/** Someone is typing a number: a redraw now would take the box away from under their finger. */
+const lbTyping = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#lbEnter")); };
+/** Typed numbers are saved by themselves a moment after the last key, the way a Google Sheet does. */
+function lbQueue(key, patch) {
+  if (!lbData) return;
+  lbData.months[key] = lbMerge(lbData.months[key] || {}, lbClone(patch));
+  lbPending[key] = lbMerge(lbPending[key] || {}, lbClone(patch));
+  lbTouch();
+  lbSaveState = "pending";
+  lbShowSave();
+  clearTimeout(lbSaveTimer);
+  lbSaveTimer = setTimeout(lbFlush, 900);
+}
+async function lbFlush() {
+  clearTimeout(lbSaveTimer);
+  if (lbSaving || !Object.keys(lbPending).length) return;
+  const writes = Object.entries(lbPending).map(([key, patch]) => ({ key, patch }));
+  lbPending = {};
+  lbSaving = true; lbSaveState = "saving"; lbShowSave();
+  try {
+    const out = await api("lbPut", { year: lbYear(), writes });
+    for (const [k, d] of Object.entries(out.months || {})) lbData.months[k] = lbMerge(lbClone(d), lbClone(lbPending[k] || {}));
+    if (out.names) lbData.names = Object.assign(lbData.names || {}, out.names);
+    lbSaveState = "saved"; lbSaveErr = "";
+  } catch (e) {
+    for (const w of writes) lbPending[w.key] = lbMerge(w.patch, lbPending[w.key] || {});
+    lbSaveState = "error"; lbSaveErr = errText(e, "The numbers");
+  } finally {
+    lbSaving = false;
+    lbTouch();
+    lbShowSave();
+    if (Object.keys(lbPending).length && lbSaveState !== "error") lbSaveTimer = setTimeout(lbFlush, 300);
+  }
+}
+window.addEventListener("beforeunload", e => { if (Object.keys(lbPending).length || lbSaving) { lbFlush(); e.preventDefault(); e.returnValue = ""; } });
+function lbShowSave() {
+  const el = $("lbSaveNote");
+  if (!el) return;
+  el.className = "lb-save " + lbSaveState;
+  if (lbSaveState === "error") el.replaceChildren(h("span", { text: `Not saved yet. ${lbSaveErr}` }), " ", h("button", { class: "btn small", type: "button", onclick: () => lbFlush(), text: "Try again" }));
+  else el.textContent = lbSaveState === "pending" || lbSaveState === "saving" ? "Saving…" : lbSaveState === "saved" ? "All changes saved" : "Numbers save by themselves as you type.";
+}
 
+/* ---- the screen ---- */
 function renderLeaderboard() {
   const box = $("lbView");
   if (!box || view.tab !== "leaderboard" || !session) return;
@@ -4423,41 +4710,60 @@ function renderLeaderboard() {
       h("p", { class: "meta", text: "The Leaderboard needs the newest Google script. In the VODA Prime Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
     return;
   }
-  if (!lbData) {
+  if (!lbData || lbData.year !== lbYear()) {
     box.replaceChildren(h("p", { class: "loading", text: lbErr || (offline ? "The Leaderboard needs a connection the first time. Try again when you're back online." : "Loading the leaderboard…") }));
     if (!lbLoading && !lbErr) lbLoad();
     return;
   }
-  const y = lbYear(), recs = lbRecords();
-  const month = lbMonthShown(), key = lbMonthKey(y, month);
-  const has = recs.some(r => r.month.startsWith(y + "-") && r.group);
-  const monthsWith = [...new Set(recs.filter(r => r.group && r.month.startsWith(y + "-")).map(r => Number(r.month.slice(5))))].sort((a, b) => a - b);
-  const imp = canImportLb();
+  const edit = canEditLb() && lbData.canEdit !== false;
+  if (!edit && lbView.tab === "enter") lbView.tab = "standings";
+  const cfg = lbCfg();
   const top = h("div", { class: "lb-top" },
     h("h2", { class: "lb-title", text: "Leaderboard" }),
-    has && lbView.per !== "week" ? h("select", { id: "lbMonth", "aria-label": "Month", onchange: e => { lbView.month = Number(e.target.value); lbSaveView(); renderLeaderboard(); } },
-      monthsWith.map(m => h("option", { value: String(m), text: `${lbMonthLong(m)} ${y}`, selected: m === month }))) : null,
-    has ? h("button", { class: "btn primary", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Present") : null,
-    imp ? h("button", { class: "btn", type: "button", id: "lbImport", onclick: () => openLbImport() }, "Import") : null,
-    imp && has ? h("button", { class: "btn ghost", type: "button", id: "lbEdit", onclick: () => openLbEdit(month) }, "Edit numbers") : null);
-  if (!has) {
+    lbView.tab === "standings" && cfg.teams.length ? h("button", { class: "btn primary", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Present") : null,
+    edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Teams") : null);
+  const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
+    Object.entries(LB_TABS).filter(([k]) => k !== "enter" || edit).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
+      onclick: () => { if (lbView.tab === "enter") lbFlush(); lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, t)));
+  if (!cfg.teams.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
-      h("h2", { text: `No ${y} numbers yet` }),
-      h("p", { class: "meta", text: imp
-        ? (LB_LINKS ? "Tap Import and paste the links to your two Google Sheets (5. Revenue per truck and 2. Technician monthly sales), or choose Excel copies. The app reads every month since January 1 and ranks the teams."
-          : "Tap Import and choose Excel copies of your two sheets (5. Revenue per truck and 2. Technician monthly sales). The app reads every month since January 1 and ranks the teams.")
-        : "An admin hasn't imported this year's numbers yet." }),
-      imp ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbImport() }, "Import numbers")) : null),
+      h("h2", { text: "No teams yet" }),
+      h("p", { class: "meta", text: edit ? "Tap Teams and add each truck's team with its unit (Cleaning or Restoration). Then type each day's numbers under Enter numbers." : "An admin hasn't set up the teams yet." }),
+      edit ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbTeams() }, "Add teams")) : null),
       ...(lbErr ? [h("p", { class: "dlg-err", text: lbErr })] : []));
     return;
   }
-  const seg = (items, cur, onpick, label) => h("div", { class: "seg", role: "tablist", "aria-label": label },
-    items.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(cur === k), "data-k": k, onclick: () => onpick(k) }, t)));
+  const body = lbView.tab === "enter" ? lbEnterEl() : lbView.tab === "status" ? lbStatusEl() : lbStandingsEl();
+  box.replaceChildren(...[top, tabs, ...body, lbErr ? h("p", { class: "dlg-err", text: lbErr }) : null].filter(Boolean));
+  if (lbView.tab === "enter") lbShowSave();
+  const g = lbView.tab === "status" && document.querySelector("#lbGrid tbody td.today");
+  if (g) { const sc = g.closest(".lb-scroll"); if (sc && g.offsetLeft > sc.clientWidth - 40) sc.scrollLeft = g.offsetLeft - sc.clientWidth + 60; }
+}
+const lbSeg = (items, cur, onpick, label) => h("div", { class: "seg", role: "tablist", "aria-label": label },
+  items.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(cur === k), "data-k": k, onclick: () => onpick(k) }, t)));
+/** Months of this year so far that have teams on the board. */
+function lbMonthsWith() {
+  const y = lbYear();
+  return [...new Set(lbRecords().filter(r => r.group && r.month.startsWith(y + "-")).map(r => Number(r.month.slice(5))))].sort((a, b) => a - b);
+}
+function lbMonthSelect(id, month, onpick) {
+  const y = lbYear();
+  return h("select", { id, "aria-label": "Month", onchange: e => onpick(Number(e.target.value)) },
+    lbMonthsWith().map(m => h("option", { value: String(m), text: `${lbMonthLong(m)} ${y}`, selected: m === month })));
+}
+
+/* ---- standings ---- */
+function lbStandingsEl() {
+  const y = lbYear(), recs = lbRecords(), b = lbB();
+  const month = lbMonthShown(lbView.month), key = lbMonthKey(y, month);
   const bar = h("div", { class: "lb-bar" },
-    seg(Object.entries(LB_PER), lbView.per, k => { lbView.per = k; lbSaveView(); renderLeaderboard(); }, "Period"),
-    lbView.per !== "week" ? seg([["Cleaning", "Cleaning"], ["Restoration", "Restoration"], ["Company", "Whole company"]], lbView.group, k => { lbView.group = k; lbSaveView(); renderLeaderboard(); }, "Unit") : null);
-  const last = lbData.last && lbData.last.at ? h("p", { class: "lb-sub" }, "Numbers updated ", h("strong", { text: `${fmtWhen(lbData.last.at)} ${fmtTime(new Date(lbData.last.at))}` }), lbData.last.by ? ` by ${lbData.last.by}` : "",
-    lbView.per === "ytd" ? ` · ${lbYtdText(month)}` : "") : null;
+    lbSeg(Object.entries(LB_PER), lbView.per, k => { lbView.per = k; lbSaveView(); renderLeaderboard(); }, "Period"),
+    lbView.per !== "week" ? lbMonthSelect("lbMonth", month, m => { lbView.month = m; lbSaveView(); renderLeaderboard(); }) : null,
+    lbView.per !== "week" ? lbSeg([["Cleaning", "Cleaning"], ["Restoration", "Restoration"], ["Company", "Whole company"]], lbView.group, k => { lbView.group = k; lbSaveView(); renderLeaderboard(); }, "Unit") : null);
+  const last = lbLastSave();
+  const sub = b.newest ? h("p", { class: "lb-sub" }, "Numbers through ", h("strong", { text: lbDayText(b.newest) }),
+    last.at ? ` · saved ${fmtWhen(last.at)} ${fmtTime(new Date(last.at))}${lbWho(last.by) ? " by " + lbWho(last.by) : ""}` : "",
+    lbView.per === "ytd" ? ` · ${lbYtdText(month)}` : "") : h("p", { class: "lb-sub", text: "No numbers typed yet this year." });
   let body;
   if (lbView.per === "week") body = lbWeekList();
   else {
@@ -4467,7 +4773,7 @@ function renderLeaderboard() {
     body = rows.length ? h("ol", { class: "lb-list", id: "lbList" }, rows.map(x => lbRowEl(x, metrics, key)))
       : h("p", { class: "meta", text: `No ${lbView.group} teams in ${lbMonthLong(month)}.` });
   }
-  box.replaceChildren(...[top, bar, last, body, lbErr ? h("p", { class: "dlg-err", text: lbErr }) : null, lbHowEl()].filter(Boolean));
+  return [bar, sub, body, lbHowEl()];
 }
 function lbRowEl(x, metrics, key) {
   const v = x.values, per = lbView.per;
@@ -4476,8 +4782,7 @@ function lbRowEl(x, metrics, key) {
   const detail = h("div", { class: "lb-detail", hidden: !open },
     metrics.map(m => h("div", { class: "lb-m" }, h("span", { text: m.label }), h("b", null, lbFmt(m, v[m.key]), h("i", { class: x.ranks[m.key] === 1 ? "r1" : "", text: `#${x.ranks[m.key]}` })))),
     h("p", { class: "lb-foot", text: `${lbMoney(v.revenue)} revenue · ${fmt(v.jobs)} jobs · ${fmt(v.workDays)} work days · ${lbMoney(v.sales)} technician sales on ${fmt(v.saleJobs)} jobs · ${fmt(v.reviews)} reviews` +
-      (per === "ytd" && v.months < monthsSoFar(key) ? ` · counts from ${x.team}'s first month on the board (${v.months} month${v.months === 1 ? "" : "s"})` : "") +
-      (per === "month" ? lbTypedText(x.team, key) : "") }));
+      (per === "ytd" && v.months < Number(key.slice(5)) ? ` · counts from ${x.team}'s first month on the board (${v.months} month${v.months === 1 ? "" : "s"})` : "") }));
   return h("li", { class: `lb-row p${x.place}`, "data-team": x.team },
     h("button", { type: "button", "aria-expanded": String(open), onclick: e => {
       lbView.open = open ? "" : id;
@@ -4492,13 +4797,6 @@ function lbRowEl(x, metrics, key) {
       h("span", { class: "lb-stats" }, h("b", { text: lbMoney(v.revenue) }), ` · ${lbMoney(v.perJob)}/job · ${lbMoney(v.perDay)}/day`)),
     detail);
 }
-const monthsSoFar = key => Number(key.slice(5));
-/** " · typed in the app: jobs" when some of this month's numbers were typed in. */
-function lbTypedText(team, key) {
-  const r = lbRaw().find(x => x.month === key && x.team === team);
-  const f = r && r.manual ? LB_EDIT_FIELDS.filter(([k]) => typeof r.manual[k] === "number").map(([, l]) => l.replace(" $", "").toLowerCase()) : [];
-  return f.length ? ` · typed in the app: ${f.join(", ")}` : "";
-}
 /** "Jan 1 – Nov 8" this month, "Jan 1 – Oct 31" for a month gone by. */
 function lbYtdText(month) {
   const now = clockNow(), y = lbYear();
@@ -4506,16 +4804,16 @@ function lbYtdText(month) {
   return `Jan 1 – ${MONTHS[end.getMonth()]} ${end.getDate()}`;
 }
 function lbWeekList() {
-  const weeks = lbWeeks(), recs = lbRecords();
-  const start = lbLatestWeek(weeks, lbDayKey(clockNow()));
-  if (!start) return h("p", { class: "meta", text: "No week numbers yet. They come with the import from 5. Revenue per truck." });
-  const rows = lbWeek(weeks, start, recs);
+  const b = lbB();
+  const start = lbLatestWeek(b.weeks, lbToday());
+  if (!start) return h("p", { class: "meta", text: "No week numbers yet. They come from the trucks' days under Enter numbers." });
+  const rows = lbWeek(b.weeks, start);
   const max = Math.max(1, ...rows.map(r => r.revenue));
-  const groups = ["Cleaning", "Restoration"].map(g => [g, rows.filter(r => r.group === g)]).filter(([, r]) => r.length);
+  const groups = LB_GROUPS.map(g => [g, rows.filter(r => r.group === g)]).filter(([, r]) => r.length);
   return h("div", { class: "lb", id: "lbWeek" },
     h("p", { class: "lb-sub" }, "Week of ", h("strong", { text: lbWeekText(start) }), start === lbThisMonday() ? " (this week so far)" : ""),
     groups.map(([g, list]) => h("div", { class: "panel" }, h("h2", { text: g }),
-      h("ol", { class: "lb-list" }, lbRanks(list.map(r => r.revenue)).map((p, i) => [p, list[i]]).sort((a, b) => a[0] - b[0]).map(([p, r]) =>
+      h("ol", { class: "lb-list" }, lbRanks(list.map(r => r.revenue)).map((p, i) => [p, list[i]]).sort((a, b2) => a[0] - b2[0]).map(([p, r]) =>
         h("li", { class: `lb-row p${p}`, "data-team": r.team }, h("div", { style: "display:grid;grid-template-columns:auto 1fr auto;gap:4px 14px;align-items:center;padding:10px 14px" },
           h("span", { class: "lb-place", text: String(p) }),
           h("span", { class: "lb-name" }, h("strong", { text: r.team })),
@@ -4525,245 +4823,329 @@ function lbWeekList() {
 }
 function lbHowEl() {
   return h("details", { class: "panel lb-how" }, h("summary", { text: "How the ranking works" }),
-    h("p", { text: "Teams are ranked inside Cleaning, inside Restoration, and across the whole company, the same way the 5. Revenue per truck sheet does it." }),
+    h("p", { text: "Teams are ranked inside Cleaning, inside Restoration, and across the whole company, the same way the 5. Revenue per truck sheet did it." }),
     h("p", { text: "This month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews." }),
-    h("p", { text: "On each number the best team gets 1, the next 2, and so on (a tie shares the number). Those add up to the score: the lowest score is #1." }),
-    h("p", { text: "Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Sale per job = technician sales ÷ the jobs with a sale. Reviews are 5-star reviews only. The year to date adds up only the months a team is on the board, so a team that took over a truck later in the year counts from that month." }),
-    h("p", { text: "▲ and ▼ show a move up or down since last week's import." }));
+    h("p", { text: "On each number the best team gets 1, the next 2, and so on (a tie shares the number). Those add up to the score: the lowest score is #1. Equal scores share the place and the next team takes the next number (1, 1, 2)." }),
+    h("p", { text: "Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Technician sales = up sale + add-on + rugs in plant + additional service. Sale per job = technician sales ÷ the technician's jobs. Reviews are 5-star reviews only. A team counts only in the months it's on the board (Teams), so a team that took over a truck later in the year counts from that month." }),
+    h("p", { text: "▲ and ▼ show a move up or down since a week before the newest day typed in." }));
 }
 
-/* ---- import ---- */
-function openLbImport() {
-  const y = lbYear();
-  const links = (lbData && lbData.links) || {};
-  const err = h("p", { class: "dlg-err" });
-  const preview = h("div", { class: "lb", id: "lbPreview" });
-  let parsed = null;
-  const src = (kind, title, hint) => {
-    const status = h("p", { class: "lb-status", id: `lbSt-${kind}` });
-    return { kind, status, el: h("div", { class: "lb-src" },
-      h("h4", { text: title }),
-      h("p", { class: "hint", text: hint }),
-      LB_LINKS ? h("div", { class: "field" }, h("label", { for: `lbUrl-${kind}`, text: "Google Sheets link" }),
-        h("input", { id: `lbUrl-${kind}`, type: "url", inputmode: "url", autocomplete: "off", placeholder: "https://docs.google.com/spreadsheets/d/…", value: links[kind] || "" })) : null,
-      h("div", { class: "field" }, h("label", { for: `lbFile-${kind}`, class: LB_LINKS ? "or" : "", text: LB_LINKS ? "or an Excel copy (.xlsx)" : "Excel copy (.xlsx)" }),
-        h("input", { id: `lbFile-${kind}`, type: "file", accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })),
-      status) };
-  };
-  const A = src("revenue", "5. Revenue per truck", "Jobs, work days and revenue by truck for each week, and the reviews table.");
-  const B = src("sales", "2. Technician monthly sales", "Up sale, add-on, rugs and additional service per technician (MTD and jobs).");
-  const readOne = async s => {
-    const file = $(`lbFile-${s.kind}`).files[0], url = LB_LINKS ? val(`lbUrl-${s.kind}`) : "";
-    if (!file && !url) return null;
-    s.status.className = "lb-status"; s.status.textContent = file ? `Reading ${file.name}…` : "Reading the Google Sheet…";
-    try {
-      let tabs, title;
-      if (file) { tabs = await lbReadXlsx(await file.arrayBuffer(), n => lbSheetMonth(n, y) > 0); title = file.name; }
-      else { const out = await api("lbFetch", { url, kind: s.kind, year: y }, 90000); tabs = out.tabs; title = out.title; }
-      if (!tabs.length) throw { lb: `No ${y} month tabs (like "January ${y}") in ${title}.` };
-      s.status.className = "lb-status ok"; s.status.textContent = `${title}: ${tabs.length} month${tabs.length === 1 ? "" : "s"} read.`;
-      return { tabs, title, kind: lbKindOf(tabs) };
-    } catch (e) {
-      s.status.className = "lb-status bad";
-      s.status.textContent = e && e.lb ? e.lb
-        : e && e.error === "lb_link" ? "That isn't a Google Sheets link. Open the sheet, tap Share > Copy link, and paste it here."
-        : e && e.error === "lb_no_access" ? `VODA Prime can't open that sheet. In Google Sheets tap Share and add ${e.account || "the VODA Prime Google account"} as a Viewer, then try again.`
-        : e && e.message === "not_xlsx" ? "That file isn't an Excel file. In Google Sheets: File > Download > Microsoft Excel (.xlsx)."
-        : errText(e, "Nothing");
-      throw e;
-    }
-  };
-  const readBtn = h("button", { class: "btn primary", type: "button", id: "lbRead", text: "Read the sheets", onclick: async () => {
-    err.textContent = ""; preview.replaceChildren(); saveBtn.hidden = true; parsed = null;
-    readBtn.disabled = true;
-    try {
-      let a = null, b = null, failed = false;
-      try { a = await readOne(A); } catch (e) { failed = true; }
-      try { b = await readOne(B); } catch (e) { failed = true; }
-      if (!a && !b) { if (!failed) err.textContent = LB_LINKS ? "Paste a link or choose a file for at least one of the two sheets." : "Choose the Excel file for at least one of the two sheets."; return; }
-      // a sheet put in the other box still counts
-      if ((a && a.kind === "sales") || (b && b.kind === "revenue")) [a, b] = [b && b.kind === "revenue" ? b : (a && a.kind === "revenue" ? a : null), a && a.kind === "sales" ? a : (b && b.kind === "sales" ? b : null)];
-      for (const x of [a, b]) if (x && !x.kind) { err.textContent = `${x.title} doesn't look like either sheet (no "Weekly Totals" rows or "TECH." table).`; return; }
-      const rev = a ? lbParseRevenue(a.tabs, y) : null;
-      const sales = b ? lbParseSales(b.tabs, y, a ? lbSlotNames(a.tabs, y) : null) : null;
-      const all = lbCombine(rev, sales, y, lbRecords().map(r => ({ month: r.month, team: r.team, group: r.group })));
-      parsed = { rev, sales, all, revMonths: rev ? Object.keys(rev.months) : [], salesMonths: sales ? Object.keys(sales.months) : [] };
-      lbPreview(preview, parsed, y);
-      saveBtn.hidden = !all.records.length;
-    } finally { readBtn.disabled = false; }
-  } });
-  const saveBtn = h("button", { class: "btn primary", type: "button", id: "lbSave", hidden: true, text: "Save to VODA Prime", onclick: async () => {
-    if (!parsed) return;
-    err.textContent = ""; saveBtn.disabled = true; saveBtn.textContent = "Saving…";
-    try {
-      const { all, revMonths, salesMonths } = parsed;
-      let out = null;
-      const mine = recs => recs.map(r => ({ month: r.month, team: r.team, unit: r.group, revenue: r.revenue, jobs: r.jobs, workDays: r.workDays, sales: r.sales, saleJobs: r.saleJobs, reviews: r.reviews }));
-      const after = lbAfter(all, revMonths, salesMonths);
-      const snap = lbSnapFor(after);
-      const what = [revMonths.length ? "revenue" : "", salesMonths.length ? "sales" : ""].filter(Boolean).join(" and ");
-      if (revMonths.length) out = await api("lbSave", { months: revMonths, fields: ["unit", "revenue", "jobs", "workDays", "reviews"], records: mine(all.records.filter(r => revMonths.includes(r.month))),
-        weekMonths: revMonths, weeks: all.weeks, snap: salesMonths.length ? null : snap, what: "Imported " + what });
-      if (salesMonths.length) out = await api("lbSave", { months: salesMonths, fields: ["sales", "saleJobs"], records: mine(all.records.filter(r => salesMonths.includes(r.month))), snap, what: "Imported " + what });
-      lbTake(out);
-      closeDialog();
-      toast(`Leaderboard updated: ${what} for ${[...new Set(revMonths.concat(salesMonths))].length} months`);
-      renderLeaderboard();
-    } catch (e) { err.textContent = errText(e, "Nothing"); }
-    finally { saveBtn.disabled = false; saveBtn.textContent = "Save to VODA Prime"; }
-  } });
-  openDialog(
-    h("h3", { id: "dlgTitle", text: "Import numbers" }),
-    h("p", { text: `Reads every ${y} month tab (January ${y} on) and adds each team's month up. Each import replaces the months it reads; nothing in your sheets is changed.` }),
-    A.el, B.el,
-    h("p", { class: "hint", text: LB_LINKS ? "A link works once the sheet is shared with the Google account VODA Prime runs on (Viewer is enough). The links are remembered for next week."
-      : "In Google Sheets: File > Download > Microsoft Excel (.xlsx). On a phone: ⋮ > Share & export > Save as > Excel. Then choose the file here." }),
-    err, preview,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }), readBtn, saveBtn)));
+/* ---- entering the numbers ---- */
+const LB_PARTS = { trucks: "Trucks", sales: "Technician sales", reviews: "Reviews" };
+function lbEnterDay() {
+  const y = lbYear(), today = lbToday();
+  let d = lbIsDay(lbView.day) ? lbView.day : (today.startsWith(y + "-") ? today : `${y}-12-31`);
+  if (!d.startsWith(y + "-")) d = `${y}-01-01`;
+  return (lbView.day = d);
 }
-/** What the saved rows will look like after this import (the months read replace the sheets' numbers there; numbers
- *  typed in the app stay on top). */
-function lbAfter(all, revMonths, salesMonths) {
-  const keep = lbRaw().map(r => Object.assign({}, r, { unit: r.unit != null ? r.unit : (r.group || "") }));
-  const by = {};
-  for (const r of keep) by[r.month + "|" + r.team.toLowerCase()] = r;
-  for (const r of keep) {
-    if (revMonths.includes(r.month)) Object.assign(r, { unit: "", revenue: 0, jobs: 0, workDays: 0, reviews: 0 });
-    if (salesMonths.includes(r.month)) Object.assign(r, { sales: 0, saleJobs: 0 });
-  }
-  for (const n of all.records) {
-    const k = n.month + "|" + n.team.toLowerCase();
-    const r = by[k] || (by[k] = keep[keep.push({ month: n.month, team: n.team, unit: "", revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0 }) - 1]);
-    if (revMonths.includes(n.month)) Object.assign(r, { unit: n.group, revenue: n.revenue, jobs: n.jobs, workDays: n.workDays, reviews: n.reviews });
-    if (salesMonths.includes(n.month)) Object.assign(r, { sales: n.sales, saleJobs: n.saleJobs });
-  }
-  return lbEffective(keep);
+const lbDayDoc = day => { const d = ((lbData.months[day.slice(0, 7)] || {}).days || {})[day]; return d && typeof d === "object" ? d : {}; };
+const lbHasPart = (day, part) => Object.values(lbDayDoc(day)[part] || {}).some(a => lbEntry(a, part === "t" ? LB_TRUCK.length : LB_SALE.length).length);
+/** The teams to show for a day: the month's board, then anyone else with numbers that day (so they can be cleared). */
+function lbTeamsFor(key, names) {
+  const cfg = lbCfg(), board = lbBoard(cfg, key);
+  const extra = [...new Set(names)].filter(n => !board.some(t => t.name.toLowerCase() === n.toLowerCase())).map(n => ({ name: n, unit: "", off: true }));
+  return board.map(t => Object.assign({}, t)).concat(extra);
 }
-function lbSnapFor(records) {
-  const y = lbYear(), m = lbLatestMonth(records, y);
-  if (!m) return null;
-  return { week: lbThisMonday(), month: lbMonthKey(y, m), places: lbPlaces(lbStandings(records, y, m)) };
+function lbGoDay(day) {
+  lbFlush();
+  lbView.day = day;
+  renderLeaderboard();
 }
-function lbTake(out) {
-  if (!out) return;
-  lbData = { records: out.records || [], weeks: out.weeks || [], snap: out.snap || null, links: out.links || (lbData && lbData.links) || null, last: out.last || null, canImport: !!out.canImport, at: new Date().toISOString() };
-  store.set(K_LB, lbData);
-}
-function lbPreview(box, p, y) {
-  const { all, rev, sales } = p;
-  const months = all.months.filter(k => k.startsWith(y + "-"));
-  const sum = (k, f) => all.records.filter(r => r.month === k).reduce((s, r) => s + (Number(r[f]) || 0), 0);
-  const teams = k => all.records.filter(r => r.month === k && r.group).map(r => r.team);
-  const warns = [].concat(rev ? rev.warnings : [], sales ? sales.warnings : []);
-  const notes = [].concat(rev ? rev.notes : [], sales ? sales.notes : [], all.notes);
-  const latest = lbLatestMonth(all.records, y);
-  const st = latest ? lbStandings(lbAfter(all, p.revMonths, p.salesMonths), y, latest) : null;
-  box.replaceChildren(...[
-    h("h4", { text: `Found ${months.length} month${months.length === 1 ? "" : "s"}` }),
-    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table" },
-      h("thead", null, h("tr", null, ["Month", "Teams", "Revenue", "Jobs", "Sales", "Reviews"].map(t => h("th", { text: t })))),
-      h("tbody", null, months.map(k => h("tr", null,
-        h("td", { text: lbMonthLong(Number(k.slice(5))) }), h("td", { text: rev ? String(teams(k).length) : "–", title: teams(k).join(", ") }),
-        h("td", { text: rev ? lbMoney(sum(k, "revenue")) : "–" }), h("td", { text: rev ? fmt(sum(k, "jobs")) : "–" }),
-        h("td", { text: sales ? lbMoney(sum(k, "sales")) : "–" }), h("td", { text: rev ? fmt(sum(k, "reviews")) : "–" })))))),
-    warns.length ? h("ul", { class: "lb-notes warn" }, warns.map(t => h("li", { text: t }))) : null,
-    notes.length ? h("ul", { class: "lb-notes" }, notes.map(t => h("li", { text: t }))) : null,
-    st ? h("p", { class: "hint", text: `${lbMonthLong(latest)} after saving: ` + ["Cleaning", "Restoration"].map(g => `${g} #1 ${st.month[g].filter(x => x.place === 1).map(x => x.team).join(" & ") || "–"}`).join(", ") +
-      `. Year to date: ` + ["Cleaning", "Restoration"].map(g => `${g} #1 ${st.ytd[g].filter(x => x.place === 1).map(x => x.team).join(" & ") || "–"}`).join(", ") + "." }) : null].filter(Boolean));
-}
-
-/* ---- typing or fixing numbers ---- */
-// A typed number is kept apart from the sheets' number (r.manual) and wins over it, so the weekly import never wipes it.
-// Clearing the box goes back to the sheets' number.
-const LB_EDIT_FIELDS = [["revenue", "Revenue $"], ["jobs", "Jobs"], ["workDays", "Work days"], ["sales", "Tech sales $"], ["saleJobs", "Sale jobs"], ["reviews", "5-star reviews"]];
-function openLbEdit(monthNum) {
-  const y = lbYear();
-  const err = h("p", { class: "dlg-err" });
-  const list = h("div", { class: "lb", id: "lbEditList" });
-  let month = monthNum || lbMonthShown();
-  const num2 = n => String(Math.round((Number(n) || 0) * 100) / 100);
-  const rowsFor = m => {
-    const k = lbMonthKey(y, m);
-    const eff = lbRecords();
-    let rows = lbRaw().filter(r => r.month === k).map(r => ({ raw: r, eff: eff.find(e => e.month === k && e.team === r.team) }))
-      .filter(x => x.eff.group || (x.raw.manual && Object.keys(x.raw.manual).length) || LB_EDIT_FIELDS.some(([f]) => x.raw[f]));
-    if (!rows.length) {   // a month with nothing yet starts with last month's teams
-      rows = eff.filter(r => r.month === lbMonthKey(y, m - 1) && r.group)
-        .map(r => ({ raw: { month: k, team: r.team, unit: r.group, revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0, fresh: true }, eff: null }));
-    }
-    return rows.sort((a, b) => ((a.eff && a.eff.group) || a.raw.unit || "z").localeCompare((b.eff && b.eff.group) || b.raw.unit || "z") || a.raw.team.localeCompare(b.raw.team));
-  };
-  const card = x => {
-    const r = x.raw, man = r.manual || {};
-    const fromSheet = !r.fresh && !!(r.unit || LB_EDIT_FIELDS.some(([f]) => r[f]));
-    const sheetUnit = r.unit || "";
-    const unitSel = h("select", { class: "lb-in-unit" },
-      fromSheet ? h("option", { value: "", text: `As in the sheet (${sheetUnit || "not ranked"})` }) : null,
-      LB_GROUPS.map(g => h("option", { value: g, text: g })), h("option", { value: "none", text: "Not ranked" }));
-    unitSel.value = typeof man.unit === "string" ? man.unit : fromSheet ? "" : (sheetUnit || "Cleaning");
-    const el = h("div", { class: "lb-team", "data-team": r.team || "", "data-sheet": fromSheet ? "1" : "" },
-      h("div", { class: "lb-team-top" },
-        h("div", { class: "field" }, h("label", { text: "Team" }), fromSheet
-          ? h("input", { class: "lb-in-team", type: "text", value: r.team, readonly: true, tabindex: "-1" })
-          : h("input", { class: "lb-in-team", type: "text", maxlength: "40", value: r.team || "", placeholder: "Name", autocomplete: "off" })),
-        h("div", { class: "field" }, h("label", { text: "Unit" }), unitSel),
-        fromSheet ? null : h("button", { class: "btn small ghost danger", type: "button", text: "Remove", onclick: () => el.remove() })),
-      h("div", { class: "nums" }, LB_EDIT_FIELDS.map(([f, label]) => {
-        const typed = typeof man[f] === "number";
-        return h("div", { class: "field" + (typed ? " typed" : "") }, h("label", null, label, typed ? h("span", { class: "lb-typed", text: "typed" }) : null),
-          h("input", { class: "lb-in-num", "data-f": f, type: "text", inputmode: "decimal", autocomplete: "off",
-            value: typed ? num2(man[f]) : (fromSheet ? "" : (r[f] ? num2(r[f]) : "")),
-            placeholder: fromSheet ? num2(r[f]) : "0" }));
+function lbEnterEl() {
+  const y = lbYear(), part = LB_PARTS[lbView.part] ? lbView.part : "trucks";
+  const day = lbEnterDay(), key = day.slice(0, 7), month = Number(key.slice(5));
+  const parts = lbSeg(Object.entries(LB_PARTS), part, k => { lbFlush(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
+  const out = [h("div", { class: "lb-bar" }, parts)];
+  if (part === "reviews") {
+    const months = Array.from({ length: Math.max(1, Math.min(12, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 12)) }, (_, i) => i + 1);
+    out.push(h("div", { class: "lb-daybar" },
+      h("select", { id: "lbRevMonth", "aria-label": "Month", onchange: e => lbGoDay(`${y}-${String(e.target.value).padStart(2, "0")}-01`) },
+        months.map(m => h("option", { value: String(m), text: `${lbMonthLong(m)} ${y}`, selected: m === month }))),
+      h("span", { class: "hint", text: "5-star reviews only (4 and 3 stars don't count)." })));
+    out.push(lbReviewsEl(key));
+  } else {
+    const first = `${y}-01-01`, last = `${y}-12-31`;
+    const mon = lbMondayOf(day);
+    const pk = part === "trucks" ? "t" : "s";
+    out.push(h("div", { class: "lb-daybar" },
+      h("button", { class: "btn small", type: "button", id: "lbPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => lbGoDay(lbAddDays(day, -1)) }, "‹"),
+      h("input", { id: "lbDay", type: "date", value: day, min: first, max: last, "aria-label": "Day", onchange: e => { if (lbIsDay(e.target.value) && e.target.value.startsWith(y + "-")) lbGoDay(e.target.value); } }),
+      h("button", { class: "btn small", type: "button", id: "lbNextDay", "aria-label": "Next day", disabled: day >= last, onclick: () => lbGoDay(lbAddDays(day, 1)) }, "›"),
+      day !== lbToday() && lbToday().startsWith(y + "-") ? h("button", { class: "btn ghost small", type: "button", onclick: () => lbGoDay(lbToday()) }, "Today") : null),
+      h("div", { class: "lb-week", role: "group", "aria-label": "This week" }, Array.from({ length: 7 }, (_, i) => {
+        const d = lbAddDays(mon, i), dt = lbDate(d);
+        if (!d.startsWith(y + "-")) return h("span");
+        return h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : "") + (lbHasPart(d, pk) ? " has" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => lbGoDay(d) },
+          h("small", { text: LB_WD[dt.getDay()] }), String(dt.getDate()));
       })));
-    return el;
+    out.push(part === "trucks" ? lbTrucksEl(day) : lbSalesEl(day));
+  }
+  out.push(h("p", { id: "lbSaveNote", class: "lb-save", role: "status" }));
+  return out;
+}
+/** One number box. */
+const lbBox = (label, value, data, hint) => h("label", { class: "lb-box" + (hint ? " has-hint" : "") }, h("span", { text: label }),
+  h("input", Object.assign({ type: "text", inputmode: "decimal", autocomplete: "off", enterkeyhint: "next", value: value == null ? "" : String(value) }, data)),
+  hint ? h("small", { text: hint }) : null);
+function lbCard(t, part, day, fields, arr, foot) {
+  return h("div", { class: "lb-card" + (t.off ? " off" : ""), "data-team": t.name, "data-part": part },
+    h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
+    h("div", { class: `lb-boxes n${fields.length}` }, fields.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), arr[i], { "data-i": String(i), oninput: () => lbTyped(day, part, t.name, fields.length) }))),
+    h("p", { class: "lb-card-foot", text: foot }));
+}
+/** A box changed: save that team's day (blank boxes are saved as blank). */
+function lbTyped(day, part, team, n) {
+  const card = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="${part}"]`);
+  if (!card) return;
+  const vals = [...card.querySelectorAll("input")].map(i => i.value);
+  const bad = vals.some(s => { const t = String(s).replace(/[$,\s]/g, ""); return t !== "" && !Number.isFinite(Number(t)); });
+  card.classList.toggle("bad", bad);
+  if (bad) return;
+  const arr = lbFromBoxes(vals, n);
+  lbQueue(day.slice(0, 7), { days: { [day]: { [part]: { [team]: arr } } } });
+  const foot = card.querySelector(".lb-card-foot");
+  if (foot) foot.textContent = part === "t" ? lbTruckFoot(day, team) : lbSaleFoot(day, team);
+  const tot = $("lbDayTotal");
+  if (tot) tot.textContent = lbDayTotalText(day);
+  const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);
+  if (wd) wd.classList.toggle("has", lbHasPart(day, part));
+}
+const lbRecOf = (key, team) => lbRecords().find(r => r.month === key && r.team.toLowerCase() === team.toLowerCase()) || null;
+function lbTruckFoot(day, team) {
+  const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length), r = lbRecOf(day.slice(0, 7), team);
+  const dayTxt = e.length ? `Day: ${lbMoney(e[2] || 0)}${e[0] ? ` · ${lbMoney((e[2] || 0) / e[0])}/job` : ""}` : "Nothing typed for this day";
+  return r ? `${dayTxt} · ${lbMonthLong(Number(day.slice(5, 7)))}: ${lbMoney(r.revenue)}, ${fmt(r.jobs)} jobs, ${fmt(r.workDays)} days` : dayTxt;
+}
+function lbSaleFoot(day, team) {
+  const e = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length), r = lbRecOf(day.slice(0, 7), team) || { sales: 0 };
+  const g = lbGoal(r, lbCfg().goal, lbDaysLeft(day.slice(0, 7), lbToday()));
+  const dayTxt = e.length ? `Day: ${lbMoney((e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0))}` : "Nothing typed for this day";
+  return `${dayTxt} · Month: ${lbMoney(g.mtd)} of ${lbMoney(lbCfg().goal)}${g.done ? ", goal reached" : `, ${lbMoney(g.left)} to go`}`;
+}
+function lbDayTotalText(day) {
+  const d = lbDayDoc(day);
+  let rev = 0, jobs = 0, sales = 0;
+  for (const a of Object.values(d.t || {})) { const e = lbEntry(a, LB_TRUCK.length); if (e.length) { rev += e[2] || 0; jobs += e[0] || 0; } }
+  for (const a of Object.values(d.s || {})) { const e = lbEntry(a, LB_SALE.length); if (e.length) sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0); }
+  return `${lbDayText(day)} total: ${lbMoney(rev)} revenue · ${fmt(jobs)} jobs · ${lbMoney(sales)} technician sales`;
+}
+function lbTrucksEl(day) {
+  const d = lbDayDoc(day), key = day.slice(0, 7);
+  const teams = lbTeamsFor(key, Object.keys(d.t || {}).filter(n => lbEntry(d.t[n], LB_TRUCK.length).length));
+  return h("div", { class: "lb-enter", id: "lbEnter" },
+    h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
+    teams.length ? teams.map(t => lbCard(t, "t", day, LB_TRUCK, lbEntry((d.t || {})[t.name], LB_TRUCK.length), lbTruckFoot(day, t.name)))
+      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Teams.` }),
+    h("p", { class: "hint", text: "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }));
+}
+function lbSalesEl(day) {
+  const d = lbDayDoc(day), key = day.slice(0, 7);
+  const teams = lbTeamsFor(key, Object.keys(d.s || {}).filter(n => lbEntry(d.s[n], LB_SALE.length).length));
+  return h("div", { class: "lb-enter", id: "lbEnter" },
+    h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
+    teams.length ? teams.map(t => lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name)))
+      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Teams.` }),
+    h("p", { class: "hint", text: "Jobs: the technician's jobs that day, for sale per job." }));
+}
+function lbReviewsEl(key) {
+  const doc = lbData.months[key] || {}, rv = doc.reviews || {};
+  const teams = lbTeamsFor(key, Object.keys(rv).filter(n => lbVal(rv[n]) != null));
+  const y = lbYear();
+  const ytd = team => lbRecords().filter(r => r.team === team && r.group && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
+  return h("div", { class: "lb-enter lb-enter-rv", id: "lbEnter" },
+    teams.map(t => h("div", { class: "lb-card" + (t.off ? " off" : ""), "data-team": t.name, "data-part": "r" },
+      h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
+      h("div", { class: "lb-boxes n1" }, lbBox("5-star reviews", lbVal(rv[t.name]), { oninput: e => {
+        const s = e.target.value.replace(/[,\s]/g, "");
+        const bad = s !== "" && !Number.isFinite(Number(s));
+        e.target.closest(".lb-card").classList.toggle("bad", bad);
+        if (bad) return;
+        lbQueue(key, { reviews: { [t.name]: s === "" ? null : Number(s) } });
+        const f = e.target.closest(".lb-card").querySelector(".lb-card-foot");
+        if (f) f.textContent = `Year to date: ${fmt(ytd(t.name))}`;
+      } })),
+      h("p", { class: "lb-card-foot", text: `Year to date: ${fmt(ytd(t.name))}` }))));
+}
+
+/* ---- status: what's typed, and every team's numbers ---- */
+function lbStatusEl() {
+  const y = lbYear(), today = lbToday();
+  const months = lbMonthsWith();
+  const month = months.includes(lbView.smonth) ? lbView.smonth : (months.includes(Number(today.slice(5, 7))) && today.startsWith(y + "-") ? Number(today.slice(5, 7)) : months[months.length - 1] || 1);
+  const key = lbMonthKey(y, month), cfg = lbCfg();
+  const recs = lbRecords().filter(r => r.month === key);
+  const board = lbBoard(cfg, key);
+  const recOf = name => recs.find(r => r.team === name) || { revenue: 0, jobs: 0, workDays: 0, techs: 0, sales: 0, up: 0, addon: 0, rugs: 0, extra: 0, saleJobs: 0, reviews: 0, truckDays: 0, saleDays: 0, last: "" };
+  const off = recs.filter(r => !r.group && (r.revenue || r.jobs || r.workDays || r.sales || r.reviews));
+  const nDays = lbDaysIn(key), left = lbDaysLeft(key, today);
+  const edit = canEditLb() && lbData.canEdit !== false;
+  // days typed: one square per day, per team
+  const grid = h("div", { class: "lb-scroll" }, h("table", { class: "lb-grid", id: "lbGrid" },
+    h("thead", null, h("tr", null, h("th", { text: "" }), Array.from({ length: nDays }, (_, i) => {
+      const d = `${key}-${String(i + 1).padStart(2, "0")}`;
+      return h("th", { class: lbDate(d).getDay() === 0 ? "sun" : "", title: lbDayText(d), text: String(i + 1) });
+    }))),
+    h("tbody", null, board.map(t => h("tr", null, h("th", { text: t.name }), Array.from({ length: nDays }, (_, i) => {
+      const d = `${key}-${String(i + 1).padStart(2, "0")}`, dd = lbDayDoc(d);
+      const tr = lbEntry((dd.t || {})[t.name], LB_TRUCK.length).length > 0, sa = lbEntry((dd.s || {})[t.name], LB_SALE.length).length > 0;
+      const cls = [d > today ? "future" : "", d === today ? "today" : "", lbDate(d).getDay() === 0 ? "sun" : "", tr ? "t" : "", sa ? "s" : ""].filter(Boolean).join(" ");
+      const label = `${t.name}, ${lbDayText(d)}: ${tr ? "truck numbers" : "no truck numbers"}, ${sa ? "sales" : "no sales"}`;
+      return h("td", { class: cls }, edit && d <= today ? h("button", { type: "button", "aria-label": label, title: label, onclick: () => { lbView.tab = "enter"; lbView.part = tr || !sa ? "trucks" : "sales"; lbView.day = d; lbSaveView(); renderLeaderboard(); } }) : h("i", { title: label }));
+    }))))));
+  const table = (cols, rows, foot) => h("div", { class: "lb-scroll" }, h("table", { class: "lb-table" },
+    h("thead", null, h("tr", null, cols.map(c => h("th", { text: c })))),
+    h("tbody", null, rows.map(r => h("tr", null, r.map((c, i) => h(i ? "td" : "th", { text: c }))))),
+    foot ? h("tfoot", null, h("tr", null, foot.map((c, i) => h(i ? "td" : "th", { text: c })))) : null));
+  const sum = (list, f) => list.reduce((s, n) => s + (recOf(n.name)[f] || 0), 0);
+  const unitTables = LB_GROUPS.map(g => [g, board.filter(t => t.unit === g)]).filter(([, l]) => l.length).map(([g, list]) => h("div", { class: "panel" },
+    h("h2", { text: `${g} · trucks` }),
+    table(["Team", "Revenue", "Per job", "Per day", "Jobs", "Work days", "Techs/day", "Days typed", "Last day"], list.map(t => {
+      const r = recOf(t.name);
+      return [t.name, lbMoney(r.revenue), lbMoney(lbDiv(r.revenue, r.jobs)), lbMoney(lbDiv(r.revenue, r.workDays)), fmt(r.jobs), fmt(r.workDays), fmt(lbDiv(r.techs, r.truckDays)), String(r.truckDays), r.last ? lbDayText(r.last).replace(/^\w+, /, "") : "–"];
+    }), ["Total", lbMoney(sum(list, "revenue")), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "jobs"))), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "workDays"))), fmt(sum(list, "jobs")), fmt(sum(list, "workDays")), "", "", ""])));
+  const goal = cfg.goal;
+  const sales = h("div", { class: "panel" },
+    h("h2", { text: "Technician sales" }),
+    h("p", { class: "lb-sub", text: left ? `Goal ${lbMoney(goal)} each · ${left} day${left === 1 ? "" : "s"} left in ${lbMonthLong(month)}` : `Goal ${lbMoney(goal)} each` }),
+    table(["Tech", "Month to date", "Left to goal", "Need per day", "Jobs", "Per job", "Up sale", "Add-on", "Rugs in plant", "Additional"], board.map(t => {
+      const r = recOf(t.name), g = lbGoal(r, goal, left);
+      return [t.name, lbMoney(r.sales), g.done ? "Done" : lbMoney(g.left), g.done || !left ? "–" : lbMoney(g.perDay), fmt(r.saleJobs), lbMoney(lbDiv(r.sales, r.saleJobs)), lbMoney(r.up), lbMoney(r.addon), lbMoney(r.rugs), lbMoney(r.extra)];
+    }), ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
+  const ytdRv = name => lbRecords().filter(r => r.team === name && r.group && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
+  const reviews = h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
+    table(["Team", lbMonthLong(month), "Year to date"], board.map(t => [t.name, fmt(recOf(t.name).reviews), fmt(ytdRv(t.name))])));
+  const offEl = off.length ? h("div", { class: "panel" }, h("h2", { text: "Numbers not counted" }),
+    h("p", { class: "meta", text: `Typed for a team that isn't on the board in ${lbMonthLong(month)}: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. Fix the team's months in Teams if they should count.` })) : null;
+  return [
+    h("div", { class: "lb-bar" }, lbMonthSelect("lbStatusMonth", month, m => { lbView.smonth = m; lbSaveView(); renderLeaderboard(); })),
+    h("div", { class: "panel" }, h("h2", { text: "Days typed" }),
+      h("p", { class: "lb-sub" }, h("i", { class: "lb-key t" }), " truck numbers ", h("i", { class: "lb-key s" }), " technician sales ", h("i", { class: "lb-key ts" }), " both", edit ? " · tap a day to open it" : ""),
+      grid),
+    ...unitTables, sales, reviews, offEl].filter(Boolean);
+}
+
+/* ---- teams: who's on the board, in which unit, from which month ---- */
+function openLbTeams() {
+  const y = lbYear(), cfg = lbCleanConfig(lbData.config);
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const used = new Set();
+  for (const d of Object.values(lbData.months || {})) {
+    for (const x of Object.values(d.days || {})) for (const part of ["t", "s"]) for (const [n, a] of Object.entries((x && x[part]) || {})) if (lbEntry(a, 5).length) used.add(n.toLowerCase());
+    for (const [n, v] of Object.entries(d.reviews || {})) if (lbVal(v) != null) used.add(n.toLowerCase());
+  }
+  const monthOpts = (sel, blank) => {
+    const keys = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
+    if (sel && !keys.includes(sel)) keys.unshift(sel);
+    return [h("option", { value: "", text: blank, selected: !sel }), ...keys.map(k => h("option", { value: k, text: `${lbMonthLong(Number(k.slice(5)))} ${k.slice(0, 4)}`, selected: k === sel }))];
   };
-  const draw = () => { list.replaceChildren(...rowsFor(month).map(card)); };
-  const monthSel = h("select", { id: "lbEditMonth", onchange: e => { month = Number(e.target.value); draw(); } },
-    Array.from({ length: 12 }, (_, i) => h("option", { value: String(i + 1), text: `${lbMonthLong(i + 1)} ${y}`, selected: i + 1 === month })));
-  draw();
+  const list = h("div", { class: "lb-teams", id: "lbTeamList" });
+  const rowEl = (t, isNew) => {
+    const row = h("div", { class: "lb-team", "data-new": isNew ? "1" : null, "data-name": t.name || null },
+      h("div", { class: "lb-team-top" },
+        isNew ? h("div", { class: "field" }, h("label", { text: "Name" }), h("input", { type: "text", class: "t-name", maxlength: "30", autocomplete: "off", value: t.name || "", placeholder: "First name" }))
+          : h("strong", { class: "t-label", text: t.name }),
+        !isNew && !used.has(t.name.toLowerCase()) ? h("button", { class: "btn ghost small danger", type: "button", onclick: () => row.remove() }, "Remove") : null),
+      h("div", { class: "nums" },
+        h("div", { class: "field" }, h("label", { text: "Unit" }), h("select", { class: "t-unit" }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === t.unit })))),
+        h("div", { class: "field" }, h("label", { text: "On the board from" }), h("select", { class: "t-from" }, monthOpts(t.from, `Before ${y}`))),
+        h("div", { class: "field" }, h("label", { text: "Until" }), h("select", { class: "t-to" }, monthOpts(t.to, "Still on the board")))),
+      !isNew && used.has(t.name.toLowerCase()) ? h("p", { class: "hint", text: "Has numbers, so the name stays. When the team leaves the board, pick the last month under Until." }) : null);
+    return row;
+  };
+  for (const t of cfg.teams) list.append(rowEl(t, false));
+  const thisMonth = lbMonthKey(y, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 1);
   openDialog(
-    h("h3", { id: "dlgTitle", text: "Edit numbers" }),
-    h("p", { text: "Each team's totals for the month. Grey numbers come from your sheets. Type a number to use yours instead: it stays even when you import again. Empty a box to go back to the sheet's number." }),
-    h("div", { class: "field" }, h("label", { for: "lbEditMonth", text: "Month" }), monthSel),
+    h("h3", { id: "dlgTitle", text: "Teams on the board" }),
+    h("p", { class: "hint", text: "Each truck's team, the unit it's ranked in, and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June." }),
     list,
-    h("div", null, h("button", { class: "btn", type: "button", id: "lbAddTeam", text: "+ Add team", onclick: () => list.append(card({ raw: { team: "", unit: "Cleaning", fresh: true } })) })),
+    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: thisMonth, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a team")),
+    h("div", { class: "field" }, h("label", { for: "lbGoal", text: "Technician sales goal per month $" }), h("input", { id: "lbGoal", type: "text", inputmode: "decimal", value: String(cfg.goal) })),
     err,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
-      h("button", { class: "btn primary", type: "button", id: "lbEditSave", text: "Save", onclick: async ev => {
-        err.textContent = "";
-        const k = lbMonthKey(y, month), seen = new Set(), records = [];
-        for (const el of list.querySelectorAll(".lb-team")) {
-          const raw = el.querySelector(".lb-in-team").value.trim();
-          const team = lbName(raw);
-          if (!raw) continue;
-          if (!team) { err.textContent = `"${raw}" can't be a team name (letters only).`; return; }
-          if (seen.has(team.toLowerCase())) { err.textContent = `${team} is in the list twice.`; return; }
-          seen.add(team.toLowerCase());
-          const manual = {};
-          const u = el.querySelector(".lb-in-unit").value;
-          if (u) manual.unit = u;
-          for (const inp of el.querySelectorAll(".lb-in-num")) {
-            if (inp.value.trim() === "") continue;
-            const n = parseNum(inp.value);
-            if (Number.isNaN(n)) { err.textContent = `${team}: "${inp.value}" isn't a number.`; inp.focus(); return; }
-            manual[inp.dataset.f] = n;
+    h("div", { class: "dlg-foot" },
+      h("button", { class: "btn ghost", type: "button", id: "lbLoadXl", onclick: () => openLbHistory() }, "Load from Excel…"),
+      h("div", { class: "right" },
+        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+        h("button", { class: "btn primary", type: "button", id: "lbTeamsSave", text: "Save", onclick: async () => {
+          const teams = [], names = new Set();
+          for (const row of list.children) {
+            const name = row.dataset.new ? lbTeamName(row.querySelector(".t-name").value) : row.dataset.name;
+            if (row.dataset.new && !row.querySelector(".t-name").value.trim()) continue;
+            if (!name) { err.textContent = "Names take letters only (spaces, ' and - are fine)."; return; }
+            if (names.has(name.toLowerCase())) { err.textContent = `${name} is on the list twice.`; return; }
+            names.add(name.toLowerCase());
+            const from = row.querySelector(".t-from").value, to = row.querySelector(".t-to").value;
+            if (from && to && to < from) { err.textContent = `${name}: Until is before From.`; return; }
+            teams.push({ name, unit: row.querySelector(".t-unit").value, from, to });
           }
-          records.push({ month: k, team, manual });
+          const goal = Number(val("lbGoal").replace(/[$,\s]/g, ""));
+          if (!(goal > 0)) { err.textContent = "Type the sales goal as a number, like 3000."; return; }
+          const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
+          try {
+            const out = await api("lbPut", { year: y, writes: [{ key: "config", data: { teams, goal } }] });
+            lbData.config = out.config || { teams, goal };
+            if (out.names) lbData.names = Object.assign(lbData.names || {}, out.names);
+            lbTouch();
+            closeDialog();
+            toast("Teams saved");
+            renderLeaderboard();
+          } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
+        } }))));
+}
+/** One-time: this year's numbers from Excel copies of the two old sheets (they replace what's typed in the app). */
+function openLbHistory() {
+  const y = lbYear();
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const res = h("div", { class: "lb-src", id: "lbHistResult", hidden: true });
+  let got = null, armed = false;
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Load numbers from Excel" }),
+    h("p", { class: "hint", text: `Choose Excel copies of 5. Revenue per truck and 2. Technician monthly sales (File > Download > Microsoft Excel). The app reads every ${y} day from them, with the teams and their months, and puts them in place of what's typed in the app for ${y}.` }),
+    h("input", { type: "file", id: "lbHistFiles", accept: ".xlsx", multiple: true, onchange: async e => {
+      err.textContent = ""; res.hidden = true; got = null; armed = false;
+      const files = [...e.target.files];
+      if (!files.length) return;
+      try {
+        const want = n => lbSheetMonth(n, y) > 0;
+        let rev = null, sales = null;
+        for (const f of files) {
+          const tabs = await lbReadXlsx(await f.arrayBuffer(), want);
+          const kind = lbKindOf(tabs);
+          if (kind === "revenue") rev = tabs; else if (kind === "sales") sales = tabs;
         }
-        const btn = ev.currentTarget;
-        btn.disabled = true;
+        if (!rev) { err.textContent = `None of these is 5. Revenue per truck with ${y} month tabs.`; return; }
+        got = lbHistory(rev, sales, y);
+        const b = lbBuild(got.config, got.months, y, { today: lbToday() });
+        const byMonth = {};
+        for (const r of b.records) if (r.group) { const m = byMonth[r.month] || (byMonth[r.month] = { revenue: 0, sales: 0, reviews: 0 }); m.revenue += r.revenue; m.sales += r.sales; m.reviews += r.reviews; }
+        res.replaceChildren(
+          h("h4", { text: "Found" }),
+          h("p", { class: "lb-status ok", text: `${Object.keys(got.months).length} months, ${got.config.teams.length} teams${sales ? "" : " (no technician sales file chosen)"}` }),
+          h("ul", { class: "lb-notes" }, got.config.teams.map(t => h("li", { text: `${t.name}: ${t.unit}, ${t.from ? lbMonthLong(Number(t.from.slice(5))) : "before " + y} – ${t.to ? lbMonthLong(Number(t.to.slice(5))) : "now"}` }))),
+          h("div", { class: "lb-scroll" }, h("table", { class: "lb-table" }, h("thead", null, h("tr", null, ["Month", "Revenue", "Tech sales", "Reviews"].map(c => h("th", { text: c })))),
+            h("tbody", null, Object.entries(byMonth).sort().map(([k, m]) => h("tr", null, h("th", { text: lbMonthLong(Number(k.slice(5))) }), h("td", { text: lbMoney(m.revenue) }), h("td", { text: lbMoney(m.sales) }), h("td", { text: fmt(m.reviews) })))))),
+          got.warnings.length ? h("ul", { class: "lb-notes warn" }, got.warnings.map(w => h("li", { text: w }))) : null,
+          got.notes.length ? h("ul", { class: "lb-notes" }, got.notes.map(w => h("li", { text: w }))) : null);
+        res.hidden = false;
+        $("lbHistGo").disabled = false;
+      } catch (x) { err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
+    } }),
+    res, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => openLbTeams(), text: "Back" }),
+      h("button", { class: "btn primary", type: "button", id: "lbHistGo", disabled: true, text: `Replace ${y} numbers`, onclick: async () => {
+        if (!got) return;
+        const b = $("lbHistGo");
+        if (!armed) { armed = true; b.textContent = "Tap again to replace"; return; }
+        b.disabled = true; b.textContent = "Saving…";
         try {
-          const after = lbRaw().filter(x => x.month !== k)
-            .concat(records.map(r => Object.assign({}, lbRaw().find(x => x.month === k && x.team.toLowerCase() === r.team.toLowerCase()) || { month: k, team: r.team, unit: "", revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0 }, { manual: r.manual })))
-            .concat(lbRaw().filter(x => x.month === k && !records.some(r => r.team.toLowerCase() === x.team.toLowerCase())).map(x => Object.assign({}, x, { manual: {} })));
-          const out = await api("lbSave", { months: [k], fields: ["manual"], records, snap: lbSnapFor(lbEffective(after)), what: `Edited ${lbMonthLong(month)}` });
-          lbTake(out);
+          const writes = [{ key: "config", data: got.config }];
+          for (let m = 1; m <= 12; m++) { const k = lbMonthKey(y, m); if (got.months[k] || lbData.months[k]) writes.push({ key: k, data: got.months[k] || { days: {}, reviews: {} } }); }
+          let out = {};
+          for (let i = 0; i < writes.length; i += 4) out = Object.assign(out, await api("lbPut", { year: y, writes: writes.slice(i, i + 4) }));
+          await lbLoad();
           closeDialog();
-          toast(`${lbMonthLong(month)} saved`);
-          lbView.month = month; lbSaveView();
-          renderLeaderboard();
-        } catch (e) { err.textContent = errText(e, "Nothing"); }
-        finally { btn.disabled = false; }
+          toast(`${y} numbers loaded`);
+        } catch (x) { err.textContent = errText(x, "Not everything"); b.disabled = false; b.textContent = `Replace ${y} numbers`; armed = false; }
       } }))));
 }
 
@@ -4771,14 +5153,14 @@ function openLbEdit(monthNum) {
 const LB_LOGO = '<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2b3c"/><path d="M256 92 C318 180 384 248 384 318 A128 128 0 0 1 128 318 C128 248 194 180 256 92 Z" fill="#2fa4da"/><path d="M196 318 L240 362 L320 272" fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>';   // the app icon
 const LB_CROWN = '<svg class="lbs-crown" viewBox="0 0 48 32" aria-hidden="true"><path fill="currentColor" d="M2 8l10 9 12-15 12 15 10-9-4 22H6z"/></svg>';
 let lbShowState = null;
-/** A fixed SVG from this file (never from the sheets). */
+/** A fixed SVG from this file (never from the numbers). */
 function lbSvg(markup) { const t = document.createElement("template"); t.innerHTML = markup; return t.content.firstElementChild; }
 function lbSlides() {
-  const y = lbYear(), recs = lbRecords(), month = lbMonthShown(), key = lbMonthKey(y, month);
+  const y = lbYear(), recs = lbRecords(), month = lbMonthShown(lbView.month), key = lbMonthKey(y, month), b = lbB();
   const st = lbStandings(recs, y, month);
   const mname = `${lbMonthLong(month)} ${y}`;
   const slides = [];
-  const wk = lbLatestWeek(lbWeeks(), lbDayKey(clockNow()));
+  const wk = lbLatestWeek(b.weeks, lbToday());
   slides.push(() => h("section", { class: "lbs-slide lbs-title" },
     lbSvg(LB_LOGO), h("h1", null, "VODA", h("br"), "Leaderboard"),
     h("p", { text: wk ? `Week of ${lbWeekText(wk)}, ${y}` : mname }),
@@ -4813,12 +5195,12 @@ function lbPodium(rows, per, g, kicker, key) {
       h("span", { class: "st" }, lbStat(x, per), h("small", { text: `Score ${x.score}` }))))) : h("div"));
 }
 function lbWeekSlide(start) {
-  const rows = lbWeek(lbWeeks(), start, lbRecords());
+  const rows = lbWeek(lbB().weeks, start);
   const max = Math.max(1, ...rows.map(r => r.revenue));
   return h("section", { class: "lbs-slide" },
     h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: `Week of ${lbWeekText(start)}` }), h("h2", { text: "Revenue this week" })),
       h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
-    h("div", { class: "lbs-week" }, ["Cleaning", "Restoration"].map(g => {
+    h("div", { class: "lbs-week" }, LB_GROUPS.map(g => {
       const list = rows.filter(r => r.group === g).sort((a, b) => b.revenue - a.revenue);
       return list.length ? [h("div", { class: "lbs-wgroup", text: g }), list.map(r => h("div", { class: `lbs-wrow ${g}`, "data-team": r.team },
         h("span", { class: "nm", text: r.team }), h("span", { class: "bar" }, h("i", { style: `width:${Math.max(2, Math.round(r.revenue / max * 100))}%` })),
