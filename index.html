@@ -5494,11 +5494,16 @@ function lbPresent() {
   try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(l => { if (lbShowState) lbShowState.wake = l; else l.release(); }).catch(() => {}); } catch (e) { /* screen may dim */ }
   go(0);
   stage.focus({ preventScroll: true });
+  // the phone's Back button closes the presentation (back to the Leaderboard) instead of leaving the app
+  try { window.history.pushState({ lbShow: true }, ""); lbShowState.pushed = true; } catch (e) { /* Back leaves as before */ }
 }
-function lbPresentEnd() {
+/** Close the presentation. fromBack: the phone's Back button already took the presentation's history step. */
+function lbPresentEnd(fromBack) {
   if (!lbShowState) return;
   try { if (lbShowState.wake) lbShowState.wake.release(); } catch (e) { /* already released */ }
+  const pushed = lbShowState.pushed;
   lbShowState = null;
+  if (pushed && fromBack !== true) { try { if (window.history.state && window.history.state.lbShow) window.history.back(); } catch (e) { /* fine */ } }
   $("lbShow").hidden = true;
   $("lbsStage").replaceChildren();
   document.body.style.overflow = "";
@@ -5506,7 +5511,8 @@ function lbPresentEnd() {
 }
 $("lbsPrev").addEventListener("click", () => lbShowState && lbShowState.go(lbShowState.i - 1));
 $("lbsNext").addEventListener("click", () => lbShowState && lbShowState.go(lbShowState.i + 1));
-$("lbsClose").addEventListener("click", lbPresentEnd);
+$("lbsClose").addEventListener("click", () => lbPresentEnd());
+window.addEventListener("popstate", () => { if (lbShowState) lbPresentEnd(true); });
 document.addEventListener("keydown", e => {
   if (!lbShowState) return;
   const onButton = e.target && e.target.tagName === "BUTTON";
