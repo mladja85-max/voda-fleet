@@ -1261,13 +1261,25 @@ function lbEntry(arr, n) {
 }
 const lbMondayOf = day => { const d = new Date(day + "T00:00:00Z"); return lbAddDays(day, -((d.getUTCDay() + 6) % 7)); };
 const lbDaysIn = key => new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
-/** Working days left in the month, today included: Monday to Saturday (Sundays off). 0 for a month gone by. */
+/** The company's four closed days: New Year's Day, the 4th of July, Thanksgiving (4th Thursday of November) and
+ *  Christmas. → its name for "2026-11-26", else "". */
+function lbHoliday(day) {
+  const md = day.slice(5, 10), d = Number(day.slice(8, 10));
+  if (md === "01-01") return "New Year's Day";
+  if (md === "07-04") return "4th of July";
+  if (md === "12-25") return "Christmas";
+  if (md.startsWith("11-") && d >= 22 && d <= 28 && new Date(day + "T00:00:00Z").getUTCDay() === 4) return "Thanksgiving";
+  return "";
+}
+/** A working day: Monday to Saturday, not a closed day. A closed day that falls on a Sunday changes nothing. */
+const lbWorkDay = day => new Date(day + "T00:00:00Z").getUTCDay() !== 0 && !lbHoliday(day);
+/** Working days left in the month, today included (Monday to Saturday, minus closed days). 0 for a month gone by. */
 function lbDaysLeft(key, today) {
   const tm = today.slice(0, 7);
   if (key < tm) return 0;
   const from = key > tm ? 1 : Number(today.slice(8, 10));
   let n = 0;
-  for (let d = from; d <= lbDaysIn(key); d++) if (new Date(`${key}-${String(d).padStart(2, "0")}T00:00:00Z`).getUTCDay() !== 0) n++;
+  for (let d = from; d <= lbDaysIn(key); d++) if (lbWorkDay(`${key}-${String(d).padStart(2, "0")}`)) n++;
   return n;
 }
 /** Everything the screens show, from the roster and the month documents ({ "2026-11": doc, ... }).
@@ -4991,12 +5003,13 @@ function lbStatusEl() {
   const grid = h("div", { class: "lb-scroll" }, h("table", { class: "lb-grid", id: "lbGrid" },
     h("thead", null, h("tr", null, h("th", { text: "" }), Array.from({ length: nDays }, (_, i) => {
       const d = `${key}-${String(i + 1).padStart(2, "0")}`;
-      return h("th", { class: lbDate(d).getDay() === 0 ? "sun" : "", title: lbDayText(d), text: String(i + 1) });
+      const hol = lbHoliday(d);
+      return h("th", { class: lbDate(d).getDay() === 0 || hol ? "sun" : "", title: lbDayText(d) + (hol ? ` · ${hol}, closed` : ""), text: String(i + 1) });
     }))),
     h("tbody", null, board.map(t => h("tr", null, h("th", { text: t.name }), Array.from({ length: nDays }, (_, i) => {
       const d = `${key}-${String(i + 1).padStart(2, "0")}`, dd = lbDayDoc(d);
       const tr = lbEntry((dd.t || {})[t.name], LB_TRUCK.length).length > 0, sa = lbEntry((dd.s || {})[t.name], LB_SALE.length).length > 0;
-      const cls = [d > today ? "future" : "", d === today ? "today" : "", lbDate(d).getDay() === 0 ? "sun" : "", tr ? "t" : "", sa ? "s" : ""].filter(Boolean).join(" ");
+      const cls = [d > today ? "future" : "", d === today ? "today" : "", lbDate(d).getDay() === 0 || lbHoliday(d) ? "sun" : "", tr ? "t" : "", sa ? "s" : ""].filter(Boolean).join(" ");
       const label = `${t.name}, ${lbDayText(d)}: ${tr ? "truck numbers" : "no truck numbers"}, ${sa ? "sales" : "no sales"}`;
       return h("td", { class: cls }, edit && d <= today ? h("button", { type: "button", "aria-label": label, title: label, onclick: () => { lbView.tab = "enter"; lbView.part = tr || !sa ? "trucks" : "sales"; lbView.day = d; lbSaveView(); renderLeaderboard(); } }) : h("i", { title: label }));
     }))))));
@@ -5014,7 +5027,7 @@ function lbStatusEl() {
   const goal = cfg.goal;
   const sales = h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
-    h("p", { class: "lb-sub", text: left ? `Goal ${lbMoney(goal)} each · ${left} working day${left === 1 ? "" : "s"} left in ${lbMonthLong(month)} (Monday to Saturday)` : `Goal ${lbMoney(goal)} each` }),
+    h("p", { class: "lb-sub", text: left ? `Goal ${lbMoney(goal)} each · ${left} working day${left === 1 ? "" : "s"} left in ${lbMonthLong(month)} (Monday to Saturday${lbClosedText(key, today)})` : `Goal ${lbMoney(goal)} each` }),
     table(["Tech", "Month to date", "Left to goal", "Need per day", "Jobs", "Per job", "Up sale", "Add-on", "Rugs in plant", "Additional"], board.map(t => {
       const r = recOf(t.name), g = lbGoal(r, goal, left);
       return [t.name, lbMoney(r.sales), g.done ? "Done" : lbMoney(g.left), g.done || !left ? "–" : lbMoney(g.perDay), fmt(r.saleJobs), lbMoney(lbDiv(r.sales, r.saleJobs)), lbMoney(r.up), lbMoney(r.addon), lbMoney(r.rugs), lbMoney(r.extra)];
@@ -5030,6 +5043,16 @@ function lbStatusEl() {
       h("p", { class: "lb-sub" }, h("i", { class: "lb-key t" }), " truck numbers ", h("i", { class: "lb-key s" }), " technician sales ", h("i", { class: "lb-key ts" }), " both", edit ? " · tap a day to open it" : ""),
       grid),
     ...unitTables, sales, reviews, offEl].filter(Boolean);
+}
+
+/** ", closed Thu, Nov 26 (Thanksgiving)" for a closed day still ahead this month on a Monday to Saturday. */
+function lbClosedText(key, today) {
+  const out = [];
+  for (let d = 1; d <= lbDaysIn(key); d++) {
+    const day = `${key}-${String(d).padStart(2, "0")}`, hol = lbHoliday(day);
+    if (hol && day >= today && lbDate(day).getDay() !== 0) out.push(`${lbDayText(day)} (${hol})`);
+  }
+  return out.length ? `, closed ${out.join(", ")}` : "";
 }
 
 /* ---- teams: who's on the board, in which unit, from which month ---- */
