@@ -5088,9 +5088,9 @@ function lbReviewsEl(key) {
         if (bad) return;
         lbQueue(key, { reviews: { [t.name]: s === "" ? null : Number(s) } });
         const f = e.target.closest(".lb-card").querySelector(".lb-card-foot");
-        if (f) f.textContent = `Year to date: ${fmt(ytd(t.name))}`;
+        if (f) f.textContent = `${lbYtdText(Number(key.slice(5)))}: ${fmt(ytd(t.name))}`;
       } })),
-      h("p", { class: "lb-card-foot", text: `Year to date: ${fmt(ytd(t.name))}` }))));
+      h("p", { class: "lb-card-foot", text: `${lbYtdText(Number(key.slice(5)))}: ${fmt(ytd(t.name))}` }))));
 }
 
 /* ---- status: what's typed, and every team's numbers ---- */
@@ -5140,7 +5140,7 @@ function lbStatusEl() {
     }), ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
   const ytdRv = name => lbRecords().filter(r => r.team === name && r.group && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
   const reviews = h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
-    table(["Team", lbMonthLong(month), "Year to date"], board.map(t => [t.name, fmt(recOf(t.name).reviews), fmt(ytdRv(t.name))])));
+    table(["Team", lbMonthLong(month), lbYtdText(month)], board.map(t => [t.name, fmt(recOf(t.name).reviews), fmt(ytdRv(t.name))])));
   const offEl = off.length ? h("div", { class: "panel" }, h("h2", { text: "Numbers not counted" }),
     h("p", { class: "meta", text: `Typed for a team that isn't on the board in ${lbMonthLong(month)}: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. Fix the team's months in Teams if they should count.` })) : null;
   return [
@@ -5379,7 +5379,7 @@ function lbSlides() {
   for (const per of ["month", "ytd"]) for (const g of ["Cleaning", "Restoration", "Company"]) {
     const rows = st[per][g];
     if (!rows.length) continue;
-    slides.push(() => lbPodium(rows, per, g, per === "month" ? `${mname} · month to date` : `${y} · year to date`, key));
+    slides.push(() => lbPodium(rows, per, g, per === "month" ? `${mname} · month to date` : `Year to date · ${lbYtdText(month)}, ${y}`, key));
   }
   if (wk) slides.push(() => lbWeekSlide(wk));
   return slides;
@@ -5463,7 +5463,7 @@ function lbNumbersSlide(g, st, month) {
       h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
     h("div", { class: "lbs-tblwrap" }, h("table", { class: "lbs-tbl" },
       h("thead", null,
-        h("tr", { class: "lbs-grp" }, h("th"), h("th", { colspan: String(LB_MONTH_METRICS.length), text: lbMonthLong(month) }), h("th", { class: "ytd", colspan: String(LB_YTD_METRICS.length), text: "Year to date" })),
+        h("tr", { class: "lbs-grp" }, h("th"), h("th", { colspan: String(LB_MONTH_METRICS.length), text: lbMonthLong(month) }), h("th", { class: "ytd", colspan: String(LB_YTD_METRICS.length), text: `Year to date · ${lbYtdText(month)}` })),
         h("tr", null, h("th", { text: "Team" }), LB_MONTH_METRICS.map(m => h("th", { text: m.short })), LB_YTD_METRICS.map((m, i) => h("th", { class: i ? "" : "ytd", text: m.short })))),
       h("tbody", null, rows.map(r => {
         const yv = ytd[r.team] || {};
