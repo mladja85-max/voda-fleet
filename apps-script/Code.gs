@@ -96,10 +96,19 @@
  *     URL into config.js in GitHub. Phones switch over the next time the app opens.
  * Changed your mind before step 4? Run "moveCancel" in the old sheet: it un-pauses it and turns its jobs back on.
  *
+ * LEADERBOARD (weekly team standings)
+ * The app's Leaderboard section ranks the teams the same way the "5. REVENUE PER TRUCK" sheet does, from January 1 of this
+ * year: inside Cleaning, inside Restoration and across the company, for the month and the year to date. Admins (or whoever
+ * has "Leaderboard numbers" ticked) type each day's numbers in the app, as they did in the old sheets: each truck's jobs,
+ * work day, revenue and # of techs, each technician's sales (up sale, add-on, rugs in plant, additional service, jobs) and
+ * each month's 5-star reviews, and set up the teams (unit, and the months each team is on the board). The Leaderboard tab
+ * keeps them, one row per month plus "config", in JSON. Don't edit that tab by hand.
+ *
  * WHO SEES WHAT
  * Admins see everything. Each technician sees only what an Admin ticks for him in the app (Settings > Users and invites):
- * Trucks and/or any of the checklists. Technicians from before this choice keep Trucks only. This script refuses anything
- * a technician isn't given, whatever the app sends.
+ * Trucks, any of the checklists, Leaderboard (sees the standings) and Leaderboard numbers (types the numbers, sets up the teams).
+ * Technicians from before this choice keep Trucks only. This script refuses anything a technician isn't given, whatever the
+ * app sends.
  */
 
 const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
@@ -109,7 +118,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 20;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 22;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -266,6 +275,12 @@ function doPost(e) {
         return json_(withLock_(function () { return deleteChecklist_(req); }));
       case "mergeChecklist":
         return json_(withLock_(function () { return mergeChecklist_(req); }));
+      case "leaderboard":
+        if (!canLb_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(lbRead_(user, req.year));
+      case "lbPut":
+        if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return lbPut_(req); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -2648,7 +2663,8 @@ function supplyEmailTest() {
 }
 
 /* ---------------- who sees what ---------------- */
-// Users tab, column M (access): what a technician sees, comma-separated: "trucks" and/or checklist IDs.
+// Users tab, column M (access): what a technician sees, comma-separated: "trucks", "leaderboard", "leaderboard-import"
+// and/or checklist IDs.
 // Empty means Trucks only (how every technician worked before checklists). "-" means nothing yet. Admins see everything.
 
 const ACCESS_DEFAULT = ["trucks"];
@@ -2660,11 +2676,171 @@ function parseAccess_(s) {
 }
 function accessText_(arr) { return arr && arr.length ? arr.join(",") : "-"; }
 function canSee_(user, section) { return !!user && (user.role === "admin" || parseAccess_(user.access).indexOf(section) !== -1); }
-/** Only "trucks" and checklists that exist. */
+/** Only "trucks", the leaderboard and checklists that exist. */
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+}
+
+/* ---------------- leaderboard ---------------- */
+// The team standings (see LEADERBOARD at the top). Each day's numbers are typed into the app; this tab keeps them as one
+// row per document, in JSON: "config" (the teams on the board, their unit and months, and the sales goal) and one row per
+// month ("2026-11": each day's truck numbers and technician sales, and the month's 5-star reviews). The app adds them up
+// and ranks the teams.
+
+const LB_SHEET = "Leaderboard";
+const LB_COLS = ["key", "json", "updatedAt", "by"];
+const LB_ACCESS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers and sets up the teams
+const LB_UNITS = ["Cleaning", "Restoration"];
+const LB_PARTS = { t: 4, s: 5 };   // a truck's day: jobs, work day, revenue, # of techs; a technician's day: up sale, add-on, rugs in plant, additional service, jobs
+const LB_MAX_JSON = 45000;          // one cell holds 50,000 characters; a month is about 7,000
+
+function canLb_(user) { return canSee_(user, "leaderboard") || canSee_(user, "leaderboard-import"); }
+function canLbEdit_(user) { return canSee_(user, "leaderboard-import"); }
+
+/** The Leaderboard tab (made the first time something is saved). A tab of that name from an older layout is kept as
+ *  "Leaderboard (old)". */
+function lbSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(LB_SHEET);
+  if (s && String(s.getRange(1, 1).getValue()) !== "key") {
+    if (!create) return null;
+    s.setName(LB_SHEET + " (old " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HHmm") + ")");
+    s = null;
+  }
+  if (!s && create) {
+    s = ss.insertSheet(LB_SHEET);
+    s.getRange(1, 1, 1, LB_COLS.length).setValues([LB_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:B").setNumberFormat("@");   // plain text: a key like 2026-11 must not turn into a date
+  }
+  return s;
+}
+function lbRows_(s) {
+  if (!s || s.getLastRow() < 2) return [];
+  return s.getRange(2, 1, s.getLastRow() - 1, LB_COLS.length).getValues().map(function (r, i) {
+    return { row: i + 2, key: String(r[0]).trim(), json: String(r[1] || "") };
+  });
+}
+function lbParse_(text) {
+  try { const o = JSON.parse(text || "{}"); return o && typeof o === "object" && !Array.isArray(o) ? o : {}; } catch (e) { return {}; }
+}
+/** A team name: letters, spaces, apostrophes and dashes only (nothing can turn into a formula or split a field name). */
+function lbTeam_(v) {
+  const t = supText_(v, 30);
+  return /^[A-Za-z][A-Za-z '-]*$/.test(t) ? t : "";
+}
+function lbYm_(v) { return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(v || "")) ? String(v) : ""; }
+/** Deep merge, the way the app saves a change: objects merge, everything else (lists, numbers, null) replaces. */
+function lbMerge_(a, b) {
+  Object.keys(b || {}).forEach(function (k) {
+    const v = b[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      if (!a[k] || typeof a[k] !== "object" || Array.isArray(a[k])) a[k] = {};
+      lbMerge_(a[k], v);
+    } else a[k] = v;
+  });
+  return a;
+}
+function lbNums_(a, n) {
+  if (!Array.isArray(a)) return null;
+  const out = [];
+  let any = false;
+  for (let i = 0; i < n; i++) { const v = typeof a[i] === "number" && isFinite(a[i]) ? a[i] : null; out.push(v); if (v !== null) any = true; }
+  return any ? out : null;
+}
+/** The roster, cleaned: each team once, a unit, the months it's on the board. */
+function lbConfig_(c) {
+  const out = { teams: [], goal: 3000 };
+  const g = c && Number(c.goal);
+  if (g > 0 && g < 1e7) out.goal = g;
+  const seen = {};
+  ((c && Array.isArray(c.teams)) ? c.teams : []).slice(0, 60).forEach(function (t) {
+    const name = lbTeam_(t && t.name);
+    if (!name || seen[name.toLowerCase()]) return;
+    seen[name.toLowerCase()] = true;
+    let from = lbYm_(t.from), to = lbYm_(t.to);
+    if (from && to && to < from) to = from;
+    out.teams.push({ name: name, unit: LB_UNITS.indexOf(t.unit) !== -1 ? t.unit : LB_UNITS[0], from: from, to: to });
+  });
+  return out;
+}
+/** A month, cleaned: only that month's days, team names, numbers, and who saved each day. */
+function lbMonth_(d, key) {
+  const out = { days: {}, reviews: {} };
+  const days = d && d.days && typeof d.days === "object" ? d.days : {};
+  Object.keys(days).forEach(function (day) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day.slice(0, 7) !== key) return;
+    const x = days[day] && typeof days[day] === "object" ? days[day] : {};
+    const y = {};
+    Object.keys(LB_PARTS).forEach(function (p) {
+      const m = {};
+      Object.keys(x[p] && typeof x[p] === "object" ? x[p] : {}).forEach(function (team) {
+        const name = lbTeam_(team), nums = lbNums_(x[p][team], LB_PARTS[p]);
+        if (name && nums) m[name] = nums;
+      });
+      if (Object.keys(m).length) y[p] = m;
+    });
+    if (!y.t && !y.s) return;
+    if (x.at) y.at = supText_(x.at, 30);
+    if (x.by) y.by = supText_(x.by, 60);
+    out.days[day] = y;
+  });
+  const rv = d && d.reviews && typeof d.reviews === "object" ? d.reviews : {};
+  Object.keys(rv).forEach(function (team) {
+    const name = lbTeam_(team);
+    if (name && typeof rv[team] === "number" && isFinite(rv[team])) out.reviews[name] = rv[team];
+  });
+  if (d && d.rat) out.rat = supText_(d.rat, 30);
+  if (d && d.rby) out.rby = supText_(d.rby, 60);
+  return out;
+}
+/** Everything for one year: the roster and that year's months. */
+function lbRead_(user, year) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const out = { ok: true, config: { teams: [], goal: 3000 }, months: {}, canEdit: canLbEdit_(user) };
+  lbRows_(lbSheet_(false)).forEach(function (r) {
+    if (r.key === "config") out.config = lbParse_(r.json);
+    else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);
+  });
+  return out;
+}
+/** Saves changes: { writes: [{ key: "2026-11", patch }] } merges a change into that month (a blank entry clears it);
+ *  { key, data } replaces the month or the roster ("config") whole. Each day changed is stamped with who saved it. */
+function lbPut_(req) {
+  const writes = (Array.isArray(req.writes) ? req.writes : []).slice(0, 14);
+  const s = lbSheet_(true);
+  const byKey = {};
+  lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
+  const now = new Date().toISOString();
+  const out = { ok: true, months: {} };
+  writes.forEach(function (w) {
+    const key = String((w && w.key) || "");
+    const whole = w && w.data && typeof w.data === "object";
+    const change = whole ? w.data : (w && w.patch && typeof w.patch === "object" ? w.patch : null);
+    if (!change || (key !== "config" && !lbYm_(key))) return;
+    let doc;
+    if (key === "config") doc = lbConfig_(change);
+    else {
+      doc = lbMerge_(whole ? {} : lbParse_(byKey[key] ? byKey[key].json : ""), change);
+      if (!whole) {
+        Object.keys(change.days && typeof change.days === "object" ? change.days : {}).forEach(function (day) {
+          if (doc.days && doc.days[day] && typeof doc.days[day] === "object") { doc.days[day].at = now; doc.days[day].by = req.by; }
+        });
+        if (change.reviews) { doc.rat = now; doc.rby = req.by; }
+      }
+      doc = lbMonth_(doc, key);
+    }
+    if (key === "config") { doc.at = now; doc.by = req.by; }
+    const text = JSON.stringify(doc);
+    if (text.length > LB_MAX_JSON) throw new Error("The " + key + " numbers are too long to save.");
+    if (byKey[key]) s.getRange(byKey[key].row, 2, 1, 3).setValues([[text, now, req.by]]);
+    else { appendRows_(s, LB_COLS.length, [[key, text, now, req.by]]); byKey[key] = { row: s.getLastRow(), key: key }; }
+    byKey[key].json = text;
+    if (key === "config") out.config = doc; else out.months[key] = doc;
+  });
+  return out;
 }
 
 /* ---------------- weekly backup ---------------- */
