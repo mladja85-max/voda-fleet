@@ -135,6 +135,15 @@ button { font: inherit; color: inherit; }
 
 /* ---- page ---- */
 .page { padding: 18px 24px 48px; display: grid; gap: 16px; }
+/* PCs and wide screens: the page sits in a centered column instead of stretching edge to edge, and the top bar lines
+   up with it. Trucks gets a wide column (its cards fill it); Checklists and the Leaderboard a reading-width one. */
+@media (min-width: 1100px) {
+  :root { --page-w: 1560px; }
+  body[data-tab="supplies"], body[data-tab="leaderboard"] { --page-w: 1000px; }
+  .page { width: 100%; max-width: calc(var(--page-w) + 48px); margin-inline: auto; }
+  .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
+  body .sup, body .lb { max-width: none; }
+}
 .banner { border-radius: 12px; padding: 11px 14px; font-weight: 500; background: var(--soon-bg); border: 1px solid var(--line); }
 .banner:empty { display: none; }
 .installbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 12px; padding: 10px 14px; }
