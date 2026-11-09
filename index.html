@@ -828,18 +828,12 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-pay tr.off th, .lb-pay tr.off td { color: var(--muted); background: color-mix(in srgb, var(--due) 6%, var(--surface)); }
 .lb-pay tr.wk th, .lb-pay tr.wk td { font-weight: 700; background: var(--accent-soft); }
 .lb-pay tfoot th, .lb-pay tfoot td { font-weight: 700; }
-/* the totals at the bottom stand out: gold like 1st place, the per job / daily rows a lighter gold */
+/* the total at the bottom stands out: gold like 1st place */
 .lb-pay tfoot tr.tot th, .lb-pay tfoot tr.tot td { border-top: 2px solid var(--ink); border-bottom: 2px solid #dba500; background: color-mix(in srgb, #f2b705 32%, var(--surface)); font-size: .92rem; padding-block: 7px; }
 .lb-pay tfoot tr.tot th { text-transform: uppercase; letter-spacing: .05em; }
-.lb-pay tfoot tr:not(.tot) th, .lb-pay tfoot tr:not(.tot) td { background: color-mix(in srgb, #f2b705 12%, var(--surface)); }
-/* and stay in sight at the bottom while the days scroll (2 weeks, a month) */
-.lb-pay tfoot tr { height: 30px; }
-.lb-pay tfoot tr.tot { height: 36px; }
-.lb-pay tfoot td, .lb-pay tfoot th { position: sticky; z-index: 1; box-sizing: border-box; }
+/* and stays in sight at the bottom while the days scroll (2 weeks, a month) */
+.lb-pay tfoot td, .lb-pay tfoot th { position: sticky; bottom: 0; z-index: 1; }
 .lb-pay tfoot th { z-index: 2; }
-.lb-pay tfoot tr.tot > * { bottom: 60px; }
-.lb-pay tfoot tr:nth-child(2) > * { bottom: 30px; }
-.lb-pay tfoot tr:nth-child(3) > * { bottom: 0; }
 .lb-rvsec { display: grid; gap: 8px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
 .lb-rvsec h4 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; }
 .lb-rvsec .hint { margin: 0; }
@@ -6120,9 +6114,7 @@ function lbPayrollEl() {
       h("tr", null, teams.map((t, ti) => ["Jobs", "Work days", "Revenue", "# of techs"].map((l, i) => h("th", { class: `sub t${ti % 2}${i === 3 ? " last" : ""}`, text: l }))))),
     h("tbody", null, rows),
     h("tfoot", null,
-      h("tr", { class: "tot" }, h("th", { text: "Total" }), tot.map(a => cells(a))),
-      h("tr", null, h("th", { text: "Per job" }), tot.map((a, ti) => h("td", { colspan: "4", class: `c last t${ti % 2}`, text: a.jobs ? lbMoney(a.rev / a.jobs) : "–" }))),
-      h("tr", null, h("th", { text: "Daily per truck" }), tot.map((a, ti) => h("td", { colspan: "4", class: `c last t${ti % 2}`, text: a.days ? lbMoney(a.rev / a.days) : "–" }))))));
+      h("tr", { class: "tot" }, h("th", { text: "Total" }), tot.map(a => cells(a))))));
   const label = per === "month" ? `${lbMonthLong(Number(r.from.slice(5, 7)))} ${r.from.slice(0, 4)}` : lbSpanText(r.from, r.to);
   const dateBox = (id, value, aria, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: aria }),
     h("input", { id, type: "date", value, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": aria, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
@@ -6138,8 +6130,7 @@ function lbPayrollEl() {
     h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "week" || per === "two" ? " · Sunday to Saturday" : per === "custom" ? ` · ${len} day${len === 1 ? "" : "s"}` : "",
       per === "custom" && lbIsDay(lbView.pto) && lbDayCount(r.from, lbView.pto) > LB_PAY_MAX ? ` (up to ${LB_PAY_MAX} days at a time)` : "",
       ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
-    teams.length ? h("div", { class: "panel lb-paypanel" }, grid,
-      h("p", { class: "hint", text: "Straight from Enter numbers > Trucks: each tech's jobs, work days, truck revenue and # of techs, day by day. Week, 2 weeks and Month start from the From day: its pay week (Sunday to Saturday), its two weeks or its month. Change From or To for any other dates." }))
+    teams.length ? h("div", { class: "panel lb-paypanel" }, grid)
       : h("p", { class: "meta", text: "No teams on a truck then." })];
 }
 
