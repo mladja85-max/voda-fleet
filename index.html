@@ -636,7 +636,10 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-p-head .of-mo { flex: 1 1 140px; }
 .of-mo input, .of-mo select, .of-f input, .of-f select { width: 100%; min-width: 0; box-sizing: border-box; }
 .of-p-head .p-name { flex: 1 1 140px; min-width: 0; box-sizing: border-box; }
-.lb-rv-base { display: flex; align-items: center; gap: 10px; margin: -6px 0 4px; padding: 8px 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px dashed var(--line); font-size: .85rem; color: var(--muted); }
+.lb-rv-base { display: flex; align-items: center; gap: 10px; margin: 2px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border: 1px dashed var(--soon); font-size: .82rem; color: var(--muted); }
+.lb-rv-base > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.lb-rv-base b { color: var(--soon); font-weight: 700; }
+.lb-rv-base small { font-size: .76rem; line-height: 1.3; }
 .lb-rv-base input { width: 5em; font: inherit; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .lb-rv-base input.bad { border-color: var(--due); }
 #lbHistYears td { white-space: nowrap; }
@@ -749,7 +752,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-wd:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
 .lb-enter { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; }
 .lb-enter > .lb-sub, .lb-enter > .hint, .lb-enter > .meta { grid-column: 1 / -1; margin: 0; }
-.lb-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; display: grid; gap: 8px; }
+.lb-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; display: grid; gap: 8px; align-content: start; }
 .lb-card.off { border-style: dashed; }
 .lb-card.bad { border-color: var(--due); }
 .lb-card-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -5846,17 +5849,18 @@ function lbEnterEl() {
 const lbBox = (label, value, data, hint) => h("label", { class: "lb-box" + (hint ? " has-hint" : "") }, h("span", { text: label }),
   h("input", Object.assign({ type: "text", inputmode: "decimal", autocomplete: "off", enterkeyhint: "next", value: value == null ? "" : String(value), onchange: () => lbFlush() }, data)),
   hint ? h("small", { text: hint }) : null);
-function lbCard(t, part, day, fields, arr, foot) {
+function lbCard(t, part, day, fields, arr, foot, extra) {
   return h("div", { class: "lb-card" + (t.off ? " off" : ""), "data-team": t.name, "data-part": part },
     h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
     h("div", { class: `lb-boxes n${fields.length}` }, fields.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), arr[i], { "data-i": String(i), oninput: () => lbTyped(day, part, t.name, fields.length) }))),
-    h("p", { class: "lb-card-foot", text: foot }));
+    h("p", { class: "lb-card-foot", text: foot }),
+    extra || null);
 }
 /** A box changed: save that team's day (blank boxes are saved as blank). */
 function lbTyped(day, part, team, n) {
   const card = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="${part}"]`);
   if (!card) return;
-  const vals = [...card.querySelectorAll("input")].map(i => i.value);
+  const vals = [...card.querySelectorAll(".lb-boxes input")].map(i => i.value);
   const bad = vals.some(s => { const t = String(s).replace(/[$,\s]/g, ""); return t !== "" && !Number.isFinite(Number(t)); });
   card.classList.toggle("bad", bad);
   if (bad) return;
@@ -5923,7 +5927,7 @@ function lbReviewsEl(day) {
   const teams = lbTeamsFor(key, Object.keys(d.r || {}).filter(n => lbEntry(d.r[n], LB_REVIEW.length).length).concat(Object.keys(base).filter(n => lbVal(base[n]))));
   // a total typed for the whole month before reviews were typed by day: kept, and can be changed or cleared here
   const baseBox = t => lbVal(base[t.name]) ? h("label", { class: "lb-rv-base", "data-team": t.name },
-    h("span", { text: `Typed for all of ${lbMonthLong(month)} earlier (counts too)` }),
+    h("span", null, h("b", { text: `${lbMonthLong(month)} total typed earlier` }), h("small", { text: `From before reviews were typed by day (the sheet's monthly count). It counts on top of the days, so clear it if those reviews are also typed on their day.` })),
     h("input", { type: "text", inputmode: "decimal", autocomplete: "off", value: String(base[t.name]), onchange: () => lbFlush(), oninput: e => {
       const v = e.target.value.replace(/[,\s]/g, "");
       const bad = v !== "" && !Number.isFinite(Number(v));
@@ -5936,7 +5940,7 @@ function lbReviewsEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     h("p", { class: "hint", text: "5-star reviews only (4 and 3 stars don't count)." }),
-    teams.length ? teams.map(t => [lbCard(t, "r", day, LB_REVIEW, lbEntry((d.r || {})[t.name], LB_REVIEW.length), lbReviewFoot(day, t.name)), baseBox(t)])
+    teams.length ? teams.map(t => lbCard(t, "r", day, LB_REVIEW, lbEntry((d.r || {})[t.name], LB_REVIEW.length), lbReviewFoot(day, t.name), baseBox(t)))
       : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(month)}. Check Teams.` }));
 }
 
