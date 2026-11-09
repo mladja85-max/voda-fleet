@@ -101,7 +101,7 @@
  * year: inside Cleaning, inside Restoration and across the company, for the month and the year to date. Admins (or whoever
  * has "Leaderboard numbers" ticked) type each day's numbers in the app, as they did in the old sheets: each truck's jobs,
  * work day, revenue and # of techs, each technician's sales (up sale, add-on, rugs in plant, additional service, jobs) and
- * each month's 5-star reviews, and set up the teams (unit, and the months each team is on the board). The Leaderboard tab
+ * each day's 5-star reviews (older months may have one total for the month), and set up the teams (unit, and the months each team is on the board). The Leaderboard tab
  * keeps them, one row per month plus "config", in JSON. Don't edit that tab by hand.
  *
  * WHO SEES WHAT
@@ -118,7 +118,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 22;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 23;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2693,7 +2693,7 @@ const LB_SHEET = "Leaderboard";
 const LB_COLS = ["key", "json", "updatedAt", "by"];
 const LB_ACCESS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers and sets up the teams
 const LB_UNITS = ["Cleaning", "Restoration"];
-const LB_PARTS = { t: 4, s: 5 };   // a truck's day: jobs, work day, revenue, # of techs; a technician's day: up sale, add-on, rugs in plant, additional service, jobs
+const LB_PARTS = { t: 4, s: 5, r: 1 };   // a truck's day: jobs, work day, revenue, # of techs; a technician's day: up sale, add-on, rugs in plant, additional service, jobs; a team's 5-star reviews that day
 const LB_MAX_JSON = 45000;          // one cell holds 50,000 characters; a month is about 7,000
 
 function canLb_(user) { return canSee_(user, "leaderboard") || canSee_(user, "leaderboard-import"); }
@@ -2782,7 +2782,7 @@ function lbMonth_(d, key) {
       });
       if (Object.keys(m).length) y[p] = m;
     });
-    if (!y.t && !y.s) return;
+    if (!y.t && !y.s && !y.r) return;
     if (x.at) y.at = supText_(x.at, 30);
     if (x.by) y.by = supText_(x.by, 60);
     out.days[day] = y;

@@ -588,6 +588,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-acts { display: flex; gap: 8px; margin-left: auto; } /* Presentation and Teams stay side by side */
 .lb-acts:empty { display: none; }
 .lb-when { display: flex; gap: 8px; flex-wrap: wrap; }
+.lb-rv-base { display: flex; align-items: center; gap: 10px; margin: -6px 0 4px; padding: 8px 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px dashed var(--line); font-size: .85rem; color: var(--muted); }
+.lb-rv-base input { width: 5em; font: inherit; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.lb-rv-base input.bad { border-color: var(--due); }
 #lbHistYears td { white-space: nowrap; }
 #lbHistYears td.lb-hist-teams { white-space: normal; min-width: 14em; color: var(--muted); font-size: .85rem; }
 .lb-hist-more summary { cursor: pointer; font-weight: 600; color: var(--accent); }
@@ -1275,6 +1278,8 @@ const LB_SALE = [
   { key: "rugs", label: "Rugs in plant", money: true },
   { key: "extra", label: "Additional service", money: true },
   { key: "saleJobs", label: "Jobs" }];
+const LB_REVIEW = [{ key: "reviews", label: "5-star reviews" }];   // a team's reviews that day
+const LB_PART_LEN = { t: LB_TRUCK.length, s: LB_SALE.length, r: LB_REVIEW.length };
 const LB_GOAL = 3000;   // each technician's monthly sales goal (the sheet's MONTHLY NEED)
 // How the sheets spell some names
 const LB_ALIASES = { chriss: "Chris", dereck: "Derek", hary: "Harry", jhon: "John", fredy: "Freddy" };
@@ -1447,12 +1452,16 @@ function lbBuild(cfgIn, docs, year, opts) {
         r.saleDays++;
         if (day > r.last) r.last = day;
       }
+      for (const [n, arr] of Object.entries(d.r && typeof d.r === "object" ? d.r : {})) {
+        const team = nameOf(n), e = lbEntry(arr, LB_REVIEW.length);
+        if (team && e.length && e[0] != null) rec(dkey, team).reviews += e[0];
+      }
       if (typed && day <= today && day > newest) newest = day;
     }
     if (until && key > until.slice(0, 7)) continue;
     for (const [n, v] of Object.entries(doc.reviews && typeof doc.reviews === "object" ? doc.reviews : {})) {
       const team = nameOf(n);
-      if (team && lbVal(v) != null) rec(key, team).reviews = v;
+      if (team && lbVal(v) != null) rec(key, team).reviews += v;   // a whole month's total (older months)
     }
   }
   // every team on the board gets a row each month up to now, even before anything is typed, and a row in every week
@@ -1494,12 +1503,12 @@ function lbCleanMonth(d, key) {
   for (const day of Object.keys(days)) {
     if (!lbIsDay(day) || day.slice(0, 7) !== key) continue;
     const x = days[day] && typeof days[day] === "object" ? days[day] : {}, y = {};
-    for (const [p, n] of [["t", LB_TRUCK.length], ["s", LB_SALE.length]]) {
+    for (const [p, n] of Object.entries(LB_PART_LEN)) {
       const m = {};
       for (const [team, a] of Object.entries(x[p] && typeof x[p] === "object" ? x[p] : {})) { const nm = lbTeamName(team), e = lbEntry(a, n); if (nm && e.length) m[nm] = e; }
       if (Object.keys(m).length) y[p] = m;
     }
-    if (!y.t && !y.s) continue;
+    if (!y.t && !y.s && !y.r) continue;
     if (x.at) y.at = String(x.at).slice(0, 30);
     if (x.by) y.by = String(x.by).slice(0, 60);
     out.days[day] = y;
@@ -1521,15 +1530,16 @@ function lbMoveNumbers(docs, from, to, fromKey, toKey) {
     const doc = lbCleanMonth(docs[key] || {}, key);
     let changed = false;
     for (const d of Object.values(doc.days)) {
-      for (const p of ["t", "s"]) {
+      for (const p of ["t", "s", "r"]) {
         const part = d[p];
         if (!part) continue;
         const src = Object.keys(part).find(isFrom);
         if (!src) continue;
-        if (part[toName] && lbEntry(part[toName], p === "t" ? LB_TRUCK.length : LB_SALE.length).length) { out.kept++; continue; }
+        if (part[toName] && lbEntry(part[toName], LB_PART_LEN[p]).length) { out.kept++; continue; }
         const e = part[src];
         if (p === "t") { out.moved.truckDays++; out.moved.revenue += e[2] || 0; }
-        else { out.moved.saleDays++; out.moved.sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0); }
+        else if (p === "s") { out.moved.saleDays++; out.moved.sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0); }
+        else out.moved.reviews += e[0] || 0;
         part[toName] = e; delete part[src]; changed = true;
       }
     }
@@ -4928,6 +4938,7 @@ function accessChips(selected, onchange, idPrefix) {
 
 /* ---------- leaderboard ---------- */
 const LB_API = 22;                                     // the Google script version with typed-in leaderboard numbers
+const LB_RV_API = 23;                                  // ... and with 5-star reviews typed by day
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -5265,7 +5276,7 @@ function lbEnterDay() {
   return (lbView.day = d);
 }
 const lbDayDoc = day => { const d = ((lbData.months[day.slice(0, 7)] || {}).days || {})[day]; return d && typeof d === "object" ? d : {}; };
-const lbHasPart = (day, part) => Object.values(lbDayDoc(day)[part] || {}).some(a => lbEntry(a, part === "t" ? LB_TRUCK.length : LB_SALE.length).length);
+const lbHasPart = (day, part) => Object.values(lbDayDoc(day)[part] || {}).some(a => lbEntry(a, LB_PART_LEN[part] || 1).length);
 /** The teams to show for a day: the month's board, then anyone else with numbers that day (so they can be cleared). */
 function lbTeamsFor(key, names) {
   const cfg = lbCfg(), board = lbBoard(cfg, key);
@@ -5282,17 +5293,10 @@ function lbEnterEl() {
   const day = lbEnterDay(), key = day.slice(0, 7), month = Number(key.slice(5));
   const parts = lbSeg(Object.entries(LB_PARTS), part, k => { lbFlush(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
   const out = [h("div", { class: "lb-bar" }, parts)];
-  if (part === "reviews") {
-    const months = Array.from({ length: Math.max(1, Math.min(12, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 12)) }, (_, i) => i + 1);
-    out.push(h("div", { class: "lb-daybar" },
-      h("select", { id: "lbRevMonth", "aria-label": "Month", onchange: e => lbGoDay(`${y}-${String(e.target.value).padStart(2, "0")}-01`) },
-        months.map(m => h("option", { value: String(m), text: `${lbMonthLong(m)} ${y}`, selected: m === month }))),
-      h("span", { class: "hint", text: "5-star reviews only (4 and 3 stars don't count)." })));
-    out.push(lbReviewsEl(key));
-  } else {
+  {
     const first = `${y}-01-01`, last = `${y}-12-31`;
     const mon = lbMondayOf(day);
-    const pk = part === "trucks" ? "t" : "s";
+    const pk = part === "trucks" ? "t" : part === "sales" ? "s" : "r";
     out.push(h("div", { class: "lb-daybar" },
       h("button", { class: "btn small", type: "button", id: "lbPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => lbGoDay(lbAddDays(day, -1)) }, "‹"),
       h("input", { id: "lbDay", type: "date", value: day, min: first, max: last, "aria-label": "Day", onchange: e => { if (lbIsDay(e.target.value) && e.target.value.startsWith(y + "-")) lbGoDay(e.target.value); } }),
@@ -5304,7 +5308,10 @@ function lbEnterEl() {
         return h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : "") + (lbHasPart(d, pk) ? " has" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => lbGoDay(d) },
           h("small", { text: LB_WD[dt.getDay()] }), String(dt.getDate()));
       })));
-    out.push(part === "trucks" ? lbTrucksEl(day) : lbSalesEl(day));
+    out.push(part === "trucks" ? lbTrucksEl(day) : part === "sales" ? lbSalesEl(day)
+      : apiLevel && apiLevel < LB_RV_API ? h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+        h("p", { class: "meta", text: "Typing reviews by day needs the newest Google script. In the VODA Prime Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." }))
+      : lbReviewsEl(day));
   }
   out.push(h("p", { id: "lbSaveNote", class: "lb-save", role: "status" }));
   return out;
@@ -5330,7 +5337,7 @@ function lbTyped(day, part, team, n) {
   const arr = lbFromBoxes(vals, n);
   lbQueue(day.slice(0, 7), { days: { [day]: { [part]: { [team]: arr } } } });
   const foot = card.querySelector(".lb-card-foot");
-  if (foot) foot.textContent = part === "t" ? lbTruckFoot(day, team) : lbSaleFoot(day, team);
+  if (foot) foot.textContent = part === "t" ? lbTruckFoot(day, team) : part === "s" ? lbSaleFoot(day, team) : lbReviewFoot(day, team);
   const tot = $("lbDayTotal");
   if (tot) tot.textContent = lbDayTotalText(day);
   const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);
@@ -5353,7 +5360,9 @@ function lbDayTotalText(day) {
   let rev = 0, jobs = 0, sales = 0;
   for (const a of Object.values(d.t || {})) { const e = lbEntry(a, LB_TRUCK.length); if (e.length) { rev += e[2] || 0; jobs += e[0] || 0; } }
   for (const a of Object.values(d.s || {})) { const e = lbEntry(a, LB_SALE.length); if (e.length) sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0); }
-  return `${lbDayText(day)} total: ${lbMoney(rev)} revenue · ${fmt(jobs)} jobs · ${lbMoney(sales)} technician sales`;
+  let reviews = 0;
+  for (const a of Object.values(d.r || {})) { const e = lbEntry(a, LB_REVIEW.length); if (e.length) reviews += e[0] || 0; }
+  return `${lbDayText(day)} total: ${lbMoney(rev)} revenue · ${fmt(jobs)} jobs · ${lbMoney(sales)} technician sales · ${fmt(reviews)} five-star review${reviews === 1 ? "" : "s"}`;
 }
 function lbTrucksEl(day) {
   const d = lbDayDoc(day), key = day.slice(0, 7);
@@ -5373,24 +5382,34 @@ function lbSalesEl(day) {
       : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Teams.` }),
     h("p", { class: "hint", text: "Jobs: the technician's jobs that day, for sale per job." }));
 }
-function lbReviewsEl(key) {
-  const doc = lbData.months[key] || {}, rv = doc.reviews || {};
-  const teams = lbTeamsFor(key, Object.keys(rv).filter(n => lbVal(rv[n]) != null));
-  const y = lbYear();
-  const ytd = team => lbRecords().filter(r => r.team === team && r.group && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
-  return h("div", { class: "lb-enter lb-enter-rv", id: "lbEnter" },
-    teams.map(t => h("div", { class: "lb-card" + (t.off ? " off" : ""), "data-team": t.name, "data-part": "r" },
-      h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
-      h("div", { class: "lb-boxes n1" }, lbBox("5-star reviews", lbVal(rv[t.name]), { oninput: e => {
-        const s = e.target.value.replace(/[,\s]/g, "");
-        const bad = s !== "" && !Number.isFinite(Number(s));
-        e.target.closest(".lb-card").classList.toggle("bad", bad);
-        if (bad) return;
-        lbQueue(key, { reviews: { [t.name]: s === "" ? null : Number(s) } });
-        const f = e.target.closest(".lb-card").querySelector(".lb-card-foot");
-        if (f) f.textContent = `${lbYtdText(Number(key.slice(5)))}: ${fmt(ytd(t.name))}`;
-      } })),
-      h("p", { class: "lb-card-foot", text: `${lbYtdText(Number(key.slice(5)))}: ${fmt(ytd(t.name))}` }))));
+/** A team's 5-star reviews: that day, the month (with any total typed for the whole month the older way) and the year. */
+function lbReviewFoot(day, team) {
+  const e = lbEntry((lbDayDoc(day).r || {})[team], LB_REVIEW.length), key = day.slice(0, 7), month = Number(key.slice(5));
+  const r = lbRecOf(key, team), y = lbYear();
+  const ytd = lbRecords().filter(x => x.team.toLowerCase() === team.toLowerCase() && x.group && x.month <= key && x.month.startsWith(y + "-")).reduce((sum, x) => sum + x.reviews, 0);
+  return `${e.length ? `Day: ${fmt(e[0] || 0)}` : "Nothing typed for this day"} · ${lbMonthLong(month)}: ${fmt(r ? r.reviews : 0)} · ${lbYtdText(month)}: ${fmt(ytd)}`;
+}
+function lbReviewsEl(day) {
+  const d = lbDayDoc(day), key = day.slice(0, 7), month = Number(key.slice(5));
+  const base = (lbData.months[key] || {}).reviews || {};
+  const teams = lbTeamsFor(key, Object.keys(d.r || {}).filter(n => lbEntry(d.r[n], LB_REVIEW.length).length).concat(Object.keys(base).filter(n => lbVal(base[n]))));
+  // a total typed for the whole month before reviews were typed by day: kept, and can be changed or cleared here
+  const baseBox = t => lbVal(base[t.name]) ? h("label", { class: "lb-rv-base", "data-team": t.name },
+    h("span", { text: `Typed for all of ${lbMonthLong(month)} earlier (counts too)` }),
+    h("input", { type: "text", inputmode: "decimal", autocomplete: "off", value: String(base[t.name]), onchange: () => lbFlush(), oninput: e => {
+      const v = e.target.value.replace(/[,\s]/g, "");
+      const bad = v !== "" && !Number.isFinite(Number(v));
+      e.target.classList.toggle("bad", bad);
+      if (bad) return;
+      lbQueue(key, { reviews: { [t.name]: v === "" ? null : Number(v) } });
+      const f = document.querySelector(`.lb-card[data-team="${CSS.escape(t.name)}"][data-part="r"] .lb-card-foot`);
+      if (f) f.textContent = lbReviewFoot(day, t.name);
+    } })) : null;
+  return h("div", { class: "lb-enter", id: "lbEnter" },
+    h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
+    h("p", { class: "hint", text: "5-star reviews only (4 and 3 stars don't count)." }),
+    teams.length ? teams.map(t => [lbCard(t, "r", day, LB_REVIEW, lbEntry((d.r || {})[t.name], LB_REVIEW.length), lbReviewFoot(day, t.name)), baseBox(t)])
+      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(month)}. Check Teams.` }));
 }
 
 /* ---- status: what's typed, and every team's numbers ---- */
