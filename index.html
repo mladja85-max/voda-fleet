@@ -788,6 +788,20 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-grid td > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .lb-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-left: 6px; }
 .lb-table tfoot th, .lb-table tfoot td { font-weight: 700; border-bottom: 0; }
+/* Status tables ranked: tap a heading to rank by it */
+.lb-rank thead th { padding: 0; }
+.lb-rank .lbs-sort { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 5px 6px; cursor: pointer; text-align: inherit; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
+.lb-rank .lbs-sort:hover { color: var(--accent); }
+.lb-rank .lbs-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.lb-rank thead th.on { color: var(--accent); }
+.lb-rank .lbs-sort i { font-style: normal; }
+.lb-rank td.on { font-weight: 700; color: var(--ink); }
+.lb-rank .lbs-who { display: inline-flex; align-items: center; gap: 8px; }
+.lbs-place { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 7px; font-family: var(--font-display); font-size: .9rem; font-weight: 700;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); box-sizing: border-box; }
+.lbs-place.p1 { background: #f2b705; color: #3b2a00; border-color: #dba500; }
+.lbs-place.p2 { background: #1f4fbf; color: #fff; border-color: #1a43a6; }
+.lbs-place.p3 { background: #1f8fc7; color: #fff; border-color: #1a7fb3; }
 .lb-table tbody th, .lb-table tfoot th { font-weight: 700; text-align: left; color: var(--ink); text-transform: none; letter-spacing: 0; font-size: .86rem; }
 .lb-teams { display: grid; gap: 8px; }
 .lb-team .t-label { font-family: var(--font-display); font-size: 1.2rem; text-transform: uppercase; letter-spacing: .02em; margin-right: auto; }
@@ -5348,8 +5362,8 @@ const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the stan
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
 let lbLoading = false, lbErr = "", lbOld = false;
-const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false }, store.get(K_LB_VIEW) || {});
-const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut });
+const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {} }, store.get(K_LB_VIEW) || {});
+const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort });
 /** Status can show a month, the year to date, this week so far or last week (a past year: a month or the year). */
 const LB_SPER = { month: "Month", ytd: "Year to date", wtd: "Week to date", lastweek: "Last week" };
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
@@ -5924,6 +5938,37 @@ function lbSpanRecs(from, to, withReviews) {
   }
   return out;
 }
+/** A Status table ranked by one of its numbers, best first: 1, 2 and 3 in gold, VODA blue and VODA drop blue (a tie
+ *  shares the place). Tap a heading to rank by that number, tap it again for the other way; Team sorts A to Z with no
+ *  places. A team with nothing typed (`has` false) comes last, without a place.
+ *  cols: [{ k, label, v: team => number, f: team => text, low: lower is better, def: ranked by it at first }] */
+function lbRankTable(id, cols, list, has, foot) {
+  const saved = (lbView.ssort || {})[id] || {};
+  const k = saved.k === "name" || cols.some(c => c.k === saved.k) ? saved.k : (cols.find(c => c.def) || cols[0]).k;
+  const flip = !!saved.flip;
+  const col = cols.find(c => c.k === k);
+  const live = list.filter(has), idle = list.filter(t => !has(t)).sort((a, b) => a.name.localeCompare(b.name));
+  let rows;
+  if (k === "name") rows = list.slice().sort((a, b) => (flip ? -1 : 1) * a.name.localeCompare(b.name)).map(t => ({ t, p: null }));
+  else {
+    const low = flip ? !col.low : !!col.low;
+    const vals = live.map(col.v), rk = lbRanks(vals, low);
+    // gold and blues only for a real result: $0 sales tied for 3rd get a plain place
+    rows = live.map((t, i) => ({ t, p: rk[i], medal: low || vals[i] > 0 })).sort((a, b) => a.p - b.p || a.t.name.localeCompare(b.t.name)).concat(idle.map(t => ({ t, p: null })));
+  }
+  const pick = key => { lbView.ssort = Object.assign({}, lbView.ssort, { [id]: { k: key, flip: key === k ? !flip : false } }); lbSaveView(); renderLeaderboard(); };
+  const head = (key, label) => {
+    const on = key === k, dir = key === "name" ? (flip ? "descending" : "ascending") : (flip ? !(col && col.low) : !!(col && col.low)) ? "ascending" : "descending";
+    return h("th", { "aria-sort": on ? dir : "none", class: on ? "on" : "" },
+      h("button", { type: "button", class: "lbs-sort", "data-k": key, title: key === "name" ? "A to Z" : `Rank by ${label.toLowerCase()}`, onclick: () => pick(key) }, label, on ? h("i", { text: flip ? " ▲" : " ▼" }) : null));
+  };
+  return h("div", { class: "lb-scroll" }, h("table", { class: "lb-table lb-rank", id, "data-k": k },
+    h("thead", null, h("tr", null, head("name", cols[0].label), cols.slice(1).map(c => head(c.k, c.label)))),
+    h("tbody", null, rows.map(({ t, p, medal }) => h("tr", { "data-team": t.name },
+      h("th", null, h("span", { class: "lbs-who" }, k === "name" ? null : h("span", { class: "lbs-place" + (p && p <= 3 && medal ? ` p${p}` : ""), text: p ? String(p) : "–" }), t.name)),
+      cols.slice(1).map(c => h("td", { class: c.k === k ? "on" : "", text: c.f(t) }))))),
+    foot ? h("tfoot", null, h("tr", null, foot.map((c, i) => h(i ? "td" : "th", { text: c })))) : null));
+}
 function lbStatusEl() {
   const y = lbYear(), today = lbAsOf();
   const months = lbMonthsWith();
@@ -5970,35 +6015,47 @@ function lbStatusEl() {
       const label = `${t.name}, ${lbDayText(d)}: ${tr ? "truck numbers" : "no truck numbers"}, ${sa ? "sales" : "no sales"}`;
       return h("td", { class: cls }, edit && d <= today && !lbPast() ? h("button", { type: "button", "aria-label": label, title: label, onclick: () => { lbView.tab = "enter"; lbView.part = tr || !sa ? "trucks" : "sales"; lbView.day = d; lbSaveView(); renderLeaderboard(); } }) : h("i", { title: label }));
     }))))));
-  const table = (cols, rows, foot) => h("div", { class: "lb-scroll" }, h("table", { class: "lb-table" },
-    h("thead", null, h("tr", null, cols.map(c => h("th", { text: c })))),
-    h("tbody", null, rows.map(r => h("tr", null, r.map((c, i) => h(i ? "td" : "th", { text: c }))))),
-    foot ? h("tfoot", null, h("tr", null, foot.map((c, i) => h(i ? "td" : "th", { text: c })))) : null));
   const sum = (list, f) => list.reduce((s, n) => s + (recOf(n.name)[f] || 0), 0);
+  const R = t => recOf(t.name);
+  const truckCols = [
+    { k: "name", label: "Team" },
+    { k: "revenue", label: "Revenue", def: true, v: t => R(t).revenue, f: t => lbMoney(R(t).revenue) },
+    { k: "perJob", label: "Per job", v: t => lbDiv(R(t).revenue, R(t).jobs), f: t => lbMoney(lbDiv(R(t).revenue, R(t).jobs)) },
+    { k: "perDay", label: "Per day", v: t => lbDiv(R(t).revenue, R(t).workDays), f: t => lbMoney(lbDiv(R(t).revenue, R(t).workDays)) },
+    { k: "jobs", label: "Jobs", v: t => R(t).jobs, f: t => fmt(R(t).jobs) },
+    { k: "workDays", label: "Work days", v: t => R(t).workDays, f: t => fmt(R(t).workDays) },
+    { k: "techs", label: "Techs/day", v: t => lbDiv(R(t).techs, R(t).truckDays), f: t => fmt(lbDiv(R(t).techs, R(t).truckDays)) },
+    { k: "truckDays", label: "Days typed", v: t => R(t).truckDays, f: t => String(R(t).truckDays) },
+    { k: "last", label: "Last day", v: t => (R(t).last ? Number(R(t).last.replace(/-/g, "")) : 0), f: t => (R(t).last ? lbDayText(R(t).last).replace(/^\w+, /, "") : "–") }];
   const unitTables = LB_GROUPS.map(g => [g, board.filter(t => t.unit === g)]).filter(([, l]) => l.length).map(([g, list]) => h("div", { class: "panel" },
     h("h2", { text: `${g} · trucks` }),
-    table(["Team", "Revenue", "Per job", "Per day", "Jobs", "Work days", "Techs/day", "Days typed", "Last day"], list.map(t => {
-      const r = recOf(t.name);
-      return [t.name, lbMoney(r.revenue), lbMoney(lbDiv(r.revenue, r.jobs)), lbMoney(lbDiv(r.revenue, r.workDays)), fmt(r.jobs), fmt(r.workDays), fmt(lbDiv(r.techs, r.truckDays)), String(r.truckDays), r.last ? lbDayText(r.last).replace(/^\w+, /, "") : "–"];
-    }), ["Total", lbMoney(sum(list, "revenue")), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "jobs"))), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "workDays"))), fmt(sum(list, "jobs")), fmt(sum(list, "workDays")), "", "", ""])));
+    lbRankTable(`lbs${g}`, truckCols, list, t => R(t).truckDays > 0,
+      ["Total", lbMoney(sum(list, "revenue")), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "jobs"))), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "workDays"))), fmt(sum(list, "jobs")), fmt(sum(list, "workDays")), "", "", ""])));
+  // a technician with a day of numbers (truck or sales) is ranked in sales, even at $0
+  const sold = t => R(t).saleDays > 0 || R(t).truckDays > 0 || R(t).sales > 0;
+  const kindCols = [
+    { k: "saleJobs", label: "Jobs", v: t => R(t).saleJobs, f: t => fmt(R(t).saleJobs) },
+    { k: "salePerJob", label: "Per job", v: t => lbDiv(R(t).sales, R(t).saleJobs), f: t => lbMoney(lbDiv(R(t).sales, R(t).saleJobs)) },
+    { k: "up", label: "Up sale", v: t => R(t).up, f: t => lbMoney(R(t).up) },
+    { k: "addon", label: "Add-on", v: t => R(t).addon, f: t => lbMoney(R(t).addon) },
+    { k: "rugs", label: "Rugs in plant", v: t => R(t).rugs, f: t => lbMoney(R(t).rugs) },
+    { k: "extra", label: "Additional", v: t => R(t).extra, f: t => lbMoney(R(t).extra) }];
   const goal = cfg.goal;
   const sales = span ? h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
-    table(["Tech", LB_SPER[per], "Jobs", "Per job", "Up sale", "Add-on", "Rugs in plant", "Additional"], board.map(t => {
-      const r = recOf(t.name);
-      return [t.name, lbMoney(r.sales), fmt(r.saleJobs), lbMoney(lbDiv(r.sales, r.saleJobs)), lbMoney(r.up), lbMoney(r.addon), lbMoney(r.rugs), lbMoney(r.extra)];
-    }), ["Total", lbMoney(sum(board, "sales")), fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]))
+    lbRankTable("lbsSales", [{ k: "name", label: "Tech" }, { k: "sales", label: LB_SPER[per], def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]))
   : h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
     h("p", { class: "lb-sub", text: left ? `Goal ${lbMoney(goal)} each · ${left} working day${left === 1 ? "" : "s"} left in ${lbMonthLong(month)} (Monday to Saturday${lbClosedText(key, today)})` : `Goal ${lbMoney(goal)} each` }),
-    table(["Tech", "Month to date", "Left to goal", "Need per day", "Jobs", "Per job", "Up sale", "Add-on", "Rugs in plant", "Additional"], board.map(t => {
-      const r = recOf(t.name), g = lbGoal(r, goal, left);
-      return [t.name, lbMoney(r.sales), g.done ? "Done" : lbMoney(g.left), g.done || !left ? "–" : lbMoney(g.perDay), fmt(r.saleJobs), lbMoney(lbDiv(r.sales, r.saleJobs)), lbMoney(r.up), lbMoney(r.addon), lbMoney(r.rugs), lbMoney(r.extra)];
-    }), ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
+    lbRankTable("lbsSales", [{ k: "name", label: "Tech" },
+      { k: "sales", label: "Month to date", def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) },
+      { k: "left", label: "Left to goal", low: true, v: t => lbGoal(R(t), goal, left).left, f: t => { const g = lbGoal(R(t), goal, left); return g.done ? "Done" : lbMoney(g.left); } },
+      { k: "need", label: "Need per day", low: true, v: t => lbGoal(R(t), goal, left).perDay, f: t => { const g = lbGoal(R(t), goal, left); return g.done || !left ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
   const ytdRv = name => lbRecords().filter(r => r.team === name && r.group && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
   const reviews = week ? null : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
-    per === "ytd" ? table(["Team", lbYtdText(month)], board.map(t => [t.name, fmt(recOf(t.name).reviews)]), ["Total", fmt(sum(board, "reviews"))])
-      : table(["Team", lbMonthLong(month), lbYtdText(month)], board.map(t => [t.name, fmt(recOf(t.name).reviews), fmt(ytdRv(t.name))])));
+    per === "ytd" ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbYtdText(month), def: true, v: t => R(t).reviews, f: t => fmt(R(t).reviews) }], board, () => true, ["Total", fmt(sum(board, "reviews"))])
+      : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbMonthLong(month), def: true, v: t => R(t).reviews, f: t => fmt(R(t).reviews) },
+        { k: "ytd", label: lbYtdText(month), v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], board, () => true));
   const offEl = off.length ? h("div", { class: "panel" }, h("h2", { text: "Numbers not counted" }),
     h("p", { class: "meta", text: `Typed for a team that isn't on the board in ${lbMonthLong(month)}: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. Fix the team's months in Teams if they should count.` })) : null;
   return [
