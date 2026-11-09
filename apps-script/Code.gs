@@ -2778,8 +2778,11 @@ function lbRows_(s) {
   if (!s || s.getLastRow() < 2) return [];
   const w = Math.min(s.getMaxColumns(), LB_COLS.length + LB_MORE);
   return s.getRange(2, 1, s.getLastRow() - 1, w).getValues().map(function (r, i) {
-    let json = String(r[1] || ""), long = false;
+    const first = String(r[1] || "");
+    let json = first, long = false;
     for (let c = LB_COLS.length; c < w; c++) { const t = String(r[c] || ""); if (t) { long = true; json += t.charAt(0) === "~" ? t.slice(1) : t; } }
+    // cells left over from before (an older script saved this row in one cell): the first cell alone is the month
+    if (long) { try { JSON.parse(json); } catch (e) { try { JSON.parse(first); json = first; } catch (e2) { /* keep it all: nothing better */ } } }
     return { row: i + 2, key: String(r[0]).trim(), json: json, long: long };
   });
 }
