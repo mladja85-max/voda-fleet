@@ -686,6 +686,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbf-sec { display: grid; gap: 8px; min-width: 0; }
 .lbf-sec + .lbf-sec { border-top: 1px solid var(--line); padding-top: 12px; }
 .lbf-sec h3 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .04em; }
+.lbf-unit { display: grid; gap: 6px; }
+.lbf-unit h4 { font-size: .78rem; margin: 2px 0 0; }
 .lbf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .lbf-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--surface-2); display: grid; gap: 3px; min-width: 0; }
 .lbf-item p { margin: 0; font-size: .9rem; overflow-wrap: anywhere; }
@@ -1721,6 +1723,8 @@ function lbWeekAgo(cfg, docs, year, newest) {
  *  the rest of the unit's revenue a day · low: jobs a day or per job under this share is the reason · pace: sales under
  *  this share of where the goal's pace says they should be · early: working days before sales pace is judged */
 const LB_FOCUS = { days: 28, minDays: 5, slow: 0.85, low: 0.9, pace: 0.8, early: 3 };
+/** The units held to the sales goal's pace: selling is a cleaning technician's job. Restoration's sales are a bonus. */
+const LB_SALES_UNITS = ["Cleaning"];
 const LB_SALE_KINDS = [["up", "Up sales"], ["addon", "Add-ons"], ["rugs", "Rugs in plant"], ["extra", "Additional services"]];
 const LB_SUM_FIELDS = ["revenue", "jobs", "workDays", "sales", "up", "addon", "rugs", "extra", "saleJobs", "truckDays", "saleDays"];
 /** Each team's numbers added up over the days from..to of `year` (both included) → { name: { revenue, jobs, ... } }. */
@@ -1741,12 +1745,14 @@ function lbSpanSum(cfg, docs, year, from, to) {
   return out;
 }
 /** What to work on, from the numbers through `asOf` (the newest day typed).
- *  Revenue: over the last 4 weeks each truck against the rest of its unit; a truck making clearly less a day gets a
- *  reason: fewer jobs a day (give it more jobs), a lower per job (work on the ticket), or both. A truck doing fine a
- *  day with fewer jobs than the others at a higher per job is "room": the best place for an extra job.
- *  Sales: the month so far against the goal's pace; a technician clearly behind gets what's needed a day and the kind
- *  of sale where he's furthest under the others (last 4 weeks).
- *  → { asOf, from, key, span, total, done, left, goal, expected, revenue: [...], thin: [names], sales: [...], kinds } */
+ *  Revenue: over the last 4 weeks each truck against the rest of its own unit only (Restoration always makes more than
+ *  Cleaning); a truck making clearly less a day gets a reason: fewer jobs a day (give it more jobs), a lower per job
+ *  (work on the ticket), or both. A truck doing fine a day with fewer jobs than the others at a higher per job is
+ *  "room": the best place for an extra job. Listed by unit, the furthest behind first.
+ *  Sales: the month so far against the goal's pace, for the units in LB_SALES_UNITS; a technician clearly behind gets
+ *  what's needed a day and the kind of sale where he's furthest under the others in his unit (last 4 weeks). Other
+ *  units' sales are listed as a bonus ("extra"), never as behind.
+ *  → { asOf, from, key, span, total, done, left, goal, expected, revenue: [...], thin: [names], sales: [...], kinds, units } */
 function lbFocus(cfgIn, docs, year, asOf) {
   const cfg = lbCleanConfig(cfgIn), F = LB_FOCUS, key = asOf.slice(0, 7);
   let from = lbAddDays(asOf, -(F.days - 1));
@@ -1785,10 +1791,12 @@ function lbFocus(cfgIn, docs, year, asOf) {
         fix = "room";
         worth = moreJobs * me.perJob;
       } else continue;
-      revenue.push({ team: x.team, unit, fix, revenue: x.revenue, jobs: x.jobs, workDays: x.workDays, me, rest: u, moreJobs, worth });
+      revenue.push({ team: x.team, unit, fix, revenue: x.revenue, jobs: x.jobs, workDays: x.workDays, me, rest: u, moreJobs, worth, share: me.perDay / u.perDay });
     }
   }
-  revenue.sort((a, b) => b.worth - a.worth || a.team.localeCompare(b.team));
+  // by unit (they're never compared with each other), the furthest behind first, then the room for more jobs
+  revenue.sort((a, b) => LB_GROUPS.indexOf(a.unit) - LB_GROUPS.indexOf(b.unit) || (a.fix === "room") - (b.fix === "room")
+    || (a.fix === "room" ? b.worth - a.worth : a.share - b.share) || a.team.localeCompare(b.team));
 
   // sales: the month so far against the goal's pace
   let total = 0;
@@ -1800,11 +1808,11 @@ function lbFocus(cfgIn, docs, year, asOf) {
     const m = get(mtd, t.name), w = get(win, t.name);
     const row = { team: t.name, unit: t.unit, sales: m.sales, saleJobs: m.saleJobs, perJob: lbDiv(m.sales, m.saleJobs),
       toGo: Math.max(0, goal - m.sales), perDay: left ? Math.max(0, goal - m.sales) / left : 0, tip: null };
-    row.status = m.sales >= goal ? "done" : !m.truckDays && !m.saleDays ? "none" : done < F.early ? "early"
-      : m.sales < expected * F.pace ? "behind" : "onPace";
+    row.status = !m.truckDays && !m.saleDays && !m.sales ? "none" : !LB_SALES_UNITS.includes(t.unit) ? "extra"
+      : m.sales >= goal ? "done" : done < F.early ? "early" : m.sales < expected * F.pace ? "behind" : "onPace";
     if (row.status === "behind") {
-      // the kind of sale where he's furthest under the rest of the board, a job, over the last 4 weeks
-      const others = board.filter(o => o.name !== t.name).map(o => get(win, o.name)), oj = sum(others, "saleJobs");
+      // the kind of sale where he's furthest under the others in his unit, a job, over the last 4 weeks
+      const others = board.filter(o => o.name !== t.name && o.unit === t.unit).map(o => get(win, o.name)), oj = sum(others, "saleJobs");
       if (oj) for (const [k, label] of LB_SALE_KINDS) {
         const theirs = sum(others, k) / oj, his = lbDiv(w[k], w.saleJobs);
         if (theirs - his > 0 && (!row.tip || theirs - his > row.tip.theirs - row.tip.his)) row.tip = { kind: k, label, his, theirs, jobs: w.saleJobs };
@@ -1812,12 +1820,13 @@ function lbFocus(cfgIn, docs, year, asOf) {
     }
     sales.push(row);
   }
-  // what the whole board sells a job, by kind (last 4 weeks): the best kind first
-  const all = board.map(t => get(win, t.name)), aj = sum(all, "saleJobs");
+  // what the selling units sell a job, by kind (last 4 weeks): the best kind first
+  const all = board.filter(t => LB_SALES_UNITS.includes(t.unit)).map(t => get(win, t.name)), aj = sum(all, "saleJobs");
   const kinds = LB_SALE_KINDS.map(([k, label]) => ({ kind: k, label, perJob: aj ? sum(all, k) / aj : 0 })).sort((a, b) => b.perJob - a.perJob);
-  const order = { behind: 0, early: 1, onPace: 2, done: 3, none: 4 };
+  const order = { behind: 0, early: 1, onPace: 2, done: 3, extra: 4, none: 5 };
   sales.sort((a, b) => order[a.status] - order[b.status] || (a.status === "behind" || a.status === "early" ? a.sales - b.sales : b.sales - a.sales) || a.team.localeCompare(b.team));
-  return { asOf, from, key, span, total, done, left, goal, expected, revenue, thin, sales, kinds };
+  const units = LB_SALES_UNITS.filter(u => board.some(t => t.unit === u));
+  return { asOf, from, key, span, total, done, left, goal, expected, revenue, thin, sales, kinds, units };
 }
 
 
@@ -5577,24 +5586,27 @@ function lbFocusEl() {
     const worth = x.fix === "room" ? `About +${lbMoney(x.worth)} a week.`
       : `${lbMoney(x.me.perDay)} a day vs ${lbMoney(x.rest.perDay)}. Matching them: about +${lbMoney(x.worth)} a week.`;
     return h("li", { class: `lbf-item ${x.fix}`, "data-team": x.team },
-      h("div", { class: "lbf-top" }, h("strong", { text: x.team }), h("span", { class: `lb-unit ${x.unit}`, text: x.unit }), h("span", { class: `lbf-tag ${x.fix}`, text: LB_FIX[x.fix] })),
+      h("div", { class: "lbf-top" }, h("strong", { text: x.team }), h("span", { class: `lbf-tag ${x.fix}`, text: LB_FIX[x.fix] })),
       h("p", { text: why }), h("p", { class: "lbf-worth", text: worth }));
   };
+  const revUnits = LB_GROUPS.map(u => [u, f.revenue.filter(x => x.unit === u)]).filter(([, l]) => l.length);
   const revenue = h("section", { class: "lbf-sec", id: "lbfRevenue" },
     h("h3", { text: "More revenue" }),
-    h("p", { class: "lb-sub", text: `Last 4 weeks (${md(f.from)} – ${md(f.asOf)}), each truck against the rest of its unit.` }),
-    f.revenue.length ? h("ul", { class: "lbf-list" }, f.revenue.map(revItem))
+    h("p", { class: "lb-sub", text: `Last 4 weeks (${md(f.from)} – ${md(f.asOf)}). Cleaning is only compared with Cleaning and Restoration with Restoration.` }),
+    revUnits.length ? revUnits.map(([u, l]) => h("div", { class: "lbf-unit", "data-unit": u },
+      h("h4", { class: `lb-unit ${u}`, text: u }), h("ul", { class: "lbf-list" }, l.map(revItem))))
       : h("p", { class: "lbf-ok", text: "Every truck is close to the rest of its unit a day. Nothing to move today." }),
     f.thin.length ? h("p", { class: "meta", text: `Not enough truck days in these 4 weeks to judge: ${f.thin.join(", ")}.` }) : null);
 
   // technician sales
   const by = st => f.sales.filter(x => x.status === st);
   const behind = by("behind"), sold = behind.filter(x => x.sales > 0), zero = behind.filter(x => !(x.sales > 0));
-  const early = by("early"), onPace = by("onPace"), done = by("done"), none = by("none");
+  const early = by("early"), onPace = by("onPace"), done = by("done"), none = by("none"), extra = by("extra");
+  const sellers = f.units.join(" and ") || "Cleaning", others = LB_GROUPS.filter(u => !f.units.includes(u));
   const need = x => (f.left ? `needs ${lbMoney(x.perDay)} a day for the ${f.left} day${f.left === 1 ? "" : "s"} left` : `${lbMoney(x.toGo)} short of the goal`);
   const best = f.kinds[0] && f.kinds[0].perJob > 0 ? f.kinds[0] : null;
   const saleItem = x => h("li", { class: "lbf-item sale", "data-team": x.team },
-    h("div", { class: "lbf-top" }, h("strong", { text: x.team }), h("span", { class: `lb-unit ${x.unit}`, text: x.unit }), h("span", { class: "lbf-tag sale", text: `${lbMoney(x.sales)} so far` })),
+    h("div", { class: "lbf-top" }, h("strong", { text: x.team }), h("span", { class: "lbf-tag sale", text: `${lbMoney(x.sales)} so far` })),
     h("p", { text: `Under the pace: ${need(x)}.` }),
     h("p", { class: "lbf-worth", text: x.tip ? `Weak spot: ${x.tip.label.toLowerCase()}, ${lbMoney(x.tip.his)} a job vs ${lbMoney(x.tip.theirs)} for the others (last 4 weeks).`
       : `${lbMoney(x.perJob)} a job in sales this month.` }));
@@ -5602,22 +5614,25 @@ function lbFocusEl() {
   const sales = h("section", { class: "lbf-sec", id: "lbfSales" },
     h("h3", { text: "Technician sales" }),
     h("p", { class: "lb-sub", text: early.length
-      ? `${mo} so far: ${f.done} of ${f.total} working days. Goal ${lbMoney(f.goal)} each. The pace is judged from the ${F.early + 1}th working day; until then each needs ${lbMoney(f.left ? f.goal / f.left : 0)} a day.`
-      : `${mo} so far: ${f.done} of ${f.total} working days done, ${f.left} left. Goal ${lbMoney(f.goal)} each, so about ${lbMoney(f.expected)} by now.` }),
+      ? `${mo} so far: ${f.done} of ${f.total} working days. Goal ${lbMoney(f.goal)} for each ${sellers} technician. The pace is judged from the ${F.early + 1}th working day; until then each needs ${lbMoney(f.left ? f.goal / f.left : 0)} a day.`
+      : `${mo} so far: ${f.done} of ${f.total} working days done, ${f.left} left. Goal ${lbMoney(f.goal)} for each ${sellers} technician, so about ${lbMoney(f.expected)} by now.` }),
     sold.length ? h("ul", { class: "lbf-list" }, sold.map(saleItem)) : null,
     zero.length ? h("div", { class: "lbf-item sale zero" },
-      line("No sales yet:", `${names(zero)}. Each ${need(zero[0])}.`),
+      line("No sales yet:", `${names(zero)}. ${zero.length === 1 ? "" : "Each "}${need(zero[0])}.`.replace(/\. (needs|\$)/, (m0, w) => ". " + (w === "$" ? "$" : "Needs"))),
       best ? h("p", { class: "lbf-worth", text: `The others make the most on ${best.label.toLowerCase()}: ${lbMoney(best.perJob)} a job (last 4 weeks).` }) : null) : null,
     early.some(x => x.sales > 0) ? line("So far:", early.filter(x => x.sales > 0).map(x => `${x.team} ${lbMoney(x.sales)}`).join(", ") + ".") : null,
-    !behind.length && !early.length ? h("p", { class: "lbf-ok", text: done.length || onPace.length ? "Everyone with numbers is on pace." : "No sales numbers yet." }) : null,
+    !behind.length && !early.length ? h("p", { class: "lbf-ok", text: done.length || onPace.length ? `Every ${sellers} technician with numbers is on pace.` : "No sales numbers yet." }) : null,
     onPace.length ? line("On pace:", onPace.map(x => `${x.team} ${lbMoney(x.sales)}`).join(", ") + ".") : null,
     done.length ? line("Goal reached:", done.map(x => `${x.team} ${lbMoney(x.sales)}`).join(", ") + ".") : null,
+    others.length ? h("p", { class: "lbf-line", id: "lbfExtra" }, h("strong", { text: `${others.join(" and ")}:` }), " ",
+      extra.some(x => x.sales > 0) ? extra.filter(x => x.sales > 0).map(x => `${x.team} ${lbMoney(x.sales)}`).join(", ") + ` this month, a bonus.` : `no sales yet this month.`,
+      h("span", { class: "meta", text: ` Not held to the pace: the selling is on ${sellers}.` })) : null,
     none.length ? h("p", { class: "meta", text: `No numbers yet in ${mo}: ${names(none)}.` }) : null);
 
   const stale = lbToday() > lbAddDays(f.asOf, 3);
   const how = h("details", { class: "lbf-how" }, h("summary", { text: "How this is worked out" }),
-    h("p", { text: `More revenue looks at the last 4 weeks and compares each truck with the rest of its own unit (a truck needs ${F.minDays} work days to be judged). A truck making under ${Math.round(F.slow * 100)}% of their revenue a day is listed with the reason: fewer jobs a day, a lower per job (under ${Math.round(F.low * 100)}% of theirs), or both. A truck doing fine with fewer jobs but a higher per job is the best place for an extra job. "Matching them" is what the gap a day adds up to in his usual work days a week.` }),
-    h("p", { text: `Technician sales compares the month so far with the goal's pace (the goal × working days done ÷ working days in the month). Under ${Math.round(F.pace * 100)}% of the pace is listed, with the kind of sale where he's furthest under the others a job.` }),
+    h("p", { text: `More revenue looks at the last 4 weeks and compares each truck only with the rest of its own unit, since Restoration always brings in more than Cleaning (a truck needs ${F.minDays} work days to be judged). Each unit lists the furthest behind first. A truck making under ${Math.round(F.slow * 100)}% of their revenue a day is listed with the reason: fewer jobs a day, a lower per job (under ${Math.round(F.low * 100)}% of theirs), or both. A truck doing fine with fewer jobs but a higher per job is the best place for an extra job. "Matching them" is what the gap a day adds up to in his usual work days a week.` }),
+    h("p", { text: `Technician sales holds ${sellers} technicians to the goal's pace (the goal × working days done ÷ working days in the month), since that's where the chance to sell is. Under ${Math.round(F.pace * 100)}% of the pace is listed, with the kind of sale where he's furthest under the other ${sellers} technicians a job. ${others.length ? `${others.join(" and ")} sales show as a bonus, never as behind.` : ""}` }),
     h("p", { text: "Only admins and whoever types the numbers see this. It isn't in the presentation." }));
   const el = h("details", { class: "panel lb-focus", id: "lbFocus", open: !lbView.fshut },
     h("summary", null, h("h2", { text: "Today's focus" }), h("span", { class: "lbf-asof" }, "From the numbers through ", h("strong", { text: lbDayText(f.asOf) }))),
