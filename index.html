@@ -6032,11 +6032,14 @@ function lbReviewsEl(day) {
 
 /* ---- payroll: every tech's truck numbers day by day for a week, two weeks or a month (admins switched on) ---- */
 const LB_PAY = { week: "Week", two: "2 weeks", month: "Month" };
-/** The days a payroll view covers: the week (Monday to Sunday) or two weeks starting the Monday of `day`, or its month. */
+/** The pay week runs Sunday to Saturday. "2026-11-09" → "2026-11-08". */
+const lbSundayOf = day => lbAddDays(day, -new Date(day + "T00:00:00Z").getUTCDay());
+/** The days a payroll view covers: the pay week (Sunday to Saturday) or two weeks starting the Sunday of `day`, or its
+ *  month. */
 function lbPayRange(per, day) {
   if (per === "month") { const k = day.slice(0, 7); return { from: `${k}-01`, to: `${k}-${String(lbDaysIn(k)).padStart(2, "0")}` }; }
-  const mon = lbMondayOf(day);
-  return { from: mon, to: lbAddDays(mon, per === "two" ? 13 : 6) };
+  const sun = lbSundayOf(day);
+  return { from: sun, to: lbAddDays(sun, per === "two" ? 13 : 6) };
 }
 const lbSpanText = (from, to) => { const a = lbDate(from), b = lbDate(to); return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}, ${b.getFullYear()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`; };
 function lbPayrollEl() {
@@ -6067,7 +6070,7 @@ function lbPayrollEl() {
   const num = v => (v == null ? "" : fmt(v)), cash = v => (v == null ? "" : lbMoney(v));
   const cells = a => (a.typed ? [h("td", { class: "n", text: fmt(a.jobs) }), h("td", { class: "n", text: fmt(a.days) }), h("td", { class: "m", text: lbMoney(a.rev) }), h("td", { class: "n last", text: fmt(a.techs) })]
     : [h("td", { class: "n" }), h("td", { class: "n" }), h("td", { class: "m" }), h("td", { class: "n last" })]);
-  // a week total after each Sunday when the view is longer than a week
+  // a week total after each Saturday when the view is longer than a week
   const rows = [];
   let wk = [];
   days.forEach((d, i) => {
@@ -6076,7 +6079,7 @@ function lbPayrollEl() {
       h("th", { title: hol ? `${hol}: closed` : "" }, h("span", { class: "pd-w", text: LB_WD[dt.getDay()] }), ` ${dt.getMonth() + 1}/${dt.getDate()}`),
       teams.map((t, ti) => { const e = entry(d, t.name) || []; return [h("td", { class: `n t${ti % 2}`, text: num(e[0]) }), h("td", { class: `n t${ti % 2}`, text: num(e[1]) }), h("td", { class: `m t${ti % 2}`, text: cash(e[2]) }), h("td", { class: `n last t${ti % 2}`, text: num(e[3]) })]; })));
     wk.push(d);
-    if (per !== "week" && (dt.getDay() === 0 || i === days.length - 1)) {
+    if (per !== "week" && (dt.getDay() === 6 || i === days.length - 1)) {   // a week total after each Saturday
       rows.push(h("tr", { class: "wk" }, h("th", { text: `Week ${lbDate(wk[0]).getMonth() + 1}/${lbDate(wk[0]).getDate()}–${dt.getMonth() + 1}/${dt.getDate()}` }), teams.map(t => cells(sum(wk, t.name)))));
       wk = [];
     }
@@ -6098,12 +6101,12 @@ function lbPayrollEl() {
       lbSeg(Object.entries(LB_PAY), per, k => { lbView.pper = k; lbSaveView(); renderLeaderboard(); }, "Pay period"),
       h("div", { class: "lb-daybar" },
         h("button", { class: "btn small", type: "button", id: "lbPayPrev", "aria-label": "Earlier", disabled: r.from <= `${y}-01-01`, onclick: () => step(-1) }, "‹"),
-        h("input", { id: "lbPayDay", type: "date", value: per === "month" ? r.from : r.from, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": per === "month" ? "A day in the month" : "Start (its Monday)",
+        h("input", { id: "lbPayDay", type: "date", value: per === "month" ? r.from : r.from, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": per === "month" ? "A day in the month" : "Start (its Sunday)",
           onchange: e => { if (lbIsDay(e.target.value)) go(e.target.value); } }),
         h("button", { class: "btn small", type: "button", id: "lbPayNext", "aria-label": "Later", disabled: r.to >= `${y}-12-31`, onclick: () => step(1) }, "›"))),
-    h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "month" ? "" : " · Monday to Sunday", ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
+    h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "month" ? "" : " · Sunday to Saturday", ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
     teams.length ? h("div", { class: "panel lb-paypanel" }, grid,
-      h("p", { class: "hint", text: "Straight from Enter numbers > Trucks: each tech's jobs, work days, truck revenue and # of techs, day by day. Pick any day and the view jumps to its week (Monday to Sunday), its two weeks or its month." }))
+      h("p", { class: "hint", text: "Straight from Enter numbers > Trucks: each tech's jobs, work days, truck revenue and # of techs, day by day. Pick any day and the view jumps to its pay week (Sunday to Saturday), its two weeks or its month." }))
       : h("p", { class: "meta", text: "No teams on a truck then." })];
 }
 
