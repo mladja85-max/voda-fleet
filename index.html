@@ -618,8 +618,19 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-mo { display: grid; gap: 2px; font-size: .8rem; color: var(--muted); }
 .of-mo input, .of-mo select, .of-f input, .of-f select, .of-p-head .p-name { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .of-fields { display: grid; gap: 6px; }
-.of-f { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
-@media (max-width: 560px) { .of-f { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; } .of-f .f-label { grid-column: 1 / -1; } }
+.of-f { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+@media (max-width: 560px) {
+  .of-f { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 6px; border-bottom: 1px dashed var(--line); }
+  .of-f .f-label { grid-column: 1 / -1; }
+  .of-f > .btn { justify-self: end; }
+}
+.of-f .f-past { display: inline-flex; align-items: center; gap: 5px; font-size: .8rem; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.of-f .f-past input { width: auto; padding: 0; margin: 0; accent-color: var(--accent); }
+.of-f.past .f-label, .of-f.past select { opacity: .55; }
+.of-f.past .f-past { color: var(--soon); font-weight: 700; }
+.of-tasks { display: grid; gap: 6px; justify-items: start; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--accent); background: var(--accent-soft); }
+.of-tasks .hint { margin: 0; }
+.of-tasks .hint.ok { color: var(--ok); font-weight: 600; }
 .of-unnamed { display: grid; gap: 6px; }
 .of-people, .of-person, .of-fields, .of-p-head > * { min-width: 0; }
 .of-p-head .of-mo { flex: 1 1 140px; }
@@ -750,6 +761,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-boxes.n1 { grid-template-columns: minmax(0, 200px); }
 .lb-box { display: grid; gap: 3px; min-width: 0; }
 .lb-box span { font-size: .74rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* office day: her task names are long ("Past clients (6M, 1Y, 18M, 2Y, 3Y)"): two lines, so the boxes still line up */
+.of-day .lb-box { align-content: start; }
+.of-day .lb-box > span { white-space: normal; line-height: 1.25; min-height: 2.5em; display: flex; align-items: flex-end; }
 .lb-box input { width: 100%; min-width: 0; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 9px; }
 .lb-box input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
 .lb-card.bad input { border-color: var(--due); }
@@ -2343,13 +2357,53 @@ function ofCleanConfig(c) {
       const id = String((f && f.id) || ""), label = String((f && f.label) || "").replace(/\s+/g, " ").trim().slice(0, 40);
       if (!/^[a-z][a-z0-9]{0,15}$/.test(id) || id === "at" || id === "by" || ids.has(id) || !label) continue;
       ids.add(id);
-      fields.push({ id, label, kind: OF_KINDS[f.kind] ? f.kind : "num", of: String(f.of || "") });
+      const field = { id, label, kind: OF_KINDS[f.kind] ? f.kind : "num", of: String(f.of || "") };
+      if (f.hide === true) field.hide = true;   // past only: kept for the history, not typed any more
+      fields.push(field);
     }
     for (const f of fields) if (!ids.has(f.of) || f.of === f.id) f.of = "";
     out.people.push({ name, user: /^[A-Za-z0-9_-]{1,64}$/.test(String(p.user || "")) ? String(p.user) : "", from, to, fields });
   }
   return out;
 }
+/** Each person's own task list: her calls by task (they add up to the goal), what each follow-up booked, and Google
+ *  Guaranteed / Online Booking (tracked, not part of the goal). The sheet's general follow-up and other calls become
+ *  past only: their history still counts, they just aren't typed any more. */
+const OF_TASK_LISTS = {
+  Anahi: [
+    { id: "fb", label: "Feedback calls (yesterday's clients)", kind: "out" },
+    { id: "past", label: "Past clients (6M, 1Y, 18M, 2Y, 3Y)", kind: "out" },
+    { id: "pastb", label: "Booked from past clients", kind: "num", of: "past" },
+    { id: "gg", label: "Google Guaranteed / Online Booking", kind: "num" },
+    { id: "ggs", label: "Booked from Google / Online", kind: "num", of: "gg" },
+    { id: "conf", label: "Confirmation calls (tomorrow)", kind: "out" }],
+  Destiny: [
+    { id: "vm", label: "Voicemail follow-ups", kind: "out" },
+    { id: "vmb", label: "Booked from voicemails", kind: "num", of: "vm" },
+    { id: "gg", label: "Google Guaranteed / Online Booking", kind: "num" },
+    { id: "ggs", label: "Booked from Google / Online", kind: "num", of: "gg" },
+    { id: "est", label: "Cleaning estimate follow-ups", kind: "out" },
+    { id: "estb", label: "Booked from estimates", kind: "num", of: "est" },
+    { id: "price", label: "Pricing follow-ups (not booked yet)", kind: "out" },
+    { id: "priceb", label: "Booked from pricing calls", kind: "num", of: "price" }] };
+const OF_RETIRED = ["fu", "fus", "other"];
+/** A person's numbers with a task list put in: the list first (a number she already has keeps its history under the
+ *  new name), then her other numbers as they were, then the sheet's general follow-up / other calls as past only. */
+function ofWithTasks(fields, list) {
+  const have = id => fields.find(f => f.id === id);
+  const out = list.map(t => Object.assign({}, have(t.id) || {}, { id: t.id, label: t.label, kind: t.kind, of: t.of || "" }));
+  for (const f of fields) if (!list.some(t => t.id === f.id) && !OF_RETIRED.includes(f.id)) out.push(Object.assign({}, f));
+  for (const id of OF_RETIRED) if (have(id) && !list.some(t => t.id === id)) out.push(Object.assign({}, have(id), { hide: true }));
+  for (const f of out) if (!f.hide) delete f.hide;
+  return out;
+}
+/** Does she already have this task list? */
+const ofHasTasks = (fields, list) => list.every(t => fields.some(f => f.id === t.id && f.label === t.label && f.kind === t.kind && !f.hide));
+/** The numbers to type that day: everything but the past-only ones, unless that day has a number in one. */
+const ofShown = (p, e) => p.fields.filter(f => !f.hide || (e && ofNum(e[f.id]) != null));
+/** The numbers to show for a period (`had`: typed in it): a period from before a task list came in shows the numbers it
+ *  has; otherwise her numbers now (a 0 included). */
+const ofShownIn = (p, had) => { const old = p.fields.some(f => f.hide && had[f.id]); return p.fields.filter(f => had[f.id] || (!old && !f.hide)); };
 const ofPerson = (cfg, name) => cfg.people.find(p => p.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 /** In the office during any part of the days from..to. */
 const ofInRange = (p, from, to) => (!p.from || p.from <= to.slice(0, 7)) && (!p.to || from.slice(0, 7) <= p.to);
@@ -2366,16 +2420,16 @@ const ofWorked = (p, e) => !!e && p.fields.some(f => f.kind !== "admin" && ofNum
  *  she has numbers for, how many of them reached the goal, and the goal for those days. */
 function ofSummary(cfg, months, p, from, to) {
   const goal = cfg.goal || OF_GOAL;
-  const sums = Object.fromEntries(p.fields.map(f => [f.id, 0])), days = [];
+  const sums = Object.fromEntries(p.fields.map(f => [f.id, 0])), had = {}, days = [];
   let out = 0, worked = 0, hit = 0;
   for (let d = from; d <= to; d = lbAddDays(d, 1)) {
     const e = ofEntry(months, d, p.name), typed = ofTyped(p, e), did = ofWorked(p, e), o = ofOut(p, e), wd = ofWorkDay(d);
-    if (typed) for (const f of p.fields) if (ofNum(e[f.id]) != null) sums[f.id] += e[f.id];
+    if (typed) for (const f of p.fields) if (ofNum(e[f.id]) != null) { sums[f.id] += e[f.id]; had[f.id] = true; }
     out += o;
     if (wd && did) { worked++; if (o >= goal) hit++; }
     days.push({ day: d, typed, worked: did, out: o, work: wd });
   }
-  return { sums, out, worked, hit, goal, target: goal * worked, pct: worked ? out / (goal * worked) : 0, avg: worked ? out / worked : 0, days };
+  return { sums, had, out, worked, hit, goal, target: goal * worked, pct: worked ? out / (goal * worked) : 0, avg: worked ? out / worked : 0, days };
 }
 /** A field's share of the field it's "of" ("Scheduled jobs/estimates: 75% of opportunity calls"), or null. */
 const ofRatio = (sums, f) => (f.of && sums[f.of] ? sums[f.id] / sums[f.of] : null);
@@ -6211,6 +6265,7 @@ function openLbHistory() {
 
 /* ======================= Office scorecards ======================= */
 const OF_API = 24;                                      // the Google script version with the Office section
+const OF_HIDE_API = 25;                                 // ... and with past-only numbers
 const K_OF = "voda.of1", K_OF_VIEW = "voda.ofView1";
 let ofData = store.get(K_OF);                           // { config, months: { "2026-11": doc }, year, admin, me, at }
 let ofYears = {};                                       // other years' months, loaded when a period reaches into them
@@ -6371,7 +6426,8 @@ function ofTodayEl() {
         onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
       f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : null);
   };
-  const outs = p.fields.filter(f => f.kind === "out"), nums = p.fields.filter(f => f.kind === "num"), adm = p.fields.filter(f => f.kind === "admin");
+  const shown = ofShown(p, e);   // a past-only number shows only on a day that has one
+  const outs = shown.filter(f => f.kind === "out"), nums = shown.filter(f => f.kind === "num"), adm = shown.filter(f => f.kind === "admin");
   out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
     h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
     h("div", { class: "of-total" }, h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
@@ -6397,7 +6453,7 @@ function ofRefreshDay(day, p) {
   for (const el of card.querySelectorAll(".of-ratio")) {
     const f = p.fields.find(x => x.id === el.dataset.of), base = p.fields.find(x => x.id === f.of);
     const a = ofNum(e[f.id]), b = ofNum(e[f.of]);
-    el.textContent = a != null && b ? `${ofPct(a / b)} of ${base.label.toLowerCase()}` : "";
+    el.textContent = a != null && b ? `${ofPct(a / b)} of ${base.label}` : "";   // as typed: "Google", "6M"
   }
   const mon = lbMondayOf(day), sw = ofSummary(cfg, ofData.months, p, mon, lbAddDays(mon, 6) > lbToday() ? lbToday() : lbAddDays(mon, 6));
   $("ofWeekFoot").textContent = `Week of ${lbWeekText(mon)}: ${fmt(sw.out)} outgoing calls · ${goal} reached on ${sw.hit} of ${sw.worked} day${sw.worked === 1 ? "" : "s"} worked`;
@@ -6456,7 +6512,7 @@ function ofScoreEl() {
         per === "week" || per === "month" ? h("div", { class: "of-days", "aria-label": "Outgoing calls each work day" }, workDays.map(d => h("span", {
           class: "of-dd" + (d.day > today ? " future" : !d.worked ? " none" : d.out >= s.goal ? " ok" : " low"), title: `${lbDayText(d.day)}: ${d.worked ? `${d.out} outgoing calls` : "nothing typed"}`,
           text: d.day > today ? "" : d.worked ? String(d.out) : "·" }))) : null,
-        h("div", { class: "of-nums" }, p.fields.filter(f => f.kind !== "out" || p.fields.filter(x => x.kind === "out").length > 1).map(f => {
+        h("div", { class: "of-nums" }, ((vis) => vis.filter(f => f.kind !== "out" || vis.filter(x => x.kind === "out").length > 1))(ofShownIn(p, s.had)).map(f => {
           const ratio = ofRatio(s.sums, f);
           return h("div", { class: "lb-m" }, h("span", { text: f.label }), h("b", null, fmt(s.sums[f.id]), ratio != null ? h("i", { text: ofPct(ratio) }) : null));
         }))));
@@ -6473,13 +6529,30 @@ async function openOfPeople() {
   try { users = ((await api("users")).users || []).filter(u => u.status !== "removed"); } catch (e) { /* logins can be picked later */ }
   const err = h("p", { class: "dlg-err", role: "alert" });
   const months = (p, cls, label, v) => h("label", { class: "of-mo" }, h("span", { text: label }), h("input", { type: "month", class: cls, value: v || "" }));
-  const fieldRow = (f, all) => h("div", { class: "of-f", "data-id": f.id },
+  const canHide = apiLevel >= OF_HIDE_API;
+  const fieldRow = (f, all) => h("div", { class: "of-f" + (f.hide ? " past" : ""), "data-id": f.id },
     h("input", { class: "f-label", type: "text", value: f.label, maxlength: "40", "aria-label": "Name of the number" }),
     h("select", { class: "f-kind", "aria-label": "Kind" }, Object.entries(OF_KINDS).map(([k, t]) => h("option", { value: k, text: t, selected: k === f.kind }))),
     h("select", { class: "f-of", "aria-label": "Show as a % of" }, [h("option", { value: "", text: "No %" })].concat(all.filter(x => x.id !== f.id).map(x => h("option", { value: x.id, text: `% of ${x.label}`, selected: x.id === f.of })))),
+    canHide || f.hide ? h("label", { class: "f-past", title: "Past only: its history still counts, it's no longer typed" },
+      h("input", { type: "checkbox", class: "f-hide", checked: !!f.hide, onchange: ev => ev.target.closest(".of-f").classList.toggle("past", ev.target.checked) }), "Past only") : null,
     h("button", { class: "btn ghost small", type: "button", "aria-label": `Remove ${f.label}`, onclick: ev => ev.currentTarget.closest(".of-f").remove() }, "✕"));
+  /** The numbers as they are in the dialog now. */
+  const rowsOf = el => [...el.querySelectorAll(".of-f")].map(r => {
+    const f = { id: r.dataset.id, label: r.querySelector(".f-label").value.trim(), kind: r.querySelector(".f-kind").value, of: r.querySelector(".f-of").value };
+    if (r.querySelector(".f-hide") && r.querySelector(".f-hide").checked) f.hide = true;
+    return f;
+  });
   const personEl = (p, isNew) => {
     const fields = h("div", { class: "of-fields" }, p.fields.map(f => fieldRow(f, p.fields)));
+    const list = !isNew && OF_TASK_LISTS[Object.keys(OF_TASK_LISTS).find(k => k.toLowerCase() === p.name.toLowerCase())];
+    const tasks = list && !ofHasTasks(p.fields, list) ? h("div", { class: "of-tasks" },
+      h("p", { class: "hint", text: `${p.name}'s task list: ${list.filter(t => t.kind === "out").map(t => t.label.toLowerCase()).join(", ")} (they add up to the goal), what each one booked, and Google Guaranteed / Online Booking (tracked, not in the goal).` }),
+      h("button", { class: "btn small primary", type: "button", "data-tasks": p.name, onclick: ev => {
+        const next = ofWithTasks(rowsOf(fields), list);
+        fields.replaceChildren(...next.map(f => fieldRow(f, next)));
+        ev.currentTarget.closest(".of-tasks").replaceChildren(h("p", { class: "hint ok", text: "Put in. The old follow-up and other calls are past only now (their history still counts). Tap Save." }));
+      } }, `Use ${p.name}'s task list`)) : null;
     return h("div", { class: "of-person", "data-name": p.name },
       h("div", { class: "of-p-head" },
         isNew ? h("input", { class: "p-name", type: "text", placeholder: "Name", maxlength: "30", "aria-label": "Name" }) : h("strong", { class: "p-name-fixed", text: p.name }),
@@ -6487,13 +6560,15 @@ async function openOfPeople() {
           [h("option", { value: "", text: "Not linked" })].concat(users.map(u => h("option", { value: u.id, text: `${u.name} (${u.username})`, selected: u.id === p.user }))))),
         months(p, "p-from", "From", p.from), months(p, "p-to", "To (blank = now)", p.to),
         h("button", { class: "btn ghost small", type: "button", onclick: ev => { if (confirm(`Remove ${p.name || "this person"}? Her numbers stay saved, but she won't show.`)) ev.currentTarget.closest(".of-person").remove(); } }, "Remove")),
+      tasks,
       fields,
       h("button", { class: "btn small", type: "button", onclick: () => { const taken = new Set([...fields.querySelectorAll(".of-f")].map(x => x.dataset.id)); fields.append(fieldRow({ id: ofNewId(taken), label: "New number", kind: "out", of: "" }, p.fields)); } }, "+ Add a number"));
   };
   const list = h("div", { class: "of-people", id: "ofPeopleList" }, cfg.people.map(p => personEl(p, false)));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Office people" }),
-    h("p", { class: "hint", text: "Each person types her own day under her login. Calls that count toward the goal add up to her outgoing calls; admin-only numbers (like Scheduled / completed) are typed by admins after checking the CRM. A login also needs Office ticked in Settings > Users." }),
+    h("p", { class: "hint", text: "Each person types her own day under her login. Calls that count toward the goal add up to her outgoing calls; admin-only numbers (like Scheduled / completed) are typed by admins after checking the CRM. Past only: a number that's no longer typed but whose history still counts. A login also needs Office ticked in Settings > Users." }),
+    canHide ? null : h("p", { class: "dlg-err", id: "ofHideOld", text: "To use the task lists and past-only numbers, update the Google script first: paste the newest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that." }),
     h("label", { class: "of-mo" }, h("span", { text: "Outgoing calls goal (a day, Monday to Friday)" }), h("input", { type: "text", inputmode: "numeric", id: "ofGoal", value: String(cfg.goal) })),
     list,
     h("button", { class: "btn small", type: "button", id: "ofAddPerson", onclick: () => list.append(personEl({ name: "", user: "", from: lbToday().slice(0, 7), to: "", fields: OF_DEFAULT_FIELDS.map(f => Object.assign({}, f)) }, true)) }, "+ Add a person"),
@@ -6509,9 +6584,10 @@ async function openOfPeople() {
           const name = el.dataset.name || lbTeamName(el.querySelector(".p-name") ? el.querySelector(".p-name").value : "");
           if (!name) { err.textContent = "Every new person needs a name (letters only)."; return; }
           if (people.some(x => x.name.toLowerCase() === name.toLowerCase())) { err.textContent = `${name} is in the list twice.`; return; }
-          const fields = [...el.querySelectorAll(".of-f")].map(r => ({ id: r.dataset.id, label: r.querySelector(".f-label").value.trim(), kind: r.querySelector(".f-kind").value, of: r.querySelector(".f-of").value }));
+          const fields = rowsOf(el);
           if (fields.some(f => !f.label)) { err.textContent = `${name}: every number needs a name.`; return; }
-          if (!fields.some(f => f.kind === "out")) { err.textContent = `${name}: at least one number has to count toward the calls goal.`; return; }
+          if (!fields.some(f => f.kind === "out" && !f.hide)) { err.textContent = `${name}: at least one number she types has to count toward the calls goal.`; return; }
+          if (fields.some(f => f.hide) && apiLevel < OF_HIDE_API) { err.textContent = "Past-only numbers need the newest Google script. Update it first (see the note at the top)."; return; }
           people.push({ name, user: el.querySelector(".p-user").value, from: el.querySelector(".p-from").value, to: el.querySelector(".p-to").value, fields });
         }
         const b = $("ofPeopleSave"); b.disabled = true; b.textContent = "Saving…";
