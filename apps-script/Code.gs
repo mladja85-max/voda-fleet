@@ -104,9 +104,16 @@
  * each day's 5-star reviews (older months may have one total for the month), and set up the teams (unit, and the months each team is on the board). The Leaderboard tab
  * keeps them, one row per month plus "config", in JSON. Don't edit that tab by hand.
  *
+ * OFFICE (the office scorecards)
+ * The app's Office section replaces "14. OFFICE SCORECARDS": each office person types her own day (her calls, by kind,
+ * toward the 50 outgoing calls goal, and her other numbers); Admins set up the people and their numbers, link each one to
+ * her login, and type the admin-only numbers (like Scheduled / Completed, checked in the CRM). Everyone with Office ticked
+ * sees everyone. The Office tab keeps it, one row per month plus "config", in JSON. Don't edit that tab by hand.
+ *
  * WHO SEES WHAT
  * Admins see everything. Each technician sees only what an Admin ticks for him in the app (Settings > Users and invites):
- * Trucks, any of the checklists, Leaderboard (sees the standings) and Leaderboard numbers (types the numbers, sets up the teams).
+ * Trucks, any of the checklists, Leaderboard (sees the standings), Leaderboard numbers (types the numbers, sets up the
+ * teams) and Office (sees the office scorecards and types her own day).
  * Technicians from before this choice keep Trucks only. This script refuses anything a technician isn't given, whatever the
  * app sends.
  */
@@ -118,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 23;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 24;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -281,6 +288,12 @@ function doPost(e) {
       case "lbPut":
         if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return lbPut_(req); }));
+      case "office":
+        if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
+        return json_(ofRead_(user, req.year));
+      case "ofPut":
+        if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return ofPut_(req); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -2680,7 +2693,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -2833,6 +2846,139 @@ function lbPut_(req) {
       doc = lbMonth_(doc, key);
     }
     if (key === "config") { doc.at = now; doc.by = req.by; }
+    const text = JSON.stringify(doc);
+    if (text.length > LB_MAX_JSON) throw new Error("The " + key + " numbers are too long to save.");
+    if (byKey[key]) s.getRange(byKey[key].row, 2, 1, 3).setValues([[text, now, req.by]]);
+    else { appendRows_(s, LB_COLS.length, [[key, text, now, req.by]]); byKey[key] = { row: s.getLastRow(), key: key }; }
+    byKey[key].json = text;
+    if (key === "config") out.config = doc; else out.months[key] = doc;
+  });
+  return out;
+}
+
+/* ---------------- office scorecards ---------------- */
+// One row per document, in JSON, like the Leaderboard tab: "config" (the office people, which login each one is, the
+// months she's in the office, her own list of numbers and the daily goal) and one row per month ("2026-11": each day,
+// each person's numbers by field, and who saved them when).
+
+const OF_SHEET = "Office";
+const OF_KINDS = ["out", "num", "admin"];   // counts toward the outgoing calls goal; any other number; typed by Admins only
+
+function ofSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(OF_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(OF_SHEET);
+    s.getRange(1, 1, 1, LB_COLS.length).setValues([LB_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:B").setNumberFormat("@");
+  }
+  return s;
+}
+/** The people and their numbers, cleaned. */
+function ofConfig_(c) {
+  const out = { people: [], goal: 50 };
+  const g = c && Number(c.goal);
+  if (g > 0 && g <= 1000) out.goal = Math.round(g);
+  const seen = {};
+  ((c && Array.isArray(c.people)) ? c.people : []).slice(0, 40).forEach(function (p) {
+    const name = lbTeam_(p && p.name);
+    if (!name || seen[name.toLowerCase()]) return;
+    seen[name.toLowerCase()] = true;
+    let from = lbYm_(p.from), to = lbYm_(p.to);
+    if (from && to && to < from) to = from;
+    const user = /^[A-Za-z0-9_-]{1,64}$/.test(String(p.user || "")) ? String(p.user) : "";
+    const ids = {}, fields = [];
+    (Array.isArray(p.fields) ? p.fields : []).slice(0, 20).forEach(function (f) {
+      const id = String((f && f.id) || "");
+      if (!/^[a-z][a-z0-9]{0,15}$/.test(id) || id === "at" || id === "by" || ids[id]) return;
+      const label = supText_(f.label, 40);
+      if (!label) return;
+      ids[id] = true;
+      fields.push({ id: id, label: label, kind: OF_KINDS.indexOf(f.kind) !== -1 ? f.kind : "num", of: String(f.of || "") });
+    });
+    fields.forEach(function (f) { if (!ids[f.of] || f.of === f.id) f.of = ""; });
+    out.people.push({ name: name, user: user, from: from, to: to, fields: fields });
+  });
+  return out;
+}
+/** A month, cleaned: only that month's days, people, numbers (or blank), and who saved each person's day when. */
+function ofMonth_(d, key) {
+  const out = { days: {} };
+  const days = d && d.days && typeof d.days === "object" ? d.days : {};
+  Object.keys(days).forEach(function (day) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day.slice(0, 7) !== key) return;
+    const x = days[day] && typeof days[day] === "object" ? days[day] : {};
+    const y = {};
+    Object.keys(x).forEach(function (name) {
+      if (!lbTeam_(name) || !x[name] || typeof x[name] !== "object") return;
+      const e = {};
+      let any = false;
+      Object.keys(x[name]).forEach(function (k) {
+        const v = x[name][k];
+        if (k === "at" || k === "by") { if (v) e[k] = supText_(v, 40); return; }
+        if (/^[a-z][a-z0-9]{0,15}$/.test(k) && typeof v === "number" && isFinite(v) && v >= 0 && v <= 1e6) { e[k] = v; any = true; }
+      });
+      if (any) y[name] = e;
+    });
+    if (Object.keys(y).length) out.days[day] = y;
+  });
+  return out;
+}
+function ofRead_(user, year) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", me: user.id };
+  lbRows_(ofSheet_(false)).forEach(function (r) {
+    if (r.key === "config") out.config = lbParse_(r.json);
+    else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);
+  });
+  return out;
+}
+/** Saves changes: { writes: [{ key: "2026-11", patch: { days: { day: { name: { field: n | null } } } } }] } merges into
+ *  the month (null clears a box); Admins may also replace a month or the people ("config") whole ({ key, data }).
+ *  Someone who isn't an Admin can change only her own day (the person linked to her login) and never an admin-only number. */
+function ofPut_(req) {
+  const admin = req.user.role === "admin";
+  const writes = (Array.isArray(req.writes) ? req.writes : []).slice(0, 14);
+  if (!admin && writes.some(function (w) { return w && (w.key === "config" || (w.data && typeof w.data === "object")); })) return { ok: false, error: "not_allowed" };
+  const s = ofSheet_(true);
+  const byKey = {};
+  lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
+  const cfg = ofConfig_(byKey.config ? lbParse_(byKey.config.json) : {});
+  const now = new Date().toISOString();
+  const out = { ok: true, months: {} };
+  writes.forEach(function (w) {
+    const key = String((w && w.key) || "");
+    const whole = w && w.data && typeof w.data === "object";
+    let change = whole ? w.data : (w && w.patch && typeof w.patch === "object" ? w.patch : null);
+    if (!change || (key !== "config" && !lbYm_(key))) return;
+    let doc;
+    if (key === "config") { doc = ofConfig_(change); doc.at = now; doc.by = req.by; }
+    else {
+      if (!whole) {
+        // only her own person and fields she may type; every person's day changed is stamped
+        const days = {};
+        Object.keys(change.days && typeof change.days === "object" ? change.days : {}).forEach(function (day) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day.slice(0, 7) !== key) return;
+          const x = change.days[day] && typeof change.days[day] === "object" ? change.days[day] : {};
+          Object.keys(x).forEach(function (name) {
+            const p = cfg.people.filter(function (q) { return q.name.toLowerCase() === String(name).toLowerCase(); })[0];
+            if (!p || (!admin && p.user !== req.user.id) || !x[name] || typeof x[name] !== "object") return;
+            const e = {};
+            p.fields.forEach(function (f) {
+              if (!(f.id in x[name]) || (f.kind === "admin" && !admin)) return;
+              const v = x[name][f.id];
+              e[f.id] = typeof v === "number" && isFinite(v) && v >= 0 && v <= 1e6 ? v : null;
+            });
+            if (!Object.keys(e).length) return;
+            e.at = now; e.by = req.by;
+            (days[day] || (days[day] = {}))[p.name] = e;
+          });
+        });
+        change = { days: days };
+      }
+      doc = ofMonth_(lbMerge_(whole ? {} : lbParse_(byKey[key] ? byKey[key].json : ""), change), key);
+    }
     const text = JSON.stringify(doc);
     if (text.length > LB_MAX_JSON) throw new Error("The " + key + " numbers are too long to save.");
     if (byKey[key]) s.getRange(byKey[key].row, 2, 1, 3).setValues([[text, now, req.by]]);
