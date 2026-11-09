@@ -694,6 +694,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbf-asof { color: var(--muted); font-size: .88rem; }
 .lbf-asof strong { color: var(--ink); }
 .lbf-stale { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--soon-bg); color: var(--soon); font-weight: 600; font-size: .88rem; }
+.lbf-units { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .lbf-sec { display: grid; gap: 8px; min-width: 0; }
 .lbf-sec + .lbf-sec { border-top: 1px solid var(--line); padding-top: 12px; }
 .lbf-sec h3 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .04em; }
@@ -1784,8 +1785,9 @@ function lbSpanSum(cfg, docs, year, from, to) {
  *  Cleaning); a truck making clearly less a day gets a reason: fewer jobs a day (give it more jobs), a lower per job
  *  (work on the ticket), or both. A truck doing fine a day with fewer jobs than the others at a higher per job is
  *  "room": the best place for an extra job. Listed by unit, the furthest behind first.
+ *  An estimator (noSale in Teams) is left out of both.
  *  Sales: the month so far against the goal's pace in his unit's working days (Cleaning Monday to Friday, Restoration
- *  Monday to Saturday), the same goal for every technician but an estimator (noSale); a technician clearly behind
+ *  Monday to Saturday), the same goal for every technician; a technician clearly behind
  *  gets what's needed a day and the kind of sale where he's furthest under the others in his own unit (last 4 weeks:
  *  the chance to sell is much bigger on Cleaning, so Restoration is only compared with Restoration). By unit.
  *  → { asOf, from, key, span, goal, pace: { unit: { week, total, left, done, expected } }, revenue: [...], thin: [names],
@@ -1804,7 +1806,8 @@ function lbFocus(cfgIn, docs, year, asOf) {
   // revenue: each truck against the rest of its unit
   const revenue = [], thin = [];
   for (const unit of LB_GROUPS) {
-    const teams = board.filter(t => t.unit === unit).map(t => Object.assign({ team: t.name }, get(win, t.name)));
+    // an estimator (noSale) isn't a technician: not judged, and not part of the others' numbers either
+    const teams = board.filter(t => t.unit === unit && !t.noSale).map(t => Object.assign({ team: t.name }, get(win, t.name)));
     const judged = teams.filter(x => x.workDays >= F.minDays);
     thin.push(...teams.filter(x => x.workDays < F.minDays).map(x => x.team));
     for (const x of judged) {
@@ -5370,13 +5373,13 @@ function accessChips(selected, onchange, idPrefix) {
 /* ---------- leaderboard ---------- */
 const LB_API = 22;                                     // the Google script version with typed-in leaderboard numbers
 const LB_RV_API = 23;                                  // ... and with 5-star reviews typed by day
-const LB_NOSALE_API = 26;                              // ... and with "No sales goal" (an estimator)
+const LB_NOSALE_API = 26;                              // ... and with Estimator (noSale) on a team
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
 let lbLoading = false, lbErr = "", lbOld = false;
-const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {} }, store.get(K_LB_VIEW) || {});
-const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort });
+const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {}, funit: "Cleaning" }, store.get(K_LB_VIEW) || {});
+const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit });
 /** Status can show a month, the year to date, this week so far or last week (a past year: a month or the year). */
 const LB_SPER = { month: "Month", ytd: "Year to date", wtd: "Week to date", lastweek: "Last week" };
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
@@ -5652,6 +5655,9 @@ function lbFocusEl() {
   if (!b || lbPast() || !canEditLb() || !b.newest) return null;
   if (b.focus === undefined) b.focus = lbFocus(lbData.config, lbData.months, lbYear(), b.newest);
   const f = b.focus, F = LB_FOCUS, mo = lbMonthLong(Number(f.key.slice(5)));
+  // each department's admin picks his own unit (remembered on this phone)
+  if (!LB_GROUPS.includes(lbView.funit)) lbView.funit = LB_GROUPS[0];
+  const unit = lbView.funit, unitOf = name => { const t = lbTeamOf(lbCfg(), name); return t ? t.unit : ""; };
   const md = day => lbDayText(day).replace(/^\w+, /, "");          // "Nov 6"
   const jd = v => (Math.round(v * 10) / 10).toFixed(1);
   const jobsWk = n => { const k = Math.max(1, Math.round(n)); return `about ${k} more job${k === 1 ? "" : "s"} a week`; };
@@ -5672,14 +5678,13 @@ function lbFocusEl() {
       h("div", { class: "lbf-top" }, h("strong", { text: x.team }), h("span", { class: `lbf-tag ${x.fix}`, text: LB_FIX[x.fix] })),
       h("p", { text: why }), h("p", { class: "lbf-worth", text: worth }));
   };
-  const revUnits = LB_GROUPS.map(u => [u, f.revenue.filter(x => x.unit === u)]).filter(([, l]) => l.length);
+  const revList = f.revenue.filter(x => x.unit === unit), thin = f.thin.filter(n => unitOf(n) === unit);
   const revenue = h("section", { class: "lbf-sec", id: "lbfRevenue" },
     h("h3", { text: "More revenue" }),
-    h("p", { class: "lb-sub", text: `Last 4 weeks (${md(f.from)} – ${md(f.asOf)}). Cleaning is only compared with Cleaning and Restoration with Restoration.` }),
-    revUnits.length ? revUnits.map(([u, l]) => h("div", { class: "lbf-unit", "data-unit": u },
-      h("h4", { class: `lb-unit ${u}`, text: u }), h("ul", { class: "lbf-list" }, l.map(revItem))))
-      : h("p", { class: "lbf-ok", text: "Every truck is close to the rest of its unit a day. Nothing to move today." }),
-    f.thin.length ? h("p", { class: "meta", text: `Not enough truck days in these 4 weeks to judge: ${f.thin.join(", ")}.` }) : null);
+    h("p", { class: "lb-sub", text: `Last 4 weeks (${md(f.from)} – ${md(f.asOf)}), each ${unit} truck against the rest of ${unit}.` }),
+    revList.length ? h("div", { class: "lbf-unit", "data-unit": unit }, h("ul", { class: "lbf-list" }, revList.map(revItem)))
+      : h("p", { class: "lbf-ok", text: `Every ${unit} truck is close to the rest of ${unit} a day. Nothing to move today.` }),
+    thin.length ? h("p", { class: "meta", text: `Not enough truck days in these 4 weeks to judge: ${thin.join(", ")}.` }) : null);
 
   // technician sales, by unit: the same goal, each compared with his own unit
   const need = x => { const l = f.pace[x.unit].left; return l ? `needs ${lbMoney(x.perDay)} a day for the ${l} day${l === 1 ? "" : "s"} left` : `${lbMoney(x.toGo)} short of the goal`; };
@@ -5696,7 +5701,7 @@ function lbFocusEl() {
     const behind = by("behind"), sold = behind.filter(x => x.sales > 0), zero = behind.filter(x => !(x.sales > 0));
     const early = by("early"), onPace = by("onPace"), done = by("done");
     const k = f.kinds[u], best = k && k.list[0].perJob > 0 ? k.list[0] : null, pc = f.pace[u];
-    return h("div", { class: "lbf-unit", "data-unit": u }, h("h4", { class: `lb-unit ${u}`, text: u }),
+    return h("div", { class: "lbf-unit", "data-unit": u },
       h("p", { class: "lb-sub lbf-pace", text: early.length
         ? `${LB_WEEK_TEXT[pc.week]}: ${pc.done} of ${pc.total} working days. The pace is judged from the ${F.early + 1}th working day; until then each needs ${lbMoney(pc.left ? f.goal / pc.left : 0)} a day.`
         : `${LB_WEEK_TEXT[pc.week]}: ${pc.done} of ${pc.total} working days done, ${pc.left} left, so about ${lbMoney(pc.expected)} by now.` }),
@@ -5709,24 +5714,27 @@ function lbFocusEl() {
       onPace.length ? line("On pace:", money(onPace)) : null,
       done.length ? line("Goal reached:", money(done)) : null);
   };
-  const none = f.sales.filter(x => x.status === "none");
+  const none = f.sales.filter(x => x.status === "none" && x.unit === unit), est = f.noSale.filter(n => unitOf(n) === unit);
   const sales = h("section", { class: "lbf-sec", id: "lbfSales" },
     h("h3", { text: "Technician sales" }),
-    h("p", { class: "lb-sub", text: `${mo} so far. Goal ${lbMoney(f.goal)} for each technician, counted in his unit's working days; each is compared with his own unit.` }),
-    f.units.map(unitSales),
-    f.noSale.length ? h("p", { class: "meta", id: "lbfNoSale", text: `Not on the sales goal: ${f.noSale.join(", ")}.` }) : null,
-    !f.sales.some(x => x.status !== "none") ? h("p", { class: "lbf-ok", text: "No sales numbers yet." }) : null,
+    h("p", { class: "lb-sub", text: `${mo} so far. Goal ${lbMoney(f.goal)} for each technician; each ${unit} technician is compared with the rest of ${unit}.` }),
+    unitSales(unit),
+    !f.sales.some(x => x.unit === unit && x.status !== "none") ? h("p", { class: "lbf-ok", text: "No sales numbers yet." }) : null,
     none.length ? h("p", { class: "meta", text: `No numbers yet in ${mo}: ${names(none)}.` }) : null);
 
   const stale = lbToday() > lbAddDays(f.asOf, 3);
   const how = h("details", { class: "lbf-how" }, h("summary", { text: "How this is worked out" }),
     h("p", { text: `More revenue looks at the last 4 weeks and compares each truck only with the rest of its own unit, since Restoration always brings in more than Cleaning (a truck needs ${F.minDays} work days to be judged). Each unit lists the furthest behind first. A truck making under ${Math.round(F.slow * 100)}% of their revenue a day is listed with the reason: fewer jobs a day, a lower per job (under ${Math.round(F.low * 100)}% of theirs), or both. A truck doing fine with fewer jobs but a higher per job is the best place for an extra job. "Matching them" is what the gap a day adds up to in his usual work days a week.` }),
-    h("p", { text: `Technician sales holds every technician to the same ${lbMoney(f.goal)} goal's pace (the goal × working days done ÷ working days in the month: Cleaning works Monday to Friday, Restoration Monday to Saturday). A team marked "No sales goal" in Teams (an estimator) isn't counted. Under ${Math.round(F.pace * 100)}% of the pace is listed, with the kind of sale where he's furthest under the other technicians in his own unit a job: the chance to sell is much bigger on Cleaning, so Restoration is only compared with Restoration.` }),
+    h("p", { text: `Technician sales holds every technician to the same ${lbMoney(f.goal)} goal's pace (the goal × working days done ÷ working days in the month: Cleaning works Monday to Friday, Restoration Monday to Saturday). Under ${Math.round(F.pace * 100)}% of the pace is listed, with the kind of sale where he's furthest under the other technicians in his own unit a job: the chance to sell is much bigger on Cleaning, so Restoration is only compared with Restoration.` }),
+    h("p", { text: "An estimator (ticked in Teams) isn't in Today's focus at all, and isn't part of the others' numbers. He's still ranked on revenue in Standings and Status." }),
     h("p", { text: "Only admins and whoever types the numbers see this. It isn't in the presentation." }));
   const el = h("details", { class: "panel lb-focus", id: "lbFocus", open: !lbView.fshut },
     h("summary", null, h("h2", { text: "Today's focus" }), h("span", { class: "lbf-asof" }, "From the numbers through ", h("strong", { text: lbDayText(f.asOf) }))),
+    h("div", { class: "lbf-units" }, lbSeg(LB_GROUPS.map(u => [`focus-${u}`, u]), `focus-${unit}`, k => { lbView.funit = k.slice(6); lbSaveView(); renderLeaderboard(); }, "Department")),
     stale ? h("p", { class: "lbf-stale", text: `The newest numbers are from ${lbDayText(f.asOf)}. Type the days since for a fresh read.` }) : null,
-    revenue, sales, how);
+    revenue, sales,
+    est.length ? h("p", { class: "meta", id: "lbfNoSale", text: `${est.join(", ")}: estimator, not in Today's focus.` }) : null,
+    how);
   el.addEventListener("toggle", () => { lbView.fshut = !el.open; lbSaveView(); });
   return el;
 }
@@ -6050,7 +6058,7 @@ function lbStatusEl() {
     lbRankTable(`lbs${g}`, truckCols, list, t => R(t).truckDays > 0,
       ["Total", lbMoney(sum(list, "revenue")), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "jobs"))), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "workDays"))), fmt(sum(list, "jobs")), fmt(sum(list, "workDays")), "", "", ""])));
   // a technician with a day of numbers (truck or sales) is ranked in sales, even at $0
-  // an estimator (No sales goal in Teams) is shown but not ranked
+  // an estimator (ticked in Teams) is shown but not ranked
   const sold = t => !t.noSale && (R(t).saleDays > 0 || R(t).truckDays > 0 || R(t).sales > 0);
   const gOf = t => lbGoal(R(t), goal, leftOf(t.unit));
   const kindCols = [
@@ -6125,7 +6133,7 @@ function openLbTeams() {
         h("div", { class: "field" }, h("label", { text: "On the board from" }), h("select", { class: "t-from" }, monthOpts(t.from, `Before ${y}`))),
         h("div", { class: "field" }, h("label", { text: "Until" }), h("select", { class: "t-to" }, monthOpts(t.to, "Still on the board")))),
       h("label", { class: "check lb-nosale" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
-        h("span", null, "No sales goal ", h("small", { text: "(an estimator: still ranked on revenue, left out of technician sales)" }))),
+        h("span", null, "Estimator ", h("small", { text: "(left out of Today's focus and technician sales; still ranked on revenue)" }))),
       !isNew && used.has(t.name.toLowerCase()) ? h("p", { class: "hint", text: "Has numbers, so the name stays. When the team leaves the board, pick the last month under Until." }) : null);
     return row;
   };
@@ -6160,7 +6168,7 @@ function openLbTeams() {
           }
           const goal = Number(val("lbGoal").replace(/[$,\s]/g, ""));
           if (!(goal > 0)) { err.textContent = "Type the sales goal as a number, like 3000."; return; }
-          if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "No sales goal needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+          if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "Estimator needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
           try {
             const out = await api("lbPut", { year: y, writes: [{ key: "config", data: { teams, goal } }] });
