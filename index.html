@@ -1464,7 +1464,9 @@ function lbCleanConfig(c) {
     seen.add(name.toLowerCase());
     let from = lbYm(t.from), to = lbYm(t.to);
     if (from && to && to < from) to = from;
-    out.teams.push({ name, unit: LB_GROUPS.includes(t.unit) ? t.unit : LB_GROUPS[0], from, to });
+    const team = { name, unit: LB_GROUPS.includes(t.unit) ? t.unit : LB_GROUPS[0], from, to };
+    if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
+    out.teams.push(team);
   }
   return out;
 }
@@ -1495,15 +1497,22 @@ function lbHoliday(day) {
   if (md.startsWith("11-") && d >= 22 && d <= 28 && new Date(day + "T00:00:00Z").getUTCDay() === 4) return "Thanksgiving";
   return "";
 }
-/** A working day: Monday to Saturday, not a closed day. A closed day that falls on a Sunday changes nothing. */
-const lbWorkDay = day => new Date(day + "T00:00:00Z").getUTCDay() !== 0 && !lbHoliday(day);
-/** Working days left in the month, today included (Monday to Saturday, minus closed days). 0 for a month gone by. */
-function lbDaysLeft(key, today) {
+/** A unit's working days a week: Cleaning technicians work Monday to Friday, Restoration Monday to Saturday. */
+const LB_UNIT_DAYS = { Cleaning: 5, Restoration: 6 };
+const LB_WEEK_TEXT = { 5: "Monday to Friday", 6: "Monday to Saturday" };
+const lbWeekOf = unit => LB_UNIT_DAYS[unit] || 6;
+/** A working day for a unit (no unit: the company's, Monday to Saturday), not a closed day. A closed day that falls on
+ *  a Sunday changes nothing. */
+const lbWorkDay = (day, unit) => { const w = new Date(day + "T00:00:00Z").getUTCDay(); return w !== 0 && (w !== 6 || lbWeekOf(unit) === 6) && !lbHoliday(day); };
+/** Working days in a month for a unit. */
+function lbWorkDays(key, unit) { let n = 0; for (let d = 1; d <= lbDaysIn(key); d++) if (lbWorkDay(`${key}-${String(d).padStart(2, "0")}`, unit)) n++; return n; }
+/** Working days left in the month for a unit, today included (minus closed days). 0 for a month gone by. */
+function lbDaysLeft(key, today, unit) {
   const tm = today.slice(0, 7);
   if (key < tm) return 0;
   const from = key > tm ? 1 : Number(today.slice(8, 10));
   let n = 0;
-  for (let d = from; d <= lbDaysIn(key); d++) if (lbWorkDay(`${key}-${String(d).padStart(2, "0")}`)) n++;
+  for (let d = from; d <= lbDaysIn(key); d++) if (lbWorkDay(`${key}-${String(d).padStart(2, "0")}`, unit)) n++;
   return n;
 }
 /** Everything the screens show, from the roster and the month documents ({ "2026-11": doc, ... }).
@@ -1775,10 +1784,12 @@ function lbSpanSum(cfg, docs, year, from, to) {
  *  Cleaning); a truck making clearly less a day gets a reason: fewer jobs a day (give it more jobs), a lower per job
  *  (work on the ticket), or both. A truck doing fine a day with fewer jobs than the others at a higher per job is
  *  "room": the best place for an extra job. Listed by unit, the furthest behind first.
- *  Sales: the month so far against the goal's pace, the same goal for every technician; a technician clearly behind
+ *  Sales: the month so far against the goal's pace in his unit's working days (Cleaning Monday to Friday, Restoration
+ *  Monday to Saturday), the same goal for every technician but an estimator (noSale); a technician clearly behind
  *  gets what's needed a day and the kind of sale where he's furthest under the others in his own unit (last 4 weeks:
  *  the chance to sell is much bigger on Cleaning, so Restoration is only compared with Restoration). By unit.
- *  → { asOf, from, key, span, total, done, left, goal, expected, revenue: [...], thin: [names], sales: [...], kinds, units } */
+ *  → { asOf, from, key, span, goal, pace: { unit: { week, total, left, done, expected } }, revenue: [...], thin: [names],
+ *      sales: [...], kinds, units, noSale: [names] } */
 function lbFocus(cfgIn, docs, year, asOf) {
   const cfg = lbCleanConfig(cfgIn), F = LB_FOCUS, key = asOf.slice(0, 7);
   let from = lbAddDays(asOf, -(F.days - 1));
@@ -1824,21 +1835,22 @@ function lbFocus(cfgIn, docs, year, asOf) {
   revenue.sort((a, b) => LB_GROUPS.indexOf(a.unit) - LB_GROUPS.indexOf(b.unit) || (a.fix === "room") - (b.fix === "room")
     || (a.fix === "room" ? b.worth - a.worth : a.share - b.share) || a.team.localeCompare(b.team));
 
-  // sales: the month so far against the goal's pace
-  let total = 0;
-  for (let d = 1; d <= lbDaysIn(key); d++) if (lbWorkDay(`${key}-${String(d).padStart(2, "0")}`)) total++;
-  const left = lbDaysLeft(key, lbAddDays(asOf, 1)), done = total - left, goal = cfg.goal;
-  const expected = total ? goal * done / total : 0;
+  // sales: the month so far against the goal's pace, in each unit's working days (an estimator isn't on the goal)
+  const goal = cfg.goal, sellers = board.filter(t => !t.noSale), pace = {};
+  for (const u of LB_GROUPS) {
+    const total = lbWorkDays(key, u), left = lbDaysLeft(key, lbAddDays(asOf, 1), u), done = total - left;
+    pace[u] = { week: lbWeekOf(u), total, left, done, expected: total ? goal * done / total : 0 };
+  }
   const sales = [];
-  for (const t of board) {
-    const m = get(mtd, t.name), w = get(win, t.name);
+  for (const t of sellers) {
+    const m = get(mtd, t.name), w = get(win, t.name), pc = pace[t.unit];
     const row = { team: t.name, unit: t.unit, sales: m.sales, saleJobs: m.saleJobs, perJob: lbDiv(m.sales, m.saleJobs),
-      toGo: Math.max(0, goal - m.sales), perDay: left ? Math.max(0, goal - m.sales) / left : 0, tip: null };
-    row.status = m.sales >= goal ? "done" : !m.truckDays && !m.saleDays ? "none" : done < F.early ? "early"
-      : m.sales < expected * F.pace ? "behind" : "onPace";
+      toGo: Math.max(0, goal - m.sales), perDay: pc.left ? Math.max(0, goal - m.sales) / pc.left : 0, tip: null };
+    row.status = m.sales >= goal ? "done" : !m.truckDays && !m.saleDays ? "none" : pc.done < F.early ? "early"
+      : m.sales < pc.expected * F.pace ? "behind" : "onPace";
     if (row.status === "behind") {
       // the kind of sale where he's furthest under the others in his unit, a job, over the last 4 weeks
-      const others = board.filter(o => o.name !== t.name && o.unit === t.unit).map(o => get(win, o.name)), oj = sum(others, "saleJobs");
+      const others = sellers.filter(o => o.name !== t.name && o.unit === t.unit).map(o => get(win, o.name)), oj = sum(others, "saleJobs");
       if (oj) for (const [k, label] of LB_SALE_KINDS) {
         const theirs = sum(others, k) / oj, his = lbDiv(w[k], w.saleJobs);
         if (theirs - his > 0 && (!row.tip || theirs - his > row.tip.theirs - row.tip.his)) row.tip = { kind: k, label, his, theirs, jobs: w.saleJobs };
@@ -1848,15 +1860,15 @@ function lbFocus(cfgIn, docs, year, asOf) {
   }
   // what each unit sells a job, by kind (last 4 weeks), the best kind first; a unit with no sales then: the whole board
   const kindsOf = list => { const j = sum(list, "saleJobs"); return LB_SALE_KINDS.map(([k, label]) => ({ kind: k, label, perJob: j ? sum(list, k) / j : 0 })).sort((a, b) => b.perJob - a.perJob); };
-  const units = LB_GROUPS.filter(u => board.some(t => t.unit === u)), kinds = {};
+  const units = LB_GROUPS.filter(u => sellers.some(t => t.unit === u)), kinds = {};
   for (const u of units) {
-    const own = kindsOf(board.filter(t => t.unit === u).map(t => get(win, t.name)));
-    kinds[u] = own[0].perJob > 0 ? { list: own, all: false } : { list: kindsOf(board.map(t => get(win, t.name))), all: true };
+    const own = kindsOf(sellers.filter(t => t.unit === u).map(t => get(win, t.name)));
+    kinds[u] = own[0].perJob > 0 ? { list: own, all: false } : { list: kindsOf(sellers.map(t => get(win, t.name))), all: true };
   }
   const order = { behind: 0, early: 1, onPace: 2, done: 3, none: 4 };
   sales.sort((a, b) => LB_GROUPS.indexOf(a.unit) - LB_GROUPS.indexOf(b.unit) || order[a.status] - order[b.status]
     || (a.status === "behind" || a.status === "early" ? a.sales - b.sales : b.sales - a.sales) || a.team.localeCompare(b.team));
-  return { asOf, from, key, span, total, done, left, goal, expected, revenue, thin, sales, kinds, units };
+  return { asOf, from, key, span, goal, pace, revenue, thin, sales, kinds, units, noSale: board.filter(t => t.noSale).map(t => t.name) };
 }
 
 
@@ -5358,6 +5370,7 @@ function accessChips(selected, onchange, idPrefix) {
 /* ---------- leaderboard ---------- */
 const LB_API = 22;                                     // the Google script version with typed-in leaderboard numbers
 const LB_RV_API = 23;                                  // ... and with 5-star reviews typed by day
+const LB_NOSALE_API = 26;                              // ... and with "No sales goal" (an estimator)
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -5669,7 +5682,7 @@ function lbFocusEl() {
     f.thin.length ? h("p", { class: "meta", text: `Not enough truck days in these 4 weeks to judge: ${f.thin.join(", ")}.` }) : null);
 
   // technician sales, by unit: the same goal, each compared with his own unit
-  const need = x => (f.left ? `needs ${lbMoney(x.perDay)} a day for the ${f.left} day${f.left === 1 ? "" : "s"} left` : `${lbMoney(x.toGo)} short of the goal`);
+  const need = x => { const l = f.pace[x.unit].left; return l ? `needs ${lbMoney(x.perDay)} a day for the ${l} day${l === 1 ? "" : "s"} left` : `${lbMoney(x.toGo)} short of the goal`; };
   const saleItem = x => h("li", { class: "lbf-item sale", "data-team": x.team },
     h("div", { class: "lbf-top" }, h("strong", { text: x.team }), h("span", { class: "lbf-tag sale", text: `${lbMoney(x.sales)} so far` })),
     h("p", { text: `Under the pace: ${need(x)}.` }),
@@ -5677,14 +5690,16 @@ function lbFocusEl() {
       : `${lbMoney(x.perJob)} a job in sales this month.` }));
   const line = (label, text) => h("p", { class: "lbf-line" }, h("strong", { text: label }), " ", text);
   const money = list => list.map(x => `${x.team} ${lbMoney(x.sales)}`).join(", ") + ".";
-  const isEarly = f.sales.some(x => x.status === "early");
   const unitSales = u => {
     const mine = f.sales.filter(x => x.unit === u && x.status !== "none"), by = st => mine.filter(x => x.status === st);
     if (!mine.length) return null;
     const behind = by("behind"), sold = behind.filter(x => x.sales > 0), zero = behind.filter(x => !(x.sales > 0));
     const early = by("early"), onPace = by("onPace"), done = by("done");
-    const k = f.kinds[u], best = k && k.list[0].perJob > 0 ? k.list[0] : null;
+    const k = f.kinds[u], best = k && k.list[0].perJob > 0 ? k.list[0] : null, pc = f.pace[u];
     return h("div", { class: "lbf-unit", "data-unit": u }, h("h4", { class: `lb-unit ${u}`, text: u }),
+      h("p", { class: "lb-sub lbf-pace", text: early.length
+        ? `${LB_WEEK_TEXT[pc.week]}: ${pc.done} of ${pc.total} working days. The pace is judged from the ${F.early + 1}th working day; until then each needs ${lbMoney(pc.left ? f.goal / pc.left : 0)} a day.`
+        : `${LB_WEEK_TEXT[pc.week]}: ${pc.done} of ${pc.total} working days done, ${pc.left} left, so about ${lbMoney(pc.expected)} by now.` }),
       sold.length ? h("ul", { class: "lbf-list" }, sold.map(saleItem)) : null,
       zero.length ? h("div", { class: "lbf-item sale zero" },
         line("No sales yet:", `${names(zero)}. ${zero.length === 1 ? "" : "Each "}${need(zero[0])}.`.replace(/\. (needs|\$)/, (m0, w) => ". " + (w === "$" ? "$" : "Needs"))),
@@ -5697,17 +5712,16 @@ function lbFocusEl() {
   const none = f.sales.filter(x => x.status === "none");
   const sales = h("section", { class: "lbf-sec", id: "lbfSales" },
     h("h3", { text: "Technician sales" }),
-    h("p", { class: "lb-sub", text: isEarly
-      ? `${mo} so far: ${f.done} of ${f.total} working days. Goal ${lbMoney(f.goal)} for each technician. The pace is judged from the ${F.early + 1}th working day; until then each needs ${lbMoney(f.left ? f.goal / f.left : 0)} a day.`
-      : `${mo} so far: ${f.done} of ${f.total} working days done, ${f.left} left. Goal ${lbMoney(f.goal)} for each technician, so about ${lbMoney(f.expected)} by now. Each is compared with his own unit.` }),
+    h("p", { class: "lb-sub", text: `${mo} so far. Goal ${lbMoney(f.goal)} for each technician, counted in his unit's working days; each is compared with his own unit.` }),
     f.units.map(unitSales),
+    f.noSale.length ? h("p", { class: "meta", id: "lbfNoSale", text: `Not on the sales goal: ${f.noSale.join(", ")}.` }) : null,
     !f.sales.some(x => x.status !== "none") ? h("p", { class: "lbf-ok", text: "No sales numbers yet." }) : null,
     none.length ? h("p", { class: "meta", text: `No numbers yet in ${mo}: ${names(none)}.` }) : null);
 
   const stale = lbToday() > lbAddDays(f.asOf, 3);
   const how = h("details", { class: "lbf-how" }, h("summary", { text: "How this is worked out" }),
     h("p", { text: `More revenue looks at the last 4 weeks and compares each truck only with the rest of its own unit, since Restoration always brings in more than Cleaning (a truck needs ${F.minDays} work days to be judged). Each unit lists the furthest behind first. A truck making under ${Math.round(F.slow * 100)}% of their revenue a day is listed with the reason: fewer jobs a day, a lower per job (under ${Math.round(F.low * 100)}% of theirs), or both. A truck doing fine with fewer jobs but a higher per job is the best place for an extra job. "Matching them" is what the gap a day adds up to in his usual work days a week.` }),
-    h("p", { text: `Technician sales holds every technician to the same ${lbMoney(f.goal)} goal's pace (the goal × working days done ÷ working days in the month). Under ${Math.round(F.pace * 100)}% of the pace is listed, with the kind of sale where he's furthest under the other technicians in his own unit a job: the chance to sell is much bigger on Cleaning, so Restoration is only compared with Restoration.` }),
+    h("p", { text: `Technician sales holds every technician to the same ${lbMoney(f.goal)} goal's pace (the goal × working days done ÷ working days in the month: Cleaning works Monday to Friday, Restoration Monday to Saturday). A team marked "No sales goal" in Teams (an estimator) isn't counted. Under ${Math.round(F.pace * 100)}% of the pace is listed, with the kind of sale where he's furthest under the other technicians in his own unit a job: the chance to sell is much bigger on Cleaning, so Restoration is only compared with Restoration.` }),
     h("p", { text: "Only admins and whoever types the numbers see this. It isn't in the presentation." }));
   const el = h("details", { class: "panel lb-focus", id: "lbFocus", open: !lbView.fshut },
     h("summary", null, h("h2", { text: "Today's focus" }), h("span", { class: "lbf-asof" }, "From the numbers through ", h("strong", { text: lbDayText(f.asOf) }))),
@@ -5855,8 +5869,10 @@ function lbTruckFoot(day, team) {
 }
 function lbSaleFoot(day, team) {
   const e = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length), r = lbRecOf(day.slice(0, 7), team) || { sales: 0 };
-  const g = lbGoal(r, lbCfg().goal, lbDaysLeft(day.slice(0, 7), lbToday()));
+  const t = lbTeamOf(lbCfg(), team);
+  const g = lbGoal(r, lbCfg().goal, lbDaysLeft(day.slice(0, 7), lbToday(), t ? t.unit : ""));
   const dayTxt = e.length ? `Day: ${lbMoney((e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0))}` : "Nothing typed for this day";
+  if (t && t.noSale) return `${dayTxt} · Month: ${lbMoney(g.mtd)} (no sales goal)`;
   return `${dayTxt} · Month: ${lbMoney(g.mtd)} of ${lbMoney(lbCfg().goal)}${g.done ? ", goal reached" : `, ${lbMoney(g.left)} to go`}`;
 }
 function lbDayTotalText(day) {
@@ -5999,7 +6015,9 @@ function lbStatusEl() {
     days = per === "ytd" ? [] : Array.from({ length: 7 }, (_, i) => lbAddDays(span.from, i));
   }
   const spanText = span ? (per === "ytd" ? lbYtdText(month) : lbWeekText(span.from)) : "";
-  const left = per === "month" ? lbDaysLeft(key, today) : 0;
+  // working days left for the sales goal: each unit's own week (Cleaning Monday to Friday, Restoration Monday to Saturday)
+  const leftOf = unit => (per === "month" ? lbDaysLeft(key, today, unit) : 0);
+  const left = Math.max(0, ...LB_GROUPS.map(leftOf));
   const edit = canEditLb() && lbData.canEdit !== false;
   // days typed: one square per day, per team
   const week = per === "wtd" || per === "lastweek";
@@ -6032,7 +6050,9 @@ function lbStatusEl() {
     lbRankTable(`lbs${g}`, truckCols, list, t => R(t).truckDays > 0,
       ["Total", lbMoney(sum(list, "revenue")), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "jobs"))), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "workDays"))), fmt(sum(list, "jobs")), fmt(sum(list, "workDays")), "", "", ""])));
   // a technician with a day of numbers (truck or sales) is ranked in sales, even at $0
-  const sold = t => R(t).saleDays > 0 || R(t).truckDays > 0 || R(t).sales > 0;
+  // an estimator (No sales goal in Teams) is shown but not ranked
+  const sold = t => !t.noSale && (R(t).saleDays > 0 || R(t).truckDays > 0 || R(t).sales > 0);
+  const gOf = t => lbGoal(R(t), goal, leftOf(t.unit));
   const kindCols = [
     { k: "saleJobs", label: "Jobs", v: t => R(t).saleJobs, f: t => fmt(R(t).saleJobs) },
     { k: "salePerJob", label: "Per job", v: t => lbDiv(R(t).sales, R(t).saleJobs), f: t => lbMoney(lbDiv(R(t).sales, R(t).saleJobs)) },
@@ -6046,11 +6066,11 @@ function lbStatusEl() {
     lbRankTable("lbsSales", [{ k: "name", label: "Tech" }, { k: "sales", label: LB_SPER[per], def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]))
   : h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
-    h("p", { class: "lb-sub", text: left ? `Goal ${lbMoney(goal)} each · ${left} working day${left === 1 ? "" : "s"} left in ${lbMonthLong(month)} (Monday to Saturday${lbClosedText(key, today)})` : `Goal ${lbMoney(goal)} each` }),
+    h("p", { class: "lb-sub", id: "lbsDaysLeft", text: left ? `Goal ${lbMoney(goal)} each · working days left in ${lbMonthLong(month)}: ${LB_GROUPS.filter(u => board.some(t => t.unit === u)).map(u => `${u} ${leftOf(u)} (${LB_WEEK_TEXT[lbWeekOf(u)]})`).join(", ")}${lbClosedText(key, today).replace(/^, /, " · ")}` : `Goal ${lbMoney(goal)} each` }),
     lbRankTable("lbsSales", [{ k: "name", label: "Tech" },
       { k: "sales", label: "Month to date", def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) },
-      { k: "left", label: "Left to goal", low: true, v: t => lbGoal(R(t), goal, left).left, f: t => { const g = lbGoal(R(t), goal, left); return g.done ? "Done" : lbMoney(g.left); } },
-      { k: "need", label: "Need per day", low: true, v: t => lbGoal(R(t), goal, left).perDay, f: t => { const g = lbGoal(R(t), goal, left); return g.done || !left ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
+      { k: "left", label: "Left to goal", low: true, v: t => gOf(t).left, f: t => { const g = gOf(t); return t.noSale ? "No goal" : g.done ? "Done" : lbMoney(g.left); } },
+      { k: "need", label: "Need per day", low: true, v: t => gOf(t).perDay, f: t => { const g = gOf(t); return t.noSale || g.done || !leftOf(t.unit) ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
   const ytdRv = name => lbRecords().filter(r => r.team === name && r.group && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
   const reviews = week ? null : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
     per === "ytd" ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbYtdText(month), def: true, v: t => R(t).reviews, f: t => fmt(R(t).reviews) }], board, () => true, ["Total", fmt(sum(board, "reviews"))])
@@ -6104,6 +6124,8 @@ function openLbTeams() {
         h("div", { class: "field" }, h("label", { text: "Unit" }), h("select", { class: "t-unit" }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === t.unit })))),
         h("div", { class: "field" }, h("label", { text: "On the board from" }), h("select", { class: "t-from" }, monthOpts(t.from, `Before ${y}`))),
         h("div", { class: "field" }, h("label", { text: "Until" }), h("select", { class: "t-to" }, monthOpts(t.to, "Still on the board")))),
+      h("label", { class: "check lb-nosale" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
+        h("span", null, "No sales goal ", h("small", { text: "(an estimator: still ranked on revenue, left out of technician sales)" }))),
       !isNew && used.has(t.name.toLowerCase()) ? h("p", { class: "hint", text: "Has numbers, so the name stays. When the team leaves the board, pick the last month under Until." }) : null);
     return row;
   };
@@ -6132,10 +6154,13 @@ function openLbTeams() {
             names.add(name.toLowerCase());
             const from = row.querySelector(".t-from").value, to = row.querySelector(".t-to").value;
             if (from && to && to < from) { err.textContent = `${name}: Until is before From.`; return; }
-            teams.push({ name, unit: row.querySelector(".t-unit").value, from, to });
+            const team = { name, unit: row.querySelector(".t-unit").value, from, to };
+            if (row.querySelector(".t-nosale").checked) team.noSale = true;
+            teams.push(team);
           }
           const goal = Number(val("lbGoal").replace(/[$,\s]/g, ""));
           if (!(goal > 0)) { err.textContent = "Type the sales goal as a number, like 3000."; return; }
+          if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "No sales goal needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
           try {
             const out = await api("lbPut", { year: y, writes: [{ key: "config", data: { teams, goal } }] });
@@ -6824,9 +6849,11 @@ function lbCell(label, text, isBest) {
 }
 function lbSalesSlide(month) {
   const y = lbYear(), key = lbMonthKey(y, month), cfg = lbCfg(), today = lbAsOf();
-  const left = lbDaysLeft(key, today);
+  const leftOf = unit => lbDaysLeft(key, today, unit);
   const recOf = name => lbRecords().find(r => r.month === key && r.team === name) || { up: 0, addon: 0, rugs: 0, extra: 0, sales: 0, saleJobs: 0 };
-  const rows = lbBoardShown(cfg, key).map(t => { const r = recOf(t.name); return { team: t.name, unit: t.unit, up: r.up, addon: r.addon, rugs: r.rugs, extra: r.extra, jobs: r.saleJobs, perJob: lbDiv(r.sales, r.saleJobs), mtd: r.sales, g: lbGoal(r, cfg.goal, left) }; }).sort(lbAz);
+  // technicians on the sales goal (an estimator isn't on this slide)
+  const rows = lbBoardShown(cfg, key).filter(t => !t.noSale).map(t => { const r = recOf(t.name); return { team: t.name, unit: t.unit, left: leftOf(t.unit), up: r.up, addon: r.addon, rugs: r.rugs, extra: r.extra, jobs: r.saleJobs, perJob: lbDiv(r.sales, r.saleJobs), mtd: r.sales, g: lbGoal(r, cfg.goal, leftOf(t.unit)) }; }).sort(lbAz);
+  const units = LB_GROUPS.filter(u => rows.some(r => r.unit === u)), left = Math.max(0, ...units.map(leftOf));
   const cols = [["up", "Up sale", true], ["addon", "Add-on", true], ["rugs", "Rugs in plant", true], ["extra", "Additional", true], ["jobs", "Jobs", false], ["perJob", "Per job", true]];
   const best = Object.fromEntries(cols.concat([["mtd"]]).map(([k]) => [k, lbBest(rows, r => r[k])]));
   const tot = rows.reduce((a, r) => ({ sales: a.sales + r.mtd, jobs: a.jobs + r.jobs }), { sales: 0, jobs: 0 });
@@ -6841,9 +6868,9 @@ function lbSalesSlide(month) {
         h("td", { class: "goal" + (best.mtd != null && lbRound(r.mtd) === best.mtd ? " best" : ""), "data-l": "Month to date" },
           h("span", { class: "lbs-goalbar" + (r.g.done ? " done" : "") }, h("i", { style: `width:${Math.min(100, Math.round(r.mtd / cfg.goal * 100))}%` })),
           h("b", null, lbMoney(r.mtd), best.mtd != null && lbRound(r.mtd) === best.mtd ? h("span", { class: "lbs-star", "aria-label": "best", text: " ★" }) : null)),
-        h("td", { "data-l": "Need per day", class: r.g.done ? "done" : "", text: r.g.done ? "Goal reached" : left ? lbMoney(r.g.perDay) : "–" })))))),
+        h("td", { "data-l": "Need per day", class: r.g.done ? "done" : "", text: r.g.done ? "Goal reached" : r.left ? lbMoney(r.g.perDay) : "–" })))))),
     h("p", { class: "lbs-foot" }, `Company: ${lbMoney(tot.sales)} in sales on ${fmt(tot.jobs)} jobs · ${lbMoney(lbDiv(tot.sales, tot.jobs))} per job`,
-      left ? ` · ${left} working day${left === 1 ? "" : "s"} left` : "", h("span", { class: "lbs-star", text: " ★" }), " best in the column"));
+      left ? ` · working days left: ${units.map(u => `${u} ${leftOf(u)}`).join(", ")}` : "", h("span", { class: "lbs-star", text: " ★" }), " best in the column"));
 }
 function lbNumbersSlide(g, st, month) {
   const y = lbYear();
