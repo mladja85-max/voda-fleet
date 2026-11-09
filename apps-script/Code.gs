@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 28;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 29;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -293,6 +293,12 @@ function doPost(e) {
       case "office":
         if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
         return json_(ofRead_(user, req.year));
+      case "payRead":
+        if (!canPay_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(payRead_());
+      case "payPut":
+        if (!canPay_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return payPut_(req); }));
       case "ofPut":
         if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return ofPut_(req); }));
@@ -2729,6 +2735,8 @@ const LB_SHEET = "Leaderboard";
 const LB_COLS = ["key", "json", "updatedAt", "by"];
 const LB_ACCESS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers and sets up the teams
 const LB_UNITS = ["Cleaning", "Restoration"];
+// What each person does (Employees): pay rates are set by role and person under Payroll
+const LB_ROLES = ["assistant", "clean1", "clean2", "clean3", "rest1", "rest2", "rest3"];
 const LB_PARTS = { t: 4, s: 5, r: 1 };   // a truck's day: jobs, work day, revenue, # of techs; a technician's day: up sale, add-on, rugs in plant, additional service, jobs; a team's 5-star reviews that day
 const LB_MAX_JSON = 45000;          // one cell holds 50,000 characters; a month is about 7,000
 
@@ -2800,6 +2808,7 @@ function lbConfig_(c) {
     if (from && to && to < from) to = from;
     const team = { name: name, unit: LB_UNITS.indexOf(t.unit) !== -1 ? t.unit : LB_UNITS[0], from: from, to: to };
     if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
+    if (LB_ROLES.indexOf(t.role) !== -1) team.role = t.role;
     out.teams.push(team);
   });
   // people on the reviews board only (helpers who get 5-star reviews but don't run a truck): never ranked
@@ -2808,7 +2817,9 @@ function lbConfig_(c) {
     const name = lbTeam_(r && r.name);
     if (!name || seen[name.toLowerCase()]) return;
     seen[name.toLowerCase()] = true;
-    reviewers.push({ name: name, unit: LB_UNITS.indexOf(r.unit) !== -1 ? r.unit : LB_UNITS[0] });
+    const rv = { name: name, unit: LB_UNITS.indexOf(r.unit) !== -1 ? r.unit : LB_UNITS[0] };
+    if (LB_ROLES.indexOf(r.role) !== -1) rv.role = r.role;
+    reviewers.push(rv);
   });
   if (reviewers.length) out.reviewers = reviewers;
   return out;
@@ -3023,6 +3034,58 @@ function ofPut_(req) {
     if (key === "config") out.config = doc; else out.months[key] = doc;
   });
   return out;
+}
+
+/* ---------------- payroll ---------------- */
+// Pay is kept on its own tab, read and written only by admins switched on for Payroll (see setPayroll_): the
+// technicians' and the numbers typers' app never loads it. "rates": each person's pay: day rate, commission % on
+// revenue and on each kind of sale, and his share of a shared job (%).
+const PAY_SHEET = "Payroll";
+const PAY_FIELDS = ["day", "rev", "up", "addon", "rugs", "extra", "share"];
+function canPay_(user) { return !!user && user.role === "admin" && parseAccess_(user.access).indexOf(PAYROLL) !== -1; }
+function paySheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(PAY_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(PAY_SHEET);
+    s.getRange(1, 1, 1, LB_COLS.length).setValues([LB_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:B").setNumberFormat("@");
+  }
+  return s;
+}
+/** Each person's pay, cleaned: a day rate up to $10,000 and percentages 0-100, blank when not set. */
+function payRates_(r) {
+  const out = { people: {} };
+  const people = r && r.people && typeof r.people === "object" ? r.people : {};
+  Object.keys(people).slice(0, 80).forEach(function (n) {
+    const name = lbTeam_(n), x = people[n];
+    if (!name || !x || typeof x !== "object") return;
+    const e = {};
+    PAY_FIELDS.forEach(function (f) {
+      const v = x[f];
+      if (typeof v === "number" && isFinite(v) && v >= 0 && v <= (f === "day" ? 10000 : 100)) e[f] = Math.round(v * 100) / 100;
+    });
+    if (Object.keys(e).length) out.people[name] = e;
+  });
+  return out;
+}
+function payRead_() {
+  const out = { ok: true, rates: { people: {} } };
+  lbRows_(paySheet_(false)).forEach(function (r) { if (r.key === "rates") out.rates = lbParse_(r.json); });
+  return out;
+}
+/** { rates: { people: { "Aaron": { day: 120, up: 25, ... } } } } replaces the pay rates whole. */
+function payPut_(req) {
+  const s = paySheet_(true);
+  const doc = payRates_(req.rates);
+  const now = new Date().toISOString();
+  doc.at = now; doc.by = req.by;
+  const text = JSON.stringify(doc);
+  const row = lbRows_(s).filter(function (r) { return r.key === "rates"; })[0];
+  if (row) s.getRange(row.row, 2, 1, 3).setValues([[text, now, req.by]]);
+  else appendRows_(s, LB_COLS.length, [["rates", text, now, req.by]]);
+  return { ok: true, rates: doc };
 }
 
 /* ---------------- weekly backup ---------------- */
