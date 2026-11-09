@@ -803,6 +803,13 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rank td.on { font-weight: 700; color: var(--ink); }
 .lb-rank .lbs-who { display: inline-flex; align-items: center; gap: 8px; }
 .lb-paypanel { padding: 10px; }
+.pay-list { display: grid; gap: 10px; }
+.pay-person { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; background: var(--surface-2); }
+.pay-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.pay-head strong { font-family: var(--font-display); font-size: 1.15rem; text-transform: uppercase; }
+.pay-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.pay-f { display: grid; gap: 2px; font-size: .74rem; font-weight: 600; color: var(--muted); }
+.pay-f input { font: inherit; font-size: .95rem; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
 .lb-payrange { flex-wrap: wrap; align-items: end; }
 .lb-paydate { display: grid; gap: 2px; font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .lb-paydate input { font: inherit; font-size: .95rem; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
@@ -838,7 +845,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rvsec h4 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; }
 .lb-rvsec .hint { margin: 0; }
 .lb-rvlist { display: grid; gap: 6px; }
-.lb-rvrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px) auto; gap: 8px; align-items: center; }
+.lb-rvrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px) minmax(0, 170px) auto; gap: 8px; align-items: center; }
+.lb-rvacts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 560px) { .lb-rvrow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 6px; border-bottom: 1px dashed var(--line); } .lb-rvrow > strong, .lb-rvrow > .r-name { grid-column: 1 / -1; } .lb-rvacts { grid-column: 1 / -1; } }
 .lb-rvrow strong { font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; }
 .lb-rvrow input, .lb-rvrow select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
 .lb-rvbtns { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1514,16 +1523,22 @@ function lbCleanConfig(c) {
     if (from && to && to < from) to = from;
     const team = { name, unit: LB_GROUPS.includes(t.unit) ? t.unit : LB_GROUPS[0], from, to };
     if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
+    if (LB_ROLES[t.role]) team.role = t.role;
     out.teams.push(team);
   }
   for (const r of (c && Array.isArray(c.reviewers) ? c.reviewers : []).slice(0, 30)) {
     const name = lbTeamName(r && r.name);
     if (!name || seen.has(name.toLowerCase())) continue;   // a team's name wins
     seen.add(name.toLowerCase());
-    out.reviewers.push({ name, unit: LB_GROUPS.includes(r.unit) ? r.unit : LB_GROUPS[0] });
+    const rv = { name, unit: LB_GROUPS.includes(r.unit) ? r.unit : LB_GROUPS[0] };
+    if (LB_ROLES[r.role]) rv.role = r.role;
+    out.reviewers.push(rv);
   }
   return out;
 }
+/** What each person does (Employees). */
+const LB_ROLES = { assistant: "Assistant", clean1: "Cleaning tech 1", clean2: "Cleaning tech 2", clean3: "Cleaning tech 3",
+  rest1: "Restoration tech 1", rest2: "Restoration tech 2", rest3: "Restoration tech 3" };
 /** A reviews-only person by name (any capitals), or null. */
 const lbReviewerOf = (cfg, name) => ((cfg && cfg.reviewers) || []).find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 const lbOnBoard = (t, key) => (!t.from || t.from <= key) && (!t.to || key <= t.to);
@@ -5462,6 +5477,7 @@ const LB_API = 22;                                     // the Google script vers
 const LB_RV_API = 23;                                  // ... and with 5-star reviews typed by day
 const LB_NOSALE_API = 26;                              // ... and with Estimator (noSale) on a team
 const LB_REVIEWERS_API = 27;                           // ... and with reviews-only people (cfg.reviewers)
+const LB_ROLES_API = 29;                               // ... and with roles and the pay rates (Payroll)
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -5664,7 +5680,7 @@ function renderLeaderboard() {
     h("h2", { class: "lb-title", text: "Leaderboard" }),
     h("div", { class: "lb-acts" },
       lbView.tab === "standings" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null,
-      edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Teams") : null));
+      edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Employees") : null));
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
     Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
       onclick: () => { if (lbView.tab === "enter") lbFlush(); lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, t)));
@@ -5943,7 +5959,7 @@ const lbBox = (label, value, data, hint) => h("label", { class: "lb-box" + (hint
   hint ? h("small", { text: hint }) : null);
 function lbCard(t, part, day, fields, arr, foot, extra) {
   return h("div", { class: "lb-card" + (t.off ? " off" : "") + (t.reviewer ? " rv-only" : ""), "data-team": t.name, "data-part": part },
-    h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.reviewer ? `${t.unit} · reviews only` : t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
+    h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.reviewer ? `${t.unit} · not ranked` : t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
     h("div", { class: `lb-boxes n${fields.length}` }, fields.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), arr[i], { "data-i": String(i), oninput: () => lbTyped(day, part, t.name, fields.length) }))),
     h("p", { class: "lb-card-foot", text: foot }),
     extra || null);
@@ -6122,6 +6138,7 @@ function lbPayrollEl() {
     h("div", { class: "lb-bar" },
       // a preset starts from the From day shown; From or To typed by hand makes it From – To
       lbSeg(Object.entries(LB_PAY), per, k => { if (k === "custom") { custom(r.from, r.to); return; } lbView.pper = k; lbView.pday = r.from; lbSaveView(); renderLeaderboard(); }, "Pay period"),
+      h("button", { class: "btn", type: "button", id: "payRatesBtn", onclick: () => openPayRates() }, "Pay rates"),
       h("div", { class: "lb-daybar lb-payrange" },
         h("button", { class: "btn small", type: "button", id: "lbPayPrev", "aria-label": "Earlier", disabled: r.from <= `${y}-01-01`, onclick: () => step(-1) }, "‹"),
         dateBox("lbPayFrom", r.from, "From", v => custom(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
@@ -6132,6 +6149,56 @@ function lbPayrollEl() {
       ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
     teams.length ? h("div", { class: "panel lb-paypanel" }, grid)
       : h("p", { class: "meta", text: "No teams on a truck then." })];
+}
+
+/* ---- pay rates (Payroll admins only): each person's day rate, commissions and share of a shared job ---- */
+const PAY_FIELDS = [["day", "Day rate", "$"], ["rev", "Revenue", "%"], ["up", "Up sale", "%"], ["addon", "Add-on", "%"], ["rugs", "Rugs in plant", "%"], ["extra", "Additional", "%"], ["share", "Share of a shared job", "%"]];
+async function openPayRates() {
+  const cfg = lbCfg(), y = lbNowYear();
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  if (apiLevel && apiLevel < LB_ROLES_API) {
+    openDialog(h("h3", { id: "dlgTitle", text: "Pay rates" }),
+      h("p", { class: "dlg-err", text: "Pay rates need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that." }),
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+    return;
+  }
+  let rates = {};
+  try { rates = ((await api("payRead")).rates || {}).people || {}; }
+  catch (e) { toast(e && e.error === "not_allowed" ? "Only admins switched on for Payroll see pay rates." : errText(e, "Nothing")); return; }
+  // everyone this year: the teams on the board, then the people not on the leaderboard, by unit
+  const months = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
+  const people = LB_GROUPS.flatMap(g => cfg.teams.filter(t => t.unit === g && months.some(k => lbOnBoard(t, k))).map(t => Object.assign({ off: false }, t))
+    .concat(cfg.reviewers.filter(r => r.unit === g).map(r => Object.assign({ off: true }, r))));
+  const rate = (n, f) => { const x = Object.entries(rates).find(([k]) => k.toLowerCase() === n.toLowerCase()); return x && typeof x[1][f] === "number" ? String(x[1][f]) : ""; };
+  const list = h("div", { class: "pay-list", id: "payList" }, people.map(p => h("div", { class: "pay-person", "data-name": p.name },
+    h("div", { class: "pay-head" }, h("strong", { text: p.name }), h("span", { class: `lb-unit ${p.unit}`, text: [p.unit, LB_ROLES[p.role] || "", p.off ? "not ranked" : ""].filter(Boolean).join(" · ") })),
+    h("div", { class: "pay-fields" }, PAY_FIELDS.map(([f, label, unit]) => h("label", { class: "pay-f" }, h("span", { text: `${label} ${unit}` }),
+      h("input", { type: "text", inputmode: "decimal", autocomplete: "off", "data-f": f, value: rate(p.name, f), placeholder: f === "share" ? "50" : "" })))))));
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Pay rates" }),
+    h("p", { class: "hint", text: "Each person's pay: the day rate, the commission on revenue and on each kind of sale, and his share of a shared job (blank = 50%). Only admins switched on for Payroll see this. Roles are set under Employees." }),
+    people.length ? list : h("p", { class: "meta", text: "No one yet. Add people under Employees." }),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "paySave", text: "Save", onclick: async () => {
+        err.textContent = "";
+        const out = {};
+        for (const row of list.querySelectorAll(".pay-person")) {
+          const e = {};
+          for (const i of row.querySelectorAll("input")) {
+            const v = i.value.replace(/[$,%\s]/g, "");
+            if (v === "") continue;
+            const n = Number(v), f = i.dataset.f;
+            if (!Number.isFinite(n) || n < 0 || n > (f === "day" ? 10000 : 100)) { err.textContent = `${row.dataset.name}: ${PAY_FIELDS.find(x => x[0] === f)[1]} should be ${f === "day" ? "a dollar amount" : "a percent from 0 to 100"}.`; i.focus(); return; }
+            e[f] = n;
+          }
+          if (Object.keys(e).length) out[row.dataset.name] = e;
+        }
+        const b = $("paySave"); b.disabled = true; b.textContent = "Saving…";
+        try { await api("payPut", { rates: { people: out } }); closeDialog(); toast("Pay rates saved"); }
+        catch (e) { err.textContent = e && e.error === "not_allowed" ? "Only admins switched on for Payroll can change pay rates." : errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
+      } }))));
 }
 
 /* ---- status: what's typed, and every team's numbers ---- */
@@ -6276,7 +6343,7 @@ function lbStatusEl() {
   // a reviews-only person counts all his reviews (he's never on the board)
   const ytdRv = name => lbRecords().filter(r => r.team === name && (r.group || lbReviewerOf(cfg, name)) && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
   const monthRv = name => (lbRecords().find(r => r.month === key && r.team === name) || { reviews: 0 }).reviews;
-  const rvOnly = cfg.reviewers.map(r => ({ name: r.name, unit: r.unit, reviewer: true, note: "reviews only" }))
+  const rvOnly = cfg.reviewers.map(r => ({ name: r.name, unit: r.unit, reviewer: true, note: "not ranked" }))
     .filter(r => !lbPast() || ytdRv(r.name) > 0);
   const rvOf = t => (!t.reviewer ? R(t).reviews : per === "ytd" ? ytdRv(t.name) : monthRv(t.name));
   const rvBoard = board.concat(rvOnly), rvTotal = rvBoard.reduce((n, t) => n + rvOf(t), 0);
@@ -6307,6 +6374,10 @@ function lbClosedText(key, today) {
   return out.length ? `, closed ${out.join(", ")}` : "";
 }
 
+/** A role picker for Employees. */
+const lbRoleSelect = (cls, role, name) => h("select", { class: cls, "aria-label": `${name || "Their"} role` },
+  [h("option", { value: "", text: "No role yet", selected: !role })].concat(Object.entries(LB_ROLES).map(([k, t]) => h("option", { value: k, text: t, selected: k === role }))));
+
 /* ---- teams: who's on the board, in which unit, from which month ---- */
 function openLbTeams() {
   const y = lbYear(), cfg = lbCleanConfig(lbData.config);
@@ -6332,6 +6403,7 @@ function openLbTeams() {
         h("div", { class: "field" }, h("label", { text: "Unit" }), h("select", { class: "t-unit" }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === t.unit })))),
         h("div", { class: "field" }, h("label", { text: "On the board from" }), h("select", { class: "t-from" }, monthOpts(t.from, `Before ${y}`))),
         h("div", { class: "field" }, h("label", { text: "Until" }), h("select", { class: "t-to" }, monthOpts(t.to, "Still on the board")))),
+      h("div", { class: "field" }, h("label", { text: "Role" }), lbRoleSelect("t-role", t.role, t.name)),
       h("label", { class: "check lb-nosale" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
         h("span", null, "Estimator ", h("small", { text: "(left out of Today's focus and technician sales; still ranked on revenue)" }))),
       !isNew && used.has(t.name.toLowerCase()) ? h("p", { class: "hint", text: "Has numbers, so the name stays. When the team leaves the board, pick the last month under Until." }) : null);
@@ -6345,19 +6417,28 @@ function openLbTeams() {
       isNew ? h("input", { type: "text", class: "r-name", maxlength: "30", autocomplete: "off", value: r.name || "", placeholder: "First name", "aria-label": "Name" })
         : h("strong", { text: r.name }),
       h("select", { class: "r-unit", "aria-label": `${r.name || "Their"} unit` }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === r.unit }))),
-      h("button", { class: "btn ghost small danger", type: "button", "aria-label": `Remove ${r.name || "this name"}`, onclick: () => row.remove() }, "Remove"));
+      lbRoleSelect("r-role", r.role, r.name),
+      h("div", { class: "lb-rvacts" },
+        h("button", { class: "btn ghost small", type: "button", "data-up": r.name || "", "aria-label": `Put ${r.name || "this name"} on the leaderboard`, onclick: () => {
+          const name = row.dataset.new ? row.querySelector(".r-name").value.trim() : row.dataset.name;
+          if (!name) { err.textContent = "Type the name first."; return; }
+          list.append(rowEl({ name, unit: row.querySelector(".r-unit").value, role: row.querySelector(".r-role").value, from: thisMonth, to: "" }, true));
+          row.remove();
+          toast(`${name} goes on the leaderboard from ${lbMonthLong(Number(thisMonth.slice(5)))}. Tap Save.`);
+        } }, "Put on the leaderboard"),
+        h("button", { class: "btn ghost small danger", type: "button", "aria-label": `Remove ${r.name || "this name"}`, onclick: () => row.remove() }, "Remove")));
     return row;
   };
   for (const r of cfg.reviewers) rvList.append(rvRow(r, false));
   const thisMonth = lbMonthKey(y, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 1);
   openDialog(
-    h("h3", { id: "dlgTitle", text: "Teams on the board" }),
-    h("p", { class: "hint", text: "Each truck's team, the unit it's ranked in, and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June." }),
+    h("h3", { id: "dlgTitle", text: "Employees" }),
+    h("p", { class: "hint", text: "On the leaderboard: each truck's team, the unit it's ranked in, its role and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June." }),
     list,
     h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: thisMonth, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a team")),
     h("div", { class: "lb-rvsec" },
-      h("h4", { text: "Reviews only" }),
-      h("p", { class: "hint", text: "People who get 5-star reviews but don't run a truck (helpers). They're on the reviews board (Enter numbers > Reviews, Status > 5-star reviews), never ranked in Standings. Removing a name keeps the reviews typed for it." }),
+      h("h4", { text: "Not on the leaderboard" }),
+      h("p", { class: "hint", text: "Helpers and techs who don't compete for a spot yet. Their reviews and the jobs they help on count, and they show at the bottom of their department, but they're never ranked in Standings until you put them on the leaderboard. Removing a name keeps what was typed for it." }),
       rvList,
       h("div", { class: "lb-rvbtns" },
         h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); } }, "+ Add a name"),
@@ -6381,6 +6462,7 @@ function openLbTeams() {
             const from = row.querySelector(".t-from").value, to = row.querySelector(".t-to").value;
             if (from && to && to < from) { err.textContent = `${name}: Until is before From.`; return; }
             const team = { name, unit: row.querySelector(".t-unit").value, from, to };
+            if (row.querySelector(".t-role").value) team.role = row.querySelector(".t-role").value;
             if (row.querySelector(".t-nosale").checked) team.noSale = true;
             teams.push(team);
           }
@@ -6392,11 +6474,13 @@ function openLbTeams() {
             if (!name) { err.textContent = "Names take letters only (spaces, ' and - are fine)."; return; }
             if (names.has(name.toLowerCase())) { err.textContent = `${name} is a team or on the list twice.`; return; }
             names.add(name.toLowerCase());
-            reviewers.push({ name, unit: row.querySelector(".r-unit").value });
+            const rv = { name, unit: row.querySelector(".r-unit").value };
+            if (row.querySelector(".r-role").value) rv.role = row.querySelector(".r-role").value;
+            reviewers.push(rv);
           }
           const goal = Number(val("lbGoal").replace(/[$,\s]/g, ""));
           if (!(goal > 0)) { err.textContent = "Type the sales goal as a number, like 3000."; return; }
-          if (reviewers.length && apiLevel && apiLevel < LB_REVIEWERS_API) { err.textContent = "Reviews only needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+          if ((teams.concat(reviewers).some(t => t.role) && apiLevel && apiLevel < LB_ROLES_API) || (reviewers.length && apiLevel && apiLevel < LB_REVIEWERS_API)) { err.textContent = "Roles and Not on the leaderboard need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "Estimator needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
           try {
@@ -6420,8 +6504,8 @@ function openLbReviewsXl() {
   const status = h("p", { class: "lb-dl-status", id: "lbRvXlStatus", role: "status" });
   let found = [];
   openDialog(
-    h("h3", { id: "dlgTitle", text: "Reviews only: their reviews from Excel" }),
-    h("p", { class: "hint", text: "Choose an Excel copy of 5. Revenue per truck. The app reads the REVIEWS table on every month tab and lists the names there that aren't a team (helpers). Loading adds them to Reviews only and saves their monthly counts; trucks, sales and the teams' reviews stay as they are." }),
+    h("h3", { id: "dlgTitle", text: "Not on the leaderboard: their reviews from Excel" }),
+    h("p", { class: "hint", text: "Choose an Excel copy of 5. Revenue per truck. The app reads the REVIEWS table on every month tab and lists the names there that aren't a team (helpers). Loading adds them to Not on the leaderboard and saves their monthly counts; trucks, sales and the teams' reviews stay as they are." }),
     h("input", { type: "file", id: "lbRvXlFile", accept: ".xlsx", onchange: async e => {
       err.textContent = ""; res.hidden = true; found = [];
       const f = e.target.files[0];
@@ -6470,11 +6554,11 @@ function openLbReviewsXl() {
         const pick = found.filter(x => { const tr = document.querySelector(`#lbRvXlTable tr[data-name="${CSS.escape(x.name)}"]`); return tr && tr.querySelector(".rx-on").checked; })
           .map(x => Object.assign({}, x, { unit: document.querySelector(`#lbRvXlTable tr[data-name="${CSS.escape(x.name)}"] .rx-unit`).value }));
         if (!pick.length) { err.textContent = "Tick at least one name."; return; }
-        if (apiLevel && apiLevel < LB_REVIEWERS_API) { err.textContent = "Reviews only needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+        if (apiLevel && apiLevel < LB_REVIEWERS_API) { err.textContent = "Not on the leaderboard needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
         const b = $("lbRvXlGo"); b.disabled = true; b.textContent = "Saving…";
         try {
           const cur = lbCleanConfig(lbData.config);
-          const reviewers = cur.reviewers.filter(r => !pick.some(x => x.name.toLowerCase() === r.name.toLowerCase())).concat(pick.map(x => ({ name: x.name, unit: x.unit })));
+          const reviewers = cur.reviewers.filter(r => !pick.some(x => x.name.toLowerCase() === r.name.toLowerCase())).concat(pick.map(x => Object.assign({ name: x.name, unit: x.unit }, (lbReviewerOf(cur, x.name) || {}).role ? { role: lbReviewerOf(cur, x.name).role } : {})));
           const patches = {};
           for (const x of pick) for (const [k, n] of Object.entries(x.months)) ((patches[k] || (patches[k] = { reviews: {} })).reviews)[x.name] = n;
           const writes = [{ key: "config", data: { teams: cur.teams, goal: cur.goal, reviewers } }].concat(Object.keys(patches).sort().map(k => ({ key: k, patch: patches[k] })));
@@ -6486,7 +6570,7 @@ function openLbReviewsXl() {
           lbYearCache = {};
           await lbReload();
           closeDialog();
-          toast(`Reviews only: ${pick.map(x => x.name).join(", ")}`);
+          toast(`Not on the leaderboard: ${pick.map(x => x.name).join(", ")}`);
           renderLeaderboard();
         } catch (x) { err.textContent = errText(x, "The reviews") + " Tap Load again to finish (it's safe to repeat)."; b.disabled = false; b.textContent = "Load"; }
       } }))));
