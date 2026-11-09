@@ -139,7 +139,7 @@ button { font: inherit; color: inherit; }
    up with it. Trucks gets a wide column (its cards fill it); Checklists and the Leaderboard a reading-width one. */
 @media (min-width: 1100px) {
   :root { --page-w: 1560px; }
-  body[data-tab="supplies"], body[data-tab="leaderboard"] { --page-w: 1000px; }
+  body[data-tab="supplies"], body[data-tab="leaderboard"], body[data-tab="office"] { --page-w: 1000px; }
   .page { width: 100%; max-width: calc(var(--page-w) + 48px); margin-inline: auto; }
   .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
   body .sup, body .lb { max-width: none; }
@@ -588,6 +588,43 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-acts { display: flex; gap: 8px; margin-left: auto; } /* Presentation and Teams stay side by side */
 .lb-acts:empty { display: none; }
 .lb-when { display: flex; gap: 8px; flex-wrap: wrap; }
+/* ---- office scorecards ---- */
+.of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.of-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .2s ease; }
+.of-bar.done i { background: var(--ok); }
+.of-total { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 8px; margin: 2px 0 6px; }
+.of-total b { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; }
+.of-total span { color: var(--muted); font-weight: 600; }
+.of-total .of-bar { grid-column: 1 / -1; }
+.of-sec { margin: 10px 0 2px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.lb-box.ro input { background: var(--surface-2); color: var(--muted); }
+.of-ratio { color: var(--muted); font-size: .78rem; }
+.of-step { display: flex; align-items: center; gap: 8px; }
+.of-step strong { min-width: 10em; text-align: center; }
+.of-row-in { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 14px; padding: 12px 14px; }
+.of-row-goal, .of-days, .of-nums { grid-column: 1 / -1; }
+.of-row-goal .lb-stats { margin: 4px 0 0; }
+.of-days { display: flex; flex-wrap: wrap; gap: 4px; }
+.of-dd { min-width: 30px; height: 26px; padding: 0 4px; border-radius: 6px; display: grid; place-items: center; font-size: .78rem; font-weight: 700; font-variant-numeric: tabular-nums; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.of-dd.ok { background: color-mix(in srgb, var(--ok) 22%, var(--surface)); color: var(--ok); border-color: transparent; }
+.of-dd.low { background: color-mix(in srgb, var(--soon) 18%, var(--surface)); color: var(--soon); border-color: transparent; }
+.of-dd.future { opacity: .35; }
+.of-nums { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; padding-top: 6px; border-top: 1px solid var(--line); }
+.of-nums .lb-m b i { margin-left: 6px; font-style: normal; color: var(--muted); font-weight: 600; }
+.of-people { display: grid; gap: 12px; }
+.of-person { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; background: var(--surface-2); }
+.of-p-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; }
+.of-p-head .p-name-fixed { font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; align-self: center; }
+.of-mo { display: grid; gap: 2px; font-size: .8rem; color: var(--muted); }
+.of-mo input, .of-mo select, .of-f input, .of-f select, .of-p-head .p-name { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.of-fields { display: grid; gap: 6px; }
+.of-f { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+@media (max-width: 560px) { .of-f { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; } .of-f .f-label { grid-column: 1 / -1; } }
+.of-unnamed { display: grid; gap: 6px; }
+.of-people, .of-person, .of-fields, .of-p-head > * { min-width: 0; }
+.of-p-head .of-mo { flex: 1 1 140px; }
+.of-mo input, .of-mo select, .of-f input, .of-f select { width: 100%; min-width: 0; box-sizing: border-box; }
+.of-p-head .p-name { flex: 1 1 140px; min-width: 0; box-sizing: border-box; }
 .lb-rv-base { display: flex; align-items: center; gap: 10px; margin: -6px 0 4px; padding: 8px 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px dashed var(--line); font-size: .85rem; color: var(--muted); }
 .lb-rv-base input { width: 5em; font: inherit; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .lb-rv-base input.bad { border-color: var(--due); }
@@ -925,6 +962,10 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 /* three tabs (Trucks, Checklists, Leaderboard) on a phone: drop the icons so the bar fits the screen */
 @media (max-width: 430px) { .view-btn { flex: 1 1 auto; min-width: 0; padding: 6px 8px; letter-spacing: .01em; } .view-btn svg { display: none; } }
 @media (max-width: 370px) { .view-btn { padding: 6px 5px; font-size: .9rem; letter-spacing: 0; } }
+@media (max-width: 600px) {
+  .views.many .view-btn { flex: 1 1 0; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: .68rem; letter-spacing: .02em; min-width: 0; }
+  .views.many .view-btn svg { display: block; width: 18px; height: 18px; }
+}
 @media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
 @media (max-width: 380px) { .topbar, .top-actions, .sync { gap: 6px; } .topbar { padding: 8px 10px; } .brand { gap: 8px; } .brand h1 { font-size: 1.15rem; } }
 @media (max-width: 480px) { .sup-bar .sum.quiet { display: none; } .sup-bar #supNone { flex: 1; } }
@@ -1010,6 +1051,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
       <button type="button" class="view-btn" id="viewLeaderboard" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>Leaderboard
       </button>
+      <button type="button" class="view-btn" id="viewOffice" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Office
+      </button>
     </nav>
     <div id="fleetView">
     <section class="kpis" id="kpis" aria-label="Fleet summary"></section>
@@ -1043,6 +1087,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
     </div>
     <section class="sup" id="suppliesView" aria-label="Checklists" hidden></section>
     <section class="lb" id="lbView" aria-label="Leaderboard" hidden></section>
+    <section class="lb of" id="ofView" aria-label="Office" hidden></section>
     <section class="panel" id="noAccess" hidden>
       <h2>Nothing here yet</h2>
       <p class="meta">An admin hasn't given you Trucks, a checklist or the Leaderboard yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
@@ -2125,6 +2170,162 @@ function lbMp4(samples, o) {
   return lbConcat([ftyp, moov(ftyp.length + size + 8), lbU32(8 + data.reduce((t, d) => t + d.length, 0)), lbAscii("mdat"), ...data]);
 }
 // </leaderboard-logic>
+// <office-logic>
+/* ---- the office scorecards: each person's day, the 50 outgoing calls goal (Monday to Friday) ---- */
+const OF_GOAL = 50;
+const OF_KINDS = { out: "Counts toward the calls goal", num: "Other number", admin: "Admins type it (after checking the CRM)" };
+/** A new person's numbers, the way "14. OFFICE SCORECARDS" had them. `of`: shown as a % of that number. */
+const OF_DEFAULT_FIELDS = [
+  { id: "opp", label: "Opportunity calls", kind: "num", of: "" },
+  { id: "sched", label: "Scheduled jobs/estimates", kind: "num", of: "opp" },
+  { id: "gg", label: "Google Guaranteed leads", kind: "num", of: "" },
+  { id: "ggs", label: "Scheduled Google Guaranteed", kind: "num", of: "gg" },
+  { id: "fu", label: "Follow-up calls", kind: "out", of: "" },
+  { id: "fus", label: "Scheduled from follow-ups", kind: "num", of: "fu" },
+  { id: "other", label: "Other outgoing calls", kind: "out", of: "" },
+  { id: "done", label: "Scheduled / completed", kind: "admin", of: "" }];
+/** The people and their numbers, cleaned (the same rules the Google script uses). */
+function ofCleanConfig(c) {
+  const out = { people: [], goal: OF_GOAL };
+  const g = c && Number(c.goal);
+  if (g > 0 && g <= 1000) out.goal = Math.round(g);
+  const seen = new Set();
+  for (const p of (c && Array.isArray(c.people) ? c.people : []).slice(0, 40)) {
+    const name = lbTeamName(p && p.name);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    let from = lbYm(p.from), to = lbYm(p.to);
+    if (from && to && to < from) to = from;
+    const ids = new Set(), fields = [];
+    for (const f of (Array.isArray(p.fields) ? p.fields : []).slice(0, 20)) {
+      const id = String((f && f.id) || ""), label = String((f && f.label) || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      if (!/^[a-z][a-z0-9]{0,15}$/.test(id) || id === "at" || id === "by" || ids.has(id) || !label) continue;
+      ids.add(id);
+      fields.push({ id, label, kind: OF_KINDS[f.kind] ? f.kind : "num", of: String(f.of || "") });
+    }
+    for (const f of fields) if (!ids.has(f.of) || f.of === f.id) f.of = "";
+    out.people.push({ name, user: /^[A-Za-z0-9_-]{1,64}$/.test(String(p.user || "")) ? String(p.user) : "", from, to, fields });
+  }
+  return out;
+}
+const ofPerson = (cfg, name) => cfg.people.find(p => p.name.toLowerCase() === String(name || "").toLowerCase()) || null;
+/** In the office during any part of the days from..to. */
+const ofInRange = (p, from, to) => (!p.from || p.from <= to.slice(0, 7)) && (!p.to || from.slice(0, 7) <= p.to);
+/** A working day for the calls goal: Monday to Friday, and not one of the 4 closed holidays. */
+const ofWorkDay = day => { const w = new Date(day + "T12:00:00Z").getUTCDay(); return w >= 1 && w <= 5 && !lbHoliday(day); };
+const ofEntry = (months, day, name) => ((((months || {})[day.slice(0, 7)] || {}).days || {})[day] || {})[name] || null;
+const ofNum = v => (typeof v === "number" && Number.isFinite(v) ? v : null);
+/** Her outgoing calls that day: every number of hers that counts toward the goal, added up. */
+const ofOut = (p, e) => (e ? p.fields.filter(f => f.kind === "out").reduce((sum, f) => sum + (ofNum(e[f.id]) || 0), 0) : 0);
+const ofTyped = (p, e) => !!e && p.fields.some(f => ofNum(e[f.id]) != null);
+/** A day she worked: one of her own numbers (not an admin-only one) above 0. */
+const ofWorked = (p, e) => !!e && p.fields.some(f => f.kind !== "admin" && ofNum(e[f.id]) > 0);
+/** One person from day `from` to day `to` (both included): each number added up, her outgoing calls, the working days
+ *  she has numbers for, how many of them reached the goal, and the goal for those days. */
+function ofSummary(cfg, months, p, from, to) {
+  const goal = cfg.goal || OF_GOAL;
+  const sums = Object.fromEntries(p.fields.map(f => [f.id, 0])), days = [];
+  let out = 0, worked = 0, hit = 0;
+  for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+    const e = ofEntry(months, d, p.name), typed = ofTyped(p, e), did = ofWorked(p, e), o = ofOut(p, e), wd = ofWorkDay(d);
+    if (typed) for (const f of p.fields) if (ofNum(e[f.id]) != null) sums[f.id] += e[f.id];
+    out += o;
+    if (wd && did) { worked++; if (o >= goal) hit++; }
+    days.push({ day: d, typed, worked: did, out: o, work: wd });
+  }
+  return { sums, out, worked, hit, goal, target: goal * worked, pct: worked ? out / (goal * worked) : 0, avg: worked ? out / worked : 0, days };
+}
+/** A field's share of the field it's "of" ("Scheduled jobs/estimates: 75% of opportunity calls"), or null. */
+const ofRatio = (sums, f) => (f.of && sums[f.of] ? sums[f.id] / sums[f.of] : null);
+
+/* ---- "14. OFFICE SCORECARDS" (the Excel history): two people side by side on each month tab ---- */
+const OF_SEATS = [
+  { name: 1, day: 2, cols: { opp: 3, sched: 4, gg: 6, ggs: 7, fu: 9, fus: 10, out: 12, done: 13 } },
+  { name: 16, day: 17, cols: { opp: 18, sched: 19, gg: 21, ggs: 22, fu: 24, fus: 25, out: 27, done: 28 } }];
+const OF_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+/** A heading from the sheet as a field name: "# of income calls" → "Incoming calls". */
+function ofLabel(raw, fallback) {
+  let t = lbText(raw).replace(/^(#|number)\s*of\s*/i, "").replace(/\s+/g, " ").trim();
+  if (!t) return fallback;
+  t = t.toLowerCase().replace(/\bincome calls\b/, "incoming calls").replace(/\bfollow ?ups?\b/g, "follow-ups").replace(/^friendly reminder follow-ups$/, "friendly reminder calls")
+    .replace(/^estimates follow-ups$/, "estimate follow-ups").replace(/^follow-ups(\/estimates)?$/, "follow-up calls$1").replace(/jobs\/estimate$/, "jobs/estimates");
+  t = t.replace(/^# of /, "").replace(/\s*\/\s*/g, "/");
+  return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 40);
+}
+const ofSheetNum = v => (lbIsNum(v) ? v : typeof v === "string" && /^\s*\d+(\.\d+)?\s*$/.test(v) ? Number(v) : null);
+/** People, their days and their numbers from the month tabs of the years asked for. A seat with no name is listed in
+ *  `unnamed` ("2026-07|0") and read only when `names` gives it one. Each person's outgoing calls come in as her follow-ups
+ *  plus "Other outgoing calls" (the rest of that day's total). A day typed on two tabs counts once (its own month's tab). */
+function ofHistory(tabs, years, names) {
+  const want = new Set(years.map(Number));
+  const out = { people: {}, months: {}, unnamed: [], notes: [], warnings: [] };
+  const from = {}, seenOn = {};
+  const tabsIn = tabs.map(lbTab).map(t => { const y = lbSheetYear(t.name); return { t, y, m: y ? lbSheetMonth(t.name, y) : 0 }; })
+    .filter(x => x.m && want.has(x.y)).sort((a, b) => a.y - b.y || a.m - b.m);
+  for (const { t, y, m } of tabsIn) {
+    const key = lbMonthKey(y, m), mname = `${LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase())} ${y}`;
+    if (!/call/i.test(lbText(t.get(1, 3))) || !/call/i.test(lbText(t.get(1, 18)))) { out.warnings.push(`${mname}: not the two-person layout this reader knows. Skipped.`); continue; }
+    OF_SEATS.forEach((seat, si) => {
+      const raw = lbText(t.get(1, seat.name)).replace(/['’]s\b/i, "").replace(/scorecard/i, "").trim();
+      let name = lbTeamName(raw);
+      const nk = `${key}|${si}`;
+      if (!name) { name = lbTeamName((names || {})[nk]); if (!name) { out.unnamed.push({ key: nk, month: mname, side: si ? "right" : "left" }); return; } }
+      // the days: weekday rows, dated in column A (or P); a row without a date gets it from a dated row of its week
+      const rows = [];
+      const wdOf = d => (new Date(d + "T12:00:00Z").getUTCDay() + 6) % 7;   // Monday = 0
+      for (let r = 2; r <= Math.min(t.height, 60); r++) {
+        const w = OF_WEEKDAYS.indexOf(lbText(t.get(r, seat.day)).toLowerCase());
+        if (w < 0) continue;
+        let d = lbDay(t.get(r, seat.name));
+        // a year typed wrong (May 2025's tab has 2024 dates): the tab's year, when that makes the weekday right
+        if (d && !d.startsWith(y + "-") && Math.abs(Number(d.slice(0, 4)) - y) === 1 && !/^-(01|12)-/.test(d.slice(4, 8)) && wdOf(y + d.slice(4)) === w) { out.notes.push(`${mname}: ${d} read as ${y}${d.slice(4)} (the tab's year).`); d = y + d.slice(4); }
+        rows.push({ r, w, d, ok: !!d && wdOf(d) === w });
+      }
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        let day = row.ok ? row.d : "";
+        if (!day) {   // no date, or one that doesn't fit its weekday (Tuesday typed as Monday's date): from a dated row of its week
+          const anchor = rows.find(x => x.ok && x.r - row.r === x.w - row.w && Math.abs(x.r - row.r) < 7);   // same week: rows and weekdays step together
+          if (anchor) day = lbAddDays(anchor.d, row.w - anchor.w);
+          if (day && row.d) out.notes.push(`${mname}: ${name}'s ${OF_WEEKDAYS[row.w]} row says ${row.d}; read as ${day}.`);
+        }
+        const v = Object.fromEntries(Object.entries(seat.cols).map(([k, c]) => [k, ofSheetNum(t.get(row.r, c))]));
+        if (Object.values(v).every(x => x == null || x === 0)) continue;   // nothing, or only zeros: not a day she worked
+        if (!day) { out.warnings.push(`${mname}: ${name}'s ${OF_WEEKDAYS[row.w]} in row ${row.r} has numbers but no date. Skipped.`); continue; }
+        if (!want.has(Number(day.slice(0, 4)))) continue;
+        const e = {};
+        for (const k of ["opp", "sched", "gg", "ggs", "fu", "fus", "done"]) if (v[k] != null) e[k] = v[k];
+        if (v.out != null) e.other = Math.max(0, v.out - (v.fu || 0));
+        if (!Object.keys(e).length) continue;
+        const dk = day.slice(0, 7), sk = `${day}|${name}`;
+        const doc = out.months[dk] || (out.months[dk] = { days: {} });
+        const dd = doc.days[day] || (doc.days[day] = {});
+        if (dd[name]) {
+          if (seenOn[sk] === dk) continue;                       // already read from its own month's tab
+          if (dk !== key) continue;                              // this tab isn't its month: keep the first
+          out.notes.push(`${name}'s ${day} is typed on two tabs; counted once, from the ${mname} tab.`);
+        }
+        dd[name] = e;
+        seenOn[sk] = key;
+        if (!from[name] || dk < from[name]) from[name] = dk;
+        const pp = out.people[name] || (out.people[name] = { name, from: dk, to: dk, labels: {} });
+        if (dk > pp.to) pp.to = dk;
+        if (dk < pp.from) pp.from = dk;
+      }
+      // the newest tab's headings name her numbers
+      const pp = out.people[name];
+      if (pp) pp.labels = { opp: ofLabel(t.get(1, seat.cols.opp), "Opportunity calls"), sched: ofLabel(t.get(1, seat.cols.sched), "Scheduled jobs/estimates"),
+        fu: ofLabel(t.get(1, seat.cols.fu), "Follow-up calls"), fus: ofLabel(t.get(1, seat.cols.fus), "Scheduled from follow-ups") };
+    });
+  }
+  return out;
+}
+/** The fields a person from the Excel history gets (her own headings for her calls). */
+function ofFieldsFrom(labels) {
+  const l = labels || {};
+  return OF_DEFAULT_FIELDS.map(f => Object.assign({}, f, l[f.id] ? { label: l[f.id] } : {}));
+}
+// </office-logic>
 
 
 /* ---------- config, storage ---------- */
@@ -4317,8 +4518,9 @@ const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
-  if (isAdmin() || userAccess().some(a => a !== "trucks" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
+  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
   if (canSeeLb()) out.push("leaderboard");
+  if (canSee("office")) out.push("office");
   return out;
 }
 
@@ -4424,7 +4626,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = tab === "supplies" || tab === "leaderboard" ? tab : "trucks";
+  view.tab = tab === "supplies" || tab === "leaderboard" || tab === "office" ? tab : "trucks";
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -4433,30 +4635,36 @@ function setTab(tab, sub) {
 function applyTab() {
   const tabs = allowedTabs();
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
-  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard";
+  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : "";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
   $("views").hidden = tabs.length < 2;
+  $("views").classList.toggle("many", tabs.length > 3);   // phones: four tabs become icons with a small label
   $("viewTrucks").hidden = !tabs.includes("trucks");
   $("viewSupplies").hidden = !tabs.includes("supplies");
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
+  $("viewOffice").hidden = !tabs.includes("office");
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
+  $("ofView").hidden = !of;
   $("noAccess").hidden = tabs.length > 0;
   $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
   $("viewLeaderboard").setAttribute("aria-pressed", String(lb));
+  $("viewOffice").setAttribute("aria-pressed", String(of));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
   renderSupplies();
   if (lb) { renderLeaderboard(); if (loaded && !lbLoading) lbLoad(); }
+  if (of) { renderOffice(); if (loaded && !ofLoading) ofLoad(); }
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
+$("viewOffice").addEventListener("click", () => setTab("office"));
 $("viewLeaderboard").addEventListener("click", () => setTab("leaderboard"));
 
 function renderSupBadge() {
@@ -4922,7 +5130,8 @@ function openChecklistEditor(listId) {
 function accessChips(selected, onchange, idPrefix) {
   const lists = (supplies && supplies.lists) || [];
   const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]),
-    apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : []);
+    apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
+    apiLevel >= OF_API ? [["office", "Office"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -5773,6 +5982,414 @@ function openLbHistory() {
       } }))));
 }
 
+/* ======================= Office scorecards ======================= */
+const OF_API = 24;                                      // the Google script version with the Office section
+const K_OF = "voda.of1", K_OF_VIEW = "voda.ofView1";
+let ofData = store.get(K_OF);                           // { config, months: { "2026-11": doc }, year, admin, me, at }
+let ofYears = {};                                       // other years' months, loaded when a period reaches into them
+let ofLoading = false, ofErr = "", ofOld = false;
+let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
+const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
+const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
+const OF_TABS = { today: "My day", score: "Scorecard" };
+const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
+const ofCfg = () => ofCleanConfig(ofData && ofData.config);
+/** The office person linked to this login. */
+const ofMe = () => (ofData && ofData.me ? ofCfg().people.find(p => p.user === ofData.me) || null : null);
+const ofTypingNow = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#ofView")); };
+const ofThisYear = () => clockNow().getFullYear();
+
+async function ofLoad(year) {
+  if (!session || !canSee("office")) return;
+  const y = year || ofThisYear();
+  if (ofLoading) return;
+  ofLoading = true;
+  try {
+    const out = await api("office", { year: y });
+    if (y === ofThisYear()) {
+      const months = out.months || {};
+      for (const [k, p] of Object.entries(ofPending)) months[k] = lbMerge(months[k] || {}, lbClone(p));   // keep what's still being saved
+      ofData = { config: out.config || { people: [] }, months, year: y, admin: !!out.admin, me: out.me || "", at: new Date().toISOString() };
+      store.set(K_OF, ofData);
+    } else ofYears[y] = { months: out.months || {} };
+    ofErr = ""; ofOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { ofLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    ofOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < OF_API);
+    ofErr = ofOld ? "" : errText(e, "Nothing");
+  } finally {
+    ofLoading = false;
+    if (view.tab === "office" && !ofTypingNow()) renderOffice();
+  }
+}
+/** Every month from..to touches, this year's and other years' (null while another year is still loading). */
+function ofMonthsFor(from, to) {
+  const out = {};
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
+    if (ofData && y === ofData.year) Object.assign(out, ofData.months);
+    else if (ofYears[y]) Object.assign(out, ofYears[y].months);
+    else { if (!ofLoading) ofLoad(y); return null; }
+  }
+  return out;
+}
+function ofQueue(key, patch) {
+  if (!ofData) return;
+  ofData.months[key] = lbMerge(ofData.months[key] || {}, lbClone(patch));
+  ofPending[key] = lbMerge(ofPending[key] || {}, lbClone(patch));
+  store.set(K_OF, ofData);
+  ofSaveState = "pending"; ofShowSave();
+  clearTimeout(ofSaveTimer);
+  ofSaveTimer = setTimeout(ofFlush, 300);
+}
+async function ofFlush() {
+  clearTimeout(ofSaveTimer);
+  if (ofSaving || !Object.keys(ofPending).length) return;
+  const writes = Object.entries(ofPending).map(([key, patch]) => ({ key, patch }));
+  ofPending = {};
+  ofSaving = true; ofSaveState = "saving"; ofShowSave();
+  try {
+    const out = await api("ofPut", { writes });
+    for (const [k, d] of Object.entries(out.months || {})) ofData.months[k] = lbMerge(lbClone(d), lbClone(ofPending[k] || {}));
+    ofSaveState = Object.keys(ofPending).length ? "pending" : "saved"; ofSaveErr = "";
+  } catch (e) {
+    for (const w of writes) ofPending[w.key] = lbMerge(w.patch, ofPending[w.key] || {});
+    ofSaveState = "error"; ofSaveErr = errText(e, "The numbers");
+  } finally {
+    ofSaving = false;
+    store.set(K_OF, ofData);
+    ofShowSave();
+    if (Object.keys(ofPending).length && ofSaveState !== "error") ofSaveTimer = setTimeout(ofFlush, 300);
+  }
+}
+window.addEventListener("beforeunload", e => { if (Object.keys(ofPending).length || ofSaving) { ofFlush(); e.preventDefault(); e.returnValue = ""; } });
+function ofShowSave() {
+  const el = $("ofSaveNote");
+  if (!el) return;
+  el.className = "lb-save " + ofSaveState;
+  if (ofSaveState === "error") el.replaceChildren(h("span", { text: `Not saved yet. ${ofSaveErr}` }), " ", h("button", { class: "btn small", type: "button", onclick: () => ofFlush(), text: "Try again" }));
+  else el.textContent = ofSaveState === "pending" || ofSaveState === "saving" ? "Saving…" : ofSaveState === "saved" ? "All changes saved" : "Numbers save as you type.";
+}
+
+/* ---- the screen ---- */
+function renderOffice() {
+  const box = $("ofView");
+  if (!box || view.tab !== "office" || !session) return;
+  if (ofOld || (apiLevel && apiLevel < OF_API && !ofData)) {
+    box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "The Office scorecards need the newest Google script. In the VODA Prime Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  if (!ofData || ofData.year !== ofThisYear()) {
+    box.replaceChildren(h("p", { class: "loading", text: ofErr || (offline ? "The Office scorecards need a connection the first time. Try again when you're back online." : "Loading the office scorecards…") }));
+    if (!ofLoading && !ofErr) ofLoad();
+    return;
+  }
+  const cfg = ofCfg(), admin = isAdmin();
+  const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" }),
+    admin ? h("div", { class: "lb-acts" },
+      h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => openOfPeople() }, "People"),
+      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => openOfExcel() }, "Load from Excel")) : null);
+  if (!cfg.people.length) {
+    box.replaceChildren(top, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
+      h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
+      ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null);
+    return;
+  }
+  if (!OF_TABS[ofView.tab]) ofView.tab = "today";
+  const tabs = lbSeg(Object.entries(OF_TABS).map(([k, t]) => [k, k === "today" && admin ? "Enter numbers" : t]), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
+  tabs.classList.add("of-tabs");
+  const body = ofView.tab === "score" ? ofScoreEl() : ofTodayEl();
+  box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
+  if (ofView.tab === "today") ofShowSave();
+}
+const ofPct = v => `${Math.round(v * 100)}%`;
+/** The bar toward a goal: green when it's reached. */
+const ofBar = (n, goal) => h("div", { class: "of-bar" + (goal && n >= goal ? " done" : "") }, h("i", { style: `width:${goal ? Math.min(100, Math.round(n / goal * 100)) : 0}%` }));
+
+/* ---- my day: her calls by kind (adding up toward the goal) and her other numbers ---- */
+function ofTodayEl() {
+  const cfg = ofCfg(), admin = isAdmin(), y = ofData.year;
+  const today = lbToday();
+  const day = lbIsDay(ofView.day) && ofView.day.startsWith(y + "-") ? ofView.day : today.startsWith(y + "-") ? today : `${y}-12-31`;
+  const key = day.slice(0, 7);
+  const people = cfg.people.filter(p => lbOnBoard(p, key));
+  let p = admin ? (people.find(x => x.name === ofView.who) || people[0] || null) : ofMe();
+  const go = d => { ofFlush(); ofView.day = d; renderOffice(); };
+  const out = [];
+  if (!p) {
+    out.push(h("div", { class: "panel" }, h("h2", { text: admin ? `No one in the office in ${lbMonthLong(Number(key.slice(5)))}` : "Your login isn't linked yet" }),
+      h("p", { class: "meta", text: admin ? "Check the months in People." : "Ask Mike to pick your login next to your name in Office > People. Until then you can see everyone under Scorecard." })));
+    return out;
+  }
+  const first = `${y}-01-01`, last = `${y}-12-31`, mon = lbMondayOf(day);
+  if (admin) out.push(h("div", { class: "lb-bar" }, lbSeg(people.map(x => [x.name, x.name]), p.name, k => { ofFlush(); ofView.who = k; ofSaveView(); renderOffice(); }, "Who")));
+  out.push(h("div", { class: "lb-daybar" },
+    h("button", { class: "btn small", type: "button", id: "ofPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => go(lbAddDays(day, -1)) }, "‹"),
+    h("input", { id: "ofDay", type: "date", value: day, min: first, max: last, "aria-label": "Day", onchange: e => { if (lbIsDay(e.target.value) && e.target.value.startsWith(y + "-")) go(e.target.value); } }),
+    h("button", { class: "btn small", type: "button", id: "ofNextDay", "aria-label": "Next day", disabled: day >= last, onclick: () => go(lbAddDays(day, 1)) }, "›"),
+    day !== today && today.startsWith(y + "-") ? h("button", { class: "btn ghost small", type: "button", onclick: () => go(today) }, "Today") : null),
+    h("div", { class: "lb-week", role: "group", "aria-label": "This week" }, Array.from({ length: 7 }, (_, i) => {
+      const d = lbAddDays(mon, i), dt = lbDate(d);
+      if (!d.startsWith(y + "-")) return h("span");
+      const e = ofEntry(ofData.months, d, p.name);
+      return h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : "") + (ofTyped(p, e) ? " has" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => go(d) },
+        h("small", { text: LB_WD[dt.getDay()] }), String(dt.getDate()));
+    })));
+  const e = ofEntry(ofData.months, day, p.name) || {};
+  const goal = cfg.goal, work = ofWorkDay(day);
+  const box = (f) => {
+    const mine = f.kind !== "admin" || admin;
+    return h("label", { class: "lb-box" + (mine ? "" : " ro") }, h("span", { text: f.label }),
+      h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? "" : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
+        onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
+      f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : null);
+  };
+  const outs = p.fields.filter(f => f.kind === "out"), nums = p.fields.filter(f => f.kind === "num"), adm = p.fields.filter(f => f.kind === "admin");
+  out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
+    h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
+    h("div", { class: "of-total" }, h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
+    outs.length ? [h("h4", { class: "of-sec", text: `Calls (they add up to the ${goal} goal)` }), h("div", { class: `lb-boxes n${Math.min(3, outs.length)}` }, outs.map(box))] : null,
+    nums.length ? [h("h4", { class: "of-sec", text: "Other numbers" }), h("div", { class: `lb-boxes n${Math.min(3, nums.length)}` }, nums.map(box))] : null,
+    adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : "Typed by admins (checked in the CRM)" }), h("div", { class: `lb-boxes n${Math.min(3, adm.length)}` }, adm.map(box))] : null,
+    h("p", { class: "lb-card-foot", id: "ofWeekFoot" })));
+  out.push(h("p", { id: "ofSaveNote", class: "lb-save", role: "status" }));
+  setTimeout(() => ofRefreshDay(day, p), 0);
+  return out;
+}
+/** The day card's total, bar, % lines and the week line, from what's in the boxes. */
+function ofRefreshDay(day, p) {
+  const card = $("ofDayCard");
+  if (!card) return;
+  const cfg = ofCfg(), e = ofEntry(ofData.months, day, p.name) || {};
+  const o = ofOut(p, e), goal = cfg.goal;
+  $("ofOutNum").textContent = fmt(o);
+  $("ofOutGoal").textContent = ofWorkDay(day) ? ` of ${goal} outgoing calls${o >= goal ? " · goal reached" : ` · ${goal - o} to go`}` : " outgoing calls";
+  const bar = card.querySelector(".of-bar");
+  bar.classList.toggle("done", o >= goal);
+  bar.querySelector("i").style.width = `${Math.min(100, Math.round(o / goal * 100))}%`;
+  for (const el of card.querySelectorAll(".of-ratio")) {
+    const f = p.fields.find(x => x.id === el.dataset.of), base = p.fields.find(x => x.id === f.of);
+    const a = ofNum(e[f.id]), b = ofNum(e[f.of]);
+    el.textContent = a != null && b ? `${ofPct(a / b)} of ${base.label.toLowerCase()}` : "";
+  }
+  const mon = lbMondayOf(day), sw = ofSummary(cfg, ofData.months, p, mon, lbAddDays(mon, 6) > lbToday() ? lbToday() : lbAddDays(mon, 6));
+  $("ofWeekFoot").textContent = `Week of ${lbWeekText(mon)}: ${fmt(sw.out)} outgoing calls · ${goal} reached on ${sw.hit} of ${sw.worked} day${sw.worked === 1 ? "" : "s"} worked`;
+}
+function ofTypedBox(day, p, input) {
+  const v = input.value.replace(/[,\s]/g, "");
+  const bad = v !== "" && !(Number.isFinite(Number(v)) && Number(v) >= 0);
+  input.classList.toggle("bad", bad);
+  if (bad) return;
+  ofQueue(day.slice(0, 7), { days: { [day]: { [p.name]: { [input.dataset.f]: v === "" ? null : Number(v) } } } });
+  ofRefreshDay(day, p);
+  const wd = document.querySelector(`#ofView .lb-wd[data-day="${day}"]`);
+  if (wd) wd.classList.toggle("has", ofTyped(p, ofEntry(ofData.months, day, p.name)));
+}
+
+/* ---- the scorecard: everyone, for a day, a week, a month or the year ---- */
+function ofRange(per, off) {
+  const today = lbToday(), y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
+  if (per === "day") { const d = lbAddDays(today, off); return { from: d, to: d, label: lbDayText(d) }; }
+  if (per === "week") { const mon = lbAddDays(lbMondayOf(today), 7 * off); return { from: mon, to: lbAddDays(mon, 6), label: `Week of ${lbWeekText(mon)}` }; }
+  if (per === "month") {
+    const t = y * 12 + (m - 1) + off, yy = Math.floor(t / 12), mm = (t % 12) + 1, k = lbMonthKey(yy, mm);
+    return { from: `${k}-01`, to: `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`, label: `${lbMonthLong(mm)} ${yy}` };
+  }
+  return { from: `${y + off}-01-01`, to: `${y + off}-12-31`, label: String(y + off) };
+}
+function ofScoreEl() {
+  const cfg = ofCfg(), per = OF_PER[ofView.per] ? ofView.per : "week";
+  const off = Math.min(0, Number(ofView.off) || 0);
+  const r = ofRange(per, off), today = lbToday(), to = r.to > today ? today : r.to;
+  const step = n => { ofView.off = Math.min(0, off + n); renderOffice(); };
+  const out = [h("div", { class: "lb-bar" },
+    lbSeg(Object.entries(OF_PER), per, k => { ofView.per = k; ofView.off = 0; ofSaveView(); renderOffice(); }, "Period"),
+    h("div", { class: "of-step" },
+      h("button", { class: "btn small", type: "button", id: "ofPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+      h("strong", { id: "ofRangeLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
+      h("button", { class: "btn small", type: "button", id: "ofNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")))];
+  if (r.from > today) return out;
+  const months = ofMonthsFor(r.from, to);
+  if (!months) { out.push(h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` })); return out; }
+  const rows = cfg.people.filter(p => ofInRange(p, r.from, to)).map(p => ({ p, s: ofSummary(cfg, months, p, r.from, to) }))
+    .filter(x => x.s.days.some(d => d.typed) || lbOnBoard(x.p, to.slice(0, 7)));
+  rows.sort((a, b) => b.s.pct - a.s.pct || b.s.out - a.s.out || a.p.name.localeCompare(b.p.name));
+  const places = lbRanks(rows.map(x => Math.round(x.s.pct * 1000)), false, true);
+  if (!rows.length) { out.push(h("p", { class: "meta", text: "No one in the office then." })); return out; }
+  out.push(h("ol", { class: "lb-list", id: "ofList" }, rows.map(({ p, s }, i) => {
+    const workDays = s.days.filter(d => d.work);
+    return h("li", { class: `lb-row of-row p${s.worked ? places[i] : 9}`, "data-person": p.name },
+      h("div", { class: "of-row-in" },
+        h("span", { class: "lb-place", text: s.worked ? String(places[i]) : "–" }),
+        h("span", { class: "lb-name" }, h("strong", { text: p.name })),
+        h("span", { class: "lb-right" }, h("span", { class: "lb-score" }, h("small", { text: "Calls" }), fmt(s.out))),
+        h("div", { class: "of-row-goal" },
+          ofBar(s.out, s.target),
+          h("p", { class: "lb-stats", text: s.worked ? `${ofPct(s.pct)} of ${fmt(s.target)} (${s.worked} day${s.worked === 1 ? "" : "s"} worked × ${s.goal}) · ${s.goal}+ on ${s.hit} of ${s.worked} · ${fmt(Math.round(s.avg))} a day` : "No numbers typed" })),
+        per === "week" || per === "month" ? h("div", { class: "of-days", "aria-label": "Outgoing calls each work day" }, workDays.map(d => h("span", {
+          class: "of-dd" + (d.day > today ? " future" : !d.worked ? " none" : d.out >= s.goal ? " ok" : " low"), title: `${lbDayText(d.day)}: ${d.worked ? `${d.out} outgoing calls` : "nothing typed"}`,
+          text: d.day > today ? "" : d.worked ? String(d.out) : "·" }))) : null,
+        h("div", { class: "of-nums" }, p.fields.filter(f => f.kind !== "out" || p.fields.filter(x => x.kind === "out").length > 1).map(f => {
+          const ratio = ofRatio(s.sums, f);
+          return h("div", { class: "lb-m" }, h("span", { text: f.label }), h("b", null, fmt(s.sums[f.id]), ratio != null ? h("i", { text: ofPct(ratio) }) : null));
+        }))));
+  })));
+  out.push(h("p", { class: "hint", text: `The goal is ${cfg.goal} outgoing calls a day, Monday to Friday (closed on New Year's Day, July 4, Thanksgiving and Christmas), counted on the days each person has numbers. Every kind of outgoing call adds up.` }));
+  return out;
+}
+
+/* ---- admins: the people, their numbers and their logins ---- */
+const ofNewId = (taken) => { let id; do { id = "f" + Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 5); } while (!/^[a-z][a-z0-9]{0,15}$/.test(id) || taken.has(id)); return id; };
+async function openOfPeople() {
+  const cfg = ofCfg();
+  let users = [];
+  try { users = ((await api("users")).users || []).filter(u => u.status !== "removed"); } catch (e) { /* logins can be picked later */ }
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const months = (p, cls, label, v) => h("label", { class: "of-mo" }, h("span", { text: label }), h("input", { type: "month", class: cls, value: v || "" }));
+  const fieldRow = (f, all) => h("div", { class: "of-f", "data-id": f.id },
+    h("input", { class: "f-label", type: "text", value: f.label, maxlength: "40", "aria-label": "Name of the number" }),
+    h("select", { class: "f-kind", "aria-label": "Kind" }, Object.entries(OF_KINDS).map(([k, t]) => h("option", { value: k, text: t, selected: k === f.kind }))),
+    h("select", { class: "f-of", "aria-label": "Show as a % of" }, [h("option", { value: "", text: "No %" })].concat(all.filter(x => x.id !== f.id).map(x => h("option", { value: x.id, text: `% of ${x.label}`, selected: x.id === f.of })))),
+    h("button", { class: "btn ghost small", type: "button", "aria-label": `Remove ${f.label}`, onclick: ev => ev.currentTarget.closest(".of-f").remove() }, "✕"));
+  const personEl = (p, isNew) => {
+    const fields = h("div", { class: "of-fields" }, p.fields.map(f => fieldRow(f, p.fields)));
+    return h("div", { class: "of-person", "data-name": p.name },
+      h("div", { class: "of-p-head" },
+        isNew ? h("input", { class: "p-name", type: "text", placeholder: "Name", maxlength: "30", "aria-label": "Name" }) : h("strong", { class: "p-name-fixed", text: p.name }),
+        h("label", { class: "of-mo" }, h("span", { text: "Login" }), h("select", { class: "p-user", "aria-label": `${p.name || "Her"} login` },
+          [h("option", { value: "", text: "Not linked" })].concat(users.map(u => h("option", { value: u.id, text: `${u.name} (${u.username})`, selected: u.id === p.user }))))),
+        months(p, "p-from", "From", p.from), months(p, "p-to", "To (blank = now)", p.to),
+        h("button", { class: "btn ghost small", type: "button", onclick: ev => { if (confirm(`Remove ${p.name || "this person"}? Her numbers stay saved, but she won't show.`)) ev.currentTarget.closest(".of-person").remove(); } }, "Remove")),
+      fields,
+      h("button", { class: "btn small", type: "button", onclick: () => { const taken = new Set([...fields.querySelectorAll(".of-f")].map(x => x.dataset.id)); fields.append(fieldRow({ id: ofNewId(taken), label: "New number", kind: "out", of: "" }, p.fields)); } }, "+ Add a number"));
+  };
+  const list = h("div", { class: "of-people", id: "ofPeopleList" }, cfg.people.map(p => personEl(p, false)));
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Office people" }),
+    h("p", { class: "hint", text: "Each person types her own day under her login. Calls that count toward the goal add up to her outgoing calls; admin-only numbers (like Scheduled / completed) are typed by admins after checking the CRM. A login also needs Office ticked in Settings > Users." }),
+    h("label", { class: "of-mo" }, h("span", { text: "Outgoing calls goal (a day, Monday to Friday)" }), h("input", { type: "text", inputmode: "numeric", id: "ofGoal", value: String(cfg.goal) })),
+    list,
+    h("button", { class: "btn small", type: "button", id: "ofAddPerson", onclick: () => list.append(personEl({ name: "", user: "", from: lbToday().slice(0, 7), to: "", fields: OF_DEFAULT_FIELDS.map(f => Object.assign({}, f)) }, true)) }, "+ Add a person"),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "ofPeopleSave", text: "Save", onclick: async () => {
+        err.textContent = "";
+        const goal = Number(val("ofGoal"));
+        if (!(goal > 0 && goal <= 1000)) { err.textContent = "Type the goal as a number, like 50."; return; }
+        const people = [];
+        for (const el of list.querySelectorAll(".of-person")) {
+          const name = el.dataset.name || lbTeamName(el.querySelector(".p-name") ? el.querySelector(".p-name").value : "");
+          if (!name) { err.textContent = "Every new person needs a name (letters only)."; return; }
+          if (people.some(x => x.name.toLowerCase() === name.toLowerCase())) { err.textContent = `${name} is in the list twice.`; return; }
+          const fields = [...el.querySelectorAll(".of-f")].map(r => ({ id: r.dataset.id, label: r.querySelector(".f-label").value.trim(), kind: r.querySelector(".f-kind").value, of: r.querySelector(".f-of").value }));
+          if (fields.some(f => !f.label)) { err.textContent = `${name}: every number needs a name.`; return; }
+          if (!fields.some(f => f.kind === "out")) { err.textContent = `${name}: at least one number has to count toward the calls goal.`; return; }
+          people.push({ name, user: el.querySelector(".p-user").value, from: el.querySelector(".p-from").value, to: el.querySelector(".p-to").value, fields });
+        }
+        const b = $("ofPeopleSave"); b.disabled = true; b.textContent = "Saving…";
+        try {
+          const out = await api("ofPut", { writes: [{ key: "config", data: { goal, people } }] });
+          ofData.config = out.config || { goal, people };
+          store.set(K_OF, ofData);
+          closeDialog(); toast("Office people saved"); renderOffice();
+        } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
+      } }))));
+}
+
+/* ---- admins: 14. OFFICE SCORECARDS from Excel (2025 on: the two-person layout) ---- */
+function openOfExcel() {
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const res = h("div", { class: "lb-src", id: "ofXlResult", hidden: true });
+  const status = h("p", { class: "lb-dl-status", id: "ofXlStatus", role: "status" });
+  let tabs = null, hist = null, years = [], armed = false;
+  const names = {};
+  const read = () => {
+    hist = ofHistory(tabs, years, names);
+    const rows = Object.values(hist.people).sort((a, b) => a.from.localeCompare(b.from) || a.name.localeCompare(b.name)).map(p => {
+      let days = 0, calls = 0;
+      for (const d of Object.values(hist.months)) for (const x of Object.values(d.days)) { const e = x[p.name]; if (e) { days++; calls += (e.fu || 0) + (e.other || 0); } }
+      return h("tr", null, h("th", { text: p.name }), h("td", { text: `${lbMonthLong(Number(p.from.slice(5))).slice(0, 3)} ${p.from.slice(0, 4)} – ${lbMonthLong(Number(p.to.slice(5))).slice(0, 3)} ${p.to.slice(0, 4)}` }), h("td", { text: fmt(days) }), h("td", { text: fmt(calls) }));
+    });
+    res.replaceChildren(
+      h("h4", { text: `Found in ${years.join(" and ")}` }),
+      hist.unnamed.length ? h("div", { class: "of-unnamed" }, h("p", { class: "dlg-err", text: "These have numbers but no name at the top. Type who it was:" }),
+        hist.unnamed.map(u => h("label", { class: "of-mo" }, h("span", { text: `${u.month}, ${u.side} side` }), h("input", { type: "text", "data-k": u.key, value: names[u.key] || "", onchange: ev => { names[u.key] = ev.target.value; read(); } })))) : null,
+      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "ofXlTable" }, h("thead", null, h("tr", null, ["Person", "Months", "Days", "Outgoing calls"].map(c => h("th", { text: c })))), h("tbody", null, rows))),
+      h("p", { class: "hint", text: "Each day comes in per person (not per seat). The sheet only had the total outgoing calls and the follow-ups, so the rest of each day's total comes in as Other outgoing calls. Days already typed in the app stay as they are." }),
+      hist.warnings.length || hist.notes.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${hist.warnings.length + hist.notes.length})` }),
+        hist.warnings.length ? h("ul", { class: "lb-notes warn" }, hist.warnings.map(w => h("li", { text: w }))) : null,
+        hist.notes.length ? h("ul", { class: "lb-notes" }, hist.notes.map(w => h("li", { text: w }))) : null) : null);
+    res.hidden = false;
+    $("ofXlGo").disabled = !Object.keys(hist.people).length;
+    armed = false; $("ofXlGo").textContent = "Load";
+  };
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Load office scorecards from Excel" }),
+    h("p", { class: "hint", text: "Choose an Excel copy of 14. OFFICE SCORECARDS (File > Download > Microsoft Excel). The app reads 2025 and 2026, shows what it found, and adds it under each person." }),
+    h("input", { type: "file", id: "ofXlFile", accept: ".xlsx", onchange: async e => {
+      err.textContent = ""; res.hidden = true;
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        status.textContent = "Reading…";
+        tabs = await lbReadXlsx(await f.arrayBuffer(), n => lbSheetYear(n) >= 2025);
+        years = [...new Set(tabs.map(t => lbSheetYear(t.name)))].sort();
+        status.textContent = "";
+        if (!years.length) { err.textContent = "No month tabs from 2025 on (like November 2026) in that file."; return; }
+        read();
+      } catch (x) { status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
+    } }),
+    status, res, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "ofXlGo", disabled: true, text: "Load", onclick: async () => {
+        if (!hist) return;
+        const b = $("ofXlGo");
+        if (!armed) { armed = true; b.textContent = "Tap again to load"; return; }
+        b.disabled = true;
+        try {
+          // what the app already has for those years: days typed in the app stay
+          const have = {};
+          for (const y of years) {
+            if (y === ofData.year) Object.assign(have, ofData.months);
+            else Object.assign(have, (await api("office", { year: y })).months || {});
+          }
+          const writes = [];
+          for (const [k, doc] of Object.entries(hist.months).sort()) {
+            const merged = lbClone(have[k] || { days: {} });
+            merged.days = merged.days || {};
+            for (const [day, people] of Object.entries(doc.days)) for (const [n, e] of Object.entries(people)) {
+              const d = merged.days[day] || (merged.days[day] = {});
+              if (!d[n]) d[n] = e;
+            }
+            writes.push({ key: k, data: merged });
+          }
+          // the people: new ones with their own headings; those already set up keep theirs (missing numbers added)
+          const cfg = ofCfg(), nowKey = lbToday().slice(0, 7);
+          const people = cfg.people.map(p => Object.assign({}, p, { fields: p.fields.slice() }));
+          for (const hp of Object.values(hist.people)) {
+            const p = people.find(x => x.name.toLowerCase() === hp.name.toLowerCase());
+            const want = ofFieldsFrom(hp.labels);
+            if (p) {
+              if (!p.from || hp.from < p.from) p.from = hp.from;
+              for (const f of want) if (!p.fields.some(x => x.id === f.id)) p.fields.push(f);
+            } else people.push({ name: hp.name, user: "", from: hp.from, to: hp.to >= lbPrevMonth(nowKey) ? "" : hp.to, fields: want });
+          }
+          writes.unshift({ key: "config", data: { goal: cfg.goal, people } });
+          for (let i = 0; i < writes.length; i += 8) {
+            b.textContent = `Saving ${Math.round(i / writes.length * 100)}%…`;
+            const out = await api("ofPut", { writes: writes.slice(i, i + 8) });
+            if (out.config) ofData.config = out.config;
+          }
+          ofYears = {};
+          await ofLoad();
+          closeDialog();
+          toast(`Loaded ${years.join(" and ")}`);
+        } catch (x) { err.textContent = errText(x, "Not everything"); b.disabled = false; b.textContent = "Load"; armed = false; }
+      } }))));
+}
+
 /* ---- presenting (full screen, on a phone, laptop or TV) ---- */
 const LB_LOGO = '<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2b3c"/><path d="M256 92 C318 180 384 248 384 318 A128 128 0 0 1 128 318 C128 248 194 180 256 92 Z" fill="#2fa4da"/><path d="M196 318 L240 362 L320 272" fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>';   // the app icon
 const LB_CROWN = '<svg class="lbs-crown" viewBox="0 0 48 32" aria-hidden="true"><path fill="currentColor" d="M2 8l10 9 12-15 12 15 10-9-4 22H6z"/></svg>';
@@ -6220,6 +6837,7 @@ if (/^#order-list(\/|$)/.test(location.hash)) {   // the link in the checklist e
 }
 else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
 else if (location.hash === "#leaderboard") { view.tab = "leaderboard"; saveView(); }
+else if (location.hash === "#office") { view.tab = "office"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {
