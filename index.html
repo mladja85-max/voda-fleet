@@ -803,6 +803,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rank td.on { font-weight: 700; color: var(--ink); }
 .lb-rank .lbs-who { display: inline-flex; align-items: center; gap: 8px; }
 .lb-paypanel { padding: 10px; }
+.lb-payrange { flex-wrap: wrap; align-items: end; }
+.lb-paydate { display: grid; gap: 2px; font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.lb-paydate input { font: inherit; font-size: .95rem; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
 .lb-payscroll { max-height: 75vh; overflow: auto; }
 .lb-pay { border-collapse: separate; border-spacing: 0; font-size: .82rem; font-variant-numeric: tabular-nums; }
 .lb-pay th, .lb-pay td { padding: 4px 7px; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -810,9 +813,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-pay td.m { text-align: right; min-width: 5.6em; }
 .lb-pay td.c { text-align: center; font-weight: 700; }
 .lb-pay .last { border-right: 2px solid var(--line); }
-.lb-pay .t1 { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.lb-pay .t1 { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }   /* solid, so rows don't show through the stuck headings */
 .lb-pay thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
-.lb-pay thead tr:nth-child(2) th { top: 2.6em; }
+.lb-pay thead tr:nth-child(2) th { top: var(--pay-h1, 3.4em); }   /* under the names row (measured after drawing) */
 .lb-pay th.tech { text-align: center; border-bottom: 3px solid var(--line); }
 .lb-pay th.tech strong { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; display: block; }
 .lb-pay th.tech small { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
@@ -825,7 +828,18 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-pay tr.off th, .lb-pay tr.off td { color: var(--muted); background: color-mix(in srgb, var(--due) 6%, var(--surface)); }
 .lb-pay tr.wk th, .lb-pay tr.wk td { font-weight: 700; background: var(--accent-soft); }
 .lb-pay tfoot th, .lb-pay tfoot td { font-weight: 700; }
-.lb-pay tfoot tr.tot th, .lb-pay tfoot tr.tot td { border-top: 2px solid var(--ink); }
+/* the totals at the bottom stand out: gold like 1st place, the per job / daily rows a lighter gold */
+.lb-pay tfoot tr.tot th, .lb-pay tfoot tr.tot td { border-top: 2px solid var(--ink); border-bottom: 2px solid #dba500; background: color-mix(in srgb, #f2b705 32%, var(--surface)); font-size: .92rem; padding-block: 7px; }
+.lb-pay tfoot tr.tot th { text-transform: uppercase; letter-spacing: .05em; }
+.lb-pay tfoot tr:not(.tot) th, .lb-pay tfoot tr:not(.tot) td { background: color-mix(in srgb, #f2b705 12%, var(--surface)); }
+/* and stay in sight at the bottom while the days scroll (2 weeks, a month) */
+.lb-pay tfoot tr { height: 30px; }
+.lb-pay tfoot tr.tot { height: 36px; }
+.lb-pay tfoot td, .lb-pay tfoot th { position: sticky; z-index: 1; box-sizing: border-box; }
+.lb-pay tfoot th { z-index: 2; }
+.lb-pay tfoot tr.tot > * { bottom: 60px; }
+.lb-pay tfoot tr:nth-child(2) > * { bottom: 30px; }
+.lb-pay tfoot tr:nth-child(3) > * { bottom: 0; }
 .lb-rvsec { display: grid; gap: 8px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
 .lb-rvsec h4 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; }
 .lb-rvsec .hint { margin: 0; }
@@ -5458,8 +5472,8 @@ const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the stan
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
 let lbLoading = false, lbErr = "", lbOld = false;
-const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {}, funit: "Cleaning", pper: "week", pday: "" }, store.get(K_LB_VIEW) || {});
-const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit, pper: lbView.pper, pday: lbView.pday });
+const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {}, funit: "Cleaning", pper: "week", pday: "", pfrom: "", pto: "" }, store.get(K_LB_VIEW) || {});
+const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit, pper: lbView.pper, pday: lbView.pday, pfrom: lbView.pfrom, pto: lbView.pto });
 /** Status can show a month, the year to date, this week so far or last week (a past year: a month or the year). */
 const LB_SPER = { month: "Month", ytd: "Year to date", wtd: "Week to date", lastweek: "Last week" };
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
@@ -5672,6 +5686,8 @@ function renderLeaderboard() {
   const body = lbView.tab === "enter" ? lbEnterEl() : lbView.tab === "status" ? lbStatusEl() : lbView.tab === "payroll" ? lbPayrollEl() : lbStandingsEl();
   box.replaceChildren(...[top, tabs, ...body, lbErr ? h("p", { class: "dlg-err", text: lbErr }) : null].filter(Boolean));
   if (lbView.tab === "enter") lbShowSave();
+  const pay = lbView.tab === "payroll" && document.querySelector("#lbPay thead tr");
+  if (pay) pay.closest("table").style.setProperty("--pay-h1", `${pay.getBoundingClientRect().height}px`);
   const g = lbView.tab === "status" && document.querySelector("#lbGrid tbody td.today");
   if (g) { const sc = g.closest(".lb-scroll"); if (sc && g.offsetLeft > sc.clientWidth - 40) sc.scrollLeft = g.offsetLeft - sc.clientWidth + 60; }
 }
@@ -6031,7 +6047,9 @@ function lbReviewsEl(day) {
 }
 
 /* ---- payroll: every tech's truck numbers day by day for a week, two weeks or a month (admins switched on) ---- */
-const LB_PAY = { week: "Week", two: "2 weeks", month: "Month" };
+const LB_PAY = { week: "Week", two: "2 weeks", month: "Month", custom: "From – To" };
+const LB_PAY_MAX = 93;   // days a From – To view can cover (a quarter)
+const lbDayCount = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1;
 /** The pay week runs Sunday to Saturday. "2026-11-09" → "2026-11-08". */
 const lbSundayOf = day => lbAddDays(day, -new Date(day + "T00:00:00Z").getUTCDay());
 /** The days a payroll view covers: the pay week (Sunday to Saturday) or two weeks starting the Sunday of `day`, or its
@@ -6047,9 +6065,19 @@ function lbPayrollEl() {
   if (!LB_PAY[lbView.pper]) lbView.pper = "week";
   const per = lbView.pper;
   const anchor = lbIsDay(lbView.pday) ? lbView.pday : (b && b.newest) || lbToday();
-  const r = lbPayRange(per, anchor);
+  // From – To: any two days (up to LB_PAY_MAX days); the others: the pay week, two weeks or month of the anchor day
+  let r;
+  if (per === "custom") {
+    const f = lbIsDay(lbView.pfrom) ? lbView.pfrom : lbPayRange("week", anchor).from;
+    let t = lbIsDay(lbView.pto) && lbView.pto >= f ? lbView.pto : lbAddDays(f, 6);
+    if (lbDayCount(f, t) > LB_PAY_MAX) t = lbAddDays(f, LB_PAY_MAX - 1);
+    r = { from: f, to: t };
+  } else r = lbPayRange(per, anchor);
+  const len = lbDayCount(r.from, r.to);
   const go = day => { lbView.pday = day; lbSaveView(); renderLeaderboard(); };
-  const step = n => go(per === "month" ? (() => { const k = r.from.slice(0, 7), yy = Number(k.slice(0, 4)), mm = Number(k.slice(5)) + n; const t = yy * 12 + mm - 1; return `${lbMonthKey(Math.floor(t / 12), (t % 12) + 1)}-01`; })() : lbAddDays(r.from, (per === "two" ? 14 : 7) * n));
+  const custom = (from, to) => { lbView.pper = "custom"; lbView.pfrom = from; lbView.pto = to; lbView.pday = from; lbSaveView(); renderLeaderboard(); };
+  const step = n => per === "custom" ? custom(lbAddDays(r.from, len * n), lbAddDays(r.to, len * n))
+    : go(per === "month" ? (() => { const k = r.from.slice(0, 7), yy = Number(k.slice(0, 4)), mm = Number(k.slice(5)) + n; const t = yy * 12 + mm - 1; return `${lbMonthKey(Math.floor(t / 12), (t % 12) + 1)}-01`; })() : lbAddDays(r.from, (per === "two" ? 14 : 7) * n));
   // the numbers: this year's, and last year's if it's been opened (a week that starts in December)
   const months = Object.assign({}, ...Object.values(lbYearCache).map(c => (c && c.months) || {}), lbData.months || {});
   const entry = (day, team) => { const d = ((months[day.slice(0, 7)] || {}).days || {})[day]; const e = d && d.t ? lbEntry(d.t[team], LB_TRUCK.length) : []; return e.length ? e : null; };
@@ -6079,7 +6107,7 @@ function lbPayrollEl() {
       h("th", { title: hol ? `${hol}: closed` : "" }, h("span", { class: "pd-w", text: LB_WD[dt.getDay()] }), ` ${dt.getMonth() + 1}/${dt.getDate()}`),
       teams.map((t, ti) => { const e = entry(d, t.name) || []; return [h("td", { class: `n t${ti % 2}`, text: num(e[0]) }), h("td", { class: `n t${ti % 2}`, text: num(e[1]) }), h("td", { class: `m t${ti % 2}`, text: cash(e[2]) }), h("td", { class: `n last t${ti % 2}`, text: num(e[3]) })]; })));
     wk.push(d);
-    if (per !== "week" && (dt.getDay() === 6 || i === days.length - 1)) {   // a week total after each Saturday
+    if (days.length > 7 && (dt.getDay() === 6 || i === days.length - 1)) {   // a week total after each Saturday
       rows.push(h("tr", { class: "wk" }, h("th", { text: `Week ${lbDate(wk[0]).getMonth() + 1}/${lbDate(wk[0]).getDate()}–${dt.getMonth() + 1}/${dt.getDate()}` }), teams.map(t => cells(sum(wk, t.name)))));
       wk = [];
     }
@@ -6096,17 +6124,22 @@ function lbPayrollEl() {
       h("tr", null, h("th", { text: "Per job" }), tot.map((a, ti) => h("td", { colspan: "4", class: `c last t${ti % 2}`, text: a.jobs ? lbMoney(a.rev / a.jobs) : "–" }))),
       h("tr", null, h("th", { text: "Daily per truck" }), tot.map((a, ti) => h("td", { colspan: "4", class: `c last t${ti % 2}`, text: a.days ? lbMoney(a.rev / a.days) : "–" }))))));
   const label = per === "month" ? `${lbMonthLong(Number(r.from.slice(5, 7)))} ${r.from.slice(0, 4)}` : lbSpanText(r.from, r.to);
+  const dateBox = (id, value, aria, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: aria }),
+    h("input", { id, type: "date", value, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": aria, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
   return [
     h("div", { class: "lb-bar" },
-      lbSeg(Object.entries(LB_PAY), per, k => { lbView.pper = k; lbSaveView(); renderLeaderboard(); }, "Pay period"),
-      h("div", { class: "lb-daybar" },
+      // a preset starts from the From day shown; From or To typed by hand makes it From – To
+      lbSeg(Object.entries(LB_PAY), per, k => { if (k === "custom") { custom(r.from, r.to); return; } lbView.pper = k; lbView.pday = r.from; lbSaveView(); renderLeaderboard(); }, "Pay period"),
+      h("div", { class: "lb-daybar lb-payrange" },
         h("button", { class: "btn small", type: "button", id: "lbPayPrev", "aria-label": "Earlier", disabled: r.from <= `${y}-01-01`, onclick: () => step(-1) }, "‹"),
-        h("input", { id: "lbPayDay", type: "date", value: per === "month" ? r.from : r.from, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": per === "month" ? "A day in the month" : "Start (its Sunday)",
-          onchange: e => { if (lbIsDay(e.target.value)) go(e.target.value); } }),
+        dateBox("lbPayFrom", r.from, "From", v => custom(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
+        dateBox("lbPayTo", r.to, "To", v => custom(v < r.from ? v : r.from, v)),
         h("button", { class: "btn small", type: "button", id: "lbPayNext", "aria-label": "Later", disabled: r.to >= `${y}-12-31`, onclick: () => step(1) }, "›"))),
-    h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "month" ? "" : " · Sunday to Saturday", ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
+    h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "week" || per === "two" ? " · Sunday to Saturday" : per === "custom" ? ` · ${len} day${len === 1 ? "" : "s"}` : "",
+      per === "custom" && lbIsDay(lbView.pto) && lbDayCount(r.from, lbView.pto) > LB_PAY_MAX ? ` (up to ${LB_PAY_MAX} days at a time)` : "",
+      ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
     teams.length ? h("div", { class: "panel lb-paypanel" }, grid,
-      h("p", { class: "hint", text: "Straight from Enter numbers > Trucks: each tech's jobs, work days, truck revenue and # of techs, day by day. Pick any day and the view jumps to its pay week (Sunday to Saturday), its two weeks or its month." }))
+      h("p", { class: "hint", text: "Straight from Enter numbers > Trucks: each tech's jobs, work days, truck revenue and # of techs, day by day. Week, 2 weeks and Month start from the From day: its pay week (Sunday to Saturday), its two weeks or its month. Change From or To for any other dates." }))
       : h("p", { class: "meta", text: "No teams on a truck then." })];
 }
 
