@@ -801,6 +801,16 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rank .lbs-sort i { font-style: normal; }
 .lb-rank td.on { font-weight: 700; color: var(--ink); }
 .lb-rank .lbs-who { display: inline-flex; align-items: center; gap: 8px; }
+.lb-rvsec { display: grid; gap: 8px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
+.lb-rvsec h4 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; }
+.lb-rvsec .hint { margin: 0; }
+.lb-rvlist { display: grid; gap: 6px; }
+.lb-rvrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px) auto; gap: 8px; align-items: center; }
+.lb-rvrow strong { font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; }
+.lb-rvrow input, .lb-rvrow select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
+.lb-rvbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+.lbs-note { font-size: .7rem; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.lb-card.rv-only { border-style: dashed; }
 .lbs-place { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 7px; font-family: var(--font-display); font-size: .9rem; font-weight: 700;
   background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); box-sizing: border-box; }
 .lbs-place.p1 { background: #f2b705; color: #3b2a00; border-color: #dba500; }
@@ -1456,9 +1466,10 @@ const lbIs = (v, word) => lbText(v).toUpperCase() === word;
 const lbTeamName = v => { const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return /^[A-Za-z][A-Za-z '-]{0,29}$/.test(s) ? s : ""; };
 const lbYm = v => (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(v || "")) ? String(v) : "");
 const lbIsDay = v => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(v || ""));
-/** The roster, cleaned: each team once, a unit, the months it's on the board ("" = open). */
+/** The roster, cleaned: each team once, a unit, the months it's on the board ("" = open), and the people on the
+ *  reviews board only (reviewers: helpers who get 5-star reviews but don't run a truck; never ranked). */
 function lbCleanConfig(c) {
-  const out = { teams: [], goal: LB_GOAL };
+  const out = { teams: [], goal: LB_GOAL, reviewers: [] };
   const g = c && Number(c.goal);
   if (g > 0 && g < 1e7) out.goal = g;
   const seen = new Set();
@@ -1472,8 +1483,16 @@ function lbCleanConfig(c) {
     if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
     out.teams.push(team);
   }
+  for (const r of (c && Array.isArray(c.reviewers) ? c.reviewers : []).slice(0, 30)) {
+    const name = lbTeamName(r && r.name);
+    if (!name || seen.has(name.toLowerCase())) continue;   // a team's name wins
+    seen.add(name.toLowerCase());
+    out.reviewers.push({ name, unit: LB_GROUPS.includes(r.unit) ? r.unit : LB_GROUPS[0] });
+  }
   return out;
 }
+/** A reviews-only person by name (any capitals), or null. */
+const lbReviewerOf = (cfg, name) => ((cfg && cfg.reviewers) || []).find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 const lbOnBoard = (t, key) => (!t.from || t.from <= key) && (!t.to || key <= t.to);
 /** The roster entry for a name (any capitals), or null. */
 const lbTeamOf = (cfg, name) => cfg.teams.find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
@@ -2106,16 +2125,18 @@ function lbHistory(revTabs, salesTabs, year) {
   put(rev.days, "t");
   put(sales.days, "s");
   // every team's reviews are kept for every month (they count only in the months the team is on the board, so moving a
-  // team's From month in Teams brings its earlier reviews in); names that aren't a team are left out
+  // team's From month in Teams brings its earlier reviews in); a name that isn't a team (a helper like Oscar) goes on
+  // the reviews board only
   const off = new Set(), notTeam = new Set();
   for (const [name, ms] of Object.entries(rev.reviews)) for (const [key, n] of Object.entries(ms)) {
     if (!key.startsWith(year + "-") || key > lastKey) continue;
-    if (!lbTeamOf(config, name)) { if (n) notTeam.add(name); continue; }
     doc(key).reviews[name] = n;
+    if (!lbTeamOf(config, name)) { notTeam.add(name); continue; }
     if (n && !lbUnitIn(config, name, key)) off.add(name);
   }
   if (off.size) notes.push(`Reviews from months before a team's truck are kept but not counted (${[...off].join(", ")}). To count them, move the team's From month in Teams.`);
-  if (notTeam.size) notes.push(`Reviews for ${[...notTeam].join(", ")} aren't used: not a team on the board.`);
+  if (notTeam.size) notes.push(`${[...notTeam].join(", ")} ${notTeam.size === 1 ? "isn't a team, so goes" : "aren't teams, so go"} on the reviews board only (not ranked).`);
+  config.reviewers = [...notTeam].map(name => ({ name, unit: LB_GROUPS[0] }));
   for (const t of config.teams) {
     const off = sales.days && Object.entries(sales.days).filter(([day, by]) => by[t.name] && !lbUnitIn(config, t.name, day.slice(0, 7)));
     if (off && off.length) notes.push(`${t.name} has technician sales in months ${t.name} wasn't on the board; they're kept but not ranked.`);
@@ -2155,18 +2176,38 @@ function lbCombineYears(hists, known) {
     return { name, unit, from: ms[0], to: ms[ms.length - 1] };
   });
   if (guessed.length) notes.push(`Units come from the newest year that lists them; ${guessed.join(", ")} kept the unit they have in Teams.`);
-  return { teams, months, notes, warnings, perYear };
+  const reviewers = [];
+  for (const h of hists) for (const r of (h.config && h.config.reviewers) || []) if (!reviewers.some(x => x.name === r.name) && !on[r.name]) reviewers.push(r);
+  return { teams, months, notes, warnings, perYear, reviewers };
 }
 /** The roster after loading past years: everyone already in Teams keeps their unit and end month and starts at their
  *  first month on a truck; teams from those years who aren't in Teams any more are added, ending at their last month. */
-function lbMergeRoster(cur, past) {
+function lbMergeRoster(cur, past, reviewers) {
   const out = lbCleanConfig(cur);
+  for (const r of reviewers || []) if (!lbTeamOf(out, r.name) && !lbReviewerOf(out, r.name)) out.reviewers.push(r);
   for (const p of past) {
     const t = lbTeamOf(out, p.name);
     if (t) { if (p.from && (!t.from || p.from < t.from)) t.from = p.from; }
     else out.teams.push({ name: p.name, unit: p.unit, from: p.from, to: p.to });
   }
   return lbCleanConfig(out);
+}
+
+/** From the "5. REVENUE PER TRUCK" tabs: everyone in the REVIEWS tables who isn't a team, with their reviews by month
+ *  (up to `lastKey`). → [{ name, months: { "2026-07": 3 }, total, years: [2024, ...] }] */
+function lbReviewsOnly(tabs, cfg, lastKey) {
+  const years = [...new Set(tabs.map(t => lbSheetYear(t.name)).filter(Boolean))].sort();
+  const by = {};
+  for (const y of years) for (const [name, ms] of Object.entries(lbRevenueDays(tabs, y).reviews)) {
+    if (lbTeamOf(cfg, name)) continue;
+    for (const [key, n] of Object.entries(ms)) {
+      if (!key.startsWith(y + "-") || key > lastKey || lbVal(n) == null) continue;
+      const x = by[name] || (by[name] = { name, months: {}, total: 0, years: [] });
+      x.months[key] = n; x.total += n;
+      if (!x.years.includes(y)) x.years.push(y);
+    }
+  }
+  return Object.values(by).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /* ---- reading an Excel file in the browser (no add-ons: the phone's own unzip) ---- */
@@ -5377,6 +5418,7 @@ function accessChips(selected, onchange, idPrefix) {
 const LB_API = 22;                                     // the Google script version with typed-in leaderboard numbers
 const LB_RV_API = 23;                                  // ... and with 5-star reviews typed by day
 const LB_NOSALE_API = 26;                              // ... and with Estimator (noSale) on a team
+const LB_REVIEWERS_API = 27;                           // ... and with reviews-only people (cfg.reviewers)
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -5850,8 +5892,8 @@ const lbBox = (label, value, data, hint) => h("label", { class: "lb-box" + (hint
   h("input", Object.assign({ type: "text", inputmode: "decimal", autocomplete: "off", enterkeyhint: "next", value: value == null ? "" : String(value), onchange: () => lbFlush() }, data)),
   hint ? h("small", { text: hint }) : null);
 function lbCard(t, part, day, fields, arr, foot, extra) {
-  return h("div", { class: "lb-card" + (t.off ? " off" : ""), "data-team": t.name, "data-part": part },
-    h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
+  return h("div", { class: "lb-card" + (t.off ? " off" : "") + (t.reviewer ? " rv-only" : ""), "data-team": t.name, "data-part": part },
+    h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.reviewer ? `${t.unit} · reviews only` : t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
     h("div", { class: `lb-boxes n${fields.length}` }, fields.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), arr[i], { "data-i": String(i), oninput: () => lbTyped(day, part, t.name, fields.length) }))),
     h("p", { class: "lb-card-foot", text: foot }),
     extra || null);
@@ -5917,14 +5959,18 @@ function lbSalesEl(day) {
 /** A team's 5-star reviews: that day, the month (with any total typed for the whole month the older way) and the year. */
 function lbReviewFoot(day, team) {
   const e = lbEntry((lbDayDoc(day).r || {})[team], LB_REVIEW.length), key = day.slice(0, 7), month = Number(key.slice(5));
-  const r = lbRecOf(key, team), y = lbYear();
-  const ytd = lbRecords().filter(x => x.team.toLowerCase() === team.toLowerCase() && x.group && x.month <= key && x.month.startsWith(y + "-")).reduce((sum, x) => sum + x.reviews, 0);
+  const r = lbRecOf(key, team), y = lbYear(), rv = !!lbReviewerOf(lbCfg(), team);
+  const ytd = lbRecords().filter(x => x.team.toLowerCase() === team.toLowerCase() && (x.group || rv) && x.month <= key && x.month.startsWith(y + "-")).reduce((sum, x) => sum + x.reviews, 0);
   return `${e.length ? `Day: ${fmt(e[0] || 0)}` : "Nothing typed for this day"} · ${lbMonthLong(month)}: ${fmt(r ? r.reviews : 0)} · ${lbYtdText(month)}: ${fmt(ytd)}`;
 }
 function lbReviewsEl(day) {
   const d = lbDayDoc(day), key = day.slice(0, 7), month = Number(key.slice(5));
   const base = (lbData.months[key] || {}).reviews || {};
-  const teams = lbTeamsFor(key, Object.keys(d.r || {}).filter(n => lbEntry(d.r[n], LB_REVIEW.length).length).concat(Object.keys(base).filter(n => lbVal(base[n]))));
+  // the board, then the reviews-only people (helpers), then anyone else with reviews that day (so they can be cleared)
+  const cfg = lbCfg();
+  const teams = lbTeamsFor(key, Object.keys(d.r || {}).filter(n => lbEntry(d.r[n], LB_REVIEW.length).length).concat(Object.keys(base).filter(n => lbVal(base[n])))
+    .filter(n => !lbReviewerOf(cfg, n)));
+  teams.splice(teams.findIndex(t => t.off) < 0 ? teams.length : teams.findIndex(t => t.off), 0, ...cfg.reviewers.map(r => ({ name: r.name, unit: r.unit, reviewer: true })));
   // a total typed for the whole month before reviews were typed by day: kept, and can be changed or cleared here
   const baseBox = t => lbVal(base[t.name]) ? h("label", { class: "lb-rv-base", "data-team": t.name },
     h("span", null, h("b", { text: `${lbMonthLong(month)} total typed earlier` }), h("small", { text: `From before reviews were typed by day (the sheet's monthly count). It counts on top of the days, so clear it if those reviews are also typed on their day.` })),
@@ -5993,7 +6039,7 @@ function lbRankTable(id, cols, list, has, foot) {
   return h("div", { class: "lb-scroll" }, h("table", { class: "lb-table lb-rank", id, "data-k": k },
     h("thead", null, h("tr", null, head("name", cols[0].label), cols.slice(1).map(c => head(c.k, c.label)))),
     h("tbody", null, rows.map(({ t, p, medal }) => h("tr", { "data-team": t.name },
-      h("th", null, h("span", { class: "lbs-who" }, k === "name" ? null : h("span", { class: "lbs-place" + (p && p <= 3 && medal ? ` p${p}` : ""), text: p ? String(p) : "–" }), t.name)),
+      h("th", null, h("span", { class: "lbs-who" }, k === "name" ? null : h("span", { class: "lbs-place" + (p && p <= 3 && medal ? ` p${p}` : ""), text: p ? String(p) : "–" }), t.name, t.note ? h("small", { class: "lbs-note", text: t.note }) : null)),
       cols.slice(1).map(c => h("td", { class: c.k === k ? "on" : "", text: c.f(t) }))))),
     foot ? h("tfoot", null, h("tr", null, foot.map((c, i) => h(i ? "td" : "th", { text: c })))) : null));
 }
@@ -6015,7 +6061,7 @@ function lbStatusEl() {
     const recs = lbRecords().filter(r => r.month === key);
     board = lbBoardShown(cfg, key);
     recOf = name => recs.find(r => r.team === name) || zero;
-    off = recs.filter(r => !r.group && (r.revenue || r.jobs || r.workDays || r.sales || r.reviews));
+    off = recs.filter(r => !r.group && !lbReviewerOf(cfg, r.team) && (r.revenue || r.jobs || r.workDays || r.sales || r.reviews));
     days = Array.from({ length: lbDaysIn(key) }, (_, i) => `${key}-${String(i + 1).padStart(2, "0")}`);
   } else {
     const agg = lbSpanRecs(span.from, span.to, per === "ytd");
@@ -6083,11 +6129,17 @@ function lbStatusEl() {
       { k: "sales", label: "Month to date", def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) },
       { k: "left", label: "Left to goal", low: true, v: t => gOf(t).left, f: t => { const g = gOf(t); return t.noSale ? "No goal" : g.done ? "Done" : lbMoney(g.left); } },
       { k: "need", label: "Need per day", low: true, v: t => gOf(t).perDay, f: t => { const g = gOf(t); return t.noSale || g.done || !leftOf(t.unit) ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
-  const ytdRv = name => lbRecords().filter(r => r.team === name && r.group && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
+  // a reviews-only person counts all his reviews (he's never on the board)
+  const ytdRv = name => lbRecords().filter(r => r.team === name && (r.group || lbReviewerOf(cfg, name)) && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
+  const monthRv = name => (lbRecords().find(r => r.month === key && r.team === name) || { reviews: 0 }).reviews;
+  const rvOnly = cfg.reviewers.map(r => ({ name: r.name, unit: r.unit, reviewer: true, note: "reviews only" }))
+    .filter(r => !lbPast() || ytdRv(r.name) > 0);
+  const rvOf = t => (!t.reviewer ? R(t).reviews : per === "ytd" ? ytdRv(t.name) : monthRv(t.name));
+  const rvBoard = board.concat(rvOnly), rvTotal = rvBoard.reduce((n, t) => n + rvOf(t), 0);
   const reviews = week ? null : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
-    per === "ytd" ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbYtdText(month), def: true, v: t => R(t).reviews, f: t => fmt(R(t).reviews) }], board, () => true, ["Total", fmt(sum(board, "reviews"))])
-      : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbMonthLong(month), def: true, v: t => R(t).reviews, f: t => fmt(R(t).reviews) },
-        { k: "ytd", label: lbYtdText(month), v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], board, () => true));
+    per === "ytd" ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbYtdText(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) }], rvBoard, () => true, ["Total", fmt(rvTotal)])
+      : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbMonthLong(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) },
+        { k: "ytd", label: lbYtdText(month), v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], rvBoard, () => true, ["Total", fmt(rvTotal), fmt(rvBoard.reduce((n, t) => n + ytdRv(t.name), 0))]));
   const offEl = off.length ? h("div", { class: "panel" }, h("h2", { text: "Numbers not counted" }),
     h("p", { class: "meta", text: `Typed for a team that isn't on the board in ${lbMonthLong(month)}: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. Fix the team's months in Teams if they should count.` })) : null;
   return [
@@ -6142,12 +6194,30 @@ function openLbTeams() {
     return row;
   };
   for (const t of cfg.teams) list.append(rowEl(t, false));
+  // people on the reviews board only (helpers who get 5-star reviews, no truck): never ranked
+  const rvList = h("div", { class: "lb-rvlist", id: "lbRvList" });
+  const rvRow = (r, isNew) => {
+    const row = h("div", { class: "lb-rvrow", "data-new": isNew ? "1" : null, "data-name": r.name || null },
+      isNew ? h("input", { type: "text", class: "r-name", maxlength: "30", autocomplete: "off", value: r.name || "", placeholder: "First name", "aria-label": "Name" })
+        : h("strong", { text: r.name }),
+      h("select", { class: "r-unit", "aria-label": `${r.name || "Their"} unit` }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === r.unit }))),
+      h("button", { class: "btn ghost small danger", type: "button", "aria-label": `Remove ${r.name || "this name"}`, onclick: () => row.remove() }, "Remove"));
+    return row;
+  };
+  for (const r of cfg.reviewers) rvList.append(rvRow(r, false));
   const thisMonth = lbMonthKey(y, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 1);
   openDialog(
     h("h3", { id: "dlgTitle", text: "Teams on the board" }),
     h("p", { class: "hint", text: "Each truck's team, the unit it's ranked in, and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June." }),
     list,
     h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: thisMonth, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a team")),
+    h("div", { class: "lb-rvsec" },
+      h("h4", { text: "Reviews only" }),
+      h("p", { class: "hint", text: "People who get 5-star reviews but don't run a truck (helpers). They're on the reviews board (Enter numbers > Reviews, Status > 5-star reviews), never ranked in Standings. Removing a name keeps the reviews typed for it." }),
+      rvList,
+      h("div", { class: "lb-rvbtns" },
+        h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); } }, "+ Add a name"),
+        h("button", { class: "btn ghost small", type: "button", id: "lbRvXl", onclick: () => openLbReviewsXl() }, "Their reviews from Excel…"))),
     h("div", { class: "field" }, h("label", { for: "lbGoal", text: "Technician sales goal per month $" }), h("input", { id: "lbGoal", type: "text", inputmode: "decimal", value: String(cfg.goal) })),
     err,
     h("div", { class: "dlg-foot" },
@@ -6170,13 +6240,24 @@ function openLbTeams() {
             if (row.querySelector(".t-nosale").checked) team.noSale = true;
             teams.push(team);
           }
+          const reviewers = [];
+          for (const row of rvList.children) {
+            const raw = row.dataset.new ? row.querySelector(".r-name").value : row.dataset.name;
+            if (row.dataset.new && !raw.trim()) continue;
+            const name = lbTeamName(raw);
+            if (!name) { err.textContent = "Names take letters only (spaces, ' and - are fine)."; return; }
+            if (names.has(name.toLowerCase())) { err.textContent = `${name} is a team or on the list twice.`; return; }
+            names.add(name.toLowerCase());
+            reviewers.push({ name, unit: row.querySelector(".r-unit").value });
+          }
           const goal = Number(val("lbGoal").replace(/[$,\s]/g, ""));
           if (!(goal > 0)) { err.textContent = "Type the sales goal as a number, like 3000."; return; }
+          if (reviewers.length && apiLevel && apiLevel < LB_REVIEWERS_API) { err.textContent = "Reviews only needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "Estimator needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
           try {
-            const out = await api("lbPut", { year: y, writes: [{ key: "config", data: { teams, goal } }] });
-            lbData.config = out.config || { teams, goal };
+            const out = await api("lbPut", { year: y, writes: [{ key: "config", data: { teams, goal, reviewers } }] });
+            lbData.config = out.config || { teams, goal, reviewers };
             for (const c of Object.values(lbYearCache)) c.config = lbData.config;   // one roster for every year
             if (out.names) lbData.names = Object.assign(lbData.names || {}, out.names);
             lbTouch();
@@ -6185,6 +6266,86 @@ function openLbTeams() {
             renderLeaderboard();
           } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
         } }))));
+}
+/** The reviews-only people's 5-star reviews from the REVIEWS tables of 5. Revenue per truck: adds them to Reviews only
+ *  and saves their month counts, every year in the file. Nothing else changes (trucks, sales, teams' reviews). */
+function openLbReviewsXl() {
+  const now = lbNowYear(), lastKey = lbToday().slice(0, 7), cfg = lbCleanConfig(lbData.config);
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const res = h("div", { class: "lb-src", id: "lbRvXlResult", hidden: true });
+  const status = h("p", { class: "lb-dl-status", id: "lbRvXlStatus", role: "status" });
+  let found = [];
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Reviews only: their reviews from Excel" }),
+    h("p", { class: "hint", text: "Choose an Excel copy of 5. Revenue per truck. The app reads the REVIEWS table on every month tab and lists the names there that aren't a team (helpers). Loading adds them to Reviews only and saves their monthly counts; trucks, sales and the teams' reviews stay as they are." }),
+    h("input", { type: "file", id: "lbRvXlFile", accept: ".xlsx", onchange: async e => {
+      err.textContent = ""; res.hidden = true; found = [];
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        status.textContent = "Opening the file…";
+        const buf = await f.arrayBuffer(), names = [];
+        await lbReadXlsx(buf, n => { names.push(n); return false; });
+        const years = [...new Set(names.map(lbSheetYear).filter(Boolean))].sort();
+        if (!years.length) { status.textContent = ""; err.textContent = "No month tabs (like November 2026) in this file."; return; }
+        const by = {};
+        for (const y of years) {
+          status.textContent = `Reading ${y}…`;
+          for (const x of lbReviewsOnly(await lbReadXlsx(buf, n => lbSheetMonth(n, y) > 0), cfg, lastKey)) {
+            const p = by[x.name] || (by[x.name] = { name: x.name, months: {}, total: 0, years: [] });
+            Object.assign(p.months, x.months); p.total += x.total; p.years.push(...x.years);
+          }
+          await new Promise(r => setTimeout(r, 0));
+        }
+        status.textContent = "";
+        found = Object.values(by).sort((a, b) => a.name.localeCompare(b.name));
+        res.replaceChildren(...(found.length ? [
+          h("h4", { text: "Names in REVIEWS that aren't a team" }),
+          h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "lbRvXlTable" },
+            h("thead", null, h("tr", null, ["", "Name", "Unit", "Years", "Reviews"].map(c => h("th", { text: c })))),
+            h("tbody", null, found.map(x => {
+              const had = lbReviewerOf(cfg, x.name), newest = years[years.length - 1];
+              return h("tr", { "data-name": x.name },
+                // ticked: in the newest year's sheet (a helper now) or already on Reviews only; someone from years ago isn't
+                h("td", null, h("input", { type: "checkbox", class: "rx-on", checked: !!had || x.years.includes(newest), "aria-label": `Load ${x.name}` })),
+                h("th", { text: x.name }),
+                h("td", null, h("select", { class: "rx-unit", "aria-label": `${x.name}'s unit` }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === (had ? had.unit : LB_GROUPS[0]) })))),
+                h("td", { text: [...new Set(x.years)].sort().join(", ") }),
+                h("td", { text: fmt(x.total) }));
+            })))),
+          h("p", { class: "hint", text: "Ticked: everyone in the newest year's sheet. Untick anyone who shouldn't be on the reviews board. A month already typed for them in the app is replaced by the sheet's count." })]
+          : [h("p", { class: "meta", text: "Everyone in the REVIEWS tables is already a team. Nothing to add." })]));
+        res.hidden = false;
+        $("lbRvXlGo").disabled = !found.length;
+      } catch (x) { status.textContent = ""; err.textContent = "Couldn't read that file. Download it again from Google Sheets as Microsoft Excel (.xlsx)."; }
+    } }),
+    status, res, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => openLbTeams(), text: "Back" }),
+      h("button", { class: "btn primary", type: "button", id: "lbRvXlGo", text: "Load", disabled: true, onclick: async () => {
+        const pick = found.filter(x => { const tr = document.querySelector(`#lbRvXlTable tr[data-name="${CSS.escape(x.name)}"]`); return tr && tr.querySelector(".rx-on").checked; })
+          .map(x => Object.assign({}, x, { unit: document.querySelector(`#lbRvXlTable tr[data-name="${CSS.escape(x.name)}"] .rx-unit`).value }));
+        if (!pick.length) { err.textContent = "Tick at least one name."; return; }
+        if (apiLevel && apiLevel < LB_REVIEWERS_API) { err.textContent = "Reviews only needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+        const b = $("lbRvXlGo"); b.disabled = true; b.textContent = "Saving…";
+        try {
+          const cur = lbCleanConfig(lbData.config);
+          const reviewers = cur.reviewers.filter(r => !pick.some(x => x.name.toLowerCase() === r.name.toLowerCase())).concat(pick.map(x => ({ name: x.name, unit: x.unit })));
+          const patches = {};
+          for (const x of pick) for (const [k, n] of Object.entries(x.months)) ((patches[k] || (patches[k] = { reviews: {} })).reviews)[x.name] = n;
+          const writes = [{ key: "config", data: { teams: cur.teams, goal: cur.goal, reviewers } }].concat(Object.keys(patches).sort().map(k => ({ key: k, patch: patches[k] })));
+          for (let i = 0; i < writes.length; i += 8) {
+            b.textContent = `Saving ${Math.min(100, Math.round((i / writes.length) * 100))}%…`;
+            const out = await api("lbPut", { year: now, writes: writes.slice(i, i + 8) });
+            if (!i && out.config) lbData.config = out.config;
+          }
+          lbYearCache = {};
+          await lbReload();
+          closeDialog();
+          toast(`Reviews only: ${pick.map(x => x.name).join(", ")}`);
+          renderLeaderboard();
+        } catch (x) { err.textContent = errText(x, "The reviews") + " Tap Load again to finish (it's safe to repeat)."; b.disabled = false; b.textContent = "Load"; }
+      } }))));
 }
 /** Moves one name's numbers to another from a month on: for when the sheet kept the old driver's name on a truck. */
 function openLbMove() {
@@ -6245,7 +6406,7 @@ function openLbMove() {
             const ft = teams.find(t => t.name.toLowerCase() === plan.from.toLowerCase()), tt = teams.find(t => t.name.toLowerCase() === plan.to.toLowerCase());
             if (ft && (!ft.to || ft.to >= plan.start) && (!ft.from || ft.from < plan.start) && !plan.end) ft.to = lbPrevMonth(plan.start);
             if (tt && tt.from && tt.from > plan.start) tt.from = plan.start;
-            writes.unshift({ key: "config", data: { teams, goal: cfg.goal } });
+            writes.unshift({ key: "config", data: { teams, goal: cfg.goal, reviewers: cfg.reviewers } });
           }
           for (let i = 0; i < writes.length; i += 6) await api("lbPut", { year: y, writes: writes.slice(i, i + 6) });
           await lbReload();
@@ -6337,9 +6498,11 @@ function openLbHistory() {
         b.disabled = true;
         try {
           const cur = lbCleanConfig(lbData && lbData.config);
-          let roster = years.includes(now) ? lbCleanConfig({ teams: hists[now].config.teams, goal: cur.goal }) : cur;
+          // this year's teams from the sheet, keeping an estimator's tick; the reviews-only people stay (with their unit)
+          let roster = years.includes(now) ? lbCleanConfig({ teams: hists[now].config.teams.map(t => Object.assign({}, t, (lbTeamOf(cur, t.name) || {}).noSale ? { noSale: true } : {})),
+            goal: cur.goal, reviewers: cur.reviewers.concat(hists[now].config.reviewers || []) }) : cur;
           const past = years.filter(y => y !== now);
-          if (past.length) roster = lbMergeRoster(roster, lbCombineYears(past.map(y => hists[y]), cur).teams);
+          if (past.length) { const all = lbCombineYears(past.map(y => hists[y]), cur); roster = lbMergeRoster(roster, all.teams, all.reviewers); }
           const writes = [{ key: "config", data: roster }];
           for (const y of years.sort((x, z) => z - x)) for (let m = 1; m <= 12; m++) {
             const k = lbMonthKey(y, m);
