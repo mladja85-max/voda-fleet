@@ -776,11 +776,16 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 /* a truck typed by job: each job's revenue and sales, who worked with him and the split */
 .lbj-day { display: grid; grid-template-columns: minmax(84px, 110px) 1fr; gap: 10px; align-items: end; }
 .lbj-total { margin: 0 0 9px; font-size: .82rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-.lbj-list { display: grid; gap: 8px; }
 .lbj-job { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--surface-2); display: grid; gap: 7px; }
 .lbj-job.shared { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .lbj-top { display: flex; align-items: center; gap: 8px; }
-.lbj-n { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; text-transform: uppercase; white-space: nowrap; }
+.lbj-pickjob { flex: none; }
+.lbj-sel { appearance: none; -webkit-appearance: none; font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; text-transform: uppercase; color: var(--accent); background: var(--accent-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%231f4fbf' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 9px center / 11px 8px; border: 1.5px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 9px; padding: 6px 28px 6px 10px; width: 6.6em; cursor: pointer; }
+.lbj-sel:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+.lbj-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.lbj-lines button { all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer; font-size: .82rem; line-height: 1.35; font-variant-numeric: tabular-nums; color: var(--muted); padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); }
+.lbj-lines li.on button { color: var(--ink); font-weight: 600; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); cursor: default; }
+.lbj-lines button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .lbj-rev { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .lbj-rev span, .lbj-sale span { font-size: .72rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .lbj-job input[type=text] { width: 100%; min-width: 0; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 8px; }
@@ -797,9 +802,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbj-share { font-weight: 700; font-variant-numeric: tabular-nums; }
 .lbj-pct { display: flex; align-items: center; gap: 3px; font-weight: 700; }
 .lbj-pct input[type=text] { width: 64px; text-align: right; padding: 5px 6px; }
-.lbj-how { display: grid; gap: 6px; }
-.lbj-how .seg { justify-self: start; }
-.lbj-credit { font-size: .86rem; font-weight: 600; }
+.lbj-how { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.lbj-how .seg-btn { padding-block: 5px; font-size: .84rem; }
+.lbj-credit { font-size: .86rem; font-weight: 600; align-items: center; }
+.lbj-credit input { margin: 0; }
+.lbj-credit small { display: inline; font-weight: 600; text-transform: uppercase; font-size: .66rem; letter-spacing: .04em; }
 .lbj-add, .lbj-addjob { justify-self: start; }
 .lbj-pick { display: grid; gap: 7px; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .lbj-pick[hidden] { display: none; }
@@ -6212,7 +6219,7 @@ function lbTrucksEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
-    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Each job gets its revenue and the truck's sales on it; + Worked with adds the technicians and assistants who helped, and how the job is split." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
+    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Each job gets its revenue and the truck's sales on it; + Worked with adds who helped and how the job is split. Split credit: each person's share counts for him on the leaderboard (payroll always splits by the shares)." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
     jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
 }
 
@@ -6225,6 +6232,16 @@ function lbLoadRates() {
 }
 const lbSavedShare = n => { const x = lbRates && Object.entries(lbRates).find(([k]) => k.toLowerCase() === n.toLowerCase()); return x ? lbVal(x[1].share) : null; };
 const lbJobsOf = (day, team) => lbClone(((lbDayDoc(day).j || {})[team]) || []);
+const lbJobOpen = {};   // "2026-11-09|Aaron" → the job shown on his card (the newest one when not picked)
+/** One line for a job in the card's list: "Job 2 · $300 · Add-on $450 · with Oscar 40%". */
+function lbJobLine(job, i, owner) {
+  const parts = [`Job ${i + 1}`];
+  if (lbVal(job.v) != null) parts.push(lbMoney(job.v));
+  LB_JOB_SALES.forEach((label, k) => { const v = job.s && lbVal(job.s[k]); if (v) parts.push(`${label} ${lbMoney(v)}`); });
+  const crew = lbJobSplit(job, owner).slice(1);
+  if (crew.length) parts.push("with " + crew.map(x => job.e ? x.name : `${x.name} ${x.pct}%`).join(", ") + (job.c ? " (credit split)" : ""));
+  return parts.join(" · ");
+}
 const LB_JOB_SALES = ["Up sale", "Add-on", "Rugs", "Additional"];
 /** The people who can work with a truck: everyone on the board that month and everyone not on the leaderboard, by the
  *  kind picked (Technician: a tech role; Assistant: the assistant role; no role yet: both), never the truck himself. */
@@ -6275,8 +6292,22 @@ function lbJobsCard(t, day) {
   lbLoadRates();
   const save = redraw => { const w = lbWorkDayOf(day, team); lbSaveJobs(day, team, jobs, w == null && jobs.length ? 1 : w, redraw); };
   const card = h("div", { class: "lb-card lb-jobs" + (t.off ? " off" : ""), "data-team": team, "data-part": "t" });
-  const foot = h("p", { class: "lb-card-foot" }), total = h("p", { class: "lbj-total" });
-  const refresh = () => { foot.textContent = lbTruckFoot(day, team); total.textContent = lbJobsTotalText(jobs); };
+  const foot = h("p", { class: "lb-card-foot" }), total = h("p", { class: "lbj-total" }), list = h("ol", { class: "lbj-lines", "aria-label": `${team}'s jobs` });
+  const openKey = `${day}|${team}`;
+  const open = Math.min(jobs.length - 1, lbJobOpen[openKey] == null ? jobs.length - 1 : lbJobOpen[openKey]);
+  // a line for each job, the open one marked; tap one to open it
+  const lines = () => list.replaceChildren(...(jobs.length > 1 ? jobs.map((x, k) => h("li", { class: k === open ? "on" : "" },
+    h("button", { type: "button", "aria-current": k === open ? "true" : null, onclick: () => { if (k === open) return; lbJobOpen[openKey] = k; lbRedrawJobs(day, team); } }, lbJobLine(x, k, team)))) : []));
+  const refresh = () => { foot.textContent = lbTruckFoot(day, team); total.textContent = lbJobsTotalText(jobs); lines(); };
+  const addJob = () => {
+    // the first job starts with the day's sales typed on the Sales tab, so nothing typed there is lost
+    const first = !jobs.length && lbDaySales(day, team);
+    jobs.push(first && first.length ? { v: null, s: first } : { v: null });
+    lbJobOpen[openKey] = jobs.length - 1;
+    save();
+    const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lbj-v`);
+    if (i) i.focus();
+  };
   const jobRow = (job, i) => {
     const split = lbJobSplit(job, team), crew = job.w || [];
     const typed = crew.length && !job.e;
@@ -6303,11 +6334,16 @@ function lbJobsCard(t, day) {
       onchange: e => { const v = lbMoneyIn(e.target.value); if (Number.isNaN(v)) return; onset(v); save(false); refresh(); } });
     return h("div", { class: "lbj-job" + (crew.length ? " shared" : ""), "data-job": String(i + 1) },
       h("div", { class: "lbj-top" },
-        h("span", { class: "lbj-n", text: `Job ${i + 1}` }),
+        h("span", { class: "lbj-pickjob" },
+          h("select", { class: "lbj-sel", "aria-label": "Pick a job or add one", onchange: e => {
+            if (e.target.value === "add") addJob();
+            else { lbJobOpen[openKey] = Number(e.target.value); lbRedrawJobs(day, team); }
+          } }, jobs.map((x, k) => h("option", { value: String(k), selected: k === i, text: `Job ${k + 1}` })),
+            h("option", { value: "add", text: `+ Add job ${jobs.length + 1}` }))),
         h("label", { class: "lbj-rev" }, h("span", { text: "Revenue $" }), money(job.v, `Job ${i + 1} revenue`, v => { job.v = v; }, "lbj-v")),
         h("button", { class: "btn ghost small lbj-x", type: "button", "aria-label": `Remove job ${i + 1}`, onclick: () => {
           if ((job.v || lbJobSale(job) || crew.length) && !confirm(`Remove job ${i + 1}${job.v ? ` (${lbMoney(job.v)})` : ""}${lbJobSale(job) ? ` and its ${lbMoney(lbJobSale(job))} in sales` : ""}${crew.length ? ", and who worked on it" : ""}?`)) return;
-          jobs.splice(i, 1); save();
+          jobs.splice(i, 1); lbJobOpen[openKey] = Math.max(0, i - 1); save();
         } }, "✕")),
       h("div", { class: "lbj-sales" }, LB_JOB_SALES.map((label, k) => h("label", { class: "lbj-sale" }, h("span", { text: `${label} $` }),
         money(job.s && job.s[k] != null ? job.s[k] : null, `Job ${i + 1} ${label.toLowerCase()} sale`, v => { const a = Array.isArray(job.s) ? job.s.slice() : []; while (a.length < 4) a.push(null); a[k] = v; job.s = a; }, "lbj-s")))),
@@ -6319,13 +6355,13 @@ function lbJobsCard(t, day) {
             : h("span", { class: "lbj-share", text: `${x.pct}%` }),
           k ? h("button", { class: "btn ghost small", type: "button", "aria-label": `Take ${x.name} off job ${i + 1}`, onclick: () => { job.w = crew.filter((_, z) => z !== k - 1); if (!job.w.length) { delete job.w; delete job.e; delete job.c; } save(); } }, "✕") : null)),
         h("div", { class: "lbj-how" },
-          lbSeg([["eq", "Equal split"], ["pct", "Type %"]], job.e ? "eq" : "pct", k => {
+          lbSeg([["eq", "Equal"], ["pct", "Type %"]], job.e ? "eq" : "pct", k => {
             if (k === "eq") { job.e = 1; for (const y of crew) delete y.p; }
             else { delete job.e; const each = Math.floor(10000 / (crew.length + 1)) / 100; for (const y of crew) if (lbVal(y.p) == null) y.p = each; }
             save();
           }, `Split of job ${i + 1}`),
           h("label", { class: "check lbj-credit" }, h("input", { type: "checkbox", checked: !!job.c, onchange: e => { if (e.target.checked) job.c = 1; else delete job.c; save(); } }),
-            h("span", null, "Split the revenue credit ", h("small", { text: "(standings and production; off: it all stays with the truck)" })))),
+            h("span", { title: "Ticked: each person's share of this job's revenue counts for him on the leaderboard and in production. Not ticked: it all stays with the truck. Payroll always splits by the shares." }, "Split credit"))),
         typed && sum > 100 ? h("p", { class: "dlg-err", text: `The others' shares add up to ${sum}%: they can't be over 100%.` }) : null) : null,
       h("button", { class: "btn ghost small lbj-add", type: "button", onclick: () => openPicker("tech") }, "+ Worked with"),
       picker);
@@ -6339,15 +6375,8 @@ function lbJobsCard(t, day) {
         if (!bad) { lbSaveJobs(day, team, jobs, v === "" ? null : Number(v), false); refresh(); }
       } }),
       total),
-    h("div", { class: "lbj-list" }, jobs.map(jobRow)),
-    h("button", { class: "btn small lbj-addjob", type: "button", onclick: () => {
-      // the first job starts with the day's sales typed on the Sales tab, so nothing typed there is lost
-      const first = !jobs.length && lbDaySales(day, team);
-      jobs.push(first && first.length ? { v: null, s: first } : { v: null });
-      save();
-      const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lbj-job:last-child .lbj-v`);
-      if (i) i.focus();
-    } }, `+ Job ${jobs.length + 1}`),
+    jobs.length ? jobRow(jobs[open], open) : h("button", { class: "btn small lbj-addjob", type: "button", onclick: addJob }, "+ Job 1"),
+    list,
     foot);
   refresh();
   return card;
