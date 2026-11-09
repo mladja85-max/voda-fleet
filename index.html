@@ -140,6 +140,7 @@ button { font: inherit; color: inherit; }
 @media (min-width: 1100px) {
   :root { --page-w: 1560px; }
   body[data-tab="supplies"], body[data-tab="leaderboard"], body[data-tab="office"] { --page-w: 1000px; }
+  body[data-tab="leaderboard"][data-lbtab="payroll"] { --page-w: 1560px; }   /* every tech's columns side by side */
   .page { width: 100%; max-width: calc(var(--page-w) + 48px); margin-inline: auto; }
   .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
   body .sup, body .lb { max-width: none; }
@@ -801,6 +802,30 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rank .lbs-sort i { font-style: normal; }
 .lb-rank td.on { font-weight: 700; color: var(--ink); }
 .lb-rank .lbs-who { display: inline-flex; align-items: center; gap: 8px; }
+.lb-paypanel { padding: 10px; }
+.lb-payscroll { max-height: 75vh; overflow: auto; }
+.lb-pay { border-collapse: separate; border-spacing: 0; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.lb-pay th, .lb-pay td { padding: 4px 7px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.lb-pay td.n { text-align: center; min-width: 2.6em; }
+.lb-pay td.m { text-align: right; min-width: 5.6em; }
+.lb-pay td.c { text-align: center; font-weight: 700; }
+.lb-pay .last { border-right: 2px solid var(--line); }
+.lb-pay .t1 { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.lb-pay thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+.lb-pay thead tr:nth-child(2) th { top: 2.6em; }
+.lb-pay th.tech { text-align: center; border-bottom: 3px solid var(--line); }
+.lb-pay th.tech strong { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; display: block; }
+.lb-pay th.tech small { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.lb-pay th.tech.Cleaning { border-bottom-color: var(--clean); }
+.lb-pay th.tech.Restoration { border-bottom-color: var(--accent); }
+.lb-pay th.sub { font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); text-align: center; }
+.lb-pay tbody th, .lb-pay tfoot th, .lb-pay th.corner { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; border-right: 2px solid var(--line); }
+.lb-pay th.corner { z-index: 3; }
+.lb-pay .pd-w { display: inline-block; width: 2.2em; color: var(--muted); font-weight: 600; }
+.lb-pay tr.off th, .lb-pay tr.off td { color: var(--muted); background: color-mix(in srgb, var(--due) 6%, var(--surface)); }
+.lb-pay tr.wk th, .lb-pay tr.wk td { font-weight: 700; background: var(--accent-soft); }
+.lb-pay tfoot th, .lb-pay tfoot td { font-weight: 700; }
+.lb-pay tfoot tr.tot th, .lb-pay tfoot tr.tot td { border-top: 2px solid var(--ink); }
 .lb-rvsec { display: grid; gap: 8px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
 .lb-rvsec h4 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; }
 .lb-rvsec .hint { margin: 0; }
@@ -4488,7 +4513,7 @@ async function openUsers() {
   const call = async (action, data, okMsg) => {
     err.textContent = "";
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(); return out; }
-    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : errText(e, "Nothing"); return null; }
+    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it." : errText(e, "Nothing"); return null; }
   };
   const fmtAt = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "never";
   const row = u => {
@@ -4498,7 +4523,14 @@ async function openUsers() {
       h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
     role.value = u.role;
     const access = Array.isArray(u.access) ? u.access.slice() : ["trucks"];
-    const sees = u.role === "admin" ? h("span", { class: "user-meta", text: "Sees everything (Admin)" })
+    // Payroll: only admins switched on see it; an admin who sees it switches it for the others (the first time: anyone)
+    const hasPay = Array.isArray(u.access) && u.access.includes("payroll");
+    const canPay = apiLevel >= PAY_API && u.status !== "invited" && (payMe ? !me : !payAny);
+    const pay = u.role !== "admin" || apiLevel < PAY_API ? null
+      : canPay ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "payroll", id: "pay-" + (u.username || u.id), "aria-pressed": String(hasPay),
+          onclick: async () => { const out = await call("setPayroll", { id: u.id, on: !hasPay }, me ? "Payroll is on for you: Leaderboard > Payroll" : `${u.name} ${hasPay ? "no longer sees" : "now sees"} Payroll`); if (out && me) refresh(true); } }, me ? "Turn on Payroll for me" : "Payroll")
+      : h("span", { class: "user-meta", text: hasPay ? "Sees Payroll" : "No Payroll" });
+    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", Payroll only when on." : ".") }), pay)
       : apiLevel >= SUP_API ? accessChips(access, async (next, name, on) => {
           const out = await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
           if (!out) load();
@@ -4518,10 +4550,13 @@ async function openUsers() {
              h("button", { class: "btn small ghost" + (u.status === "active" ? " danger" : ""), type: "button", text: u.status === "active" ? "Turn off" : "Turn on",
                onclick: () => call("saveUser", { id: u.id, status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]));
   };
+  let payAny = false, payMe = false;   // does any admin see Payroll yet; do I
   const load = async () => {
     try {
       const out = await api("users");
       const users = (out.users || []).slice().sort((a, b) => (a.status === "invited") - (b.status === "invited") || String(a.name).localeCompare(String(b.name)));
+      const pays = u => u.role === "admin" && u.status === "active" && Array.isArray(u.access) && u.access.includes("payroll");
+      payAny = users.some(pays); payMe = users.some(u => session && u.id === session.id && pays(u));
       listBox.replaceChildren(...users.map(row));
     } catch (e) { listBox.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Nothing") })); }
   };
@@ -5423,15 +5458,15 @@ const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the stan
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
 let lbLoading = false, lbErr = "", lbOld = false;
-const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {}, funit: "Cleaning" }, store.get(K_LB_VIEW) || {});
-const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit });
+const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {}, funit: "Cleaning", pper: "week", pday: "" }, store.get(K_LB_VIEW) || {});
+const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit, pper: lbView.pper, pday: lbView.pday });
 /** Status can show a month, the year to date, this week so far or last week (a past year: a month or the year). */
 const LB_SPER = { month: "Month", ytd: "Year to date", wtd: "Week to date", lastweek: "Last week" };
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
 const canEditLb = () => isAdmin() || userAccess().includes("leaderboard-import");
 const lbNowYear = () => clockNow().getFullYear();
 /** The year on screen: a past year picked in Standings or Status (Enter numbers is always this year). */
-const lbYear = () => (lbView.year && lbView.year < lbNowYear() && lbView.tab !== "enter" ? lbView.year : lbNowYear());
+const lbYear = () => (lbView.year && lbView.year < lbNowYear() && lbView.tab !== "enter" && lbView.tab !== "payroll" ? lbView.year : lbNowYear());
 const lbPast = () => lbYear() < lbNowYear();
 /** "Today" for the year on screen: the real today, or Dec 31 of a past year (the whole year is in). */
 const lbAsOf = () => (lbPast() ? `${lbYear()}-12-31` : lbToday());
@@ -5440,7 +5475,10 @@ const lbToday = () => lbDayKey(clockNow());
 const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0)).toLocaleString("en-US");
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
 const LB_PER = { month: "This month", ytd: "Year to date", week: "This week" };
-const LB_TABS = { standings: "Standings", enter: "Enter numbers", status: "Status" };
+const LB_TABS = { standings: "Standings", enter: "Enter numbers", status: "Status", payroll: "Payroll" };
+const PAY_API = 28;                                     // the Google script version with the per-admin Payroll switch
+/** Payroll: admins switched on in Settings > Users only. */
+const canSeePayroll = () => isAdmin() && userAccess().includes("payroll");
 const lbMonthLong = m => LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase());
 const LB_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const lbDate = day => new Date(day + "T12:00:00");
@@ -5612,6 +5650,7 @@ function renderLeaderboard() {
   }
   const edit = canEditLb() && lbData.canEdit !== false;
   if (!edit && lbView.tab === "enter") lbView.tab = "standings";
+  if (lbView.tab === "payroll" && !canSeePayroll()) lbView.tab = "standings";
   const cfg = lbCfg();
   const top = h("div", { class: "lb-top" },
     h("h2", { class: "lb-title", text: "Leaderboard" }),
@@ -5619,7 +5658,7 @@ function renderLeaderboard() {
       lbView.tab === "standings" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null,
       edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Teams") : null));
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
-    Object.entries(LB_TABS).filter(([k]) => k !== "enter" || edit).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
+    Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
       onclick: () => { if (lbView.tab === "enter") lbFlush(); lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, t)));
   if (!cfg.teams.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
@@ -5629,7 +5668,8 @@ function renderLeaderboard() {
       ...(lbErr ? [h("p", { class: "dlg-err", text: lbErr })] : []));
     return;
   }
-  const body = lbView.tab === "enter" ? lbEnterEl() : lbView.tab === "status" ? lbStatusEl() : lbStandingsEl();
+  document.body.dataset.lbtab = lbView.tab;   // Payroll gets the wide page
+  const body = lbView.tab === "enter" ? lbEnterEl() : lbView.tab === "status" ? lbStatusEl() : lbView.tab === "payroll" ? lbPayrollEl() : lbStandingsEl();
   box.replaceChildren(...[top, tabs, ...body, lbErr ? h("p", { class: "dlg-err", text: lbErr }) : null].filter(Boolean));
   if (lbView.tab === "enter") lbShowSave();
   const g = lbView.tab === "status" && document.querySelector("#lbGrid tbody td.today");
@@ -5988,6 +6028,83 @@ function lbReviewsEl(day) {
     h("p", { class: "hint", text: "5-star reviews only (4 and 3 stars don't count)." }),
     teams.length ? teams.map(t => lbCard(t, "r", day, LB_REVIEW, lbEntry((d.r || {})[t.name], LB_REVIEW.length), lbReviewFoot(day, t.name), baseBox(t)))
       : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(month)}. Check Teams.` }));
+}
+
+/* ---- payroll: every tech's truck numbers day by day for a week, two weeks or a month (admins switched on) ---- */
+const LB_PAY = { week: "Week", two: "2 weeks", month: "Month" };
+/** The days a payroll view covers: the week (Monday to Sunday) or two weeks starting the Monday of `day`, or its month. */
+function lbPayRange(per, day) {
+  if (per === "month") { const k = day.slice(0, 7); return { from: `${k}-01`, to: `${k}-${String(lbDaysIn(k)).padStart(2, "0")}` }; }
+  const mon = lbMondayOf(day);
+  return { from: mon, to: lbAddDays(mon, per === "two" ? 13 : 6) };
+}
+const lbSpanText = (from, to) => { const a = lbDate(from), b = lbDate(to); return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}, ${b.getFullYear()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`; };
+function lbPayrollEl() {
+  const b = lbB(), cfg = lbCfg(), y = lbNowYear();
+  if (!LB_PAY[lbView.pper]) lbView.pper = "week";
+  const per = lbView.pper;
+  const anchor = lbIsDay(lbView.pday) ? lbView.pday : (b && b.newest) || lbToday();
+  const r = lbPayRange(per, anchor);
+  const go = day => { lbView.pday = day; lbSaveView(); renderLeaderboard(); };
+  const step = n => go(per === "month" ? (() => { const k = r.from.slice(0, 7), yy = Number(k.slice(0, 4)), mm = Number(k.slice(5)) + n; const t = yy * 12 + mm - 1; return `${lbMonthKey(Math.floor(t / 12), (t % 12) + 1)}-01`; })() : lbAddDays(r.from, (per === "two" ? 14 : 7) * n));
+  // the numbers: this year's, and last year's if it's been opened (a week that starts in December)
+  const months = Object.assign({}, ...Object.values(lbYearCache).map(c => (c && c.months) || {}), lbData.months || {});
+  const entry = (day, team) => { const d = ((months[day.slice(0, 7)] || {}).days || {})[day]; const e = d && d.t ? lbEntry(d.t[team], LB_TRUCK.length) : []; return e.length ? e : null; };
+  const days = [];
+  for (let d = r.from; d <= r.to; d = lbAddDays(d, 1)) days.push(d);
+  // the techs: every team on a truck in those months (roster order, Cleaning then Restoration), and anyone else with
+  // truck numbers on those days
+  const keys = [...new Set(days.map(d => d.slice(0, 7)))];
+  const names = [];
+  for (const g of LB_GROUPS) for (const t of cfg.teams) if (t.unit === g && keys.some(k => lbOnBoard(t, k)) && !names.includes(t.name)) names.push(t.name);
+  for (const d of days) for (const n of Object.keys((((months[d.slice(0, 7)] || {}).days || {})[d] || {}).t || {})) {
+    const nm = (lbTeamOf(cfg, n) || { name: n }).name;
+    if (!names.some(x => x.toLowerCase() === nm.toLowerCase()) && entry(d, n)) names.push(nm);
+  }
+  const teams = names.map(n => ({ name: n, unit: (lbTeamOf(cfg, n) || {}).unit || "" }));
+  const sum = (list, team) => list.reduce((a, d) => { const e = entry(d, team); if (e) { a.jobs += e[0] || 0; a.days += e[1] || 0; a.rev += e[2] || 0; a.techs += e[3] || 0; a.typed++; } return a; }, { jobs: 0, days: 0, rev: 0, techs: 0, typed: 0 });
+  // a box typed as 0 shows 0 ($0); a box left blank stays blank; a total shows when that tech has any day typed
+  const num = v => (v == null ? "" : fmt(v)), cash = v => (v == null ? "" : lbMoney(v));
+  const cells = a => (a.typed ? [h("td", { class: "n", text: fmt(a.jobs) }), h("td", { class: "n", text: fmt(a.days) }), h("td", { class: "m", text: lbMoney(a.rev) }), h("td", { class: "n last", text: fmt(a.techs) })]
+    : [h("td", { class: "n" }), h("td", { class: "n" }), h("td", { class: "m" }), h("td", { class: "n last" })]);
+  // a week total after each Sunday when the view is longer than a week
+  const rows = [];
+  let wk = [];
+  days.forEach((d, i) => {
+    const dt = lbDate(d), hol = lbHoliday(d), off = dt.getDay() === 0 || hol;
+    rows.push(h("tr", { class: off ? "off" : "", "data-day": d },
+      h("th", { title: hol ? `${hol}: closed` : "" }, h("span", { class: "pd-w", text: LB_WD[dt.getDay()] }), ` ${dt.getMonth() + 1}/${dt.getDate()}`),
+      teams.map((t, ti) => { const e = entry(d, t.name) || []; return [h("td", { class: `n t${ti % 2}`, text: num(e[0]) }), h("td", { class: `n t${ti % 2}`, text: num(e[1]) }), h("td", { class: `m t${ti % 2}`, text: cash(e[2]) }), h("td", { class: `n last t${ti % 2}`, text: num(e[3]) })]; })));
+    wk.push(d);
+    if (per !== "week" && (dt.getDay() === 0 || i === days.length - 1)) {
+      rows.push(h("tr", { class: "wk" }, h("th", { text: `Week ${lbDate(wk[0]).getMonth() + 1}/${lbDate(wk[0]).getDate()}–${dt.getMonth() + 1}/${dt.getDate()}` }), teams.map(t => cells(sum(wk, t.name)))));
+      wk = [];
+    }
+  });
+  const tot = teams.map(t => sum(days, t.name));
+  const all = tot.reduce((a, x) => ({ jobs: a.jobs + x.jobs, days: a.days + x.days, rev: a.rev + x.rev, techs: a.techs + x.techs }), { jobs: 0, days: 0, rev: 0, techs: 0 });
+  const grid = h("div", { class: "lb-scroll lb-payscroll" }, h("table", { class: "lb-pay", id: "lbPay" },
+    h("thead", null,
+      h("tr", null, h("th", { rowspan: "2", class: "corner", text: "Day" }), teams.map((t, ti) => h("th", { colspan: "4", class: `tech ${t.unit} t${ti % 2}`, "data-team": t.name }, h("strong", { text: t.name }), t.unit ? h("small", { text: t.unit }) : null))),
+      h("tr", null, teams.map((t, ti) => ["Jobs", "Work days", "Revenue", "# of techs"].map((l, i) => h("th", { class: `sub t${ti % 2}${i === 3 ? " last" : ""}`, text: l }))))),
+    h("tbody", null, rows),
+    h("tfoot", null,
+      h("tr", { class: "tot" }, h("th", { text: "Total" }), tot.map(a => cells(a))),
+      h("tr", null, h("th", { text: "Per job" }), tot.map((a, ti) => h("td", { colspan: "4", class: `c last t${ti % 2}`, text: a.jobs ? lbMoney(a.rev / a.jobs) : "–" }))),
+      h("tr", null, h("th", { text: "Daily per truck" }), tot.map((a, ti) => h("td", { colspan: "4", class: `c last t${ti % 2}`, text: a.days ? lbMoney(a.rev / a.days) : "–" }))))));
+  const label = per === "month" ? `${lbMonthLong(Number(r.from.slice(5, 7)))} ${r.from.slice(0, 4)}` : lbSpanText(r.from, r.to);
+  return [
+    h("div", { class: "lb-bar" },
+      lbSeg(Object.entries(LB_PAY), per, k => { lbView.pper = k; lbSaveView(); renderLeaderboard(); }, "Pay period"),
+      h("div", { class: "lb-daybar" },
+        h("button", { class: "btn small", type: "button", id: "lbPayPrev", "aria-label": "Earlier", disabled: r.from <= `${y}-01-01`, onclick: () => step(-1) }, "‹"),
+        h("input", { id: "lbPayDay", type: "date", value: per === "month" ? r.from : r.from, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": per === "month" ? "A day in the month" : "Start (its Monday)",
+          onchange: e => { if (lbIsDay(e.target.value)) go(e.target.value); } }),
+        h("button", { class: "btn small", type: "button", id: "lbPayNext", "aria-label": "Later", disabled: r.to >= `${y}-12-31`, onclick: () => step(1) }, "›"))),
+    h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "month" ? "" : " · Monday to Sunday", ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
+    teams.length ? h("div", { class: "panel lb-paypanel" }, grid,
+      h("p", { class: "hint", text: "Straight from Enter numbers > Trucks: each tech's jobs, work days, truck revenue and # of techs, day by day. Pick any day and the view jumps to its week (Monday to Sunday), its two weeks or its month." }))
+      : h("p", { class: "meta", text: "No teams on a truck then." })];
 }
 
 /* ---- status: what's typed, and every team's numbers ---- */

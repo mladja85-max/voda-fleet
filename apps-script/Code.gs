@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 27;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 28;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -245,6 +245,8 @@ function doPost(e) {
         return json_(withLock_(function () { return saveUser_(req); }));
       case "resetUser":
         return json_(withLock_(function () { return resetUser_(req); }));
+      case "setPayroll":
+        return json_(withLock_(function () { return setPayroll_(req); }));
       case "list": {
         const seesTrucks = canSee_(user, "trucks");
         const trucks = seesTrucks ? readTrucks_().map(function (x) { return x.truck; }) : [];
@@ -426,7 +428,7 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech"];
-const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setShop",
+const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setShop",
   "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
@@ -658,6 +660,26 @@ function saveUser_(req) {
     x.u.ver = Number(x.u.ver) + 1;      // takes effect on their phone straight away
     writeUser_(s, x.rowIndex, x.u);
   }
+  return { ok: true, user: publicUser_(x.u) };
+}
+
+/** Admin: Payroll on or off for an admin ({ id, on }). Only an admin who sees Payroll can switch it, for himself or
+ *  another admin; while no admin sees it yet, any admin can switch it on (the first time). Nobody switches himself off,
+ *  so there's always someone who can. Technicians never see Payroll. */
+function setPayroll_(req) {
+  const s = usersSheet_();
+  const all = readUsers_(s);
+  const x = all.filter(function (y) { return y.u.id === String(req.id || ""); })[0];
+  if (!x) return { ok: false, error: "gone" };
+  if (x.u.role !== "admin") return { ok: false, error: "bad_request" };
+  const has = function (u) { return u.role === "admin" && u.status === "active" && parseAccess_(u.access).indexOf(PAYROLL) !== -1; };
+  const anyone = all.some(function (y) { return has(y.u); });
+  const me = all.filter(function (y) { return y.u.id === req.user.id; })[0];
+  if (anyone ? !(me && has(me.u)) : !req.on) return { ok: false, error: "not_allowed" };
+  if (!req.on && x.u.id === req.user.id) return { ok: false, error: "self" };
+  const access = parseAccess_(x.u.access).filter(function (a) { return a !== PAYROLL; });
+  if (req.on) access.push(PAYROLL);
+  if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   return { ok: true, user: publicUser_(x.u) };
 }
 
@@ -2681,6 +2703,7 @@ function supplyEmailTest() {
 // Empty means Trucks only (how every technician worked before checklists). "-" means nothing yet. Admins see everything.
 
 const ACCESS_DEFAULT = ["trucks"];
+const PAYROLL = "payroll";   // an admin who sees Leaderboard > Payroll (switched per admin, see setPayroll_)
 function parseAccess_(s) {
   s = String(s === null || s === undefined ? "" : s).trim();
   if (!s) return ACCESS_DEFAULT.slice();
