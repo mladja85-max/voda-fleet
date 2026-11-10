@@ -810,6 +810,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-card.off { border-style: dashed; }
 .lb-card.bad { border-color: var(--due); }
 .lb-card-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lb-card-who { flex: 1 1 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.lb-card-who .lb-unit { white-space: nowrap; }
 .lb-card-head strong { font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; letter-spacing: .02em; }
 .lb-boxes { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .lb-boxes.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -845,6 +847,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbj-job input[type=text]:focus { outline: none; border-color: var(--accent); }
 .lbj-job input.bad { border-color: var(--due); }
 .lbj-sales { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.lbj-sales.k3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .lbj-sale { display: grid; gap: 2px; min-width: 0; align-content: end; }
 .lbj-sale span { white-space: normal; line-height: 1.15; }
 .lb-enter:has(.lb-jobs) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
@@ -883,29 +886,59 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbj-help ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .lbj-help li { overflow-wrap: anywhere; }
 .lbj-add, .lbj-addjob { justify-self: start; }
-.lbj-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-/* a day total: + Sale and + Help at the top right; under the boxes his sales, who helped, what the truck keeps */
-.lbt-acts { margin-left: auto; display: flex; gap: 6px; align-self: center; }
-.lbt-acts .btn { padding: 4px 10px; }
+/* a day total (every card starts as one): + Job 1, + Sale and + Help at the top right; under the day's boxes his
+   sales, who helped, and what the truck keeps. Everything is typed in the card */
+.lbt-acts { margin-left: auto; flex: none; display: flex; gap: 5px; align-self: flex-start; }
+.lbt-acts .btn { padding: 4px 8px; white-space: nowrap; }
+.lbt-acts .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+/* a phone, three buttons: the department is under the name on every card, so the cards look alike */
+@media (max-width: 430px) { .lbt-acts .btn { padding: 4px 7px; } .lb-card-head.three .lb-card-who { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; } }
+.lbt-row { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lbt-row.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.lb-total input.bad { border-color: var(--due); }
 .lbt-lines { display: grid; gap: 5px; }
 .lbt-lines:empty { display: none; }
-.lbt-line { all: unset; box-sizing: border-box; cursor: pointer; display: block; width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); font-size: .84rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.lbt-line:hover { border-color: var(--accent); }
-.lbt-line:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
 .lbt-keeps { margin: 0; font-size: .8rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-.lbt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
-.lbt-grid input.bad { border-color: var(--due); }
-.lbt-sum { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
-.lbt-sum:empty, .lbt-later:empty { display: none; }
-.lbt-later, .lbt-wait { margin: 0; }
-.lbt-whobox { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.lbt-whobox select { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; min-width: 0; flex: 1 1 160px; }
+.lbt-wait { margin: 0; }
+/* who helped. Narrow (a phone): each helper is one line of text; tapped, his boxes open in two rows, with ✕ (take him
+   off) and ▴ (close) at their ends. Wide (a PC): every helper is one line of boxes, always open */
+.lbt-helps { container-type: inline-size; display: grid; gap: 6px; }
+.lbt-helps:empty { display: none; }
+.lbh { display: grid; gap: 6px; min-width: 0; }
+.lbh-fold { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); font-size: .86rem; font-variant-numeric: tabular-nums; }
+.lbh-fold:hover { border-color: var(--accent); }
+.lbh-fold:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.lbh-sum { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.lbh-chev { flex: none; color: var(--muted); }
+.lbh.open > .lbh-fold { display: none; }
+.lbh:not(.open) > .lbh-f { display: none; }
+.lbh-f { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)) 34px; gap: 6px; align-items: end; border-top: 1px solid var(--line); padding-top: 8px; }
+.lbh-who { grid-column: span 5; }
+.lbh-j { grid-column: span 3; }
+.lbh-a { grid-column: span 4; }
+.lbh-b { grid-column: span 4; }
+.lbh-f.k4 .lbh-b { grid-column: span 3; }
+.lbh-x { grid-row: 1; grid-column: 13; }
+.lbh-up { grid-row: 2; grid-column: 13; }
+.lbh-f .btn { padding: 0; height: 40px; align-self: end; color: var(--muted); }
+.lbh-pick { width: 100%; min-width: 0; height: 40px; font: inherit; font-weight: 600; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 0 4px; }
+.lbh-pick:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.lbh-f .lb-box input { height: 40px; padding-top: 0; padding-bottom: 0; }
+@container (min-width: 400px) {
+  .lbh > .lbh-fold { display: none; }
+  .lbh:not(.open) > .lbh-f { display: grid; }
+  .lbh-f { grid-template-columns: 94px 40px repeat(3, minmax(0, 1fr)) minmax(0, 1.25fr) 26px; gap: 5px; }
+  .lbh-f.k4 { grid-template-columns: 94px 40px repeat(4, minmax(0, 1fr)) minmax(0, 1.25fr) 26px; }
+  .lbh-f > *, .lbh-f.k4 .lbh-b { grid-column: auto; grid-row: auto; }
+  .lbh-up { display: none; }
+  .lbh-f .lb-box span { font-size: .68rem; }
+  .lbh-f .lb-box input { padding-left: 6px; padding-right: 6px; }
+}
 .lbj-pick { display: grid; gap: 7px; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .lbj-pick[hidden] { display: none; }
 .lbj-pick .seg { justify-self: start; }
 .lbj-pick select { font: inherit; padding: 8px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); }
 .lbj-pick-btns { display: flex; gap: 8px; }
-.lb-tojobs { justify-self: start; }
 .lbj-from { margin: 0; font-size: .86rem; font-variant-numeric: tabular-nums; }
 .lbj-hist { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .jh-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -6324,6 +6357,26 @@ function lbB() {
   return lbCache;
 }
 const lbRecords = () => (lbB() ? lbB().records : []);
+/** Rugs in plant isn't sold any more. The last day one was typed in the year shown ("" when none): the days after it
+ *  don't offer it any more; the days up to it still do. */
+function lbRugsLast() {
+  const b = lbB();
+  if (!b) return "";
+  if (b.rugsLast === undefined) {
+    let last = "";
+    for (const doc of Object.values(lbData.months || {})) for (const [day, d] of Object.entries((doc && doc.days) || {})) {
+      if (day <= last || !d || typeof d !== "object") continue;
+      if (Object.values(d.s || {}).some(a => Array.isArray(a) && lbVal(a[2]) > 0)
+        || Object.values(d.j || {}).some(js => Array.isArray(js) && js.some(j => j && Array.isArray(j.s) && lbVal(j.s[2]) > 0))) last = day;
+    }
+    b.rugsLast = last;
+  }
+  return b.rugsLast;
+}
+const lbRugsOn = day => !!lbRugsLast() && day <= lbRugsLast();
+/** The kinds of sale a day offers (0 up sale, 1 add-on, 2 rugs in plant, 3 additional): rugs only up to its last
+ *  sale, or where an amount is typed for it (so that can be changed). */
+const lbDayKinds = (day, vals) => (lbRugsOn(day) || (Array.isArray(vals) && lbVal(vals[2]) != null) ? [0, 1, 2, 3] : [0, 1, 3]);
 /** The teams shown for a month: the board; a past year lists only the teams with numbers that month. */
 const lbBoardShown = (cfg, key) => (!lbPast() ? lbBoard(cfg, key) : lbBoard(cfg, key).filter(t => lbRecords().some(r => r.month === key && r.team === t.name && r.group)));
 const lbCfg = () => (lbB() ? lbB().cfg : lbCleanConfig(null));
@@ -6488,7 +6541,7 @@ setInterval(() => {
 }, 2000);
 /** Someone is typing a number: a redraw now would take the box away from under their finger. (A window that isn't
  *  the one in use has nobody typing in it, even if its cursor was left in a box.) */
-const lbTyping = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#lbEnter") && document.hasFocus()); };
+const lbTyping = () => { const a = document.activeElement; return !!(a && (a.tagName === "INPUT" || (a.tagName === "SELECT" && a.classList.contains("lbh-pick"))) && a.closest && a.closest("#lbEnter") && document.hasFocus()); };
 /** Typed numbers are saved by themselves a moment after the last key, the way a Google Sheet does. */
 function lbQueue(key, patch) {
   if (!lbData) return;
@@ -6558,7 +6611,7 @@ function renderLeaderboard() {
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
     Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
       title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
-      onclick: () => { if (lbView.tab === "enter") lbFlush(); lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, lbTabText(t))));
+      onclick: () => { if (lbView.tab === "enter") { lbFlush(); lbCardsLeft(); } lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, lbTabText(t))));
   if (!cfg.teams.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
       h("h2", { text: "No teams yet" }),
@@ -6770,7 +6823,7 @@ function lbHowEl() {
     h("p", { text: "Teams are ranked inside Cleaning, inside Restoration, and across the whole company, the same way the 5. Revenue per truck sheet did it." }),
     h("p", { text: "A month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews. A week (Week to date, Last week) is ranked on its revenue alone." }),
     h("p", { text: "On each number the best team gets 1, the next 2, and so on (a tie shares the number). Those add up to the score: the lowest score is #1. Equal scores share the place and the next team takes the next number (1, 1, 2)." }),
-    h("p", { text: "Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Technician sales = up sale + add-on + rugs in plant + additional service. Sale per job = technician sales ÷ the technician's jobs. Reviews are 5-star reviews only. A team counts only in the months it's on the board (Teams), so a team that took over a truck later in the year counts from that month." }),
+    h("p", { text: `Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Technician sales = up sale + add-on + additional service${lbRugsLast() ? " (and rugs in plant up to its last sale)" : ""}. Sale per job = technician sales ÷ the technician's jobs. Reviews are 5-star reviews only. A team counts only in the months it's on the board (Teams), so a team that took over a truck later in the year counts from that month.` }),
     h("p", { text: "▲ and ▼ show a move up or down since a week before the newest day typed in." }));
 }
 
@@ -6792,15 +6845,22 @@ function lbTeamsFor(key, names) {
   const extra = [...new Set(names)].filter(n => !board.some(t => t.name.toLowerCase() === n.toLowerCase())).map(n => ({ name: n, unit: "", off: true, home: (lbReviewerOf(cfg, n) || {}).unit || "" }));
   return board.map(t => Object.assign({}, t)).concat(extra);
 }
+/** Leaving the cards on screen (another day, another tab): on a phone the helpers' boxes close again, and a new
+ *  helper line nobody was picked on is dropped. */
+function lbCardsLeft() {
+  for (const k of Object.keys(lbHelpOpen)) delete lbHelpOpen[k];
+  for (const k of Object.keys(lbHelpDraft)) delete lbHelpDraft[k];
+}
 function lbGoDay(day) {
   lbFlush();
+  lbCardsLeft();
   lbView.day = day;
   renderLeaderboard();
 }
 function lbEnterEl() {
   const y = lbYear(), part = LB_PARTS[lbView.part] ? lbView.part : "trucks";
   const day = lbEnterDay(), key = day.slice(0, 7), month = Number(key.slice(5));
-  const parts = lbSeg(Object.entries(LB_PARTS).map(([k, t]) => [k, lbTabText(t)]), part, k => { lbFlush(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
+  const parts = lbSeg(Object.entries(LB_PARTS).map(([k, t]) => [k, lbTabText(t)]), part, k => { lbFlush(); lbCardsLeft(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
   parts.classList.add("lb-parts");
   const out = [h("div", { class: "lb-bar" }, parts)];
   {
@@ -6830,11 +6890,12 @@ function lbEnterEl() {
 const lbBox = (label, value, data, hint) => h("label", { class: "lb-box" + (hint ? " has-hint" : "") }, h("span", { text: label }),
   h("input", Object.assign({ type: "text", inputmode: "decimal", autocomplete: "off", enterkeyhint: "next", value: value == null ? "" : String(value), onchange: () => lbFlush() }, data)),
   hint ? h("small", { text: hint }) : null);
-function lbCard(t, part, day, fields, arr, foot, extra) {
+function lbCard(t, part, day, fields, arr, foot, extra, skip) {
+  const shown = fields.map((f, i) => [f, i]).filter(([, i]) => !(skip && skip(i)));
   return h("div", { class: "lb-card" + (t.off ? " off" : "") + (t.reviewer ? " rv-only" : ""), "data-team": t.name, "data-part": part },
     h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.reviewer ? `${t.unit} · not ranked` : t.unit })
       : t.home ? h("span", { class: `lb-unit ${t.home}`, text: `${t.home} · not ranked` }) : h("span", { class: "lb-unit", text: "Not on the board this month" })),
-    h("div", { class: `lb-boxes n${fields.length}` }, fields.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), arr[i], { "data-i": String(i), oninput: () => lbTyped(day, part, t.name, fields.length) }))),
+    h("div", { class: `lb-boxes n${shown.length}` }, shown.map(([f, i]) => lbBox(f.label + (f.money ? " $" : ""), arr[i], { "data-i": String(i), oninput: () => lbTyped(day, part, t.name, fields.length) }))),
     h("p", { class: "lb-card-foot", text: foot }),
     extra || null);
 }
@@ -6842,7 +6903,9 @@ function lbCard(t, part, day, fields, arr, foot, extra) {
 function lbTyped(day, part, team, n) {
   const card = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="${part}"]`);
   if (!card) return;
-  const vals = [...card.querySelectorAll(".lb-boxes input")].map(i => i.value);
+  // each box says which number it is; a number with no box that day (rugs in plant after its last sale) keeps what's saved
+  const was = lbEntry((lbDayDoc(day)[part] || {})[team], n), vals = Array.from({ length: n }, (_, i) => (was[i] == null ? "" : String(was[i])));
+  for (const i of card.querySelectorAll(".lb-boxes input")) vals[Number(i.dataset.i)] = i.value;
   const bad = vals.some(s => { const t = String(s).replace(/[$,\s]/g, ""); return t !== "" && !Number.isFinite(Number(t)); });
   card.classList.toggle("bad", bad);
   if (bad) return;
@@ -6850,9 +6913,12 @@ function lbTyped(day, part, team, n) {
   const total = part === "t" && card.classList.contains("lb-total");
   const patch = { [part]: { [team]: arr } };
   if (total) {
+    // # of techs follows who helped: left blank it's him and everyone who helped (unless that's the box being typed in)
+    const help = lbDayHelpOf(day, team).length, tb = card.querySelector('.lb-boxes input[data-i="3"]');
+    if (help && arr.length && arr[3] == null && tb && document.activeElement !== tb) { arr[3] = 1 + help; tb.value = String(1 + help); }
     // his sales' Jobs (for sale per job) follow the day's Jobs, unless a different number was typed under Technician sales
-    const was = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length)[0], s = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length);
-    if (s.slice(0, 4).some(v => v != null) && (s[4] == null || s[4] === was) && s[4] !== (arr[0] ?? null)) patch.s = { [team]: lbEntry(s.slice(0, 4).concat([arr[0] ?? null]), LB_SALE.length) };
+    const s = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length);
+    if (s.slice(0, 4).some(v => v != null) && (s[4] == null || s[4] === (was[0] ?? null)) && s[4] !== (arr[0] ?? null)) patch.s = { [team]: lbEntry(s.slice(0, 4).concat([arr[0] ?? null]), LB_SALE.length) };
   }
   lbQueue(day.slice(0, 7), { days: { [day]: patch } });
   const foot = card.querySelector(".lb-card-foot");
@@ -6889,43 +6955,30 @@ function lbDayTotalText(day) {
 /** Trucks' cards for a day: everyone on the board, anyone else with truck numbers, and everyone who helped on a
  *  shared job that day (on the leaderboard or not). */
 const lbTruckTeams = day => { const d = lbDayDoc(day); return lbTeamsFor(day.slice(0, 7), Object.keys(d.t || {}).filter(n => lbEntry(d.t[n], LB_TRUCK.length).length).concat(lbHelpers(day))); };
-/** One person's Trucks card. By job (the newest script): a day typed the old way (a day total, no jobs) keeps its
- *  boxes until it's switched. */
-/** Cards switched to "Day total" before anything is typed on them ("2026-11-10|John"). Once the day has its number of
- *  jobs or its revenue, those numbers say it's a day total, on every device. */
-const lbTotals = {};
-/** A truck's card for a day: job by job, or the day's totals (Jobs, Work day, Revenue, # of techs) when the day was
- *  typed that way or Day total was tapped on it. */
+/** A truck's card for a day. Every card starts as the day's totals (Jobs, Work day, Revenue, # of techs) with + Job 1,
+ *  + Sale and + Help at the top right; a day with a job list is typed job by job. */
 function lbTruckCard(t, day) {
-  const d = lbDayDoc(day), jobs = apiLevel >= LB_JOBS_API;
-  const e = lbEntry((d.t || {})[t.name], LB_TRUCK.length), has = ((d.j || {})[t.name] || []).length;
-  if (!jobs) return lbCard(t, "t", day, LB_TRUCK, e, lbTruckFoot(day, t.name), lbHelpEl(day, t.name));
-  // a day total: picked on the card, or the day has its number of jobs, its revenue, or someone who helped on it
-  if (!has && (lbTotals[`${day}|${t.name}`] || (e.length && (e[0] || e[2])) || ((d.h || {})[t.name] || []).length)) return lbTotalCard(t, day);
-  return lbJobsCard(t, day);
+  const d = lbDayDoc(day);
+  if (apiLevel < LB_JOBS_API) return lbCard(t, "t", day, LB_TRUCK, lbEntry((d.t || {})[t.name], LB_TRUCK.length), lbTruckFoot(day, t.name), lbHelpEl(day, t.name));
+  return ((d.j || {})[t.name] || []).length ? lbJobsCard(t, day) : lbTotalCard(t, day);
 }
-/* ---- a day total: Jobs, Work day, Revenue, # of techs; + Sale for his sales that day; + Help for who worked with him ---- */
-const LB_DAY_SALES = ["Up sale", "Add-on", "Rugs in plant", "Additional"];
+/* ---- a day total: Jobs, Work day, Revenue, # of techs. + Sale opens his sales that day in the card. + Help opens a
+   line for each person who worked with him: the jobs he was on and his dollars, typed by hand (the truck keeps the
+   rest). No windows: everything is typed in the card and saved as it's typed ---- */
 const lbDayHelpOf = (day, team) => lbCleanHelp((lbDayDoc(day).h || {})[team], team);
 /** "up sale $50 · add-on $75" for the kinds that have something (sales: [4]). */
 const lbKindsText = sales => LB_JOB_SALES.map((label, k) => (sales[k] ? `${label.toLowerCase()} ${lbCash(sales[k])}` : "")).filter(Boolean).join(" · ");
-/** Under a day total's boxes: his sales that day, each person who helped with his part, and what the truck keeps.
- *  Tap a line to change it. Always there (empty when there's nothing), so it can be redrawn in place while typing. */
+const lbTotalEl = team => document.querySelector(`.lb-card.lb-total[data-team="${CSS.escape(team)}"][data-part="t"]`);
+const lbSaleOpen = {};    // "2026-11-10|John": + Sale was tapped, so his sales row is open (a row with numbers always is)
+const lbHelpOpen = {};    // "2026-11-10|John" → on a phone, the helper whose boxes are open ("" = the new line, nobody picked yet)
+const lbHelpDraft = {};   // "2026-11-10|John": + Help was tapped, a new line is there with nobody picked yet
+/** Under who helped: what the truck keeps, and a note when the parts don't fit the day. Always there (empty when
+ *  nobody helped), so it can be redrawn in place while typing. */
 function lbTotalLines(day, team) {
-  const d = lbDayDoc(day), s = lbEntry((d.s || {})[team], LB_SALE.length).slice(0, 4), help = lbDayHelpOf(day, team);
-  const out = [];
-  if (s.some(v => v != null)) out.push(h("button", { class: "lbt-line lbt-sales", type: "button", title: "Change his sales that day", onclick: () => openDaySale(day, team) },
-    h("strong", { text: `Sales ${lbCash(s.reduce((n, v) => n + (v || 0), 0))}` }), lbKindsText(s) ? `: ${lbKindsText(s)}` : ""));
+  const d = lbDayDoc(day), help = lbDayHelpOf(day, team), out = [];
   const job = help.length ? lbDayJob(d, team, lbSpell) : null;
   if (job) {
     const parts = lbJobParts(job, team), own = parts.people[0];
-    help.forEach((x, i) => {
-      const p = parts.people[i + 1], bits = [`${fmt(x.j == null ? 1 : x.j)} job${(x.j == null ? 1 : x.j) === 1 ? "" : "s"}`];
-      if (p.rev) bits.push(`revenue ${lbCash(p.rev)}`);
-      if (lbKindsText(p.sales)) bits.push(lbKindsText(p.sales));
-      out.push(h("button", { class: "lbt-line lbt-who", type: "button", "data-who": x.n, title: `Change ${x.n}'s part`, onclick: () => openDayHelp(day, team, x.n) },
-        h("strong", { text: x.n }), LB_JOB_ROLES[x.r] ? h("span", { class: "meta", text: ` (${LB_JOB_ROLES[x.r].toLowerCase()})` }) : null, `: ${bits.join(" · ")}`));
-    });
     const kept = [`${team} keeps ${lbCash(own.rev)}`];
     if (lbKindsText(own.sales)) kept.push(lbKindsText(own.sales));
     out.push(h("p", { class: "lbt-keeps", text: kept.join(" · ") }));
@@ -6938,166 +6991,221 @@ function lbTotalLines(day, team) {
   }
   return h("div", { class: "lbt-lines" }, out);
 }
-/** + Sale and + Help, at the top right of a card: on a day total, and on every card nothing is typed on yet (saving
- *  either one there makes that day a day total). */
-const lbDayActs = (day, team) => h("span", { class: "lbt-acts" },
-  h("button", { class: "btn small lbt-sale", type: "button", title: "His sales that day", onclick: () => openDaySale(day, team) }, "+ Sale"),
-  h("button", { class: "btn small lbt-help", type: "button", title: "Who worked with him that day", onclick: () => openDayHelp(day, team) }, "+ Help"));
+/** + Job 1, + Sale and + Help, at the top right of a day total. */
+const lbDayActs = (day, team, saleOn) => h("span", { class: "lbt-acts" },
+  h("button", { class: "btn small lbj-addjob", type: "button", title: "Type this day job by job", onclick: () => lbToJobs(day, team) }, "+ Job 1"),
+  h("button", { class: "btn small lbt-sale" + (saleOn ? " on" : ""), type: "button", "aria-expanded": String(!!saleOn), title: "His sales that day", onclick: () => lbSaleToggle(day, team) }, "+ Sale"),
+  h("button", { class: "btn small lbt-help", type: "button", title: "Who worked with him that day", onclick: () => lbHelpAdd(day, team) }, "+ Help"));
 function lbTotalCard(t, day) {
-  const team = t.name, e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length);
+  const team = t.name, d = lbDayDoc(day), e = lbEntry((d.t || {})[team], LB_TRUCK.length), s = lbEntry((d.s || {})[team], LB_SALE.length);
+  const pd = lbDayOf(day, team), helpDay = !!(pd && pd.helpDay);   // he helped on someone's job and typed no work day: it counts as 1
+  const saleOn = !!lbSaleOpen[`${day}|${team}`] || s.slice(0, 4).some(v => v != null);
   const head = lbCardHead(t);
-  head.append(lbDayActs(day, team));
+  head.classList.add("three");
+  head.append(lbDayActs(day, team, saleOn));
   return h("div", { class: "lb-card lb-total" + (t.off ? " off" : ""), "data-team": team, "data-part": "t" }, ...[
     head,
-    h("div", { class: "lb-boxes n4" }, LB_TRUCK.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), e[i], { "data-i": String(i), oninput: () => lbTyped(day, "t", team, LB_TRUCK.length) }))),
-    h("p", { class: "lb-card-foot", text: lbTruckFoot(day, team) }),
+    h("div", { class: "lb-boxes n4" }, LB_TRUCK.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), e[i],
+      Object.assign({ "data-i": String(i), oninput: () => lbTyped(day, "t", team, LB_TRUCK.length) }, i === 1 && helpDay ? { placeholder: "1" } : {})))),
+    saleOn ? lbSaleRow(day, team) : null,
+    lbHelpRows(day, team),
     lbTotalLines(day, team),
-    lbToJobsBtn(day, team),
+    h("p", { class: "lb-card-foot", text: lbTruckFoot(day, team) }),
     lbHelpEl(day, team)].filter(Boolean));
 }
-/** A day total's numbers changed: its lines, the day's line and the cards of who helped follow, in place. */
+/** A day total's numbers changed: what the truck keeps, each helper's line, the day's line and the cards of who
+ *  helped follow, in place (the boxes being typed in are never drawn again). */
 function lbTotalSync(day, team) {
-  const card = document.querySelector(`.lb-card.lb-total[data-team="${CSS.escape(team)}"][data-part="t"]`);
+  const card = lbTotalEl(team);
   const old = card && card.querySelector(".lbt-lines");
   if (old) old.replaceWith(lbTotalLines(day, team));
+  if (card) lbHelpSums(card, day, team);
   const foot = card && card.querySelector(".lb-card-foot");
   if (foot) foot.textContent = lbTruckFoot(day, team);
   const tot = $("lbDayTotal");
   if (tot) tot.textContent = lbDayTotalText(day);
   lbSyncHelpCards(day, team);
 }
-/** + Sale: the day's four sales totals for that technician (the same numbers as under Technician sales). */
-function openDaySale(day, team) {
-  const d = lbDayDoc(day), s = lbEntry((d.s || {})[team], LB_SALE.length), t = lbEntry((d.t || {})[team], LB_TRUCK.length);
-  const err = h("p", { class: "dlg-err", role: "alert" }), total = h("p", { class: "lbt-sum", id: "lbtSaleSum" });
-  const boxes = LB_DAY_SALES.map((label, k) => h("input", { type: "text", inputmode: "decimal", autocomplete: "off", enterkeyhint: k < 3 ? "next" : "done", "data-k": String(k), "aria-label": `${label} $`, value: s[k] == null ? "" : String(s[k]) }));
-  const read = () => boxes.map(b => lbMoneyIn(b.value));
-  const sum = () => {
-    const v = read(), bad = v.some(Number.isNaN);
-    total.textContent = bad ? "" : `Day's sales: ${lbCash(v.reduce((n, x) => n + (x || 0), 0))}`;
-    for (const [k, b] of boxes.entries()) b.classList.toggle("bad", Number.isNaN(v[k]));
-    if (!bad) err.textContent = "";
-  };
-  for (const b of boxes) b.addEventListener("input", sum);
-  openDialog(
-    h("h3", { id: "dlgTitle", text: "Sales" }),
-    h("p", { class: "meta", id: "lbtSaleFor", text: `${team} · ${lbDayText(day)}` }),
-    h("div", { class: "lbt-grid", id: "lbtSale" }, LB_DAY_SALES.map((label, k) => h("label", { class: "pay-f" }, h("span", { text: `${label} $` }), boxes[k]))),
-    total,
-    h("p", { class: "hint", text: "The day's totals. The same numbers show under Technician sales and in Payroll." }),
-    err,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
-      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
-      h("button", { class: "btn primary", type: "button", id: "lbtSaleDone", text: "Done", onclick: () => {
-        const v = read();
-        if (v.some(Number.isNaN)) { err.textContent = "Type dollar amounts only."; return; }
-        // the jobs for sale per job: the day's Jobs, unless another number was typed for them under Technician sales
-        // (that one stays). With no sales left, jobs that only followed the day's go too
-        const any = v.some(x => x != null), own = s[4] != null && s[4] !== (t[0] ?? null);
-        const arr = lbEntry(v.concat([own ? s[4] : any ? t[0] ?? null : null]), LB_SALE.length);
-        if (any) lbTotals[`${day}|${team}`] = true;   // sales typed this way: the day is a day total (its boxes are next)
-        lbQueue(day.slice(0, 7), { days: { [day]: { s: { [team]: arr } } } });
-        lbFlush();
-        closeDialog();
-        lbRedrawJobs(day, team); lbTotalSync(day, team);
-      } }))));
-  sum();
+/* ---- + Sale: his sales that day, in a row under the day's boxes (the same numbers as under Technician sales) ---- */
+function lbSaleRow(day, team) {
+  const s = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length), kinds = lbDayKinds(day, s);
+  return h("div", { class: `lbt-row lbt-sales n${kinds.length}` }, kinds.map(k => lbBox(`${LB_JOB_SALES[k]} $`, s[k], { "data-k": String(k), oninput: () => lbDaySaleTyped(day, team) })));
 }
-/** + Help: who worked with him on a day total, and his part typed by hand: the jobs he was on, his dollars of the
- *  revenue and of each kind of sale. The truck keeps the rest. who: the helper to change (none: a new one). */
-function openDayHelp(day, team, who) {
+/** + Sale: the row opens with the cursor in its first box. Tapped again with nothing typed in it: the row goes. */
+function lbSaleToggle(day, team) {
+  const key = `${day}|${team}`, card = lbTotalEl(team);
+  if (!card) return;
+  const row = card.querySelector(".lbt-sales"), btn = card.querySelector(".lbt-sale");
+  const mark = on => { if (btn) { btn.classList.toggle("on", on); btn.setAttribute("aria-expanded", String(on)); } };
+  if (row && [...row.querySelectorAll("input")].every(i => i.value.trim() === "")) { delete lbSaleOpen[key]; row.remove(); mark(false); return; }
+  if (row) { row.querySelector("input").focus(); return; }
+  lbSaleOpen[key] = true;
+  const fresh = lbSaleRow(day, team);
+  card.querySelector(".lb-boxes").after(fresh);
+  mark(true);
+  fresh.querySelector("input").focus();
+}
+/** A sales box changed: save his sales that day. The jobs for sale per job are the day's Jobs, unless another number
+ *  was typed for them under Technician sales (that one stays); with no sales left, jobs that only followed go too. */
+function lbDaySaleTyped(day, team) {
+  const card = lbTotalEl(team);
+  if (!card) return;
+  const d = lbDayDoc(day), s = lbEntry((d.s || {})[team], LB_SALE.length), t = lbEntry((d.t || {})[team], LB_TRUCK.length);
+  const v = [0, 1, 2, 3].map(k => s[k] ?? null);
+  let bad = false;
+  for (const i of card.querySelectorAll(".lbt-sales input")) {
+    const x = lbMoneyIn(i.value);
+    i.classList.toggle("bad", Number.isNaN(x));
+    if (Number.isNaN(x)) bad = true; else v[Number(i.dataset.k)] = x;
+  }
+  if (bad) return;
+  const any = v.some(x => x != null), own = s[4] != null && s[4] !== (t[0] ?? null);
+  lbQueue(day.slice(0, 7), { days: { [day]: { s: { [team]: lbEntry(v.concat([own ? s[4] : any ? t[0] ?? null : null]), LB_SALE.length) } } } });
+  lbTotalSync(day, team);
+}
+/* ---- + Help: who worked with him, in the card. Each helper is a line of boxes: who, the jobs he was on, his dollars
+   of the revenue and of each kind of sale. On a wide card every helper is one line. On a phone a helper is one line
+   of text; tap it to open his boxes (one helper open at a time) ---- */
+function lbHelpSumText(x, p) {
+  const jobs = x.j == null ? 1 : x.j, bits = [`${fmt(jobs)} job${jobs === 1 ? "" : "s"}`];
+  if (p && p.rev) bits.push(`revenue ${lbCash(p.rev)}`);
+  if (p && lbKindsText(p.sales)) bits.push(lbKindsText(p.sales));
+  return bits.join(" · ");
+}
+/** Each helper's one-line text ("Oscar · 2 jobs · revenue $300 · up sale $50"), with what counts of what's typed. */
+function lbHelpSums(root, day, team) {
+  const d = lbDayDoc(day), list = lbDayHelpOf(day, team), job = list.length ? lbDayJob(d, team, lbSpell) : null, parts = job ? lbJobParts(job, team) : null;
+  for (const row of root.querySelectorAll(".lbh")) {
+    const i = list.findIndex(x => x.n.toLowerCase() === (row.dataset.who || "").toLowerCase()), sum = row.querySelector(".lbh-sum");
+    if (i < 0) sum.replaceChildren("Pick who helped");
+    else sum.replaceChildren(h("strong", { text: list[i].n }), ` · ${lbHelpSumText(list[i], parts && parts.people[i + 1])}`);
+  }
+}
+/** One helper's line. x: the helper as saved (null: a new line, nobody picked yet). */
+function lbHelpRow(day, team, x, open) {
+  const key = day.slice(0, 7), kinds = lbDayKinds(day, x && x.b);
+  const taken = lbDayHelpOf(day, team).filter(y => !x || y.n.toLowerCase() !== x.n.toLowerCase()).map(y => y.n);
+  const techs = lbCrewChoices(key, team, "tech", taken), asst = lbCrewChoices(key, team, "assistant", taken).filter(p => p.role === "assistant");
+  const opt = p => h("option", { value: p.name, text: p.name, "data-r": p.role === "assistant" ? "assistant" : "tech" });
+  const known = x && techs.concat(asst).some(p => p.name.toLowerCase() === x.n.toLowerCase());
+  const row = h("div", { class: "lbh" + (open ? " open" : ""), "data-who": x ? x.n : "", "data-r": x && x.r ? x.r : "tech" });
+  const typed = () => lbHelpTyped(day, team);
+  const pick = h("select", { class: "lbh-pick", "aria-label": "Who helped", onchange: e => {
+    const o = e.target.selectedOptions[0], name = e.target.value;
+    row.dataset.r = (o && o.dataset.r) || "tech";
+    if (!lbHelpTyped(day, team) || !name) return;
+    // he's saved: the lines are drawn again (so nobody can be picked twice), his stays open, the cursor goes to his jobs
+    lbHelpOpen[`${day}|${team}`] = name.toLowerCase();
+    lbHelpRedraw(day, team);
+    const card = lbTotalEl(team), again = card && [...card.querySelectorAll(".lbh")].find(r => (r.dataset.who || "").toLowerCase() === name.toLowerCase());
+    const next = again && again.querySelector('input[data-f="j"]');
+    if (next) next.focus();
+  } },
+    x ? null : h("option", { value: "", text: techs.length || asst.length ? "Pick…" : "No one left" }),
+    x && !known ? h("option", { value: x.n, text: x.n, "data-r": x.r || "tech" }) : null,
+    techs.length ? h("optgroup", { label: "Technicians" }, techs.map(opt)) : null,
+    asst.length ? h("optgroup", { label: "Assistants" }, asst.map(opt)) : null);
+  pick.value = x ? (known ? techs.concat(asst).find(p => p.name.toLowerCase() === x.n.toLowerCase()).name : x.n) : "";
+  const box = (cls, label, value, data) => { const b = lbBox(label, value, Object.assign({ oninput: typed }, data)); b.classList.add(cls); return b; };
+  row.append(
+    h("button", { class: "lbh-fold", type: "button", "aria-expanded": String(!!open), title: "Open his boxes", onclick: () => lbHelpShow(day, team, row) }, h("span", { class: "lbh-sum" }), h("span", { class: "lbh-chev", "aria-hidden": "true", text: "▾" })),
+    h("div", { class: `lbh-f k${kinds.length}` },
+      h("label", { class: "lb-box lbh-who" }, h("span", { text: "Who helped" }), pick),
+      box("lbh-j", "Jobs", x ? x.j : null, { "data-f": "j", inputmode: "numeric", placeholder: "1" }),
+      box("lbh-a", "Revenue $", x ? x.a : null, { "data-f": "a" }),
+      kinds.map(k => box("lbh-b", `${LB_JOB_SALES[k]} $`, x && x.b ? x.b[k] : null, { "data-f": "b", "data-k": String(k) })),
+      h("button", { class: "btn ghost small lbh-x", type: "button", "aria-label": x ? `Take ${x.n} off` : "Remove this line", onclick: () => lbHelpOff(day, team, row) }, "✕"),
+      h("button", { class: "btn ghost small lbh-up", type: "button", "aria-label": "Close his boxes", title: "Close his boxes", onclick: () => lbHelpShow(day, team, null) }, "▴")));
+  return row;
+}
+/** Everyone who helped on a day total, and the new line when + Help was tapped. */
+function lbHelpRows(day, team) {
+  const key = `${day}|${team}`, list = lbDayHelpOf(day, team);
+  const box = h("div", { class: "lbt-helps" }, list.map(x => lbHelpRow(day, team, x, lbHelpOpen[key] === x.n.toLowerCase())),
+    lbHelpDraft[key] ? lbHelpRow(day, team, null, lbHelpOpen[key] === "") : null);
+  lbHelpSums(box, day, team);
+  return box;
+}
+function lbHelpRedraw(day, team) {
+  const card = lbTotalEl(team), old = card && card.querySelector(".lbt-helps");
+  if (old) old.replaceWith(lbHelpRows(day, team));
+}
+/** On a phone: open one helper's boxes (the others close); row null closes them all. */
+function lbHelpShow(day, team, row) {
+  const card = lbTotalEl(team);
+  if (!card) return;
+  if (row) lbHelpOpen[`${day}|${team}`] = (row.dataset.who || "").toLowerCase(); else delete lbHelpOpen[`${day}|${team}`];
+  for (const r of card.querySelectorAll(".lbh")) { r.classList.toggle("open", r === row); r.querySelector(".lbh-fold").setAttribute("aria-expanded", String(r === row)); }
+}
+/** + Help: a new line with nobody picked yet, open, with the cursor on who helped. */
+function lbHelpAdd(day, team) {
   if (apiLevel < LB_DAYHELP_API) {
     openDialog(h("h3", { id: "dlgTitle", text: "Who helped" }),
       h("p", { class: "dlg-err", text: "Adding who helped on a day total needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that." }),
       h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
     return;
   }
-  const key = day.slice(0, 7), d = lbDayDoc(day), list = lbDayHelpOf(day, team);
-  const at = who ? list.findIndex(x => x.n.toLowerCase() === String(who).toLowerCase()) : -1, cur = at >= 0 ? list[at] : null;
-  const t = lbEntry((d.t || {})[team], LB_TRUCK.length), s = lbEntry((d.s || {})[team], LB_SALE.length).slice(0, 4);
-  let kind = cur && cur.r ? cur.r : "tech";
-  const err = h("p", { class: "dlg-err", role: "alert" }), keeps = h("p", { class: "lbt-sum", id: "lbtKeeps" }), note = h("p", { class: "meta lbt-later", id: "lbtLater", role: "status" });
-  const box = (v, label, mode) => h("input", { type: "text", inputmode: mode || "decimal", autocomplete: "off", "aria-label": label, value: v == null ? "" : String(v) });
-  const jobs = box(cur ? (cur.j == null ? 1 : cur.j) : null, "Jobs he was on", "numeric"), rev = box(cur ? cur.a : null, "Revenue $");
-  const kinds = LB_DAY_SALES.map((label, k) => box(cur && cur.b ? cur.b[k] : null, `${label} $`));
-  const pick = h("select", { id: "lbtWho", "aria-label": "Who helped" });
-  const whoBox = h("div", { class: "lbt-whobox" });
-  const drawWho = () => {
-    if (cur) { whoBox.replaceChildren(h("p", { class: "lbt-sum", id: "lbtWhoName" }, cur.n, LB_JOB_ROLES[cur.r] ? h("span", { class: "meta", text: ` · ${LB_JOB_ROLES[cur.r]}` }) : null)); return; }
-    const choices = lbCrewChoices(key, team, kind, list.map(x => x.n));
-    pick.replaceChildren(h("option", { value: "", text: choices.length ? "Pick who helped…" : `No ${LB_JOB_ROLES[kind].toLowerCase()} left to pick` }), ...choices.map(p => h("option", { value: p.name, text: p.name })));
-    whoBox.replaceChildren(lbSeg(Object.entries(LB_JOB_ROLES), kind, k => { kind = k; drawWho(); }, "Technician or assistant"), pick);
-  };
-  /** What's typed, as a helper to save: null with a message when something isn't a number. */
-  const read = () => {
-    const j = jobs.value.replace(/[,\s]/g, ""), a = lbMoneyIn(rev.value), b = kinds.map(i => lbMoneyIn(i.value));
-    const jn = j === "" ? null : Number(j);
+  const key = `${day}|${team}`, card = lbTotalEl(team), box = card && card.querySelector(".lbt-helps");
+  if (!box) return;
+  let row = [...box.querySelectorAll(".lbh")].find(r => !r.dataset.who);
+  if (!row) {
+    if (box.querySelectorAll(".lbh").length >= 8) return;   // eight helpers a day at most
+    lbHelpDraft[key] = true;
+    row = lbHelpRow(day, team, null, true);
+    box.append(row);
+    lbHelpSums(box, day, team);
+  }
+  lbHelpShow(day, team, row);
+  row.querySelector("select").focus();
+}
+/** A helper's box changed (or a helper was picked or taken off): save everyone who helped, as typed. A line with
+ *  nobody picked isn't saved yet. # of techs follows: him and everyone who helped; a bigger number typed by hand stays.
+ *  → false when a box isn't a number (nothing is saved then). */
+function lbHelpTyped(day, team) {
+  const card = lbTotalEl(team);
+  if (!card) return false;
+  const key = `${day}|${team}`, d = lbDayDoc(day), old = lbDayHelpOf(day, team), t = lbEntry((d.t || {})[team], LB_TRUCK.length);
+  const list = [];
+  let bad = false, draft = false;
+  for (const row of card.querySelectorAll(".lbh")) {
+    const name = row.querySelector("select").value, jIn = row.querySelector('input[data-f="j"]'), aIn = row.querySelector('input[data-f="a"]');
+    const jt = jIn.value.replace(/[,\s]/g, ""), jn = jt === "" ? null : Number(jt), a = lbMoneyIn(aIn.value);
     const badJ = jn != null && !(Number.isFinite(jn) && jn >= 0 && jn <= 99);
-    jobs.classList.toggle("bad", badJ); rev.classList.toggle("bad", Number.isNaN(a));
-    for (const [k, i] of kinds.entries()) i.classList.toggle("bad", Number.isNaN(b[k]));
-    if (badJ || Number.isNaN(a) || b.some(Number.isNaN)) return null;
-    const e = { n: cur ? cur.n : pick.value, r: kind };
+    jIn.classList.toggle("bad", badJ); aIn.classList.toggle("bad", Number.isNaN(a));
+    // a kind of sale with no box that day (rugs) keeps what's saved for it
+    const was = old.find(x => x.n.toLowerCase() === (row.dataset.who || "").toLowerCase()), b = [0, 1, 2, 3].map(k => (was && was.b && was.b[k] != null ? was.b[k] : null));
+    let badB = false;
+    for (const i of row.querySelectorAll('input[data-f="b"]')) { const v = lbMoneyIn(i.value); i.classList.toggle("bad", Number.isNaN(v)); if (Number.isNaN(v)) badB = true; else b[Number(i.dataset.k)] = v; }
+    if (badJ || Number.isNaN(a) || badB) { bad = true; continue; }
+    if (!name) { draft = true; continue; }
+    const e = { n: name, r: row.dataset.r || "tech" };
     if (jn != null) e.j = jn;
     if (a != null) e.a = a;
-    if (b.some(x => x != null)) e.b = b;
-    return e;
-  };
-  const listWith = e => (at >= 0 ? list.map((x, i) => (i === at ? e : x)) : list.concat([e]));
-  /** What the truck keeps with what's typed, and a warning when a part is more than the day has. */
-  const show = () => {
-    const e = read();
-    note.textContent = "";
-    if (!e) { keeps.textContent = ""; return; }
-    const day2 = Object.assign({}, d, { h: Object.assign({}, d.h, { [team]: listWith(Object.assign({}, e, { n: e.n || "Helper" })) }) });
-    const job = lbDayJob(day2, team, lbSpell), parts = job ? lbJobParts(job, team) : null;
-    if (!parts) { keeps.textContent = ""; return; }
-    const own = parts.people[0], mine = parts.people[(at >= 0 ? at : list.length) + 1];
-    const bits = [`${team} keeps ${lbCash(own.rev)}`];
-    if (lbKindsText(own.sales)) bits.push(lbKindsText(own.sales));
-    keeps.textContent = bits.join(" · ");
-    const want = (e.a || 0) > mine.rev + 0.005, wantS = (e.b || []).some((v, k) => (v || 0) > mine.sales[k] + 0.005);
-    // his dollars typed before the day's own numbers: fine, they count once those are in. More than the day has: a warning
-    const noRev = t[2] == null, noSales = !s.some(v => v != null);
-    const later = [want && noRev ? "revenue" : "", wantS && noSales ? "sales (+ Sale)" : ""].filter(Boolean);
-    const over = (want && !noRev) || (wantS && !noSales);
-    note.textContent = later.length ? `The day's ${later.join(" and ")} ${later.length > 1 ? "aren't" : "isn't"} typed yet: his part counts once ${later.length > 1 ? "they are" : "it is"}.` : "";
-    err.textContent = over ? `That's more than the day has left${want && !noRev ? ` (revenue: ${lbCash(mine.rev)} of it counts)` : ""}${wantS && !noSales ? `${want && !noRev ? ";" : ""} check the sales` : ""}. Type a smaller part, or the day's numbers on the card first.` : "";
-  };
-  for (const i of [jobs, rev].concat(kinds)) i.addEventListener("input", show);
-  // # of techs follows: him and everyone who helped. A number typed by hand that's bigger stays
-  const techs = n => (t.length && (t[3] == null || t[3] === 1 + list.length || t[3] < 1 + n) && t[3] !== 1 + n ? { t: { [team]: [t[0] ?? null, t[1] ?? null, t[2] ?? null, 1 + n] } } : {});
-  const save = next => {
-    lbQueue(key, { days: { [day]: next } });
-    lbFlush();
-    closeDialog();
-    lbRedrawJobs(day, team); lbTotalSync(day, team);
-  };
-  const dayBits = [t[0] != null ? `${fmt(t[0])} job${t[0] === 1 ? "" : "s"}` : "", t[2] != null ? `${lbCash(t[2])} revenue` : "no revenue typed yet", lbKindsText(s)].filter(Boolean);
-  drawWho();
-  openDialog(
-    h("h3", { id: "dlgTitle", text: cur ? `${cur.n}'s part` : "Who helped" }),
-    h("p", { class: "meta", id: "lbtHelpFor", text: `${team} · ${lbDayText(day)}: ${dayBits.join(" · ")}` }),
-    whoBox,
-    h("div", { class: "lbt-grid", id: "lbtHelp" },
-      h("label", { class: "pay-f" }, h("span", { text: "Jobs he was on" }), jobs),
-      h("label", { class: "pay-f" }, h("span", { text: "Revenue $" }), rev),
-      LB_DAY_SALES.map((label, k) => h("label", { class: "pay-f" }, h("span", { text: `${label} $` }), kinds[k]))),
-    keeps,
-    note,
-    h("p", { class: "hint", text: `Type his part by hand; ${team} keeps the rest. He gets the jobs typed here (1 when left blank) and a work day, unless his own card has one.` }),
-    err,
-    h("div", { class: "dlg-foot" },
-      cur ? h("button", { class: "btn", type: "button", id: "lbtHelpOff", text: `Take ${cur.n} off`, onclick: () => save(Object.assign({ h: { [team]: list.filter((_, i) => i !== at) } }, techs(list.length - 1))) }) : null,
-      h("div", { class: "right" },
-        h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
-        h("button", { class: "btn primary", type: "button", id: "lbtHelpDone", text: "Done", onclick: () => {
-          const e = read();
-          if (!e) { err.textContent = "Type numbers only: jobs from 0 to 99, and dollar amounts."; return; }
-          if (!e.n) { err.textContent = "Pick who helped."; pick.focus(); return; }
-          const hl = lbCleanHelp(listWith(e), team);
-          save(Object.assign({ h: { [team]: hl } }, techs(hl.length)));
-        } }))));
-  show();
+    if (b.some(v => v != null)) e.b = b;
+    list.push(e);
+  }
+  if (bad) return false;
+  if (!draft) delete lbHelpDraft[key];
+  for (const row of card.querySelectorAll(".lbh")) row.dataset.who = row.querySelector("select").value;   // each line is now who's picked on it
+  const hl = lbCleanHelp(list, team);
+  if (JSON.stringify(hl) === JSON.stringify(old)) return true;
+  const patch = { h: { [team]: hl } }, n = hl.length;
+  if (t.length && (t[3] == null || t[3] === 1 + old.length || t[3] < 1 + n) && t[3] !== 1 + n) {
+    patch.t = { [team]: [t[0] ?? null, t[1] ?? null, t[2] ?? null, 1 + n] };
+    const techs = card.querySelector('.lb-boxes input[data-i="3"]');
+    if (techs) techs.value = String(1 + n);
+  }
+  lbQueue(day.slice(0, 7), { days: { [day]: patch } });
+  lbTotalSync(day, team);
+  return true;
+}
+/** ✕ on a helper's line: take him off (asked first when he has dollars typed). His part goes back to the truck. */
+function lbHelpOff(day, team, row) {
+  const who = row.dataset.who, x = who ? lbDayHelpOf(day, team).find(y => y.n.toLowerCase() === who.toLowerCase()) : null;
+  if (x && (x.a || (x.b || []).some(Boolean)) && !confirm(`Take ${x.n} off ${team}'s ${lbDayText(day)}? His part goes back to ${team}.`)) return;
+  if (lbHelpOpen[`${day}|${team}`] === (who || "").toLowerCase()) delete lbHelpOpen[`${day}|${team}`];
+  row.remove();
+  if (lbHelpTyped(day, team)) lbFlush();
 }
 /** A truck's jobs changed: the cards of the people who help on them follow. A new helper gets a card; someone who no
  *  longer helps and has nothing typed loses his. On the cards already there only the shared-jobs lines, the day line,
@@ -7118,12 +7226,11 @@ function lbSyncHelpCards(day, team) {
     else if (old) old.remove();
     else if (fresh) { const at = c.querySelector(".lbj-day"); if (at) at.after(fresh); else c.append(fresh); }
     if (!old && !fresh) continue;   // not a helper, before or now
-    const pd = lbDayOf(day, t.name), wd = c.querySelector(".lbj-day input");
+    const pd = lbDayOf(day, t.name), wd = c.querySelector('.lbj-day input, .lb-boxes.n4 input[data-i="1"]');
     if (wd) { if (pd && pd.helpDay) wd.setAttribute("placeholder", "1"); else wd.removeAttribute("placeholder"); }
     if (t.name === team) continue;
-    const foot = c.querySelector(".lb-card-foot"), total = c.querySelector(".lbj-total");
+    const foot = c.querySelector(".lb-card-foot");
     if (foot) foot.textContent = lbTruckFoot(day, t.name);
-    if (total && !lbJobsOf(day, t.name).length) total.textContent = fresh ? "His own jobs: + Job 1" : lbJobsTotalText([]);
   }
 }
 function lbTrucksEl(day) {
@@ -7134,7 +7241,7 @@ function lbTrucksEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
-    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Each job gets its revenue and the truck's sales. + Worked with adds who helped: he gets the job and a work day by itself. Revenue and Sales each split their own way: Off, Equal, % or $; the truck keeps the rest. Day total: type the day's number of jobs and its revenue in one go instead; + Sale for his sales that day, + Help for who worked with him (type his part by hand; the truck keeps the rest)." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
+    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card. + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest. + Job 1 types that day job by job instead: each job gets its revenue and the truck's sales, and + Worked with adds who helped on it." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
     jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
 }
 
@@ -7232,16 +7339,26 @@ function lbRedrawJobs(day, team) {
 const lbWorkDayOf = (day, team) => { const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length); return e.length ? e[1] : null; };
 /** The day's sales typed on the Sales tab (up sale … additional), to start Job 1 with. */
 const lbDaySales = (day, team) => lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length).slice(0, 4);
-const lbCardHead = t => h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit })
-  : t.home ? h("span", { class: `lb-unit ${t.home}`, text: `${t.home} · not ranked` }) : h("span", { class: "lb-unit", text: "Not on the board this month" }));
-/** A day typed as a day total: start typing it by job instead (the day's revenue and sales go on Job 1). */
-const lbToJobsBtn = (day, team) => h("button", { class: "btn ghost small lb-tojobs", type: "button", onclick: () => {
-  const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length);
-  const help = lbDayHelpOf(day, team);
-  if (!help.length && (!e.length || !(e[0] || e[2]))) { delete lbTotals[`${day}|${team}`]; lbRedrawJobs(day, team); return; }   // nothing typed yet: just the other card
-  if (!confirm(`Type ${team}'s ${lbDayText(day)} by job? The ${lbMoney(e[2] || 0)} day total and his sales that day go on Job 1; add the other jobs and move the money to them.${help.length ? ` ${help.map(x => x.n).join(", ")} go${help.length === 1 ? "es" : ""} on Job 1 with the same dollars, counted as one job.` : ""}`)) return;
-  delete lbTotals[`${day}|${team}`];
-  const sales = lbDaySales(day, team), job = { v: e[2], s: sales };
+// the name and the department are one block: when the buttons beside them need the room, the department goes under
+// the name and the buttons stay at the top right
+const lbCardHead = t => h("div", { class: "lb-card-head" }, h("span", { class: "lb-card-who" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit })
+  : t.home ? h("span", { class: `lb-unit ${t.home}`, text: `${t.home} · not ranked` }) : h("span", { class: "lb-unit", text: "Not on the board this month" })));
+/** + Job 1 on a day total: type that day job by job instead. Nothing typed yet (or only a work day): Job 1 opens with
+ *  the cursor in its revenue (and any sales typed for the day). A day with numbers: asked first; its revenue, his
+ *  sales and who helped go on Job 1. */
+function lbToJobs(day, team) {
+  const key = `${day}|${team}`, e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length);
+  const help = lbDayHelpOf(day, team), sales = lbDaySales(day, team);
+  const first = !help.length && (!e.length || !(e[0] || e[2]));
+  if (!first && !confirm(`Type ${team}'s ${lbDayText(day)} by job? The ${lbMoney(e[2] || 0)} day total and his sales that day go on Job 1; add the other jobs and move the money to them.${help.length ? ` ${help.map(x => x.n).join(", ")} go${help.length === 1 ? "es" : ""} on Job 1 with the same dollars, counted as one job.` : ""}`)) return;
+  delete lbSaleOpen[key]; delete lbHelpOpen[key]; delete lbHelpDraft[key];
+  if (first) {
+    lbSaveJobs(day, team, [sales.length ? { v: null, s: sales } : { v: null }], e.length && e[1] != null ? e[1] : 1);
+    const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lbj-v`);
+    if (i) i.focus();
+    return;
+  }
+  const job = { v: e[2], s: sales };
   if (help.length) {
     job.w = help.map(x => Object.assign({ n: x.n }, x.r ? { r: x.r } : {}, x.a != null ? { a: x.a } : {}, x.b ? { b: x.b } : {}));
     if (help.some(x => x.a != null)) job.x = "a";
@@ -7250,7 +7367,7 @@ const lbToJobsBtn = (day, team) => h("button", { class: "btn ghost small lb-tojo
   }
   lbSaveJobs(day, team, [job], e[1] == null ? 1 : e[1], false);
   renderLeaderboard();
-} }, "Type this day by job");
+}
 /** A job with nothing on it yet: no revenue, no sales, nobody who worked with him. */
 const lbJobBlank = j => !lbVal(j && j.v) && !lbJobSale(j) && !((j && j.w) || []).length;
 const lbMoneyIn = v => { const t = String(v).replace(/[$,\s]/g, ""); return t === "" ? null : Number.isFinite(Number(t)) && Number(t) >= 0 ? Number(t) : NaN; };
@@ -7270,7 +7387,7 @@ function lbJobsCard(t, day) {
   const flag = h("p", { class: "lbj-flag", role: "alert", hidden: true });
   const updaters = [];   // what follows the open job's numbers as they're typed (what the truck keeps, shares that don't fit)
   const refresh = () => {
-    foot.textContent = lbTruckFoot(day, team); total.textContent = !jobs.length && pd && pd.help.length ? "His own jobs: + Job 1" : lbJobsTotalText(jobs); lines();
+    foot.textContent = lbTruckFoot(day, team); total.textContent = lbJobsTotalText(jobs); lines();
     const ft = jobs.length ? lbJobFlagText(jobs[open]) : "";
     flag.textContent = ft; flag.hidden = !ft;
     for (const u of updaters) u();
@@ -7284,11 +7401,10 @@ function lbJobsCard(t, day) {
     const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lbj-v`);
     if (i) i.focus();
   };
-  // Day total: the day's number of jobs and its revenue in one go, instead of each job. Offered while there's no job
-  // with anything on it (blank jobs are dropped); the cursor goes to Jobs
+  // Day total: back to the day's number of jobs and its revenue in one go. Offered while there's no job with anything
+  // on it (the blank jobs are dropped); the cursor goes to Jobs
   const dayTotal = () => {
     if (!jobs.every(lbJobBlank)) { lbRedrawJobs(day, team); return; }   // a job got numbers meanwhile: it stays
-    lbTotals[openKey] = true;
     if (jobs.length) { jobs.length = 0; save(false); }
     lbRedrawJobs(day, team);
     const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lb-boxes input`);
@@ -7407,7 +7523,7 @@ function lbJobsCard(t, day) {
           if ((job.v || lbJobSale(job) || crew.length) && !confirm(`Remove job ${i + 1}${job.v ? ` (${lbMoney(job.v)})` : ""}${lbJobSale(job) ? ` and its ${lbMoney(lbJobSale(job))} in sales` : ""}${crew.length ? ", and who worked on it" : ""}?`)) return;
           jobs.splice(i, 1); lbJobOpen[openKey] = Math.max(0, i - 1); save();
         } }, "✕")),
-      h("div", { class: "lbj-sales" }, LB_JOB_SALES.map((label, k) => h("label", { class: "lbj-sale" }, h("span", { text: `${label} $` }),
+      h("div", { class: `lbj-sales k${lbDayKinds(day, job.s).length}` }, lbDayKinds(day, job.s).map(k => [LB_JOB_SALES[k], k]).map(([label, k]) => h("label", { class: "lbj-sale", "data-k": String(k) }, h("span", { text: `${label} $` }),
         money(job.s && job.s[k] != null ? job.s[k] : null, `Job ${i + 1} ${label.toLowerCase()} sale`, v => { const a = Array.isArray(job.s) ? job.s.slice() : []; while (a.length < 4) a.push(null); a[k] = v; job.s = a; }, "lbj-s")))),
       flag,
       crew.length ? h("div", { class: "lbj-crew" },
@@ -7420,7 +7536,7 @@ function lbJobsCard(t, day) {
       picker);
   };
   const head = lbCardHead(t);
-  if (!jobs.length) head.append(lbDayActs(day, team));   // nothing typed yet: + Sale and + Help are there from the start
+  // nothing typed yet: + Job 1, + Sale and + Help are at the top right from the start
   card.append(...[   // (blanks dropped: append would show null as text)
     head,
     h("div", { class: "lbj-day" },
@@ -7431,17 +7547,14 @@ function lbJobsCard(t, day) {
       } }),
       total),
     lbHelpEl(day, team),
-    jobs.length ? jobRow(jobs[open], open) : h("div", { class: "lbj-start" },
-      h("button", { class: "btn small lbj-addjob", type: "button", onclick: addJob }, "+ Job 1"),
-      h("button", { class: "btn ghost small lbj-daytotal", type: "button", title: "Type the day's number of jobs and total revenue instead of each job", onclick: dayTotal }, "Day total")),
-    jobs.length ? null : lbTotalLines(day, team),   // his sales that day, when some are typed already
+    jobs.length ? jobRow(jobs[open], open) : null,
     list,
     foot].filter(Boolean));
   refresh();
   return card;
 }
 function lbJobsTotalText(jobs) {
-  if (!jobs.length) return "No jobs yet: + Job 1, or Day total";
+  if (!jobs.length) return "";
   const check = jobs.map((j, k) => (lbJobFlag(j) ? k + 1 : 0)).filter(Boolean);
   const rev = jobs.reduce((n, j) => n + (lbVal(j.v) || 0), 0), sales = jobs.reduce((n, j) => n + lbJobSale(j), 0);
   const crew = new Set(jobs.flatMap(j => (j.w || []).map(x => x.n.toLowerCase())));
@@ -7455,7 +7568,7 @@ function lbSalesFromJobs(t, day) {
   const p = lbDayOf(day, t.name), gave = p ? p.gave.filter(x => x.splitSales && x.sales.some(Boolean)) : [];
   return h("div", { class: "lb-card lb-fromjobs" + (t.off ? " off" : ""), "data-team": t.name, "data-part": "s" },
     lbCardHead(t),
-    h("p", { class: "lbj-from", text: `Typed by job on Trucks (${jobs.length} job${jobs.length === 1 ? "" : "s"}): ` + LB_SALE.slice(0, 4).map((f, i) => `${f.label} ${lbMoney(e[i] || 0)}`).join(" · ") }),
+    h("p", { class: "lbj-from", text: `Typed by job on Trucks (${jobs.length} job${jobs.length === 1 ? "" : "s"}): ` + lbDayKinds(day, e).map(i => `${LB_SALE[i].label} ${lbMoney(e[i] || 0)}`).join(" · ") }),
     gave.length ? h("p", { class: "lbj-from lbj-after", text: `After the split with ${[...new Set(gave.map(x => x.who))].join(", ")}: ` + LB_SALE.slice(0, 4).map((f, i) => (e[i] ? `${f.label} ${lbCash(p.sales[i])}` : "")).filter(Boolean).join(" · ") }) : null,
     lbHelpEl(day, t.name, true),
     h("p", { class: "lb-card-foot", text: lbSaleFoot(day, t.name) }),
@@ -7467,7 +7580,8 @@ function lbSalesEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     teams.length ? teams.map(t => apiLevel >= LB_JOBS_API && ((d.j || {})[t.name] || []).length ? lbSalesFromJobs(t, day)
-      : lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name), lbHelpEl(day, t.name, true)))
+      : lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name), lbHelpEl(day, t.name, true),
+        i => i === 2 && !lbDayKinds(day, lbEntry((d.s || {})[t.name], LB_SALE.length)).includes(2)))
       : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
     h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: the technician's jobs that day, for sale per job. A truck typed by job on Trucks gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }));
 }
@@ -7641,7 +7755,7 @@ async function openPayRates() {
   const rate = (n, f) => { const x = Object.entries(rates).find(([k]) => k.toLowerCase() === n.toLowerCase()); return x && typeof x[1][f] === "number" ? String(x[1][f]) : ""; };
   const list = h("div", { class: "pay-list", id: "payList" }, people.map(p => h("div", { class: "pay-person", "data-name": p.name },
     h("div", { class: "pay-head" }, h("strong", { text: p.name }), h("span", { class: `lb-unit ${p.unit}`, text: [p.unit, LB_ROLES[p.role] || "", p.off ? "not ranked" : ""].filter(Boolean).join(" · ") })),
-    h("div", { class: "pay-fields" }, PAY_FIELDS.map(([f, label, unit]) => h("label", { class: "pay-f" }, h("span", { text: `${label} ${unit}` }),
+    h("div", { class: "pay-fields" }, PAY_FIELDS.map(([f, label, unit]) => h("label", { class: "pay-f", hidden: f === "rugs" && !lbRugsOn(lbToday()) }, h("span", { text: `${label} ${unit}` }),
       h("input", { type: "text", inputmode: "decimal", autocomplete: "off", "data-f": f, value: rate(p.name, f), placeholder: f === "share" ? "50" : "", disabled: !had, oninput: e => { e.target.dataset.typed = "1"; } })))))));
   const wait = h("span", { class: "pay-wait", id: "payWait", role: "status", text: had ? "Checking the sheet for newer rates…" : "Loading the saved rates…" });
   openDialog(
@@ -7898,18 +8012,21 @@ function lbPerformanceEl() {
     { k: "up", label: "Up sale", v: t => R(t).up, f: t => lbMoney(R(t).up) },
     { k: "addon", label: "Add-on", v: t => R(t).addon, f: t => lbMoney(R(t).addon) },
     { k: "rugs", label: "Rugs in plant", v: t => R(t).rugs, f: t => lbMoney(R(t).rugs) },
-    { k: "extra", label: "Additional", v: t => R(t).extra, f: t => lbMoney(R(t).extra) }];
+    { k: "extra", label: "Additional", v: t => R(t).extra, f: t => lbMoney(R(t).extra) }].filter(c => c.k !== "rugs" || sum(board, "rugs") > 0);
+  // the totals under those columns (rugs in plant only when someone sold one in the period)
+  const kindFoot = [fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon"))]
+    .concat(sum(board, "rugs") > 0 ? [lbMoney(sum(board, "rugs"))] : [], [lbMoney(sum(board, "extra"))]);
   const goal = cfg.goal;
   const sales = span ? h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
-    lbRankTable("lbsSales", [{ k: "name", label: "Tech" }, { k: "sales", label: LB_PER[per], def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]))
+    lbRankTable("lbsSales", [{ k: "name", label: "Tech" }, { k: "sales", label: LB_PER[per], def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales"))].concat(kindFoot)))
   : h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
     h("p", { class: "lb-sub", id: "lbsDaysLeft", text: left ? `Goal ${lbMoney(goal)} each · working days left in ${lbMonthLong(month)}: ${LB_GROUPS.filter(u => board.some(t => t.unit === u)).map(u => `${u} ${leftOf(u)} (${LB_WEEK_TEXT[lbWeekOf(u)]})`).join(", ")}${lbClosedText(key, today).replace(/^, /, " · ")}` : `Goal ${lbMoney(goal)} each` }),
     lbRankTable("lbsSales", [{ k: "name", label: "Tech" },
       { k: "sales", label: "Month to date", def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) },
       { k: "left", label: "Left to goal", low: true, v: t => gOf(t).left, f: t => { const g = gOf(t); return t.noSale ? "No goal" : g.done ? "Done" : lbMoney(g.left); } },
-      { k: "need", label: "Need per day", low: true, v: t => gOf(t).perDay, f: t => { const g = gOf(t); return t.noSale || g.done || !leftOf(t.unit) ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
+      { k: "need", label: "Need per day", low: true, v: t => gOf(t).perDay, f: t => { const g = gOf(t); return t.noSale || g.done || !leftOf(t.unit) ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", ""].concat(kindFoot)));
   // everyone's reviews count from his first one: a helper's (never on the leaderboard), and the months before a tech
   // went on it. Off the leaderboard this month and still here: listed when he has reviews this year, not ranked
   const ytdRv = name => lbRecords().filter(r => r.team === name && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
@@ -9084,7 +9201,8 @@ function lbSalesSlide(month) {
   // technicians on the sales goal (an estimator isn't on this slide)
   const rows = lbBoardShown(cfg, key).filter(t => !t.noSale).map(t => { const r = recOf(t.name); return { team: t.name, unit: t.unit, left: leftOf(t.unit), up: r.up, addon: r.addon, rugs: r.rugs, extra: r.extra, jobs: r.saleJobs, perJob: lbDiv(r.sales, r.saleJobs), mtd: r.sales, g: lbGoal(r, cfg.goal, leftOf(t.unit)) }; }).sort(lbAz);
   const units = LB_GROUPS.filter(u => rows.some(r => r.unit === u)), left = Math.max(0, ...units.map(leftOf));
-  const cols = [["up", "Up sale", true], ["addon", "Add-on", true], ["rugs", "Rugs in plant", true], ["extra", "Additional", true], ["jobs", "Jobs", false], ["perJob", "Per job", true]];
+  const cols = [["up", "Up sale", true], ["addon", "Add-on", true], ["rugs", "Rugs in plant", true], ["extra", "Additional", true], ["jobs", "Jobs", false], ["perJob", "Per job", true]]
+    .filter(([k]) => k !== "rugs" || rows.some(r => r.rugs > 0));   // no rugs in plant column in a month nobody sold one
   const best = Object.fromEntries(cols.concat([["mtd"]]).map(([k]) => [k, lbBest(rows, r => r[k])]));
   const tot = rows.reduce((a, r) => ({ sales: a.sales + r.mtd, jobs: a.jobs + r.jobs }), { sales: 0, jobs: 0 });
   return h("section", { class: "lbs-slide lbs-numbers" },
