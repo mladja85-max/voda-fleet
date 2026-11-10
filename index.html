@@ -149,7 +149,7 @@ button { font: inherit; color: inherit; }
   /* Enter numbers: three cards a row across the whole page (from the same left edge) */
   body[data-lbtab="enter"] .lb-enter, body[data-lbtab="enter"] .lb-enter:has(.lb-jobs) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   /* the buttons sit next to the title instead of across the screen; Employees first, so it doesn't move when
-     Presentation shows on Standings */
+     Presentation shows on Performance */
   body .lb-title { margin-right: 6px; }
   body .lb-acts { margin-left: 0; }
   body #lbPresent { order: 2; }
@@ -909,6 +909,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-grid td > i { cursor: default; }
 .lb-grid.wk td > * { width: 34px; height: 26px; }
 .lb-grid.wk thead th { white-space: nowrap; padding: 0 4px; }
+/* Performance: the ranking's heading with Cleaning | Restoration | Whole company beside it */
+.lb-ranking { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.lb-rank-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.lb-rank-top h2 { font-family: var(--font-display); font-size: 1.15rem; text-transform: uppercase; letter-spacing: .04em; }
+.lb-wrow { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: center; padding: 10px 14px; }
 .lb-grid td.sun > * { background: color-mix(in srgb, var(--line) 60%, transparent); }
 .lb-grid td.future > * { opacity: .35; cursor: default; }
 .lb-grid td.t > *, .lb-key.t { background: color-mix(in srgb, var(--ok) 45%, var(--surface)); border-color: transparent; }
@@ -6134,14 +6139,18 @@ const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the stan
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
 let lbLoading = false, lbErr = "", lbOld = false;
-const lbView = Object.assign({ tab: "standings", per: "month", group: "Cleaning", month: 0, smonth: 0, sper: "month", open: "", day: "", part: "trucks", fshut: false, ssort: {}, funit: "Cleaning", pper: "week", pday: "", pfrom: "", pto: "" }, store.get(K_LB_VIEW) || {});
-const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, smonth: lbView.smonth, sper: lbView.sper, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit, pper: lbView.pper, pday: lbView.pday, pfrom: lbView.pfrom, pto: lbView.pto });
-/** Status can show a month, the year to date, this week so far or last week (a past year: a month or the year). */
-const LB_SPER = { month: "Month", ytd: "Year to date", wtd: "Week to date", lastweek: "Last week" };
+const lbView = Object.assign({ tab: "performance", per: "month", group: "Cleaning", month: 0, open: "", day: "", part: "trucks", fshut: false, ssort: {}, funit: "Cleaning", pper: "week", pday: "", pfrom: "", pto: "" }, store.get(K_LB_VIEW) || {});
+// a view saved before Standings and Status became Performance
+if (lbView.tab === "standings" || lbView.tab === "status") lbView.tab = "performance";
+if (lbView.per === "week") lbView.per = "wtd";
+const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit, pper: lbView.pper, pday: lbView.pday, pfrom: lbView.pfrom, pto: lbView.pto });
+/** Performance shows a month, the year to date, this week so far or last week (a past year: a month or the year). */
+const LB_PER = { month: "Month", ytd: "Year to date", wtd: "Week to date", lastweek: "Last week" };
+const LB_WEEK_PER = ["wtd", "lastweek"];
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
 const canEditLb = () => isAdmin() || userAccess().includes("leaderboard-import");
 const lbNowYear = () => clockNow().getFullYear();
-/** The year on screen: a past year picked in Standings or Status (Enter numbers is always this year). */
+/** The year on screen: a past year picked in Performance (Enter numbers is always this year). */
 const lbYear = () => (lbView.year && lbView.year < lbNowYear() && lbView.tab !== "enter" && lbView.tab !== "payroll" ? lbView.year : lbNowYear());
 const lbPast = () => lbYear() < lbNowYear();
 /** "Today" for the year on screen: the real today, or Dec 31 of a past year (the whole year is in). */
@@ -6150,9 +6159,8 @@ const lbDayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,
 const lbToday = () => lbDayKey(clockNow());
 const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0)).toLocaleString("en-US");
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
-const LB_PER = { month: "This month", ytd: "Year to date", week: "This week" };
-const LB_TABS = { standings: "Standings", enter: "Enter numbers", status: "Status", payroll: "Payroll" };
-const LB_SHORT = { "Enter numbers": "Numbers", "Technician sales": "Sales" };   // a phone's tab names, so every tab fits
+const LB_TABS = { performance: "Performance", enter: "Enter numbers", payroll: "Payroll" };
+const LB_SHORT = { "Enter numbers": "Numbers", "Technician sales": "Sales", "Whole company": "Company" };   // a phone's tab names, so every tab fits
 /** A tab's name: the long one, and on a phone the short one. */
 /** This year's jobs to check (sales over the job's revenue, or sales with no revenue), newest first. */
 const lbToCheck = () => { const y = lbYear(); return lbData ? lbJobFlags(lbData.months, `${y}-01-01`, `${y}-12-31`) : []; };
@@ -6213,6 +6221,8 @@ function lbMonthShown(pick) {
   if (pick && recs.some(r => r.month === lbMonthKey(y, pick) && r.group)) return pick;
   return latest || (lbPast() ? 12 : clockNow().getMonth() + 1);
 }
+/** The month the presentation and its file name go by: the one picked under Month, otherwise the newest. */
+const lbPerfMonth = () => lbMonthShown(lbView.per === "month" ? lbView.month : 0);
 /** Up or down since a week before the newest typed day (the newest month only; the month view only within it). */
 function lbMove(per, group, team, place, key) {
   const b = lbB();
@@ -6330,17 +6340,17 @@ function renderLeaderboard() {
     return;
   }
   const edit = canEditLb() && lbData.canEdit !== false;
-  if (!edit && lbView.tab === "enter") lbView.tab = "standings";
-  if (lbView.tab === "payroll" && !canSeePayroll()) lbView.tab = "standings";
+  if (!LB_TABS[lbView.tab] || (!edit && lbView.tab === "enter")) lbView.tab = "performance";
+  if (lbView.tab === "payroll" && !canSeePayroll()) lbView.tab = "performance";
   const cfg = lbCfg();
   const top = h("div", { class: "lb-top" },
     h("h2", { class: "lb-title", text: "Leaderboard" }),
     h("div", { class: "lb-acts" },
-      lbView.tab === "standings" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null,
+      lbView.tab === "performance" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null,
       edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Employees") : null));
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
-    Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn" + (k === "status" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
-      title: k === "status" && edit && lbToCheck().length ? "Jobs to check" : null,
+    Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
+      title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
       onclick: () => { if (lbView.tab === "enter") lbFlush(); lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, lbTabText(t))));
   if (!cfg.teams.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
@@ -6351,12 +6361,12 @@ function renderLeaderboard() {
     return;
   }
   document.body.dataset.lbtab = lbView.tab;   // Payroll gets the wide page
-  const body = lbView.tab === "enter" ? lbEnterEl() : lbView.tab === "status" ? lbStatusEl() : lbView.tab === "payroll" ? lbPayrollEl() : lbStandingsEl();
+  const body = lbView.tab === "enter" ? lbEnterEl() : lbView.tab === "payroll" ? lbPayrollEl() : lbPerformanceEl();
   box.replaceChildren(...[top, tabs, ...body, lbErr ? h("p", { class: "dlg-err", text: lbErr }) : null].filter(Boolean));
   if (lbView.tab === "enter") lbShowSave();
   const pay = lbView.tab === "payroll" && document.querySelector("#lbPay thead tr");
   if (pay) pay.closest("table").style.setProperty("--pay-h1", `${pay.getBoundingClientRect().height}px`);
-  const g = lbView.tab === "status" && document.querySelector("#lbGrid tbody td.today");
+  const g = lbView.tab === "performance" && document.querySelector("#lbGrid tbody td.today");
   if (g) { const sc = g.closest(".lb-scroll"); if (sc && g.offsetLeft > sc.clientWidth - 40) sc.scrollLeft = g.offsetLeft - sc.clientWidth + 60; }
 }
 const lbSeg = (items, cur, onpick, label) => h("div", { class: "seg", role: "tablist", "aria-label": label },
@@ -6380,8 +6390,8 @@ function lbYearSelect(id) {
     const y = Number(e.target.value);
     if (lbData && lbData.year === lbNowYear()) lbYearCache[lbNowYear()] = lbData;   // back to it at once
     lbView.year = y === lbNowYear() ? 0 : y;
-    lbView.month = 0; lbView.smonth = 0; lbView.open = "";
-    if (lbView.year && lbView.per === "week") lbView.per = "month";
+    lbView.month = 0; lbView.open = "";
+    if (lbView.year && LB_WEEK_PER.includes(lbView.per)) lbView.per = "month";
     lbSaveView();
     renderLeaderboard();
   } }, years.slice().reverse().map(y => h("option", { value: String(y), text: String(y), selected: y === lbYear() })));
@@ -6392,29 +6402,26 @@ function lbMonthSelect(id, month, onpick) {
     lbMonthsWith().map(m => h("option", { value: String(m), text: `${lbMonthLong(m)} ${y}`, selected: m === month })));
 }
 
-/* ---- standings ---- */
-function lbStandingsEl() {
-  const y = lbYear(), recs = lbRecords(), b = lbB();
-  const month = lbMonthShown(lbView.month), key = lbMonthKey(y, month);
-  if (lbPast() && lbView.per === "week") lbView.per = "month";
-  const bar = h("div", { class: "lb-bar" },
-    lbSeg(Object.entries(LB_PER).filter(([k]) => k !== "week" || !lbPast()), lbView.per, k => { lbView.per = k; lbSaveView(); renderLeaderboard(); }, "Period"),
-    h("div", { class: "lb-when" }, lbYearSelect("lbYear"), lbView.per !== "week" ? lbMonthSelect("lbMonth", month, m => { lbView.month = m; lbSaveView(); renderLeaderboard(); }) : null),
-    lbView.per !== "week" ? lbSeg([["Cleaning", "Cleaning"], ["Restoration", "Restoration"], ["Company", "Whole company"]], lbView.group, k => { lbView.group = k; lbSaveView(); renderLeaderboard(); }, "Unit") : null);
-  const last = lbLastSave();
-  const sub = b.newest ? h("p", { class: "lb-sub", id: "lbSub" }, "Numbers through ", h("strong", { text: lbDayText(b.newest) }),
-    last.at ? ` · saved ${fmtWhen(last.at)} ${fmtTime(new Date(last.at))}${lbWho(last.by) ? " by " + lbWho(last.by) : ""}` : "",
-    lbView.per === "ytd" ? ` · ${lbYtdText(month)}` : "") : h("p", { class: "lb-sub", text: lbPast() ? `No numbers for ${y}.` : "No numbers typed yet this year." });
+/* ---- performance: the ranking on top (place and score) ---- */
+const LB_GROUP_TEXT = [["Cleaning", "Cleaning"], ["Restoration", "Restoration"], ["Company", "Whole company"]];   // a phone says Company
+/** A month and the year to date are ranked by score, a week by its revenue; inside Cleaning, inside Restoration or
+ *  across the whole company. month: the month ranked (the year to date runs through it); week: a week's Monday. */
+function lbRankingEl(per, month, week) {
+  const y = lbYear(), key = lbMonthKey(y, month);
+  if (!LB_GROUP_TEXT.some(([k]) => k === lbView.group)) lbView.group = "Cleaning";
+  const group = lbView.group;
   let body;
-  if (lbView.per === "week") body = lbWeekList();
+  if (week) body = lbWeekRank(week, group);
   else {
-    const st = lbStandings(recs, y, month);
-    const rows = st[lbView.per][lbView.group];
-    const metrics = lbView.per === "month" ? LB_MONTH_METRICS : LB_YTD_METRICS;
+    const rows = lbStandings(lbRecords(), y, month)[per][group];
+    const metrics = per === "month" ? LB_MONTH_METRICS : LB_YTD_METRICS;
     body = rows.length ? h("ol", { class: "lb-list", id: "lbList" }, rows.map(x => lbRowEl(x, metrics, key)))
-      : h("p", { class: "meta", text: `No ${lbView.group} teams in ${lbMonthLong(month)}.` });
+      : h("p", { class: "meta", text: `No ${group === "Company" ? "" : group + " "}teams in ${lbMonthLong(month)}.` });
   }
-  return [lbFocusEl(), bar, sub, body, lbHowEl()];
+  return h("section", { class: "lb-ranking", id: "lbRanking" },
+    h("div", { class: "lb-rank-top" }, h("h2", { text: "Ranking" }),
+      lbSeg(LB_GROUP_TEXT.map(([k, t]) => [k, lbTabText(t)]), group, k => { lbView.group = k; lbView.open = ""; lbSaveView(); renderLeaderboard(); }, "Unit")),
+    body);
 }
 
 /* ---- today's focus: for admins and whoever types the numbers (never the technicians or the TV) ---- */
@@ -6495,7 +6502,7 @@ function lbFocusEl() {
   const how = h("details", { class: "lbf-how" }, h("summary", { text: "How this is worked out" }),
     h("p", { text: `More revenue looks at the last 4 weeks and compares each truck only with the rest of its own unit, since Restoration always brings in more than Cleaning (a truck needs ${F.minDays} work days to be judged). Each unit lists the furthest behind first. A truck making under ${Math.round(F.slow * 100)}% of their revenue a day is listed with the reason: fewer jobs a day, a lower per job (under ${Math.round(F.low * 100)}% of theirs), or both. A truck doing fine with fewer jobs but a higher per job is the best place for an extra job. "Matching them" is what the gap a day adds up to in his usual work days a week.` }),
     h("p", { text: `Technician sales holds every technician to the same ${lbMoney(f.goal)} goal's pace (the goal × working days done ÷ working days in the month: Cleaning works Monday to Friday, Restoration Monday to Saturday). Under ${Math.round(F.pace * 100)}% of the pace is listed, with the kind of sale where he's furthest under the other technicians in his own unit a job: the chance to sell is much bigger on Cleaning, so Restoration is only compared with Restoration.` }),
-    h("p", { text: "An estimator (ticked in Teams) isn't in Today's focus at all, and isn't part of the others' numbers. He's still ranked on revenue in Standings and Status." }),
+    h("p", { text: "An estimator (ticked in Teams) isn't in Today's focus at all, and isn't part of the others' numbers. He's still ranked on revenue in Performance." }),
     h("p", { text: "Only admins and whoever types the numbers see this. It isn't in the presentation." }));
   const el = h("details", { class: "panel lb-focus", id: "lbFocus", open: !lbView.fshut },
     h("summary", null, h("h2", { text: "Today's focus" }), h("span", { class: "lbf-asof" }, "From the numbers through ", h("strong", { text: lbDayText(f.asOf) }))),
@@ -6535,28 +6542,26 @@ function lbYtdText(month) {
   const end = !lbPast() && month === now.getMonth() + 1 ? now : new Date(y, month, 0);
   return `Jan 1 – ${MONTHS[end.getMonth()]} ${end.getDate()}`;
 }
-function lbWeekList() {
-  const b = lbB();
-  const start = lbLatestWeek(b.weeks, lbAsOf());
-  if (!start) return h("p", { class: "meta", text: "No week numbers yet. They come from the trucks' days under Enter numbers." });
-  const rows = lbWeek(b.weeks, start);
-  const max = Math.max(1, ...rows.map(r => r.revenue));
-  const groups = LB_GROUPS.map(g => [g, rows.filter(r => r.group === g)]).filter(([, r]) => r.length);
-  return h("div", { class: "lb", id: "lbWeek" },
-    h("p", { class: "lb-sub" }, "Week of ", h("strong", { text: lbWeekText(start) }), start === lbThisMonday() ? " (this week so far)" : ""),
-    groups.map(([g, list]) => h("div", { class: "panel" }, h("h2", { text: g }),
-      h("ol", { class: "lb-list" }, lbRanks(list.map(r => r.revenue)).map((p, i) => [p, list[i]]).sort((a, b2) => a[0] - b2[0]).map(([p, r]) =>
-        h("li", { class: `lb-row p${p}`, "data-team": r.team }, h("div", { style: "display:grid;grid-template-columns:auto 1fr auto;gap:4px 14px;align-items:center;padding:10px 14px" },
-          h("span", { class: "lb-place", text: String(p) }),
-          h("span", { class: "lb-name" }, h("strong", { text: r.team })),
-          h("span", { class: "lb-right" }, h("span", { class: "lb-score", text: lbMoney(r.revenue) })),
-          h("span", { class: "lb-stats" }, `${fmt(r.jobs)} jobs · ${lbMoney(r.perJob)}/job · ${lbMoney(r.perDay)}/day`,
-            h("div", { class: "lb-week-bar" }, h("i", { style: `width:${Math.round(r.revenue / max * 100)}%` }))))))))));
+/** A week's ranking: revenue alone, inside the unit picked or across the company. */
+function lbWeekRank(start, group) {
+  const all = lbWeek(lbB().weeks, start);
+  const list = group === "Company" ? all : all.filter(r => r.group === group);
+  if (!list.length) return h("p", { class: "meta", id: "lbWeek", text: all.length ? `No ${group} trucks on the leaderboard that week.`
+    : `Nothing typed for the week of ${lbWeekText(start)}${start === lbThisMonday() ? " yet" : ""}. A week is ranked from the trucks' days under Enter numbers.` });
+  const max = Math.max(1, ...list.map(r => r.revenue));
+  const ranks = lbRanks(list.map(r => r.revenue));
+  return h("ol", { class: "lb-list", id: "lbWeek" }, list.map((r, i) => [ranks[i], r]).sort((a, b) => a[0] - b[0] || a[1].team.localeCompare(b[1].team)).map(([p, r]) =>
+    h("li", { class: `lb-row p${p}`, "data-team": r.team }, h("div", { class: "lb-wrow" },
+      h("span", { class: "lb-place", "aria-label": `Place ${p}`, text: String(p) }),
+      h("span", { class: "lb-name" }, h("strong", { text: r.team }), group === "Company" ? h("span", { class: `lb-unit ${r.group}`, text: r.group }) : null),
+      h("span", { class: "lb-right" }, h("span", { class: "lb-score", text: lbMoney(r.revenue) })),
+      h("span", { class: "lb-stats" }, `${fmt(r.jobs)} jobs · ${lbMoney(r.perJob)}/job · ${lbMoney(r.perDay)}/day`,
+        h("div", { class: "lb-week-bar" }, h("i", { style: `width:${Math.round(Math.max(0, r.revenue) / max * 100)}%` })))))));
 }
 function lbHowEl() {
   return h("details", { class: "panel lb-how" }, h("summary", { text: "How the ranking works" }),
     h("p", { text: "Teams are ranked inside Cleaning, inside Restoration, and across the whole company, the same way the 5. Revenue per truck sheet did it." }),
-    h("p", { text: "This month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews." }),
+    h("p", { text: "A month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews. A week (Week to date, Last week) is ranked on its revenue alone." }),
     h("p", { text: "On each number the best team gets 1, the next 2, and so on (a tie shares the number). Those add up to the score: the lowest score is #1. Equal scores share the place and the next team takes the next number (1, 1, 2)." }),
     h("p", { text: "Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Technician sales = up sale + add-on + rugs in plant + additional service. Sale per job = technician sales ÷ the technician's jobs. Reviews are 5-star reviews only. A team counts only in the months it's on the board (Teams), so a team that took over a truck later in the year counts from that month." }),
     h("p", { text: "▲ and ▼ show a move up or down since a week before the newest day typed in." }));
@@ -7278,7 +7283,7 @@ function openJobHistory(range) {
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
 }
 
-/* ---- status: what's typed, and every team's numbers ---- */
+/* ---- performance: the ranking, then every team's numbers ---- */
 /** Each team's numbers added up from one day to another (the year to date, or a week), counting only the months a
  *  team is on the board, as the standings do. Reviews are kept by month, so they come only with whole months. */
 /** Everything built from the days from..to only (the month reviews too when asked). */
@@ -7302,11 +7307,11 @@ function lbSpanRecs(from, to, withReviews, built) {
     for (const f of F) o[f] += r[f] || 0;
     if (r.last > o.last) o.last = r.last;
   }
-  // his reviews from the months before he went on the leaderboard count toward his year, as in Standings
+  // his reviews from the months before he went on the leaderboard count toward his year, as in the ranking
   if (withReviews) for (const r of b.records) if (!r.group && r.reviews && out[r.team] && r.month >= from.slice(0, 7) && r.month <= to.slice(0, 7)) out[r.team].reviews += r.reviews;
   return out;
 }
-/** A Status table ranked by one of its numbers, best first: 1, 2 and 3 in gold, VODA blue and VODA drop blue (a tie
+/** A Performance table ranked by one of its numbers, best first: 1, 2 and 3 in gold, VODA blue and VODA drop blue (a tie
  *  shares the place). Tap a heading to rank by that number, tap it again for the other way; Team sorts A to Z with no
  *  places. A team with nothing typed (`has` false) comes last, without a place.
  *  cols: [{ k, label, v: team => number, f: team => text, low: lower is better, def: ranked by it at first }] */
@@ -7337,14 +7342,12 @@ function lbRankTable(id, cols, list, has, foot) {
       cols.slice(1).map(c => h("td", { class: c.k === k ? "on" : "", text: c.f(t) }))))),
     foot ? h("tfoot", null, h("tr", null, foot.map((c, i) => h(i ? "td" : "th", { text: c })))) : null));
 }
-function lbStatusEl() {
-  const y = lbYear(), today = lbAsOf();
-  const months = lbMonthsWith();
-  const LB_WEEKS = ["wtd", "lastweek"];
-  if (!LB_SPER[lbView.sper] || (lbPast() && LB_WEEKS.includes(lbView.sper))) lbView.sper = "month";
-  const per = lbView.sper;
-  const month = per === "month" ? (months.includes(lbView.smonth) ? lbView.smonth : (months.includes(Number(today.slice(5, 7))) && today.startsWith(y + "-") ? Number(today.slice(5, 7)) : months[months.length - 1] || 1))
-    : Number(today.slice(5, 7));
+function lbPerformanceEl() {
+  const y = lbYear(), today = lbAsOf(), b = lbB();
+  if (!LB_PER[lbView.per] || (lbPast() && LB_WEEK_PER.includes(lbView.per))) lbView.per = "month";
+  const per = lbView.per;
+  // a month: the one picked, or the newest with numbers; anything else runs to today
+  const month = per === "month" ? lbMonthShown(lbView.month) : Number(today.slice(5, 7));
   const key = lbMonthKey(y, month), cfg = lbCfg();
   const zero = { revenue: 0, jobs: 0, workDays: 0, techs: 0, sales: 0, up: 0, addon: 0, rugs: 0, extra: 0, saleJobs: 0, reviews: 0, truckDays: 0, saleDays: 0, last: "" };
   // the days this view covers
@@ -7374,8 +7377,8 @@ function lbStatusEl() {
   const leftOf = unit => (per === "month" ? lbDaysLeft(key, today, unit) : 0);
   const left = Math.max(0, ...LB_GROUPS.map(leftOf));
   const edit = canEditLb() && lbData.canEdit !== false;
+  const week = LB_WEEK_PER.includes(per);
   // days typed: one square per day, per team
-  const week = per === "wtd" || per === "lastweek";
   const grid = h("div", { class: "lb-scroll" }, h("table", { class: "lb-grid" + (week ? " wk" : ""), id: "lbGrid" },
     h("thead", null, h("tr", null, h("th", { text: "" }), days.map(d => {
       const hol = lbHoliday(d);
@@ -7388,6 +7391,9 @@ function lbStatusEl() {
       const label = `${t.name}, ${lbDayText(d)}: ${tr ? "truck numbers" : "no truck numbers"}, ${sa ? "sales" : "no sales"}`;
       return h("td", { class: cls }, edit && d <= today && !lbPast() ? h("button", { type: "button", "aria-label": label, title: label, onclick: () => { lbView.tab = "enter"; lbView.part = tr || !sa ? "trucks" : "sales"; lbView.day = d; lbSaveView(); renderLeaderboard(); } }) : h("i", { title: label }));
     }))))));
+  const typedEl = days.length ? h("div", { class: "panel", id: "lbsTyped" }, h("h2", { text: "Days typed" }),
+    h("p", { class: "lb-sub" }, h("i", { class: "lb-key t" }), " truck numbers ", h("i", { class: "lb-key s" }), " technician sales ", h("i", { class: "lb-key ts" }), " both", edit && !lbPast() ? " · tap a day to open it" : ""),
+    grid) : null;
   const sum = (list, f) => list.reduce((s, n) => s + (recOf(n.name)[f] || 0), 0);
   const R = t => recOf(t.name);
   const truckCols = [
@@ -7418,7 +7424,7 @@ function lbStatusEl() {
   const goal = cfg.goal;
   const sales = span ? h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
-    lbRankTable("lbsSales", [{ k: "name", label: "Tech" }, { k: "sales", label: LB_SPER[per], def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]))
+    lbRankTable("lbsSales", [{ k: "name", label: "Tech" }, { k: "sales", label: LB_PER[per], def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]))
   : h("div", { class: "panel" },
     h("h2", { text: "Technician sales" }),
     h("p", { class: "lb-sub", id: "lbsDaysLeft", text: left ? `Goal ${lbMoney(goal)} each · working days left in ${lbMonthLong(month)}: ${LB_GROUPS.filter(u => board.some(t => t.unit === u)).map(u => `${u} ${leftOf(u)} (${LB_WEEK_TEXT[lbWeekOf(u)]})`).join(", ")}${lbClosedText(key, today).replace(/^, /, " · ")}` : `Goal ${lbMoney(goal)} each` }),
@@ -7434,7 +7440,7 @@ function lbStatusEl() {
     .filter(r => !board.some(t => t.name === r.name) && (lbReviewerOf(cfg, r.name) && !lbPast() || ytdRv(r.name) > 0));
   const rvOf = t => (!t.reviewer ? R(t).reviews : per === "ytd" ? ytdRv(t.name) : monthRv(t.name));
   const rvBoard = board.concat(rvOnly), rvTotal = rvBoard.reduce((n, t) => n + rvOf(t), 0);
-  const reviews = week ? null : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
+  const reviews = week ? h("p", { class: "meta", id: "lbsNoReviews", text: "5-star reviews are counted by month: see them under Month or Year to date." }) : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
     per === "ytd" ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbYtdText(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) }], rvBoard, () => true, ["Total", fmt(rvTotal)])
       : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbMonthLong(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) },
         { k: "ytd", label: lbYtdText(month), v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], rvBoard, () => true, ["Total", fmt(rvTotal), fmt(rvBoard.reduce((n, t) => n + ytdRv(t.name), 0))]));
@@ -7457,16 +7463,24 @@ function lbStatusEl() {
       h("tbody", null, helpers.map(x => h("tr", { "data-team": x.name }, h("th", null, h("span", { class: "lbs-who" }, x.name, x.unit ? h("small", { class: "lbs-note", text: x.unit }) : null)),
         h("td", { text: fmt(x.jobs) }), h("td", { text: fmt(x.workDays) }), h("td", { text: lbMoney(x.revenue) }), h("td", { text: lbMoney(x.sales) })))))),
     h("p", { class: "meta", text: "Not ranked. A job and a work day for each shared job they worked on, their share where the job is split, and anything typed on their own card." })) : null;
+  // one line under the pickers: the days this covers, the newest day typed, the last save
+  const last = lbLastSave();
+  const spanEl = span ? h("span", { id: "lbSpan" }, h("strong", { text: per === "ytd" ? `${spanText}, ${y}` : `Week of ${spanText}` }), per === "wtd" ? " (so far)" : "") : null;
+  const sub = h("p", { class: "lb-sub", id: "lbSub" }, spanEl, spanEl ? " · " : null,
+    ...(b.newest ? ["Numbers through ", h("strong", { text: lbDayText(b.newest) }),
+      last.at ? ` · saved ${fmtWhen(last.at)} ${fmtTime(new Date(last.at))}${lbWho(last.by) ? " by " + lbWho(last.by) : ""}` : null]
+      : [lbPast() ? `No numbers for ${y}.` : "No numbers typed yet this year."]).filter(Boolean));
   return [
     h("div", { class: "lb-bar" },
-      lbSeg(Object.entries(LB_SPER).filter(([k]) => !lbPast() || !LB_WEEKS.includes(k)), per, k => { lbView.sper = k; lbSaveView(); renderLeaderboard(); }, "Period"),
-      h("div", { class: "lb-when" }, lbYearSelect("lbStatusYear"), per === "month" ? lbMonthSelect("lbStatusMonth", month, m => { lbView.smonth = m; lbSaveView(); renderLeaderboard(); }) : null)),
-    span ? h("p", { class: "lb-sub", id: "lbStatusSpan" }, h("strong", { text: per === "ytd" ? `${spanText}, ${y}` : `Week of ${spanText}` }), per === "wtd" ? " (so far)" : "", week ? " · reviews are counted by month" : "") : null,
+      lbSeg(Object.entries(LB_PER).filter(([k]) => !lbPast() || !LB_WEEK_PER.includes(k)), per, k => { lbView.per = k; lbView.open = ""; lbSaveView(); renderLeaderboard(); }, "Period"),
+      h("div", { class: "lb-when" }, lbYearSelect("lbYear"), per === "month" ? lbMonthSelect("lbMonth", month, m => { lbView.month = m; lbView.open = ""; lbSaveView(); renderLeaderboard(); }) : null)),
+    sub,
     checkEl,
-    days.length ? h("div", { class: "panel" }, h("h2", { text: "Days typed" }),
-      h("p", { class: "lb-sub" }, h("i", { class: "lb-key t" }), " truck numbers ", h("i", { class: "lb-key s" }), " technician sales ", h("i", { class: "lb-key ts" }), " both", edit && !lbPast() ? " · tap a day to open it" : ""),
-      grid) : null,
-    ...unitTables, sales, reviews, helpEl, offEl].filter(Boolean);
+    lbFocusEl(),
+    // the year to date is ranked through the newest month with numbers, as the presentation shows it
+    lbRankingEl(per, per === "month" ? month : lbMonthShown(0), week ? span.from : ""),
+    typedEl,
+    ...unitTables, sales, reviews, helpEl, offEl, lbHowEl()].filter(Boolean);
 }
 
 /** ", closed Thu, Nov 26 (Thanksgiving)" for a closed day still ahead this month on a Monday to Saturday. */
@@ -7676,7 +7690,7 @@ function openLbTeams() {
   for (const r of cfg.reviewers) rvList.append(rvRow(r, false));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Employees" }),
-    h("p", { class: "hint", text: "On the leaderboard: ranked in Standings from the day under Since. Revenue, jobs, work days and sales count only on the days someone is on it; his 5-star reviews count from his first one. Untick the check mark to take someone off from a day you pick; tick Left the company when he's gone. ↑ ↓ set the order of the cards in Enter numbers." }),
+    h("p", { class: "hint", text: "On the leaderboard: ranked in Performance from the day under Since. Revenue, jobs, work days and sales count only on the days someone is on it; his 5-star reviews count from his first one. Untick the check mark to take someone off from a day you pick; tick Left the company when he's gone. ↑ ↓ set the order of the cards in Enter numbers." }),
     list,
     h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: startDay.slice(0, 7), on: startDay, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a person to the leaderboard")),
     h("div", { class: "lb-rvsec" },
@@ -8513,7 +8527,7 @@ let lbShowState = null;
 /** A fixed SVG from this file (never from the numbers). */
 function lbSvg(markup) { const t = document.createElement("template"); t.innerHTML = markup; return t.content.firstElementChild; }
 function lbSlides() {
-  const y = lbYear(), recs = lbRecords(), month = lbMonthShown(lbView.month), key = lbMonthKey(y, month), b = lbB();
+  const y = lbYear(), recs = lbRecords(), month = lbPerfMonth(), key = lbMonthKey(y, month), b = lbB();
   const st = lbStandings(recs, y, month);
   const mname = `${lbMonthLong(month)} ${y}`;
   const slides = [];
@@ -8833,7 +8847,7 @@ async function lbVideo(slides, fonts, say) {
   return lbVideoRecorded(slides, fonts, say);
 }
 function lbFileDate() {
-  if (lbPast()) return `${lbMonthLong(lbMonthShown(lbView.month))} ${lbYear()}`;
+  if (lbPast()) return `${lbMonthLong(lbPerfMonth())} ${lbYear()}`;
   const d = clockNow();
   return `${lbMonthLong(d.getMonth() + 1).slice(0, 3)} ${d.getDate()} ${d.getFullYear()}`;
 }
