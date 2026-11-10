@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 31;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 32;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2747,7 +2747,8 @@ const LB_CELL = 45000, LB_MORE = 3;
 const LB_MAX_JSON = LB_CELL * (1 + LB_MORE);
 // A truck's jobs that day ("j": { "Aaron": [job, ...] }), each { v: revenue, s: [up sale, add-on, rugs in plant,
 // additional service] (his sales on that job), w: [{ n: name, r: "tech" | "assistant", p: share % }] (who worked with
-// him), e: 1 (equal split), c: 1 (the revenue credit is split too) }; his own share is 100 - the others'. Every change
+// him), e: 1 (equal split), c: 1 (the revenue is split too), d: 1 (the sales are split too) }; his own share is 100 -
+// the others'. Every change
 // to a truck's jobs is kept on the "Job log" tab, so any job, person or split can be looked up later.
 const LB_MAX_JOBS = 20, LB_MAX_CREW = 8;
 const JOBLOG_SHEET = "Job log";
@@ -2908,7 +2909,7 @@ function lbMonth_(d, key) {
   return out;
 }
 /** A truck's jobs that day, cleaned: up to 20 jobs, each with its revenue (or blank), who worked with him (up to 8,
- *  never himself), their shares, the equal-split and revenue-credit marks. null when there are none. */
+ *  never himself), their shares, the equal-split, revenue-split and sales-split marks. null when there are none. */
 function lbJobs_(list, owner) {
   if (!Array.isArray(list)) return null;
   const out = [];
@@ -2928,7 +2929,7 @@ function lbJobs_(list, owner) {
       if (typeof x.p === "number" && isFinite(x.p) && x.p >= 0 && x.p <= 100) e.p = Math.round(x.p * 100) / 100;
       w.push(e);
     });
-    if (w.length) { job.w = w; if (j.e) job.e = 1; if (j.c) job.c = 1; }
+    if (w.length) { job.w = w; if (j.e) job.e = 1; if (j.c) job.c = 1; if (j.d) job.d = 1; }   // c: revenue split, d: sales split
     out.push(job);
   });
   return out.length ? out : null;
