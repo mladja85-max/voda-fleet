@@ -993,6 +993,20 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-former[open] > summary { margin-bottom: 8px; }
 .lb-former .hint { margin: 0 0 8px; }
 .lb-team .t-label { font-family: var(--font-display); font-size: 1.2rem; text-transform: uppercase; letter-spacing: .02em; margin-right: auto; }
+.lb-rename { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 220px; min-width: 0; margin-right: auto; }
+.lb-rename input { flex: 1 1 120px; min-width: 0; font: inherit; font-weight: 700; color: var(--ink); background: var(--surface); border: 1.5px solid var(--accent); border-radius: 8px; padding: 6px 9px; }
+.lb-rvrow > .r-email, .lb-rvrow > .r-phone { flex: 1 1 130px; width: auto; }
+/* a phone: the name, Rename and Remove stay on one line; a helper's three buttons too */
+@media (max-width: 560px) {
+  .lb-team-top { gap: 4px; }
+  .lb-team-top > .btn.small { padding-inline: 6px; }
+  .lb-order .btn { min-width: 30px; padding-inline: 6px; }
+  .lb-rvacts { gap: 0; flex-wrap: nowrap; justify-content: space-between; }
+  .lb-rvacts .btn.small { padding-inline: 5px; }
+}
+.lb-rename-msg { flex-basis: 100%; margin: 0; }
+.lb-rename-msg[hidden] { display: none; }
+.lb-rename-msg.ok { color: var(--ok, #1a7f37); font-size: .86rem; font-weight: 600; }
 .lb-team-top { justify-content: space-between; }
 @media (max-width: 520px) {
   .lb-boxes { gap: 6px; }
@@ -1582,8 +1596,17 @@ function lbName(raw) {
   s = s.replace(/(['’`]s)?\s+(team|jobs?|truck)$/i, "").replace(/['’`]s$/i, "").trim();
   if (!/^[a-z][a-z .-]{0,30}$/i.test(s)) return "";
   const k = s.toLowerCase();
-  if (LB_ALIASES[k]) return LB_ALIASES[k];
-  return k.replace(/(^|[ .-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  const name = LB_ALIASES[k] || k.replace(/(^|[ .-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  return LB_AKA[name.toLowerCase()] || name;
+}
+/** Former names → today's names: someone renamed in Employees keeps his old name on the old sheets, so an Excel copy of
+ *  them still counts for him. A former name that someone else has now stays that person's. Set before reading Excel. */
+let LB_AKA = {};
+function lbSetAka(cfg) {
+  const c = lbCleanConfig(cfg), all = c.teams.concat(c.reviewers), now = new Set(all.map(p => p.name.toLowerCase()));
+  LB_AKA = {};
+  for (const p of all) for (const a of p.aka || []) if (!now.has(a.toLowerCase())) LB_AKA[a.toLowerCase()] = p.name;
+  return LB_AKA;
 }
 
 const lbMonthKey = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
@@ -1641,6 +1664,22 @@ const lbIs = (v, word) => lbText(v).toUpperCase() === word;
 const lbTeamName = v => { const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return /^[A-Za-z][A-Za-z '-]{0,29}$/.test(s) ? s : ""; };
 const lbYm = v => (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(v || "")) ? String(v) : "");
 const lbIsDay = v => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(v || ""));
+/** An email address, or "" when it isn't one. */
+const lbEmail = v => { const s = String(v == null ? "" : v).trim(); return s.length <= 100 && /^[^\s@<>"',;=]+@[^\s@<>"',;=]+\.[A-Za-z]{2,}$/.test(s) ? s : ""; };
+/** A phone number (digits with spaces, dots, dashes, brackets, a leading +; at least 7 digits), or "". */
+const lbPhone = v => { const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return s.length <= 25 && /^\+?[0-9(][0-9 ().-]*$/.test(s) && s.replace(/\D/g, "").length >= 7 ? s : ""; };
+/** A person's email, phone and former names (aka: what he was called before a rename), cleaned onto `p`. */
+function lbPersonMore(p, raw) {
+  if (lbEmail(raw && raw.email)) p.email = lbEmail(raw.email);
+  if (lbPhone(raw && raw.phone)) p.phone = lbPhone(raw.phone);
+  const aka = [];
+  for (const n of (raw && Array.isArray(raw.aka) ? raw.aka : []).slice(0, 8)) {
+    const a = lbTeamName(n);
+    if (a && a.toLowerCase() !== p.name.toLowerCase() && !aka.some(x => x.toLowerCase() === a.toLowerCase())) aka.push(a);
+  }
+  if (aka.length) p.aka = aka;
+  return p;
+}
 /** The roster, cleaned: each team once, a unit, the months it's on the board ("" = open), and the people on the
  *  reviews board only (reviewers: helpers who get 5-star reviews but don't run a truck; never ranked).
  *  The exact days (Employees): on = his first day on the leaderboard (kept only when it isn't the 1st of `from`),
@@ -1680,7 +1719,7 @@ function lbCleanConfig(c) {
     if (was.length) team.was = was.sort((x, y) => x[1].localeCompare(y[1]));
     if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
     if (LB_ROLES[t.role]) team.role = t.role;
-    out.teams.push(team);
+    out.teams.push(lbPersonMore(team, t));
   }
   for (const r of (c && Array.isArray(c.reviewers) ? c.reviewers : []).slice(0, 30)) {
     const name = lbTeamName(r && r.name);
@@ -1688,7 +1727,7 @@ function lbCleanConfig(c) {
     seen.add(name.toLowerCase());
     const rv = { name, unit: LB_GROUPS.includes(r.unit) ? r.unit : LB_GROUPS[0] };
     if (LB_ROLES[r.role]) rv.role = r.role;
-    out.reviewers.push(rv);
+    out.reviewers.push(lbPersonMore(rv, r));
   }
   return out;
 }
@@ -6090,6 +6129,7 @@ const LB_JOBS_API = 30;                                // ... and with a truck's
 const LB_DATES_API = 31;                               // ... and with the exact days on and off the leaderboard, and Left the company
 const LB_SPLIT_API = 32;                               // ... and with the sales split on a shared job
 const LB_MODES_API = 33;                               // ... and with separate revenue and sales splits, in % or dollars
+const LB_PEOPLE_API = 34;                              // ... and with renaming a person, emails and phone numbers
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -7464,6 +7504,54 @@ function openLbTeams() {
   const startDay = clockNow().getFullYear() === y ? today : `${y}-01-01`;   // a new person's first day (another year open: its January 1)
   const orig = {};   // each person as saved, by name: his stretch on the leaderboard as it was
   const list = h("div", { class: "lb-teams", id: "lbTeamList" });
+  /** Rename, beside a person's name: the name becomes a box with Save name / Cancel. Saving renames him everywhere at
+   *  once (every year's numbers, the jobs he helped on, reviews, pay rates) and opens this window again, so anything
+   *  else changed here has to be saved first. */
+  const renameBtn = (name, label, cls) => h("button", { class: "btn ghost small " + cls, type: "button", "aria-label": `Rename ${name}`, onclick: e => {
+    // its messages show on the person's own row (the window's message line is at the bottom, out of sight from here)
+    const host = e.currentTarget.closest(".lb-team-top, .lb-rvrow");
+    const note = host.querySelector(".lb-rename-msg") || host.appendChild(h("p", { class: "dlg-err lb-rename-msg", role: "alert", hidden: true }));
+    const say = m => { note.textContent = m; note.hidden = !m; };
+    say("");
+    if (apiLevel && apiLevel < LB_PEOPLE_API) { say("Renaming needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."); return; }
+    if (dlgDirty) { say("Save your other changes first, then rename: renaming saves right away and opens this window again."); return; }
+    const btn = e.currentTarget;
+    const input = h("input", { type: "text", class: "t-newname", maxlength: "30", autocomplete: "off", value: name, "aria-label": `New name for ${name}` });
+    const go = h("button", { class: "btn small primary t-rename-go", type: "button" }, "Save name");
+    const box = h("span", { class: "lb-rename" }, input, go);
+    const cancel = () => { box.replaceWith(label); btn.hidden = false; dlgDirty = false; say(""); };
+    box.append(h("button", { class: "btn small ghost t-rename-no", type: "button", onclick: cancel }, "Cancel"));
+    go.onclick = async () => {
+      const to = lbTeamName(input.value);
+      if (!to) { say("Names take letters only (spaces, ' and - are fine)."); return; }
+      if (to === name) { cancel(); return; }
+      if (to.toLowerCase() !== name.toLowerCase() && cfg.teams.concat(cfg.reviewers).some(x => x.name.toLowerCase() === to.toLowerCase())) { say(`There's already a ${to}. To give one person's numbers to another, use Move numbers.`); return; }
+      if (!confirm(`Rename ${name} to ${to} everywhere? Every year's numbers, the jobs he helped on, his reviews and his pay rates follow.`)) return;
+      go.disabled = true; go.textContent = "Renaming…";
+      try {
+        await api("lbRename", { from: name, to }, 120000);
+        lbYearCache = {}; lbRates = null; lbRatesAsked = false;
+        await lbReload();
+        dlgDirty = false;
+        openLbTeams();
+        toast(`${name} is now ${to}`);
+        // and said on his row in the window just opened again
+        const row = [...document.querySelectorAll("#dlg .lb-team, #dlg .lb-rvrow")].find(r => r.dataset.name === to);
+        if (row) {
+          (row.querySelector(".lb-team-top") || row).appendChild(h("p", { class: "lb-rename-msg ok", role: "status", text: `Renamed from ${name}: every year's numbers, shared jobs, reviews and pay rates now say ${to}.` }));
+          row.scrollIntoView({ block: "nearest" });
+        }
+      } catch (x) {
+        say(x && x.error === "name_in_use" ? `There are already numbers under ${to}. Pick another name, or use Move numbers.`
+          : x && x.error === "not_found" ? `${name} isn't in Employees any more. Close this window and open it again.` : errText(x, "Nothing"));
+        go.disabled = false; go.textContent = "Save name";
+      }
+    };
+    input.addEventListener("keydown", k => { if (k.key === "Enter") { k.preventDefault(); go.click(); } });
+    label.replaceWith(box); btn.hidden = true; input.focus(); input.select();
+  } }, "Rename");
+  const mailBox = (cls, v, who) => h("input", { type: "email", class: cls, maxlength: "100", autocomplete: "off", inputmode: "email", value: v || "", placeholder: "name@example.com", "aria-label": `${who || "Their"} email` });
+  const phoneBox = (cls, v, who) => h("input", { type: "tel", class: cls, maxlength: "25", autocomplete: "off", value: v || "", placeholder: "(555) 123-4567", "aria-label": `${who || "Their"} phone` });
   const dateField = (cls, label, value, hidden) => h("div", { class: "field " + cls + "-f", hidden: !!hidden }, h("label", { text: label }),
     h("input", { type: "date", class: cls, value: value || "", min: "2015-01-01", max: `${clockNow().getFullYear() + 1}-12-31` }));
   /** One person: unit, role, the On the leaderboard check mark with its exact days, and Left the company with his last
@@ -7474,18 +7562,22 @@ function openLbTeams() {
     const first = lbFirstOn(t), last = lbLastOn(t), onNow = !last;
     if (!isNew) orig[t.name.toLowerCase()] = t;
     const ended = !isNew && !!last && last < today;
+    const nameEl = h("strong", { class: "t-label", text: t.name });
     const row = h("div", { class: "lb-team", "data-new": isNew ? "1" : null, "data-name": t.name || null },
       h("div", { class: "lb-team-top" },
         h("div", { class: "lb-order" },
           h("button", { class: "btn ghost small t-up", type: "button", "aria-label": `Move ${t.name || "this person"} up`, title: "Move up", onclick: () => { const p = row.previousElementSibling; if (p) row.parentNode.insertBefore(row, p); row.querySelector(".t-up").focus(); } }, "↑"),
           h("button", { class: "btn ghost small t-down", type: "button", "aria-label": `Move ${t.name || "this person"} down`, title: "Move down", onclick: () => { const n = row.nextElementSibling; if (n) row.parentNode.insertBefore(n, row); row.querySelector(".t-down").focus(); } }, "↓")),
         isNew ? h("div", { class: "field" }, h("label", { text: "Name" }), h("input", { type: "text", class: "t-name", maxlength: "30", autocomplete: "off", value: t.name || "", placeholder: "First name" }))
-          : h("strong", { class: "t-label", text: t.name }),
+          : nameEl,
+        isNew ? null : renameBtn(t.name, nameEl, "t-rename"),
         isNew ? h("button", { class: "btn ghost small danger", type: "button", onclick: () => row.remove() }, "Remove")
           : h("button", { class: "btn ghost small danger t-remove", type: "button", onclick: () => removeTeam(row, t) }, "Remove")),
       h("div", { class: "nums" },
         h("div", { class: "field" }, h("label", { text: "Unit" }), h("select", { class: "t-unit" }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === t.unit })))),
-        h("div", { class: "field" }, h("label", { text: "Role" }), lbRoleSelect("t-role", t.role, t.name))),
+        h("div", { class: "field" }, h("label", { text: "Role" }), lbRoleSelect("t-role", t.role, t.name)),
+        h("div", { class: "field" }, h("label", { text: "Email" }), mailBox("t-email", t.email, t.name)),
+        h("div", { class: "field" }, h("label", { text: "Phone" }), phoneBox("t-phone", t.phone, t.name))),
       h("div", { class: "lb-days" },
         h("label", { class: "check" }, h("input", { type: "checkbox", class: "t-on", checked: onNow }), h("span", null, "On the leaderboard")),
         dateField("t-since", "Since (first day)", first),
@@ -7561,16 +7653,20 @@ function openLbTeams() {
   // people on the reviews board only (helpers who get 5-star reviews, no truck): never ranked
   const rvList = h("div", { class: "lb-rvlist", id: "lbRvList" });
   const rvRow = (r, isNew) => {
+    const rvName = h("strong", { text: r.name });
     const row = h("div", { class: "lb-rvrow", "data-new": isNew ? "1" : null, "data-name": r.name || null },
       isNew ? h("input", { type: "text", class: "r-name", maxlength: "30", autocomplete: "off", value: r.name || "", placeholder: "First name", "aria-label": "Name" })
-        : h("strong", { text: r.name }),
+        : rvName,
       h("select", { class: "r-unit", "aria-label": `${r.name || "Their"} unit` }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === r.unit }))),
       lbRoleSelect("r-role", r.role, r.name),
+      mailBox("r-email", r.email, r.name), phoneBox("r-phone", r.phone, r.name),
       h("div", { class: "lb-rvacts" },
+        isNew ? null : renameBtn(r.name, rvName, "r-rename"),
         h("button", { class: "btn ghost small", type: "button", "data-up": r.name || "", "aria-label": `Put ${r.name || "this name"} on the leaderboard`, onclick: () => {
           const name = row.dataset.new ? row.querySelector(".r-name").value.trim() : row.dataset.name;
           if (!name) { err.textContent = "Type the name first."; return; }
-          list.append(rowEl({ name, unit: row.querySelector(".r-unit").value, role: row.querySelector(".r-role").value, from: startDay.slice(0, 7), on: startDay, to: "" }, true));
+          list.append(rowEl({ name, unit: row.querySelector(".r-unit").value, role: row.querySelector(".r-role").value, from: startDay.slice(0, 7), on: startDay, to: "",
+            email: row.querySelector(".r-email").value, phone: row.querySelector(".r-phone").value }, true));
           row.remove();
           toast(`${name} goes on the leaderboard from ${dayLong(startDay)}. Change the day if it's another one, then tap Save.`);
         } }, "Put on the leaderboard"),
@@ -7601,6 +7697,18 @@ function openLbTeams() {
         h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
         h("button", { class: "btn primary", type: "button", id: "lbTeamsSave", text: "Save", onclick: async () => {
           const teams = [], names = new Set();
+          // each person's email and phone (blank clears them) and the names he had before a rename
+          let typedContact = false;
+          const contact = (person, row, mailSel, phoneSel) => {
+            const mail = row.querySelector(mailSel).value.trim(), phone = row.querySelector(phoneSel).value.trim();
+            if (mail && !lbEmail(mail)) { err.textContent = `${person.name}: that email doesn't look right.`; row.querySelector(mailSel).focus(); return false; }
+            if (phone && !lbPhone(phone)) { err.textContent = `${person.name}: that phone number doesn't look right (digits, spaces, dashes).`; row.querySelector(phoneSel).focus(); return false; }
+            person.email = lbEmail(mail); person.phone = lbPhone(phone);
+            if (mail || phone) typedContact = true;
+            const was = lbTeamOf(cfg, person.name) || lbReviewerOf(cfg, person.name);
+            person.aka = (was && was.aka) || [];
+            return true;
+          };
           for (const row of [...list.children, ...offList.children, ...formerList.children]) {
             const name = row.dataset.new ? lbTeamName(row.querySelector(".t-name").value) : row.dataset.name;
             if (row.dataset.new && !row.querySelector(".t-name").value.trim()) continue;
@@ -7623,6 +7731,7 @@ function openLbTeams() {
             if (was.length) team.was = was;
             if (row.querySelector(".t-role").value) team.role = row.querySelector(".t-role").value;
             if (row.querySelector(".t-nosale").checked) team.noSale = true;
+            if (!contact(team, row, ".t-email", ".t-phone")) return;
             teams.push(team);
           }
           const reviewers = [];
@@ -7635,6 +7744,7 @@ function openLbTeams() {
             names.add(name.toLowerCase());
             const rv = { name, unit: row.querySelector(".r-unit").value };
             if (row.querySelector(".r-role").value) rv.role = row.querySelector(".r-role").value;
+            if (!contact(rv, row, ".r-email", ".r-phone")) return;
             reviewers.push(rv);
           }
           const goal = Number(val("lbGoal").replace(/[$,\s]/g, ""));
@@ -7643,6 +7753,7 @@ function openLbTeams() {
           // the exact days need the script that keeps them; whole months and "left in his last month" save as before
           const plain = t => (!t.on || t.on === t.from + "-01") && (!t.off || t.off === lbLastDay(t.to)) && (t.left || "") === (t.to ? lbLastDay(t.to) : "") && !t.was;
           if (apiLevel && apiLevel < LB_DATES_API && !teams.every(plain)) { err.textContent = "Exact days and Left the company need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+          if (typedContact && apiLevel && apiLevel < LB_PEOPLE_API) { err.textContent = "Emails and phone numbers need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "Estimator needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
           try {
@@ -7670,6 +7781,7 @@ function openLbReviewsXl() {
     h("p", { class: "hint", text: "Choose an Excel copy of 5. Revenue per truck. The app reads the REVIEWS table on every month tab and lists the names there that aren't a team (helpers). Loading adds them to Not on the leaderboard and saves their monthly counts; trucks, sales and the teams' reviews stay as they are." }),
     h("input", { type: "file", id: "lbRvXlFile", accept: ".xlsx", onchange: async e => {
       err.textContent = ""; res.hidden = true; found = [];
+      lbSetAka(lbData && lbData.config);
       const f = e.target.files[0];
       if (!f) return;
       try {
@@ -7824,6 +7936,7 @@ function openLbHistory() {
     h("p", { class: "hint", text: "Choose Excel copies of 5. Revenue per truck and 2. Technician monthly sales (File > Download > Microsoft Excel). The app reads every year in them, shows what it found, and saves only the years you tick." }),
     h("input", { type: "file", id: "lbHistFiles", accept: ".xlsx", multiple: true, onchange: async e => {
       err.textContent = ""; res.hidden = true; hists = {}; armed = false;
+      lbSetAka(lbData && lbData.config);
       const files = [...e.target.files];
       if (!files.length) return;
       try {

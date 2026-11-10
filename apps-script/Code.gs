@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 33;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 34;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -290,6 +290,9 @@ function doPost(e) {
       case "lbPut":
         if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return lbPut_(req); }));
+      case "lbRename":
+        if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return lbRename_(req); }));
       case "jobLog":
         if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(jobLog_(req));
@@ -2834,6 +2837,29 @@ function lbNums_(a, n) {
   return any ? out : null;
 }
 function lbDay_(v) { return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(v || "")) ? String(v) : ""; }
+/** An email address or "" (plain enough that it can't turn into a formula or break a field). */
+function lbEmail_(v) {
+  const s = supText_(v, 100);
+  return /^[^\s@<>"',;=]+@[^\s@<>"',;=]+\.[A-Za-z]{2,}$/.test(s) ? s : "";
+}
+/** A phone number or "": digits with spaces, dots, dashes, brackets and a leading +, at least 7 digits. */
+function lbPhone_(v) {
+  const s = supText_(v, 25);
+  return /^\+?[0-9(][0-9 ().-]*$/.test(s) && s.replace(/\D/g, "").length >= 7 ? s : "";
+}
+/** A person's contact details and former names (Employees), cleaned onto `p`: email, phone, and aka: the names he had
+ *  before a rename, so an Excel copy of the old sheets still counts for him. */
+function lbPerson_(p, raw) {
+  if (lbEmail_(raw && raw.email)) p.email = lbEmail_(raw.email);
+  if (lbPhone_(raw && raw.phone)) p.phone = lbPhone_(raw.phone);
+  const aka = [];
+  ((raw && Array.isArray(raw.aka)) ? raw.aka : []).slice(0, 8).forEach(function (n) {
+    const a = lbTeam_(n);
+    if (a && a.toLowerCase() !== p.name.toLowerCase() && !aka.some(function (x) { return x.toLowerCase() === a.toLowerCase(); })) aka.push(a);
+  });
+  if (aka.length) p.aka = aka;
+  return p;
+}
 /** The roster, cleaned: each team once, a unit, the months it's on the board, and the exact days set in Employees:
  *  on / off = his first / last day on the leaderboard, left = his last day with the company, was = earlier stretches
  *  on the leaderboard [[first day, last day], ...]. */
@@ -2859,7 +2885,7 @@ function lbConfig_(c) {
     if (was.length) team.was = was;
     if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
     if (LB_ROLES.indexOf(t.role) !== -1) team.role = t.role;
-    out.teams.push(team);
+    out.teams.push(lbPerson_(team, t));
   });
   // people on the reviews board only (helpers who get 5-star reviews but don't run a truck): never ranked
   const reviewers = [];
@@ -2869,7 +2895,7 @@ function lbConfig_(c) {
     seen[name.toLowerCase()] = true;
     const rv = { name: name, unit: LB_UNITS.indexOf(r.unit) !== -1 ? r.unit : LB_UNITS[0] };
     if (LB_ROLES.indexOf(r.role) !== -1) rv.role = r.role;
-    reviewers.push(rv);
+    reviewers.push(lbPerson_(rv, r));
   });
   if (reviewers.length) out.reviewers = reviewers;
   return out;
@@ -2981,7 +3007,121 @@ function lbRead_(user, year) {
     if (r.key === "config") out.config = lbParse_(r.json);
     else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);
   });
+  // emails and phone numbers go only to those who set up the people (admins, Leaderboard numbers)
+  if (!out.canEdit) (out.config.teams || []).concat(out.config.reviewers || []).forEach(function (p) { if (p) { delete p.email; delete p.phone; } });
   return out;
+}
+/** A roster being saved keeps what the app that sent it doesn't know about: a person sent without an email, phone or
+ *  former-names field at all (an app not refreshed yet) keeps the ones on file. Sent blank, they're cleared. */
+function lbKeepPeople_(doc, raw, before) {
+  const sent = {}, had = {};
+  ((raw && Array.isArray(raw.teams)) ? raw.teams : []).concat((raw && Array.isArray(raw.reviewers)) ? raw.reviewers : []).forEach(function (p) { const n = lbTeam_(p && p.name).toLowerCase(); if (n && !sent[n]) sent[n] = p; });
+  ((before && before.teams) || []).concat((before && before.reviewers) || []).forEach(function (p) { if (p && p.name) had[String(p.name).toLowerCase()] = p; });
+  doc.teams.concat(doc.reviewers || []).forEach(function (p) {
+    const s = sent[p.name.toLowerCase()] || {}, h = had[p.name.toLowerCase()];
+    if (!h) return;
+    ["email", "phone", "aka"].forEach(function (f) { if (s[f] === undefined && h[f] !== undefined && p[f] === undefined) p[f] = h[f]; });
+  });
+  return doc;
+}
+/** Renames a person everywhere, in one step: the roster (his old name is kept as a former name), every month of every
+ *  year (his truck days, sales, reviews, jobs, and the jobs he helped on), the pay rates and the job log.
+ *  { from, to } → { ok, config, months: how many months changed }. Refused when the new name is someone else's.
+ *  The roster is saved first, so a rename cut off part way is finished by asking for it again. */
+function lbRename_(req) {
+  const from = lbTeam_(req.from), to = lbTeam_(req.to);
+  if (!from || !to || from === to) return { ok: false, error: "bad_request" };
+  const s = lbSheet_(false);
+  if (!s) return { ok: false, error: "not_found" };
+  const lf = from.toLowerCase(), lt = to.toLowerCase(), other = lf !== lt;
+  const rows = lbRows_(s), byKey = {};
+  rows.forEach(function (r) { byKey[r.key] = r; });
+  const cfg = lbConfig_(lbParse_(byKey.config ? byKey.config.json : ""));
+  const people = cfg.teams.concat(cfg.reviewers || []);
+  let who = people.filter(function (p) { return p.name.toLowerCase() === lf; })[0];
+  // a rename that was cut off part way (the roster already has the new name, some months still the old one) is
+  // finished by asking for it again
+  let resume = false;
+  if (!who) {
+    who = people.filter(function (p) { return p.name.toLowerCase() === lt && (p.aka || []).some(function (a) { return a.toLowerCase() === lf; }); })[0];
+    if (!who) return { ok: false, error: "not_found" };
+    resume = true;
+  }
+  if (!resume && other && people.some(function (p) { return p.name.toLowerCase() === lt; })) return { ok: false, error: "name_in_use" };
+  // a name → the new one when it's his; `clash` when the new name is already on something (numbers left by someone
+  // who isn't in Employees)
+  let clash = false;
+  const is = function (n) { return String(n).toLowerCase() === lf; };
+  const taken = function (n) { return !resume && other && String(n).toLowerCase() === lt; };
+  const keys = function (m) {   // an object keyed by name
+    if (!m || typeof m !== "object" || Array.isArray(m)) return false;
+    let changed = false;
+    Object.keys(m).forEach(function (k) {
+      if (taken(k)) clash = true;
+      else if (is(k) && k !== to) { m[to] = m[k]; delete m[k]; changed = true; }
+    });
+    return changed;
+  };
+  const crew = function (jobs) {   // the helpers on a list of jobs
+    let changed = false;
+    (Array.isArray(jobs) ? jobs : []).forEach(function (j) {
+      ((j && Array.isArray(j.w)) ? j.w : []).forEach(function (h) {
+        if (!h) return;
+        if (taken(h.n)) clash = true;
+        else if (is(h.n) && h.n !== to) { h.n = to; changed = true; }
+      });
+    });
+    return changed;
+  };
+  const docs = [];
+  rows.forEach(function (r) {
+    if (!lbYm_(r.key)) return;
+    const doc = lbParse_(r.json);
+    let changed = false;
+    Object.keys(doc.days && typeof doc.days === "object" ? doc.days : {}).forEach(function (day) {
+      const d = doc.days[day];
+      if (!d || typeof d !== "object") return;
+      ["t", "s", "r", "j"].forEach(function (p) { if (keys(d[p])) changed = true; });
+      Object.keys(d.j && typeof d.j === "object" ? d.j : {}).forEach(function (truck) { if (crew(d.j[truck])) changed = true; });
+    });
+    if (keys(doc.reviews)) changed = true;
+    if (changed) docs.push({ key: r.key, doc: doc });
+  });
+  if (clash) return { ok: false, error: "name_in_use" };
+  const now = new Date().toISOString();
+  // the roster: his new name, the old one kept as a former name (so an Excel copy of the old sheets still counts for him)
+  const aka = (who.aka || []).filter(function (n) { return n.toLowerCase() !== lt && n.toLowerCase() !== lf; });
+  if (other) aka.push(from);
+  who.name = to;
+  if (aka.length) who.aka = aka.slice(-8); else delete who.aka;
+  const roster = lbConfig_(cfg);
+  roster.at = now; roster.by = req.by;
+  lbSaveRow_(s, byKey, "config", JSON.stringify(roster), now, req.by);
+  docs.forEach(function (d) { lbSaveRow_(s, byKey, d.key, JSON.stringify(lbMonth_(d.doc, d.key)), now, req.by); });
+  // pay rates
+  const ps = paySheet_(false);
+  if (ps) lbRows_(ps).forEach(function (r) {
+    if (r.key !== "rates") return;
+    const rates = lbParse_(r.json);
+    if (keys(rates.people)) ps.getRange(r.row, 2, 1, 3).setValues([[JSON.stringify(rates), now, req.by]]);
+  });
+  // the job log: the truck's name and the helpers in every saved version
+  const js = jobLogSheet_(false);
+  if (js && js.getLastRow() > 1) {
+    const rng = js.getRange(2, 4, js.getLastRow() - 1, 2), vals = rng.getValues();
+    let any = false;
+    vals.forEach(function (v) {
+      if (is(v[0]) && v[0] !== to) { v[0] = to; any = true; }
+      if (String(v[1]).toLowerCase().indexOf(lf) === -1) return;
+      let jobs;
+      try { jobs = JSON.parse(String(v[1] || "[]")); } catch (e) { return; }
+      const was = clash;
+      if (crew(jobs)) { v[1] = JSON.stringify(jobs); any = true; }
+      clash = was;   // an old version naming someone else with the new name isn't a reason to stop: the log is history
+    });
+    if (any) rng.setValues(vals);
+  }
+  return { ok: true, config: roster, months: docs.length };
 }
 /** Saves changes: { writes: [{ key: "2026-11", patch }] } merges a change into that month (a blank entry clears it);
  *  { key, data } replaces the month or the roster ("config") whole. Each day changed is stamped with who saved it. */
@@ -2999,7 +3139,7 @@ function lbPut_(req) {
     const change = whole ? w.data : (w && w.patch && typeof w.patch === "object" ? w.patch : null);
     if (!change || (key !== "config" && !lbYm_(key))) return;
     let doc;
-    if (key === "config") doc = lbConfig_(change);
+    if (key === "config") doc = lbKeepPeople_(lbConfig_(change), change, byKey.config ? lbConfig_(lbParse_(byKey.config.json)) : null);
     else {
       const before = byKey[key] ? lbMonth_(lbParse_(byKey[key].json), key) : { days: {} };
       doc = lbMerge_(whole ? {} : lbParse_(byKey[key] ? byKey[key].json : ""), change);
