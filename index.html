@@ -145,7 +145,9 @@ button { font: inherit; color: inherit; }
   .page { width: 100%; max-width: calc(var(--page-w) + 48px); margin-inline: auto; }
   .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
   body .sup, body .lb { max-width: 1000px; width: 100%; }
-  body[data-tab="leaderboard"][data-lbtab="payroll"] .lb { max-width: none; }
+  body[data-tab="leaderboard"][data-lbtab="payroll"] .lb, body[data-tab="leaderboard"][data-lbtab="enter"] .lb { max-width: none; }
+  /* Enter numbers: three cards a row across the whole page (from the same left edge) */
+  body[data-lbtab="enter"] .lb-enter, body[data-lbtab="enter"] .lb-enter:has(.lb-jobs) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   /* the buttons sit next to the title instead of across the screen; Employees first, so it doesn't move when
      Presentation shows on Standings */
   body .lb-title { margin-right: 6px; }
@@ -749,6 +751,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-src .lb-status.bad { color: var(--due); }
 .lb-team { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; background: var(--surface-2); }
 .lb-team-top { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.lb-order { display: flex; gap: 2px; align-self: center; }
+.lb-order .btn { min-width: 34px; padding: 4px 8px; font-size: 1rem; }
 .lb-team-top .field { flex: 1 1 140px; }
 .lb-team .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .lb-team .field input, .lb-team .field select { padding: 7px 9px; }
@@ -6184,8 +6188,10 @@ function lbEnterDay() {
 const lbDayDoc = day => { const d = ((lbData.months[day.slice(0, 7)] || {}).days || {})[day]; return d && typeof d === "object" ? d : {}; };
 const lbHasPart = (day, part) => Object.values(lbDayDoc(day)[part] || {}).some(a => lbEntry(a, LB_PART_LEN[part] || 1).length);
 /** The teams to show for a day: the month's board, then anyone else with numbers that day (so they can be cleared). */
+/** Enter numbers' cards: everyone on the board that month in the order set in Employees (↑ ↓), then anyone else with
+ *  numbers that day (so they can be cleared). */
 function lbTeamsFor(key, names) {
-  const cfg = lbCfg(), board = lbBoard(cfg, key);
+  const cfg = lbCfg(), board = cfg.teams.filter(t => lbOnBoard(t, key));
   const extra = [...new Set(names)].filter(n => !board.some(t => t.name.toLowerCase() === n.toLowerCase())).map(n => ({ name: n, unit: "", off: true }));
   return board.map(t => Object.assign({}, t)).concat(extra);
 }
@@ -6929,6 +6935,9 @@ function openLbTeams() {
   const rowEl = (t, isNew, former) => {
     const row = h("div", { class: "lb-team", "data-new": isNew ? "1" : null, "data-name": t.name || null },
       h("div", { class: "lb-team-top" },
+        former ? null : h("div", { class: "lb-order" },
+          h("button", { class: "btn ghost small t-up", type: "button", "aria-label": `Move ${t.name || "this person"} up`, title: "Move up", onclick: () => { const p = row.previousElementSibling; if (p) list.insertBefore(row, p); row.querySelector(".t-up").focus(); } }, "↑"),
+          h("button", { class: "btn ghost small t-down", type: "button", "aria-label": `Move ${t.name || "this person"} down`, title: "Move down", onclick: () => { const n = row.nextElementSibling; if (n) list.insertBefore(n, row); row.querySelector(".t-down").focus(); } }, "↓")),
         isNew ? h("div", { class: "field" }, h("label", { text: "Name" }), h("input", { type: "text", class: "t-name", maxlength: "30", autocomplete: "off", value: t.name || "", placeholder: "First name" }))
           : h("strong", { class: "t-label", text: t.name }),
         isNew ? h("button", { class: "btn ghost small danger", type: "button", onclick: () => row.remove() }, "Remove")
@@ -6988,7 +6997,7 @@ function openLbTeams() {
   const thisMonth = lbMonthKey(y, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 1);
   openDialog(
     h("h3", { id: "dlgTitle", text: "Employees" }),
-    h("p", { class: "hint", text: "On the leaderboard: each truck's team, the unit it's ranked in, its role and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June." }),
+    h("p", { class: "hint", text: "On the leaderboard: each truck's team, the unit it's ranked in, its role and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June. ↑ ↓ set the order of the cards in Enter numbers." }),
     list,
     h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: thisMonth, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a person to the leaderboard")),
     h("div", { class: "lb-rvsec" },
