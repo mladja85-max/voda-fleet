@@ -918,9 +918,12 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rvsec h4 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; }
 .lb-rvsec .hint { margin: 0; }
 .lb-rvlist { display: grid; gap: 6px; }
-.lb-rvrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px) minmax(0, 170px) auto; gap: 8px; align-items: center; }
+.lb-rvrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }   /* the name never squeezes to a letter */
+.lb-rvrow > strong, .lb-rvrow > .r-name { flex: 1 1 7em; min-width: 0; }
+.lb-rvrow > select { flex: 1 1 130px; max-width: 170px; }
+.lb-rvacts { flex: 0 0 auto; }
 .lb-rvacts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
-@media (max-width: 560px) { .lb-rvrow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 6px; border-bottom: 1px dashed var(--line); } .lb-rvrow > strong, .lb-rvrow > .r-name { grid-column: 1 / -1; } .lb-rvacts { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .lb-rvrow { padding-bottom: 6px; border-bottom: 1px dashed var(--line); } .lb-rvrow > strong, .lb-rvrow > .r-name, .lb-rvacts { flex-basis: 100%; } .lb-rvrow > select { flex: 1 1 40%; max-width: none; } }
 .lb-rvrow strong { font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; }
 .lb-rvrow input, .lb-rvrow select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
 .lb-rvbtns { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -933,6 +936,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbs-place.p3 { background: #1f8fc7; color: #fff; border-color: #1a7fb3; }
 .lb-table tbody th, .lb-table tfoot th { font-weight: 700; text-align: left; color: var(--ink); text-transform: none; letter-spacing: 0; font-size: .86rem; }
 .lb-teams { display: grid; gap: 8px; }
+.lb-former { border: 1px dashed var(--line); border-radius: 12px; padding: 8px 12px; }
+.lb-former[hidden] { display: none; }
+.lb-former > summary { cursor: pointer; font-weight: 700; color: var(--muted); }
+.lb-former[open] > summary { margin-bottom: 8px; }
+.lb-former .hint { margin: 0 0 8px; }
 .lb-team .t-label { font-family: var(--font-display); font-size: 1.2rem; text-transform: uppercase; letter-spacing: .02em; margin-right: auto; }
 .lb-team-top { justify-content: space-between; }
 @media (max-width: 520px) {
@@ -1615,6 +1623,8 @@ const LB_ROLES = { assistant: "Assistant", clean1: "Cleaning tech 1", clean2: "C
 /** A reviews-only person by name (any capitals), or null. */
 const lbReviewerOf = (cfg, name) => ((cfg && cfg.reviewers) || []).find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 const lbOnBoard = (t, key) => (!t.from || t.from <= key) && (!t.to || key <= t.to);
+/** Still with the company in month `key` or later (a team whose last month on the board has passed is a former one). */
+const lbCurrent = (t, key) => !t.to || t.to >= key;
 /** The roster entry for a name (any capitals), or null. */
 const lbTeamOf = (cfg, name) => cfg.teams.find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 /** The unit a team is ranked in that month ("2026-11"), or "" when it isn't on the board then. */
@@ -6581,7 +6591,8 @@ async function openPayRates() {
   catch (e) { toast(e && e.error === "not_allowed" ? "Only admins switched on for Payroll see pay rates." : errText(e, "Nothing")); return; }
   // everyone this year: the teams on the board, then the people not on the leaderboard, by unit
   const months = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
-  const people = LB_GROUPS.flatMap(g => cfg.teams.filter(t => t.unit === g && months.some(k => lbOnBoard(t, k))).map(t => Object.assign({ off: false }, t))
+  const nowKey = lbMonthKey(clockNow().getFullYear(), clockNow().getMonth() + 1);
+  const people = LB_GROUPS.flatMap(g => cfg.teams.filter(t => t.unit === g && months.some(k => lbOnBoard(t, k)) && lbCurrent(t, nowKey)).map(t => Object.assign({ off: false }, t))
     .concat(cfg.reviewers.filter(r => r.unit === g).map(r => Object.assign({ off: true }, r))));
   const rate = (n, f) => { const x = Object.entries(rates).find(([k]) => k.toLowerCase() === n.toLowerCase()); return x && typeof x[1][f] === "number" ? String(x[1][f]) : ""; };
   const list = h("div", { class: "pay-list", id: "payList" }, people.map(p => h("div", { class: "pay-person", "data-name": p.name },
@@ -6591,6 +6602,7 @@ async function openPayRates() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Pay rates" }),
     h("p", { class: "hint", text: "Each person's pay: the day rate, the commission on revenue and on each kind of sale, and his share of a shared job (blank = 50%). Only admins switched on for Payroll see this. Roles are set under Employees." }),
+    h("div", null, h("button", { class: "btn small", type: "button", id: "payPeople", onclick: () => { closeDialog(); openLbTeams(); } }, "Add or remove people…")),
     people.length ? list : h("p", { class: "meta", text: "No one yet. Add people under Employees." }),
     err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
@@ -6636,7 +6648,8 @@ function openJobHistory(range) {
     return;
   }
   const from0 = range && lbIsDay(range.from) ? range.from : `${today.slice(0, 7)}-01`, to0 = range && lbIsDay(range.to) ? range.to : today;
-  const names = [...new Set(cfg.teams.map(t => t.name).concat(cfg.reviewers.map(r => r.name)))].sort((a, b) => a.localeCompare(b));
+  const nowKey = lbMonthKey(clockNow().getFullYear(), clockNow().getMonth() + 1);
+  const names = [...new Set(cfg.teams.filter(t => lbCurrent(t, nowKey)).map(t => t.name).concat(cfg.reviewers.map(r => r.name)))].sort((a, b) => a.localeCompare(b));
   const unitOf = n => { const t = lbTeamOf(cfg, n) || lbReviewerOf(cfg, n); return t ? t.unit || "" : ""; };
   const err = h("p", { class: "dlg-err", role: "alert" });
   const fromI = h("input", { type: "date", id: "jhFrom", value: from0, "aria-label": "From" }), toI = h("input", { type: "date", id: "jhTo", value: to0, "aria-label": "To" });
@@ -6868,23 +6881,29 @@ const lbRoleSelect = (cls, role, name) => h("select", { class: cls, "aria-label"
 function openLbTeams() {
   const y = lbYear(), cfg = lbCleanConfig(lbData.config);
   const err = h("p", { class: "dlg-err", role: "alert" });
-  const used = new Set();
-  for (const d of Object.values(lbData.months || {})) {
-    for (const x of Object.values(d.days || {})) for (const part of ["t", "s"]) for (const [n, a] of Object.entries((x && x[part]) || {})) if (lbEntry(a, 5).length) used.add(n.toLowerCase());
-    for (const [n, v] of Object.entries(d.reviews || {})) if (lbVal(v) != null) used.add(n.toLowerCase());
+  const used = new Set(), lastNum = {};   // names with numbers, and the last month each has them
+  const allMonths = Object.assign({}, ...Object.values(lbYearCache).map(c => (c && c.months) || {}), lbData.months || {});
+  for (const [key, d] of Object.entries(allMonths)) {
+    const seen = n => { const k = n.toLowerCase(); if (key.startsWith(y + "-")) used.add(k); if (!lastNum[k] || lastNum[k] < key) lastNum[k] = key; };
+    for (const x of Object.values(d.days || {})) for (const part of ["t", "s"]) for (const [n, a] of Object.entries((x && x[part]) || {})) if (lbEntry(a, 5).length) seen(n);
+    for (const [n, v] of Object.entries(d.reviews || {})) if (lbVal(v) != null) seen(n);
   }
+  const nowKey = lbMonthKey(clockNow().getFullYear(), clockNow().getMonth() + 1);
+  const prevKey = (() => { const d = clockNow(); return d.getMonth() ? lbMonthKey(d.getFullYear(), d.getMonth()) : lbMonthKey(d.getFullYear() - 1, 12); })();
   const monthOpts = (sel, blank) => {
     const keys = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
     if (sel && !keys.includes(sel)) keys.unshift(sel);
     return [h("option", { value: "", text: blank, selected: !sel }), ...keys.map(k => h("option", { value: k, text: `${lbMonthLong(Number(k.slice(5)))} ${k.slice(0, 4)}`, selected: k === sel }))];
   };
   const list = h("div", { class: "lb-teams", id: "lbTeamList" });
-  const rowEl = (t, isNew) => {
+  const rowEl = (t, isNew, former) => {
     const row = h("div", { class: "lb-team", "data-new": isNew ? "1" : null, "data-name": t.name || null },
       h("div", { class: "lb-team-top" },
         isNew ? h("div", { class: "field" }, h("label", { text: "Name" }), h("input", { type: "text", class: "t-name", maxlength: "30", autocomplete: "off", value: t.name || "", placeholder: "First name" }))
           : h("strong", { class: "t-label", text: t.name }),
-        !isNew && !used.has(t.name.toLowerCase()) ? h("button", { class: "btn ghost small danger", type: "button", onclick: () => row.remove() }, "Remove") : null),
+        isNew ? h("button", { class: "btn ghost small danger", type: "button", onclick: () => row.remove() }, "Remove")
+          : former ? null
+          : h("button", { class: "btn ghost small danger t-remove", type: "button", onclick: () => removeTeam(row, t) }, "Remove")),
       h("div", { class: "nums" },
         h("div", { class: "field" }, h("label", { text: "Unit" }), h("select", { class: "t-unit" }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === t.unit })))),
         h("div", { class: "field" }, h("label", { text: "On the board from" }), h("select", { class: "t-from" }, monthOpts(t.from, `Before ${y}`))),
@@ -6892,10 +6911,30 @@ function openLbTeams() {
       h("div", { class: "field" }, h("label", { text: "Role" }), lbRoleSelect("t-role", t.role, t.name)),
       h("label", { class: "check lb-nosale" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
         h("span", null, "Estimator ", h("small", { text: "(left out of Today's focus and technician sales; still ranked on revenue)" }))),
-      !isNew && used.has(t.name.toLowerCase()) ? h("p", { class: "hint", text: "Has numbers, so the name stays. When the team leaves the board, pick the last month under Until." }) : null);
+      null);
     return row;
   };
-  for (const t of cfg.teams) list.append(rowEl(t, false));
+  // someone who left: with numbers he moves to Former employees (his last month under Until, so the past months keep
+  // him); without numbers he's taken off the list
+  const formerList = h("div", { class: "lb-teams", id: "lbFormerList" });
+  const formerBox = h("details", { class: "lb-former", id: "lbFormer" }, h("summary"), h("p", { class: "hint", text: "No longer with the company. Their past months stay in the standings as they were; they're left out of Pay rates, Worked with and Job history. To bring someone back, set Until to Still on the board." }), formerList);
+  const formerCount = () => { const n = formerList.children.length; formerBox.hidden = !n; formerBox.querySelector("summary").textContent = `Former employees (${n})`; };
+  const removeTeam = (row, t) => {
+    const k = t.name.toLowerCase();
+    if (!lastNum[k] && !used.has(k)) { row.remove(); toast(`${t.name} comes off the list when you tap Save.`); return; }
+    let until = lastNum[k] ? (lastNum[k] > nowKey ? nowKey : lastNum[k]) : prevKey;   // his last month with numbers
+    const from = row.querySelector(".t-from").value;
+    if (from && until < from) until = from;
+    if (!confirm(`${t.name} has numbers, so his past months stay as they are. Move him to Former employees, on the board until ${lbMonthLong(Number(until.slice(5)))} ${until.slice(0, 4)}?`)) return;
+    const sel = row.querySelector(".t-to");
+    if (![...sel.options].some(o => o.value === until)) sel.append(h("option", { value: until, text: `${lbMonthLong(Number(until.slice(5)))} ${until.slice(0, 4)}` }));
+    sel.value = until;
+    const btn = row.querySelector(".t-remove"); if (btn) btn.remove();
+    formerList.append(row); formerCount();
+    toast(`${t.name} moves to Former employees when you tap Save.`);
+  };
+  for (const t of cfg.teams) { const former = !lbCurrent(t, nowKey); (former ? formerList : list).append(rowEl(t, false, former)); }
+  formerCount();
   // people on the reviews board only (helpers who get 5-star reviews, no truck): never ranked
   const rvList = h("div", { class: "lb-rvlist", id: "lbRvList" });
   const rvRow = (r, isNew) => {
@@ -6921,14 +6960,15 @@ function openLbTeams() {
     h("h3", { id: "dlgTitle", text: "Employees" }),
     h("p", { class: "hint", text: "On the leaderboard: each truck's team, the unit it's ranked in, its role and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June." }),
     list,
-    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: thisMonth, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a team")),
+    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: thisMonth, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a person to the leaderboard")),
     h("div", { class: "lb-rvsec" },
       h("h4", { text: "Not on the leaderboard" }),
       h("p", { class: "hint", text: "Helpers and techs who don't compete for a spot yet. Their reviews and the jobs they help on count, and they show at the bottom of their department, but they're never ranked in Standings until you put them on the leaderboard. Removing a name keeps what was typed for it." }),
       rvList,
       h("div", { class: "lb-rvbtns" },
-        h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); } }, "+ Add a name"),
+        h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); } }, "+ Add a person"),
         h("button", { class: "btn ghost small", type: "button", id: "lbRvXl", onclick: () => openLbReviewsXl() }, "Their reviews from Excel…"))),
+    formerBox,
     h("div", { class: "field" }, h("label", { for: "lbGoal", text: "Technician sales goal per month $" }), h("input", { id: "lbGoal", type: "text", inputmode: "decimal", value: String(cfg.goal) })),
     err,
     h("div", { class: "dlg-foot" },
@@ -6939,7 +6979,7 @@ function openLbTeams() {
         h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
         h("button", { class: "btn primary", type: "button", id: "lbTeamsSave", text: "Save", onclick: async () => {
           const teams = [], names = new Set();
-          for (const row of list.children) {
+          for (const row of [...list.children, ...formerList.children]) {
             const name = row.dataset.new ? lbTeamName(row.querySelector(".t-name").value) : row.dataset.name;
             if (row.dataset.new && !row.querySelector(".t-name").value.trim()) continue;
             if (!name) { err.textContent = "Names take letters only (spaces, ' and - are fine)."; return; }
