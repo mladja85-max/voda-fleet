@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 32;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 33;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2746,10 +2746,12 @@ const LB_PARTS = { t: 4, s: 5, r: 1 };   // a truck's day: jobs, work day, reven
 const LB_CELL = 45000, LB_MORE = 3;
 const LB_MAX_JSON = LB_CELL * (1 + LB_MORE);
 // A truck's jobs that day ("j": { "Aaron": [job, ...] }), each { v: revenue, s: [up sale, add-on, rugs in plant,
-// additional service] (his sales on that job), w: [{ n: name, r: "tech" | "assistant", p: share % }] (who worked with
-// him), e: 1 (equal split), c: 1 (the revenue is split too), d: 1 (the sales are split too) }; his own share is 100 -
-// the others'. Every change
-// to a truck's jobs is kept on the "Job log" tab, so any job, person or split can be looked up later.
+// additional service] (his sales on that job), w: [{ n: name, r: "tech" | "assistant", p, a, q, b }] (who worked with
+// him), x: how its revenue is split ("e" equally, "p" by each helper's p %, "a" by each helper's a dollars; none: not
+// split), y: how its sales are split ("e", "p" by each helper's q %, "a" by each helper's b dollars of each kind) }.
+// The truck keeps what the helpers don't get. Jobs saved before the separate splits have e: 1 (equal), c: 1 (revenue
+// split), d: 1 (sales split) and one p % for both; they're kept as they are and the app reads them the same way.
+// Every change to a truck's jobs is kept on the "Job log" tab, so any job, person or split can be looked up later.
 const LB_MAX_JOBS = 20, LB_MAX_CREW = 8;
 const JOBLOG_SHEET = "Job log";
 const JOBLOG_COLS = ["at", "by", "day", "truck", "jobs"];
@@ -2909,27 +2911,38 @@ function lbMonth_(d, key) {
   return out;
 }
 /** A truck's jobs that day, cleaned: up to 20 jobs, each with its revenue (or blank), who worked with him (up to 8,
- *  never himself), their shares, the equal-split, revenue-split and sales-split marks. null when there are none. */
+ *  never himself) and how the revenue and the sales are split (today's marks and shares, or the older ones as they
+ *  were sent). null when there are none. */
 function lbJobs_(list, owner) {
   if (!Array.isArray(list)) return null;
   const out = [];
+  const money = function (v) { return typeof v === "number" && isFinite(v) && v >= 0 && v <= 1e6 ? Math.round(v * 100) / 100 : null; };
+  const pct = function (v) { return typeof v === "number" && isFinite(v) && v >= 0 && v <= 100 ? Math.round(v * 100) / 100 : null; };
+  const mode = function (v) { return v === "e" || v === "p" || v === "a" ? v : ""; };
+  const trim = function (a) { while (a.length && a[a.length - 1] == null) a.pop(); return a; };
   list.slice(0, LB_MAX_JOBS).forEach(function (j) {
     if (!j || typeof j !== "object") return;
-    const money = function (v) { return typeof v === "number" && isFinite(v) && v >= 0 && v <= 1e6 ? Math.round(v * 100) / 100 : null; };
     const job = { v: money(j.v) };
-    const sales = [0, 1, 2, 3].map(function (i) { return money(Array.isArray(j.s) ? j.s[i] : null); });
-    while (sales.length && sales[sales.length - 1] == null) sales.pop();
+    const sales = trim([0, 1, 2, 3].map(function (i) { return money(Array.isArray(j.s) ? j.s[i] : null); }));
     if (sales.length) job.s = sales;
+    const x = mode(j.x), y = mode(j.y), now = !!(x || y);   // today's format; else the older marks (e, c, d, one p)
     const w = [];
-    (Array.isArray(j.w) ? j.w : []).slice(0, LB_MAX_CREW).forEach(function (x) {
-      const n = lbTeam_(x && x.n);
-      if (!n || (owner && n.toLowerCase() === owner.toLowerCase()) || w.some(function (y) { return y.n.toLowerCase() === n.toLowerCase(); })) return;
+    (Array.isArray(j.w) ? j.w : []).slice(0, LB_MAX_CREW).forEach(function (h) {
+      const n = lbTeam_(h && h.n);
+      if (!n || (owner && n.toLowerCase() === owner.toLowerCase()) || w.some(function (o) { return o.n.toLowerCase() === n.toLowerCase(); })) return;
       const e = { n: n };
-      if (x.r === "tech" || x.r === "assistant") e.r = x.r;
-      if (typeof x.p === "number" && isFinite(x.p) && x.p >= 0 && x.p <= 100) e.p = Math.round(x.p * 100) / 100;
+      if (h.r === "tech" || h.r === "assistant") e.r = h.r;
+      if ((!now || x === "p") && pct(h.p) != null) e.p = pct(h.p);
+      if (x === "a" && money(h.a) != null) e.a = money(h.a);
+      if (y === "p" && pct(h.q) != null) e.q = pct(h.q);
+      if (y === "a" && Array.isArray(h.b)) { const b = trim([0, 1, 2, 3].map(function (k) { return money(h.b[k]); })); if (b.length) e.b = b; }
       w.push(e);
     });
-    if (w.length) { job.w = w; if (j.e) job.e = 1; if (j.c) job.c = 1; if (j.d) job.d = 1; }   // c: revenue split, d: sales split
+    if (w.length) {
+      job.w = w;
+      if (now) { if (x) job.x = x; if (y) job.y = y; }
+      else { if (j.e) job.e = 1; if (j.c) job.c = 1; if (j.d) job.d = 1; }
+    }
     out.push(job);
   });
   return out.length ? out : null;
