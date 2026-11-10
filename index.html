@@ -854,18 +854,20 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbj-old { flex-basis: 100%; }
 .lbj-with { display: flex; flex-wrap: wrap; gap: 6px; }
 .lbj-split { display: grid; gap: 5px; }
-.lbj-split-top { display: flex; align-items: center; gap: 8px; }
-.lbj-what { font-size: .8rem; font-weight: 700; min-width: 62px; }
-.lbj-split .seg { flex: 1; max-width: 300px; }
-.lbj-split .seg-btn { flex: 1; padding-block: 5px; font-size: .84rem; }
+.lbj-split-top { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; }
+.lbj-what { font-size: .8rem; font-weight: 700; min-width: 54px; }
+.lbj-split .seg { flex: none; }
+.lbj-split .seg-btn { padding: 5px 9px; min-width: 36px; justify-content: center; font-size: .84rem; }
 .lbj-split .seg-btn:disabled { opacity: .55; cursor: default; }
-.lbj-ins { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.lbj-ins { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; min-width: 0; max-width: 100%; }
 .lbj-ins[hidden], .lbj-keeps[hidden], .lbj-flag[hidden] { display: none; }
 .lbj-in { display: inline-flex; align-items: center; gap: 5px; font-size: .84rem; font-weight: 600; }
 .lbj-in span { white-space: nowrap; }
-.lbj-job .lbj-in input[type=text] { width: 76px; text-align: right; padding: 5px 7px; }
-.lbj-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; flex-basis: 100%; }
-.lbj-keeps { margin: 0; font-size: .8rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lbj-job .lbj-in input[type=text] { width: 72px; text-align: right; padding: 5px 7px; }
+.lbj-job .lbj-in.pct input[type=text] { width: 52px; }
+.lbj-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; }
+.lbj-kinds.named { flex-basis: 100%; }
+.lbj-keeps { margin: 0; font-size: .8rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
 .lb-tabs .seg-btn.flag { position: relative; }
 .lb-tabs .seg-btn.flag::after { content: ""; position: absolute; top: 5px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--due); }
 .lbs-check { border-color: var(--due); }
@@ -6865,11 +6867,12 @@ function lbJobsCard(t, day) {
       const drawIns = () => {
         const kinds = kindsNow();
         sig = kinds.join();
-        const kids = m === "p" ? crew.map(hh => h("label", { class: "lbj-in" }, h("span", { text: hh.n }),
+        const named = crew.length > 1;   // one helper: his name is on the line above, so the box fits beside the buttons
+        const kids = m === "p" ? crew.map(hh => h("label", { class: "lbj-in pct" }, named ? h("span", { text: hh.n }) : null,
             box(rev ? hh.p : hh.q, `${hh.n}'s share of job ${i + 1}'s ${what} in percent`, { "data-who": hh.n }, v => { if (v == null) delete hh[rev ? "p" : "q"]; else hh[rev ? "p" : "q"] = v; }, 100), "%"))
-          : m === "a" && rev ? crew.map(hh => h("label", { class: "lbj-in" }, h("span", { text: `${hh.n} $` }),
+          : m === "a" && rev ? crew.map(hh => h("label", { class: "lbj-in" }, h("span", { text: named ? `${hh.n} $` : "$" }),
             box(hh.a, `${hh.n}'s share of job ${i + 1}'s revenue in dollars`, { "data-who": hh.n }, v => { if (v == null) delete hh.a; else hh.a = v; })))
-          : m === "a" ? (kinds.length ? crew.map(hh => h("div", { class: "lbj-kinds" }, h("strong", { text: hh.n }),
+          : m === "a" ? (kinds.length ? crew.map(hh => h("div", { class: "lbj-kinds" + (named ? " named" : "") }, named ? h("strong", { text: hh.n }) : null,
             kinds.map(k => h("label", { class: "lbj-in" }, h("span", { text: `${LB_JOB_SALES[k]} $` }),
               box(Array.isArray(hh.b) ? hh.b[k] : null, `${hh.n}'s share of job ${i + 1}'s ${LB_JOB_SALES[k].toLowerCase()} in dollars`, { "data-who": hh.n, "data-kind": String(k) }, v => setKind(hh, k, v))))))
             : [h("span", { class: "meta", text: "Type this job's sales first, then each person's part." })])
@@ -6884,7 +6887,7 @@ function lbJobsCard(t, day) {
         let kt = "", et = "";
         if (m === "e") kt = rev ? (hasRev ? now.people.map(p => `${p.name} ${lbCash(p.rev)}`).join(" · ") : `${now.each}% each`)
           : kinds.length ? now.people.map(p => `${p.name} ${lbCash(p.sales.reduce((a, b) => a + b, 0))}`).join(" · ") : `${now.each}% each`;
-        else if (m === "p") kt = rev ? `${team} keeps ${own.pct}%${hasRev ? ` (${lbCash(own.rev)})` : ""}` : `${team} keeps ${own.salePct}%${kinds.length ? ` (${lbCash(own.sales.reduce((a, b) => a + b, 0))})` : ""}`;
+        else if (m === "p") kt = rev ? `${team} keeps ${hasRev ? lbCash(own.rev) : own.pct + "%"}` : `${team} keeps ${kinds.length ? lbCash(own.sales.reduce((a, b) => a + b, 0)) : own.salePct + "%"}`;
         else if (m === "a") kt = rev ? (hasRev ? `${team} keeps ${lbCash(own.rev)}` : "Type the job's revenue to see what's left.") : kinds.length ? `${team} keeps: ${cashKinds(own)}` : "";
         if (rev && now.over.rev) et = m === "p" ? `The shares add up to ${lbRound2(crew.reduce((n, hh) => n + (lbVal(hh.p) || 0), 0))}%: they can't be over 100%.`
           : `The shares add up to ${lbCash(crew.reduce((n, hh) => n + (lbVal(hh.a) || 0), 0))}: more than the job's ${lbCash(job.v || 0)}.`;
@@ -6895,8 +6898,10 @@ function lbJobsCard(t, day) {
       };
       drawIns(); update();
       updaters.push(update);
+      // one row: the label, the buttons, then the boxes and what the truck keeps beside them (they wrap under only when
+      // the card is too narrow)
       return h("div", { class: "lbj-split", "data-split": rev ? "rev" : "sales" },
-        h("div", { class: "lbj-split-top" }, h("span", { class: "lbj-what", text: label }), seg), ins, keeps, err);
+        h("div", { class: "lbj-split-top" }, h("span", { class: "lbj-what", text: label }), seg, ins, keeps), err);
     };
     return h("div", { class: "lbj-job" + (crew.length ? " shared" : ""), "data-job": String(i + 1) },
       h("div", { class: "lbj-top" },
