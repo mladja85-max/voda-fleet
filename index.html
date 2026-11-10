@@ -134,16 +134,24 @@ button { font: inherit; color: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- page ---- */
-.page { padding: 18px 24px 48px; display: grid; gap: 16px; }
-/* PCs and wide screens: the page sits in a centered column instead of stretching edge to edge, and the top bar lines
-   up with it. Trucks gets a wide column (its cards fill it); Checklists and the Leaderboard a reading-width one. */
+.page { padding: 18px 24px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }   /* nothing can make the page wider than the screen */
+/* PCs and wide screens: the page sits in one centered column instead of stretching edge to edge, and the top bar
+   lines up with it. The column is the same on every tab, so the top bar, the tabs and the buttons stay where they are
+   when you switch: Trucks' cards fill it; Checklists, the Leaderboard and Office keep a reading width from its left
+   edge (Payroll uses all of it: every tech's columns side by side). */
 @media (min-width: 1100px) {
   :root { --page-w: 1560px; }
-  body[data-tab="supplies"], body[data-tab="leaderboard"], body[data-tab="office"] { --page-w: 1000px; }
-  body[data-tab="leaderboard"][data-lbtab="payroll"] { --page-w: 1560px; }   /* every tech's columns side by side */
+  html { scrollbar-gutter: stable; }   /* a short page and a long one line up the same (no scrollbar jump) */
   .page { width: 100%; max-width: calc(var(--page-w) + 48px); margin-inline: auto; }
   .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
-  body .sup, body .lb { max-width: none; }
+  body .sup, body .lb { max-width: 1000px; width: 100%; }
+  body[data-tab="leaderboard"][data-lbtab="payroll"] .lb { max-width: none; }
+  /* the buttons sit next to the title instead of across the screen; Employees first, so it doesn't move when
+     Presentation shows on Standings */
+  body .lb-title { margin-right: 6px; }
+  body .lb-acts { margin-left: 0; }
+  body #lbPresent { order: 2; }
+  body .sup-top > .btn { margin-left: 0; }
 }
 .banner { border-radius: 12px; padding: 11px 14px; font-weight: 500; background: var(--soon-bg); border: 1px solid var(--line); }
 .banner:empty { display: none; }
@@ -457,7 +465,7 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .vbadge { font-family: var(--font-body); font-size: .76rem; font-weight: 700; letter-spacing: 0; min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--soon-bg); color: var(--soon); text-align: center; line-height: 1.45; }
 
 /* ---- cleaning supplies ---- */
-.sup { display: grid; gap: 12px; max-width: 920px; }
+.sup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 920px; }
 .sup-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .sup-notice { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ink); font-weight: 600; font-size: .88rem; white-space: pre-line; }
 .sup-title { font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .03em; }
@@ -583,7 +591,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .icon-btn:disabled { opacity: .35; cursor: not-allowed; }
 
 /* ---- leaderboard ---- */
-.lb { display: grid; gap: 12px; max-width: 980px; }
+.lb { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 980px; }
 .lb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .lb-title { font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .03em; margin-right: auto; }
 .lb-acts { display: flex; gap: 8px; margin-left: auto; } /* Presentation and Teams stay side by side */
@@ -741,6 +749,22 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-week-bar { height: 8px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; margin-top: 4px; }
 .lb-week-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
 .lb-tabs { justify-self: start; max-width: 100%; overflow-x: auto; }
+.t-short { display: none; }
+/* a phone: the tabs fill the width side by side (short names), and the title row is the same height on every tab,
+   so nothing slides sideways or jumps down when a tab is tapped */
+@media (max-width: 560px) {
+  .lb-tabs, .lb-parts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; box-sizing: border-box; justify-self: stretch; overflow: visible; }
+  .lb-tabs .seg-btn, .lb-parts .seg-btn { justify-content: center; padding: 8px 4px; font-size: .9rem; }
+  .t-long { display: none; }
+  .t-short { display: inline; }
+  .lb-top { flex-wrap: nowrap; min-height: 38px; }
+  .lb-title { font-size: 1.3rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-acts { flex: none; gap: 6px; }
+  .lb-acts .btn { padding: 6px 10px; font-size: .86rem; }
+  /* a narrow phone (or before the app's font loads): a long button name goes on two lines instead of off the screen */
+  .lb .seg { max-width: 100%; box-sizing: border-box; }
+  .lb .seg-btn { min-width: 0; white-space: normal; text-align: center; line-height: 1.15; }
+}
 .lb-daybar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .lb-daybar input[type="date"], .lb-daybar select { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
 .lb-daybar .btn.small { min-width: 38px; justify-content: center; font-size: 1.1rem; line-height: 1; }
@@ -1090,8 +1114,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .toolbar:not(.open) > .sortsel, .toolbar:not(.open) > #tmOnly, .toolbar:not(.open) > .count { display: none; }
   .toolbar.open > .sortsel, .toolbar.open > #tmOnly { flex: 1 1 calc(50% - 4px); }
   .toolbar.open > .count { flex-basis: 100%; }
-  .views { width: 100%; }
-  .view-btn { flex: 1; padding: 8px 10px; }
+  .views { width: 100%; min-width: 0; box-sizing: border-box; }
+  .view-btn { flex: 1; padding: 8px 10px; min-width: 0; overflow: hidden; }   /* four buttons always fit the width */
   .sup-top .seg { flex: 1; }
   .sup-edit { padding: 8px 10px; }
   .sup-edit .txt { display: none; }
@@ -5702,6 +5726,9 @@ const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0))
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
 const LB_PER = { month: "This month", ytd: "Year to date", week: "This week" };
 const LB_TABS = { standings: "Standings", enter: "Enter numbers", status: "Status", payroll: "Payroll" };
+const LB_SHORT = { "Enter numbers": "Numbers", "Technician sales": "Sales" };   // a phone's tab names, so every tab fits
+/** A tab's name: the long one, and on a phone the short one. */
+const lbTabText = t => LB_SHORT[t] ? [h("span", { class: "t-long", text: t }), h("span", { class: "t-short", text: LB_SHORT[t] })] : t;
 const PAY_API = 28;                                     // the Google script version with the per-admin Payroll switch
 /** Payroll: admins switched on in Settings > Users only. */
 const canSeePayroll = () => isAdmin() && userAccess().includes("payroll");
@@ -5885,7 +5912,7 @@ function renderLeaderboard() {
       edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Employees") : null));
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
     Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
-      onclick: () => { if (lbView.tab === "enter") lbFlush(); lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, t)));
+      onclick: () => { if (lbView.tab === "enter") lbFlush(); lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, lbTabText(t))));
   if (!cfg.teams.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
       h("h2", { text: "No teams yet" }),
@@ -6130,7 +6157,8 @@ function lbGoDay(day) {
 function lbEnterEl() {
   const y = lbYear(), part = LB_PARTS[lbView.part] ? lbView.part : "trucks";
   const day = lbEnterDay(), key = day.slice(0, 7), month = Number(key.slice(5));
-  const parts = lbSeg(Object.entries(LB_PARTS), part, k => { lbFlush(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
+  const parts = lbSeg(Object.entries(LB_PARTS).map(([k, t]) => [k, lbTabText(t)]), part, k => { lbFlush(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
+  parts.classList.add("lb-parts");
   const out = [h("div", { class: "lb-bar" }, parts)];
   {
     const first = `${y}-01-01`, last = `${y}-12-31`;
