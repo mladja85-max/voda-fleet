@@ -896,7 +896,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
 .lbt-grid input.bad { border-color: var(--due); }
 .lbt-sum { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
-.lbt-sum:empty { display: none; }
+.lbt-sum:empty, .lbt-later:empty { display: none; }
+.lbt-later, .lbt-wait { margin: 0; }
 .lbt-whobox { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .lbt-whobox select { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; min-width: 0; flex: 1 1 160px; }
 .lbj-pick { display: grid; gap: 7px; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
@@ -6928,16 +6929,24 @@ function lbTotalLines(day, team) {
     const kept = [`${team} keeps ${lbCash(own.rev)}`];
     if (lbKindsText(own.sales)) kept.push(lbKindsText(own.sales));
     out.push(h("p", { class: "lbt-keeps", text: kept.join(" · ") }));
-    if (parts.over.rev || parts.over.sales) out.push(h("p", { class: "lbj-flag lbt-over", role: "alert", text: `⚠ The parts typed for who helped add up to more than the day has (${[parts.over.rev ? "revenue" : "", parts.over.sales ? "sales" : ""].filter(Boolean).join(" and ")}). The part that doesn't fit isn't counted: check the numbers.` }));
+    // parts typed before the day's own numbers: a reminder, not a mistake. Parts bigger than the day has: a warning
+    const noRev = lbVal(job.v) == null, noSales = !job.s;
+    const wait = [parts.over.rev && noRev ? "revenue" : "", parts.over.sales && noSales ? "sales (+ Sale)" : ""].filter(Boolean);
+    const over = [parts.over.rev && !noRev ? "revenue" : "", parts.over.sales && !noSales ? "sales" : ""].filter(Boolean);
+    if (wait.length) out.push(h("p", { class: "meta lbt-wait", text: `Now type the day's ${wait.join(" and ")}: what's typed for who helped comes out of ${wait.length > 1 ? "them" : "it"}.` }));
+    if (over.length) out.push(h("p", { class: "lbj-flag lbt-over", role: "alert", text: `⚠ The parts typed for who helped add up to more than the day has (${over.join(" and ")}). The part that doesn't fit isn't counted: check the numbers.` }));
   }
   return h("div", { class: "lbt-lines" }, out);
 }
+/** + Sale and + Help, at the top right of a card: on a day total, and on every card nothing is typed on yet (saving
+ *  either one there makes that day a day total). */
+const lbDayActs = (day, team) => h("span", { class: "lbt-acts" },
+  h("button", { class: "btn small lbt-sale", type: "button", title: "His sales that day", onclick: () => openDaySale(day, team) }, "+ Sale"),
+  h("button", { class: "btn small lbt-help", type: "button", title: "Who worked with him that day", onclick: () => openDayHelp(day, team) }, "+ Help"));
 function lbTotalCard(t, day) {
   const team = t.name, e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length);
   const head = lbCardHead(t);
-  head.append(h("span", { class: "lbt-acts" },
-    h("button", { class: "btn small lbt-sale", type: "button", title: "His sales that day", onclick: () => openDaySale(day, team) }, "+ Sale"),
-    h("button", { class: "btn small lbt-help", type: "button", title: "Who worked with him that day", onclick: () => openDayHelp(day, team) }, "+ Help")));
+  head.append(lbDayActs(day, team));
   return h("div", { class: "lb-card lb-total" + (t.off ? " off" : ""), "data-team": team, "data-part": "t" }, ...[
     head,
     h("div", { class: "lb-boxes n4" }, LB_TRUCK.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), e[i], { "data-i": String(i), oninput: () => lbTyped(day, "t", team, LB_TRUCK.length) }))),
@@ -6986,6 +6995,7 @@ function openDaySale(day, team) {
         // (that one stays). With no sales left, jobs that only followed the day's go too
         const any = v.some(x => x != null), own = s[4] != null && s[4] !== (t[0] ?? null);
         const arr = lbEntry(v.concat([own ? s[4] : any ? t[0] ?? null : null]), LB_SALE.length);
+        if (any) lbTotals[`${day}|${team}`] = true;   // sales typed this way: the day is a day total (its boxes are next)
         lbQueue(day.slice(0, 7), { days: { [day]: { s: { [team]: arr } } } });
         lbFlush();
         closeDialog();
@@ -7006,7 +7016,7 @@ function openDayHelp(day, team, who) {
   const at = who ? list.findIndex(x => x.n.toLowerCase() === String(who).toLowerCase()) : -1, cur = at >= 0 ? list[at] : null;
   const t = lbEntry((d.t || {})[team], LB_TRUCK.length), s = lbEntry((d.s || {})[team], LB_SALE.length).slice(0, 4);
   let kind = cur && cur.r ? cur.r : "tech";
-  const err = h("p", { class: "dlg-err", role: "alert" }), keeps = h("p", { class: "lbt-sum", id: "lbtKeeps" });
+  const err = h("p", { class: "dlg-err", role: "alert" }), keeps = h("p", { class: "lbt-sum", id: "lbtKeeps" }), note = h("p", { class: "meta lbt-later", id: "lbtLater", role: "status" });
   const box = (v, label, mode) => h("input", { type: "text", inputmode: mode || "decimal", autocomplete: "off", "aria-label": label, value: v == null ? "" : String(v) });
   const jobs = box(cur ? (cur.j == null ? 1 : cur.j) : null, "Jobs he was on", "numeric"), rev = box(cur ? cur.a : null, "Revenue $");
   const kinds = LB_DAY_SALES.map((label, k) => box(cur && cur.b ? cur.b[k] : null, `${label} $`));
@@ -7036,6 +7046,7 @@ function openDayHelp(day, team, who) {
   /** What the truck keeps with what's typed, and a warning when a part is more than the day has. */
   const show = () => {
     const e = read();
+    note.textContent = "";
     if (!e) { keeps.textContent = ""; return; }
     const day2 = Object.assign({}, d, { h: Object.assign({}, d.h, { [team]: listWith(Object.assign({}, e, { n: e.n || "Helper" })) }) });
     const job = lbDayJob(day2, team, lbSpell), parts = job ? lbJobParts(job, team) : null;
@@ -7045,7 +7056,12 @@ function openDayHelp(day, team, who) {
     if (lbKindsText(own.sales)) bits.push(lbKindsText(own.sales));
     keeps.textContent = bits.join(" · ");
     const want = (e.a || 0) > mine.rev + 0.005, wantS = (e.b || []).some((v, k) => (v || 0) > mine.sales[k] + 0.005);
-    err.textContent = want || wantS ? `That's more than the day has left${want ? ` (revenue: ${lbCash(mine.rev)} of it counts)` : ""}${wantS ? `${want ? ";" : ""} check the sales` : ""}. Type the day's revenue and sales on the card first, or a smaller part.` : "";
+    // his dollars typed before the day's own numbers: fine, they count once those are in. More than the day has: a warning
+    const noRev = t[2] == null, noSales = !s.some(v => v != null);
+    const later = [want && noRev ? "revenue" : "", wantS && noSales ? "sales (+ Sale)" : ""].filter(Boolean);
+    const over = (want && !noRev) || (wantS && !noSales);
+    note.textContent = later.length ? `The day's ${later.join(" and ")} ${later.length > 1 ? "aren't" : "isn't"} typed yet: his part counts once ${later.length > 1 ? "they are" : "it is"}.` : "";
+    err.textContent = over ? `That's more than the day has left${want && !noRev ? ` (revenue: ${lbCash(mine.rev)} of it counts)` : ""}${wantS && !noSales ? `${want && !noRev ? ";" : ""} check the sales` : ""}. Type a smaller part, or the day's numbers on the card first.` : "";
   };
   for (const i of [jobs, rev].concat(kinds)) i.addEventListener("input", show);
   // # of techs follows: him and everyone who helped. A number typed by hand that's bigger stays
@@ -7067,6 +7083,7 @@ function openDayHelp(day, team, who) {
       h("label", { class: "pay-f" }, h("span", { text: "Revenue $" }), rev),
       LB_DAY_SALES.map((label, k) => h("label", { class: "pay-f" }, h("span", { text: `${label} $` }), kinds[k]))),
     keeps,
+    note,
     h("p", { class: "hint", text: `Type his part by hand; ${team} keeps the rest. He gets the jobs typed here (1 when left blank) and a work day, unless his own card has one.` }),
     err,
     h("div", { class: "dlg-foot" },
@@ -7402,8 +7419,10 @@ function lbJobsCard(t, day) {
       h("button", { class: "btn ghost small lbj-add", type: "button", onclick: () => openPicker("tech") }, "+ Worked with"),
       picker);
   };
+  const head = lbCardHead(t);
+  if (!jobs.length) head.append(lbDayActs(day, team));   // nothing typed yet: + Sale and + Help are there from the start
   card.append(...[   // (blanks dropped: append would show null as text)
-    lbCardHead(t),
+    head,
     h("div", { class: "lbj-day" },
       lbBox("Work day", wday, { "data-i": "1", placeholder: helpDay ? "1" : null, oninput: e => {
         const v = e.target.value.replace(/[,\s]/g, ""), bad = v !== "" && !Number.isFinite(Number(v));
@@ -7415,6 +7434,7 @@ function lbJobsCard(t, day) {
     jobs.length ? jobRow(jobs[open], open) : h("div", { class: "lbj-start" },
       h("button", { class: "btn small lbj-addjob", type: "button", onclick: addJob }, "+ Job 1"),
       h("button", { class: "btn ghost small lbj-daytotal", type: "button", title: "Type the day's number of jobs and total revenue instead of each job", onclick: dayTotal }, "Day total")),
+    jobs.length ? null : lbTotalLines(day, team),   // his sales that day, when some are typed already
     list,
     foot].filter(Boolean));
   refresh();
