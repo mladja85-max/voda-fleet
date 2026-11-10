@@ -895,6 +895,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 @media (max-width: 430px) { .lbt-acts .btn { padding: 4px 7px; } .lb-card-head.three .lb-card-who { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; } }
 .lbt-row { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .lbt-row.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.lbt-row.n5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.lbt-row.n5 .lb-box span { font-size: .68rem; }
 .lb-total input.bad { border-color: var(--due); }
 .lbt-lines { display: grid; gap: 5px; }
 .lbt-lines:empty { display: none; }
@@ -6919,6 +6921,8 @@ function lbTyped(day, part, team, n) {
     // his sales' Jobs (for sale per job) follow the day's Jobs, unless a different number was typed under Technician sales
     const s = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length);
     if (s.slice(0, 4).some(v => v != null) && (s[4] == null || s[4] === (was[0] ?? null)) && s[4] !== (arr[0] ?? null)) patch.s = { [team]: lbEntry(s.slice(0, 4).concat([arr[0] ?? null]), LB_SALE.length) };
+    const sj = card.querySelector('.lbt-sales input[data-k="4"]');   // Sale jobs, left blank: the day's Jobs, in grey
+    if (sj) { if (arr[0] == null) sj.removeAttribute("placeholder"); else sj.setAttribute("placeholder", String(arr[0])); }
   }
   lbQueue(day.slice(0, 7), { days: { [day]: patch } });
   const foot = card.querySelector(".lb-card-foot");
@@ -6999,7 +7003,7 @@ const lbDayActs = (day, team, saleOn) => h("span", { class: "lbt-acts" },
 function lbTotalCard(t, day) {
   const team = t.name, d = lbDayDoc(day), e = lbEntry((d.t || {})[team], LB_TRUCK.length), s = lbEntry((d.s || {})[team], LB_SALE.length);
   const pd = lbDayOf(day, team), helpDay = !!(pd && pd.helpDay);   // he helped on someone's job and typed no work day: it counts as 1
-  const saleOn = !!lbSaleOpen[`${day}|${team}`] || s.slice(0, 4).some(v => v != null);
+  const saleOn = !!lbSaleOpen[`${day}|${team}`] || s.slice(0, 4).some(v => v != null) || lbSaleJobsTyped(s, e) != null;
   const head = lbCardHead(t);
   head.classList.add("three");
   head.append(lbDayActs(day, team, saleOn));
@@ -7027,9 +7031,16 @@ function lbTotalSync(day, team) {
   lbSyncHelpCards(day, team);
 }
 /* ---- + Sale: his sales that day, in a row under the day's boxes (the same numbers as under Technician sales) ---- */
+/** The jobs he sold on, typed for a day total (for sale per job): the number in his sales, when it isn't just the
+ *  day's Jobs (null: left blank, so the day's Jobs count). */
+const lbSaleJobsTyped = (s, t) => (s[4] != null && s[4] !== (t[0] ?? null) ? s[4] : null);
 function lbSaleRow(day, team) {
-  const s = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length), kinds = lbDayKinds(day, s);
-  return h("div", { class: `lbt-row lbt-sales n${kinds.length}` }, kinds.map(k => lbBox(`${LB_JOB_SALES[k]} $`, s[k], { "data-k": String(k), oninput: () => lbDaySaleTyped(day, team) })));
+  const d = lbDayDoc(day), s = lbEntry((d.s || {})[team], LB_SALE.length), t = lbEntry((d.t || {})[team], LB_TRUCK.length), kinds = lbDayKinds(day, s);
+  const typed = () => lbDaySaleTyped(day, team);
+  // Sale jobs: how many of the day's jobs he sold on. Left blank it's the day's Jobs (shown in grey)
+  const jobs = lbBox("Sale jobs", lbSaleJobsTyped(s, t), { "data-k": "4", inputmode: "numeric", placeholder: t[0] == null ? null : String(t[0]), title: "How many of the day's jobs he sold on. Left blank: all the day's jobs", oninput: typed });
+  jobs.classList.add("lbt-sj");
+  return h("div", { class: `lbt-row lbt-sales n${kinds.length + 1}` }, kinds.map(k => lbBox(`${LB_JOB_SALES[k]} $`, s[k], { "data-k": String(k), oninput: typed })), jobs);
 }
 /** + Sale: the row opens with the cursor in its first box. Tapped again with nothing typed in it: the row goes. */
 function lbSaleToggle(day, team) {
@@ -7045,22 +7056,23 @@ function lbSaleToggle(day, team) {
   mark(true);
   fresh.querySelector("input").focus();
 }
-/** A sales box changed: save his sales that day. The jobs for sale per job are the day's Jobs, unless another number
- *  was typed for them under Technician sales (that one stays); with no sales left, jobs that only followed go too. */
+/** A sales box changed: save his sales that day. Sale jobs (the jobs he sold on, for sale per job) is the number typed
+ *  in its box; left blank it's the day's Jobs, and with no sales left it's nothing. */
 function lbDaySaleTyped(day, team) {
   const card = lbTotalEl(team);
   if (!card) return;
   const d = lbDayDoc(day), s = lbEntry((d.s || {})[team], LB_SALE.length), t = lbEntry((d.t || {})[team], LB_TRUCK.length);
   const v = [0, 1, 2, 3].map(k => s[k] ?? null);
   let bad = false;
+  let jobs = lbSaleJobsTyped(s, t);   // (a script too old to show the box keeps what's saved)
   for (const i of card.querySelectorAll(".lbt-sales input")) {
-    const x = lbMoneyIn(i.value);
-    i.classList.toggle("bad", Number.isNaN(x));
-    if (Number.isNaN(x)) bad = true; else v[Number(i.dataset.k)] = x;
+    const k = Number(i.dataset.k), x = lbMoneyIn(i.value), no = Number.isNaN(x) || (k === 4 && x != null && x > 99);
+    i.classList.toggle("bad", no);
+    if (no) bad = true; else if (k === 4) jobs = x; else v[k] = x;
   }
   if (bad) return;
-  const any = v.some(x => x != null), own = s[4] != null && s[4] !== (t[0] ?? null);
-  lbQueue(day.slice(0, 7), { days: { [day]: { s: { [team]: lbEntry(v.concat([own ? s[4] : any ? t[0] ?? null : null]), LB_SALE.length) } } } });
+  const any = v.some(x => x != null);
+  lbQueue(day.slice(0, 7), { days: { [day]: { s: { [team]: lbEntry(v.concat([jobs != null ? jobs : any ? t[0] ?? null : null]), LB_SALE.length) } } } });
   lbTotalSync(day, team);
 }
 /* ---- + Help: who worked with him, in the card. Each helper is a line of boxes: who, the jobs he was on, his dollars
@@ -7241,7 +7253,7 @@ function lbTrucksEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
-    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card. + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest. + Job 1 types that day job by job instead: each job gets its revenue and the truck's sales, and + Worked with adds who helped on it." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
+    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card; Sale jobs is how many of the day's jobs he sold on (left blank: all of them). + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest. + Job 1 types that day job by job instead: each job gets its revenue and the truck's sales, and + Worked with adds who helped on it." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
     jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
 }
 
@@ -7583,7 +7595,7 @@ function lbSalesEl(day) {
       : lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name), lbHelpEl(day, t.name, true),
         i => i === 2 && !lbDayKinds(day, lbEntry((d.s || {})[t.name], LB_SALE.length)).includes(2)))
       : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
-    h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: the technician's jobs that day, for sale per job. A truck typed by job on Trucks gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }));
+    h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: how many of his jobs that day he sold on, for sale per job (the same number as Sale jobs on Trucks). A truck typed by job on Trucks gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }));
 }
 /** A team's 5-star reviews: that day, the month (with any total typed for the whole month the older way) and the year. */
 function lbReviewFoot(day, team) {
