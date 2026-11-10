@@ -421,6 +421,12 @@ details.tasks ul { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-
 /* ---- forms and dialogs (log service, edit, settings) ---- */
 dialog#dlg { border: 1px solid var(--line); border-radius: 16px; padding: 0; width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; background: var(--surface); color: var(--ink); }
 dialog#dlg::backdrop { background: rgba(8, 12, 18, .55); }
+/* the ✕: stays at the window's top right while it scrolls (a zero-height strip, so it takes no room) */
+.dlg-xbar { position: sticky; top: 0; height: 0; z-index: 5; }
+.dlg-x { all: unset; box-sizing: border-box; position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; font-size: 1.05rem; font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); cursor: pointer; }
+.dlg-x:hover { color: var(--ink); border-color: var(--accent); }
+.dlg-x:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.dlg > h3:first-child { padding-right: 40px; }
 .dlg { padding: 18px; display: grid; gap: 14px; }
 .dlg:focus { outline: none; }
 .dlg h3 { font-family: var(--font-display); font-size: 1.5rem; text-transform: uppercase; letter-spacing: .02em; }
@@ -4380,17 +4386,30 @@ $("tmOnly").addEventListener("click", () => { view.tmOnly = !view.tmOnly; $("tmO
 
 /* ---------- dialogs ---------- */
 const dlg = $("dlg");
+// Every window closes with the ✕ at its top (it stays there while you scroll), a tap on the dark area around it, or
+// Esc / the phone's back gesture. A window with a Save button asks first if something was typed and not saved.
+let dlgDirty = false, dlgDownOut = false;
+const dlgHasSave = () => [...dlg.querySelectorAll(".btn.primary")].some(b => /^save\b/i.test(b.textContent.trim()));
+const dlgMayClose = () => !(dlgDirty && dlgHasSave()) || confirm("Close without saving what you typed?");
+function dismissDialog() { if (dlg.open && dlgMayClose()) closeDialog(); }
 function openDialog(...content) {
   // On phones the form itself takes focus, so the keyboard stays down until a box is tapped.
   const touch = isTouch();
-  const form = h("form", { class: "dlg", method: "dialog", tabindex: touch ? "-1" : null, autofocus: touch, onsubmit: e => e.preventDefault() }, ...content);
-  dlg.replaceChildren(form);
-  if (!dlg.open) { try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); } }
+  const form = h("form", { class: "dlg", method: "dialog", tabindex: touch ? "-1" : null, autofocus: touch, onsubmit: e => e.preventDefault(),
+    oninput: () => { dlgDirty = true; }, onchange: () => { dlgDirty = true; } }, ...content);
+  const x = h("div", { class: "dlg-xbar" }, h("button", { class: "dlg-x", type: "button", id: "dlgX", "aria-label": "Close", title: "Close", onclick: () => dismissDialog() }, "✕"));
+  const fresh = !dlg.open;   // a window drawn again while open (the checklist editor) keeps what was typed
+  if (fresh) dlgDirty = false;
+  dlg.replaceChildren(x, form);
+  if (fresh) { try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); } dlg.scrollTop = 0; }
   const a = document.activeElement;
   if (touch && a && dlg.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) form.focus({ preventScroll: true });
 }
-function closeDialog() { if (dlg.open) dlg.close(); dlg.replaceChildren(); }
-dlg.addEventListener("cancel", () => dlg.replaceChildren());
+function closeDialog() { if (dlg.open) dlg.close(); dlg.replaceChildren(); dlgDirty = false; }
+// a tap that starts and ends on the dark area around the window (not a drag that began inside it)
+dlg.addEventListener("pointerdown", e => { dlgDownOut = e.target === dlg; });
+dlg.addEventListener("click", e => { if (e.target === dlg && dlgDownOut) dismissDialog(); dlgDownOut = false; });
+dlg.addEventListener("cancel", e => { if (!dlgMayClose()) { e.preventDefault(); return; } dlg.replaceChildren(); dlgDirty = false; });
 
 function numField(labelText, id, value, hint, mode) {
   return h("div", { class: "field" },
@@ -5649,7 +5668,7 @@ function openChecklistEditor(listId) {
               btn.disabled = false; btn.textContent = L ? "Save" : "Create";
             }
           } }))));
-    dlg.firstChild.classList.add("ed");
+    dlg.querySelector("form.dlg").classList.add("ed");
     dlg.scrollTop = top;
     if (focusId && $(focusId)) $(focusId).focus();
   };
