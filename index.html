@@ -1217,7 +1217,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .view-btn { padding: 6px 6px; gap: 5px; font-size: .98rem; letter-spacing: .02em; }
   .view-btn svg { width: 16px; height: 16px; }
   .lb-bar .seg { flex: 1 1 100%; }
-  .lb-bar .seg-btn { flex: 1; justify-content: center; padding: 7px 6px; font-size: .9rem; }
+  .lb-bar .seg-btn { flex: 1 1 auto; justify-content: center; padding: 7px 6px; font-size: .9rem; }   /* a longer name gets the room it needs, so each stays on one line */
   .lb-top .btn { padding: 7px 11px; }
   .lb-row > button { gap: 2px 10px; padding: 10px 12px; }
   .lb-place { width: 40px; height: 40px; font-size: 1.4rem; }
@@ -6145,7 +6145,7 @@ if (lbView.tab === "standings" || lbView.tab === "status") lbView.tab = "perform
 if (lbView.per === "week") lbView.per = "wtd";
 const lbSaveView = () => store.set(K_LB_VIEW, { tab: lbView.tab, per: lbView.per, group: lbView.group, month: lbView.month, part: lbView.part, fshut: lbView.fshut, ssort: lbView.ssort, funit: lbView.funit, pper: lbView.pper, pday: lbView.pday, pfrom: lbView.pfrom, pto: lbView.pto });
 /** Performance shows a month, the year to date, this week so far or last week (a past year: a month or the year). */
-const LB_PER = { month: "Month", ytd: "Year to date", wtd: "Week to date", lastweek: "Last week" };
+const LB_PER = { lastweek: "Last week", wtd: "Week to date", month: "Month", ytd: "Year to date" };   // in the order they're shown
 const LB_WEEK_PER = ["wtd", "lastweek"];
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
 const canEditLb = () => isAdmin() || userAccess().includes("leaderboard-import");
@@ -6160,7 +6160,7 @@ const lbToday = () => lbDayKey(clockNow());
 const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0)).toLocaleString("en-US");
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
 const LB_TABS = { performance: "Performance", enter: "Enter numbers", payroll: "Payroll" };
-const LB_SHORT = { "Enter numbers": "Numbers", "Technician sales": "Sales", "Whole company": "Company" };   // a phone's tab names, so every tab fits
+const LB_SHORT = { "Enter numbers": "Numbers", "Technician sales": "Sales", "Whole company": "Company", "Week to date": "Week", "Year to date": "Year" };   // a phone's names, so every row of buttons fits on one line
 /** A tab's name: the long one, and on a phone the short one. */
 /** This year's jobs to check (sales over the job's revenue, or sales with no revenue), newest first. */
 const lbToCheck = () => { const y = lbYear(); return lbData ? lbJobFlags(lbData.months, `${y}-01-01`, `${y}-12-31`) : []; };
@@ -7088,32 +7088,39 @@ function lbPayrollEl() {
     : go(per === "month" ? (() => { const k = r.from.slice(0, 7), yy = Number(k.slice(0, 4)), mm = Number(k.slice(5)) + n; const t = yy * 12 + mm - 1; return `${lbMonthKey(Math.floor(t / 12), (t % 12) + 1)}-01`; })() : lbAddDays(r.from, (per === "two" ? 14 : 7) * n));
   // the numbers: this year's, and last year's if it's been opened (a week that starts in December)
   const months = Object.assign({}, ...Object.values(lbYearCache).map(c => (c && c.months) || {}), lbData.months || {});
-  // a day's [jobs, work days, revenue, # of techs] with the shared jobs counted in: a job (and a work day, when his own
-  // has none) for each one he helped on, his share of split revenue in, the shares his truck gave out
+  // a day's [jobs, work days, revenue, sales, # of techs] with the shared jobs counted in: a job (and a work day, when
+  // his own has none) for each one he helped on, his share of split revenue in, the shares his truck gave out.
+  // Sales: what he sold that day (up sale + add-on + rugs in plant + additional service), with his share of a split
+  // sale in and the shares his truck gave out; blank until a sale is typed for him
+  const dayOf = (day, team) => { const d = ((months[day.slice(0, 7)] || {}).days || {})[day]; return d ? lbPersonDay(d, team, lbSpell) : null; };
+  const soldOn = p => p.ownSales.slice(0, 4).some(v => v != null) || p.help.some(x => x.sales.some(Boolean)) || p.gave.some(x => x.sales.some(Boolean));
   const entry = (day, team) => {
-    const d = ((months[day.slice(0, 7)] || {}).days || {})[day], p = d ? lbPersonDay(d, team, lbSpell) : null;
-    if (!p || !(p.own.length || p.help.length)) return null;
+    const p = dayOf(day, team);
+    if (!p || !(p.own.length || p.help.length || soldOn(p))) return null;
     const moved = p.help.some(x => x.revenue) || p.gave.some(x => x.revenue);
-    return [p.help.length ? p.jobs : p.own[0] ?? null, p.helpDay ? 1 : p.own[1] ?? null, moved || p.own[2] != null ? p.revenue : null, p.own[3] ?? null];
+    return [p.help.length ? p.jobs : p.own[0] ?? null, p.helpDay ? 1 : p.own[1] ?? null, moved || p.own[2] != null ? p.revenue : null,
+      soldOn(p) ? lbRound2(p.sales.reduce((n, v) => n + v, 0)) : null, p.own[3] ?? null];
   };
+  /** What a day's sales are made of, for the cell's hint: "Up sale $50 · Add-on sale $75". */
+  const saleHint = (day, team) => { const p = dayOf(day, team); return p && soldOn(p) ? p.sales.map((v, k) => (v ? `${LB_SALE[k].label} ${lbCash(v)}` : "")).filter(Boolean).join(" · ") || null : null; };
   const days = [];
   for (let d = r.from; d <= r.to; d = lbAddDays(d, 1)) days.push(d);
   // the techs: every team on a truck in those months (roster order, Cleaning then Restoration), and anyone else with
-  // truck numbers on those days
+  // truck numbers or sales on those days
   const keys = [...new Set(days.map(d => d.slice(0, 7)))];
   const names = [];
   for (const g of LB_GROUPS) for (const t of cfg.teams) if (t.unit === g && keys.some(k => lbOnBoard(t, k)) && !names.includes(t.name)) names.push(t.name);
-  for (const d of days) for (const n of Object.keys((((months[d.slice(0, 7)] || {}).days || {})[d] || {}).t || {})) {
+  for (const d of days) for (const n of ["t", "s"].flatMap(k => Object.keys((((months[d.slice(0, 7)] || {}).days || {})[d] || {})[k] || {}))) {
     const nm = (lbTeamOf(cfg, n) || { name: n }).name;
     if (!names.some(x => x.toLowerCase() === nm.toLowerCase()) && entry(d, n)) names.push(nm);
   }
   for (const d of days) for (const x of lbJobShares(((months[d.slice(0, 7)] || {}).days || {})[d], lbSpell)) if (!names.some(n => n.toLowerCase() === x.who.toLowerCase())) names.push(x.who);
   const teams = names.map(n => ({ name: n, unit: (lbTeamOf(cfg, n) || lbReviewerOf(cfg, n) || {}).unit || "" }));
-  const sum = (list, team) => list.reduce((a, d) => { const e = entry(d, team); if (e) { a.jobs += e[0] || 0; a.days += e[1] || 0; a.rev += e[2] || 0; a.techs += e[3] || 0; a.typed++; } return a; }, { jobs: 0, days: 0, rev: 0, techs: 0, typed: 0 });
+  const sum = (list, team) => list.reduce((a, d) => { const e = entry(d, team); if (e) { a.jobs += e[0] || 0; a.days += e[1] || 0; a.rev += e[2] || 0; a.sales += e[3] || 0; a.techs += e[4] || 0; a.typed++; } return a; }, { jobs: 0, days: 0, rev: 0, sales: 0, techs: 0, typed: 0 });
   // a box typed as 0 shows 0 ($0); a box left blank stays blank; a total shows when that tech has any day typed
   const num = v => (v == null ? "" : fmt(v)), cash = v => (v == null ? "" : lbMoney(v));
-  const cells = a => (a.typed ? [h("td", { class: "n", text: fmt(a.jobs) }), h("td", { class: "n", text: fmt(a.days) }), h("td", { class: "m", text: lbMoney(a.rev) }), h("td", { class: "n last", text: fmt(a.techs) })]
-    : [h("td", { class: "n" }), h("td", { class: "n" }), h("td", { class: "m" }), h("td", { class: "n last" })]);
+  const cells = a => (a.typed ? [h("td", { class: "n", text: fmt(a.jobs) }), h("td", { class: "n", text: fmt(a.days) }), h("td", { class: "m", text: lbMoney(a.rev) }), h("td", { class: "m sale", text: lbMoney(a.sales) }), h("td", { class: "n last", text: fmt(a.techs) })]
+    : [h("td", { class: "n" }), h("td", { class: "n" }), h("td", { class: "m" }), h("td", { class: "m sale" }), h("td", { class: "n last" })]);
   // a week total after each Saturday when the view is longer than a week
   const rows = [];
   let wk = [];
@@ -7121,7 +7128,8 @@ function lbPayrollEl() {
     const dt = lbDate(d), hol = lbHoliday(d), off = dt.getDay() === 0 || hol;
     rows.push(h("tr", { class: off ? "off" : "", "data-day": d },
       h("th", { title: hol ? `${hol}: closed` : "" }, h("span", { class: "pd-w", text: LB_WD[dt.getDay()] }), ` ${dt.getMonth() + 1}/${dt.getDate()}`),
-      teams.map((t, ti) => { const e = entry(d, t.name) || []; return [h("td", { class: `n t${ti % 2}`, text: num(e[0]) }), h("td", { class: `n t${ti % 2}`, text: num(e[1]) }), h("td", { class: `m t${ti % 2}`, text: cash(e[2]) }), h("td", { class: `n last t${ti % 2}`, text: num(e[3]) })]; })));
+      teams.map((t, ti) => { const e = entry(d, t.name) || []; return [h("td", { class: `n t${ti % 2}`, text: num(e[0]) }), h("td", { class: `n t${ti % 2}`, text: num(e[1]) }), h("td", { class: `m t${ti % 2}`, text: cash(e[2]) }),
+        h("td", { class: `m sale t${ti % 2}`, title: e[3] == null ? null : saleHint(d, t.name), text: cash(e[3]) }), h("td", { class: `n last t${ti % 2}`, text: num(e[4]) })]; })));
     wk.push(d);
     if (days.length > 7 && (dt.getDay() === 6 || i === days.length - 1)) {   // a week total after each Saturday
       rows.push(h("tr", { class: "wk" }, h("th", { text: `Week ${lbDate(wk[0]).getMonth() + 1}/${lbDate(wk[0]).getDate()}–${dt.getMonth() + 1}/${dt.getDate()}` }), teams.map(t => cells(sum(wk, t.name)))));
@@ -7129,11 +7137,11 @@ function lbPayrollEl() {
     }
   });
   const tot = teams.map(t => sum(days, t.name));
-  const all = tot.reduce((a, x) => ({ jobs: a.jobs + x.jobs, days: a.days + x.days, rev: a.rev + x.rev, techs: a.techs + x.techs }), { jobs: 0, days: 0, rev: 0, techs: 0 });
+  const all = tot.reduce((a, x) => ({ jobs: a.jobs + x.jobs, days: a.days + x.days, rev: a.rev + x.rev, sales: a.sales + x.sales, techs: a.techs + x.techs }), { jobs: 0, days: 0, rev: 0, sales: 0, techs: 0 });
   const grid = h("div", { class: "lb-scroll lb-payscroll" }, h("table", { class: "lb-pay", id: "lbPay" },
     h("thead", null,
-      h("tr", null, h("th", { rowspan: "2", class: "corner", text: "Day" }), teams.map((t, ti) => h("th", { colspan: "4", class: `tech ${t.unit} t${ti % 2}`, "data-team": t.name }, h("strong", { text: t.name }), t.unit ? h("small", { text: t.unit }) : null))),
-      h("tr", null, teams.map((t, ti) => ["Jobs", "Work days", "Revenue", "# of techs"].map((l, i) => h("th", { class: `sub t${ti % 2}${i === 3 ? " last" : ""}`, text: l }))))),
+      h("tr", null, h("th", { rowspan: "2", class: "corner", text: "Day" }), teams.map((t, ti) => h("th", { colspan: "5", class: `tech ${t.unit} t${ti % 2}`, "data-team": t.name }, h("strong", { text: t.name }), t.unit ? h("small", { text: t.unit }) : null))),
+      h("tr", null, teams.map((t, ti) => ["Jobs", "Work days", "Revenue", "Sales", "# of techs"].map((l, i) => h("th", { class: `sub t${ti % 2}${i === 4 ? " last" : ""}`, text: l }))))),
     h("tbody", null, rows),
     h("tfoot", null,
       h("tr", { class: "tot" }, h("th", { text: "Total" }), tot.map(a => cells(a))))));
@@ -7153,7 +7161,7 @@ function lbPayrollEl() {
         h("button", { class: "btn small", type: "button", id: "lbPayNext", "aria-label": "Later", disabled: r.to >= `${y}-12-31`, onclick: () => step(1) }, "›"))),
     h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "week" || per === "two" ? " · Sunday to Saturday" : per === "custom" ? ` · ${len} day${len === 1 ? "" : "s"}` : "",
       per === "custom" && lbIsDay(lbView.pto) && lbDayCount(r.from, lbView.pto) > LB_PAY_MAX ? ` (up to ${LB_PAY_MAX} days at a time)` : "",
-      ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue`),
+      ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue · ${lbMoney(all.sales)} sales`),
     teams.length ? h("div", { class: "panel lb-paypanel" }, grid)
       : h("p", { class: "meta", text: "No teams on a truck then." })];
 }
@@ -7472,7 +7480,7 @@ function lbPerformanceEl() {
       : [lbPast() ? `No numbers for ${y}.` : "No numbers typed yet this year."]).filter(Boolean));
   return [
     h("div", { class: "lb-bar" },
-      lbSeg(Object.entries(LB_PER).filter(([k]) => !lbPast() || !LB_WEEK_PER.includes(k)), per, k => { lbView.per = k; lbView.open = ""; lbSaveView(); renderLeaderboard(); }, "Period"),
+      lbSeg(Object.entries(LB_PER).filter(([k]) => !lbPast() || !LB_WEEK_PER.includes(k)).map(([k, t]) => [k, lbTabText(t)]), per, k => { lbView.per = k; lbView.open = ""; lbSaveView(); renderLeaderboard(); }, "Period"),
       h("div", { class: "lb-when" }, lbYearSelect("lbYear"), per === "month" ? lbMonthSelect("lbMonth", month, m => { lbView.month = m; lbView.open = ""; lbSaveView(); renderLeaderboard(); }) : null)),
     sub,
     checkEl,
