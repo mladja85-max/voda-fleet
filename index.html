@@ -810,6 +810,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-card.off { border-style: dashed; }
 .lb-card.bad { border-color: var(--due); }
 .lb-card-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lb-card-who { flex: 1 1 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.lb-card-who .lb-unit { white-space: nowrap; }
 .lb-card-head strong { font-family: var(--font-display); font-size: 1.25rem; text-transform: uppercase; letter-spacing: .02em; }
 .lb-boxes { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .lb-boxes.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -885,8 +887,10 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbj-add, .lbj-addjob { justify-self: start; }
 .lbj-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* a day total: + Sale and + Help at the top right; under the boxes his sales, who helped, what the truck keeps */
-.lbt-acts { margin-left: auto; display: flex; gap: 6px; align-self: center; }
-.lbt-acts .btn { padding: 4px 10px; }
+.lbt-acts { margin-left: auto; flex: none; display: flex; gap: 5px; align-self: flex-start; }
+.lbt-acts .btn { padding: 4px 8px; white-space: nowrap; }
+/* a phone, three buttons: the department is under the name on every card, so the cards look alike */
+@media (max-width: 430px) { .lbt-acts .btn { padding: 4px 7px; } .lb-card-head.three .lb-card-who { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; } }
 .lbt-lines { display: grid; gap: 5px; }
 .lbt-lines:empty { display: none; }
 .lbt-line { all: unset; box-sizing: border-box; cursor: pointer; display: block; width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); font-size: .84rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -6939,8 +6943,8 @@ function lbTotalLines(day, team) {
   return h("div", { class: "lbt-lines" }, out);
 }
 /** + Sale and + Help, at the top right of a card: on a day total, and on every card nothing is typed on yet (saving
- *  either one there makes that day a day total). */
-const lbDayActs = (day, team) => h("span", { class: "lbt-acts" },
+ *  either one there makes that day a day total). A card with no job yet has + Job 1 there too, in front of them. */
+const lbDayActs = (day, team, first) => h("span", { class: "lbt-acts" }, first || null,
   h("button", { class: "btn small lbt-sale", type: "button", title: "His sales that day", onclick: () => openDaySale(day, team) }, "+ Sale"),
   h("button", { class: "btn small lbt-help", type: "button", title: "Who worked with him that day", onclick: () => openDayHelp(day, team) }, "+ Help"));
 function lbTotalCard(t, day) {
@@ -7232,8 +7236,10 @@ function lbRedrawJobs(day, team) {
 const lbWorkDayOf = (day, team) => { const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length); return e.length ? e[1] : null; };
 /** The day's sales typed on the Sales tab (up sale … additional), to start Job 1 with. */
 const lbDaySales = (day, team) => lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length).slice(0, 4);
-const lbCardHead = t => h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit })
-  : t.home ? h("span", { class: `lb-unit ${t.home}`, text: `${t.home} · not ranked` }) : h("span", { class: "lb-unit", text: "Not on the board this month" }));
+// the name and the department are one block: when the buttons beside them need the room, the department goes under
+// the name and the buttons stay at the top right
+const lbCardHead = t => h("div", { class: "lb-card-head" }, h("span", { class: "lb-card-who" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit })
+  : t.home ? h("span", { class: `lb-unit ${t.home}`, text: `${t.home} · not ranked` }) : h("span", { class: "lb-unit", text: "Not on the board this month" })));
 /** A day typed as a day total: start typing it by job instead (the day's revenue and sales go on Job 1). */
 const lbToJobsBtn = (day, team) => h("button", { class: "btn ghost small lb-tojobs", type: "button", onclick: () => {
   const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length);
@@ -7420,7 +7426,11 @@ function lbJobsCard(t, day) {
       picker);
   };
   const head = lbCardHead(t);
-  if (!jobs.length) head.append(lbDayActs(day, team));   // nothing typed yet: + Sale and + Help are there from the start
+  // nothing typed yet: + Job 1, + Sale and + Help are at the top right from the start
+  if (!jobs.length) {
+    head.classList.add("three");
+    head.append(lbDayActs(day, team, h("button", { class: "btn small lbj-addjob", type: "button", title: "Type this day job by job", onclick: addJob }, "+ Job 1")));
+  }
   card.append(...[   // (blanks dropped: append would show null as text)
     head,
     h("div", { class: "lbj-day" },
@@ -7432,7 +7442,6 @@ function lbJobsCard(t, day) {
       total),
     lbHelpEl(day, team),
     jobs.length ? jobRow(jobs[open], open) : h("div", { class: "lbj-start" },
-      h("button", { class: "btn small lbj-addjob", type: "button", onclick: addJob }, "+ Job 1"),
       h("button", { class: "btn ghost small lbj-daytotal", type: "button", title: "Type the day's number of jobs and total revenue instead of each job", onclick: dayTotal }, "Day total")),
     jobs.length ? null : lbTotalLines(day, team),   // his sales that day, when some are typed already
     list,
