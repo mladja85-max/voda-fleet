@@ -3453,7 +3453,11 @@ function tellPeers(msg) { try { if (peers && session) peers.postMessage(Object.a
 function tellSaved(action, data, out) {
   if (API_READS.has(action)) return;
   const typed = action === "lbPut" && Array.isArray(data && data.writes) && data.writes.length > 0 && data.writes.every(w => w && w.patch && w.key !== "config");
-  tellPeers(typed ? { t: "lb", months: (out && out.months) || {} } : { t: "changed", action });
+  // "lb": whole months; "lb2": months of which some are just their changed days (script 35). A window still on an
+  // older version of the app doesn't know "lb2" and leaves it alone, rather than taking a few days for a whole month
+  if (!typed) tellPeers({ t: "changed", action });
+  else if (out && out.part) tellPeers({ t: "lb2", months: out.months || {}, part: out.part });
+  else tellPeers({ t: "lb", months: (out && out.months) || {} });
 }
 let peerTimer = null, peerActions = [];
 /** Another window changed something else: load it again here, quietly, a moment later (several saves make one load). */
@@ -3472,7 +3476,8 @@ function peerChanged(action) {
 if (peers) peers.onmessage = e => {
   const m = e && e.data;
   if (!m || !session || m.user !== session.id) return;
-  if (m.t === "lb") lbFromPeer(m.months);
+  if (m.t === "lb") lbFromPeer(m.months, null);
+  else if (m.t === "lb2") lbFromPeer(m.months, m.part && typeof m.part === "object" ? m.part : {});
   else if (m.t === "changed") peerChanged(m.action);
 };
 // a redraw never lands between a press and its release (the tap would hit something that's gone). A press that never
@@ -3532,6 +3537,11 @@ async function refresh(quiet) {
   if (refreshing || !session) return;
   refreshing = true;
   $("syncText").textContent = "Updating…";
+  // what's on screen loads at the same time as the trucks, not after them. Update loads the Leaderboard whole; the
+  // timed refresh asks only for what changed when the sheet can say so
+  if (view.tab === "leaderboard" && loaded && !dlg.open && !lbShowState && !lbTyping()) lbLoad(!quiet);
+  // (Office by itself only while nobody is working in this window: its boxes and menus aren't redrawn under a hand)
+  if (view.tab === "office" && loaded && !dlg.open && !ofTypingNow() && !ofLoading && (!quiet || performance.now() - lbActiveAt > 15000)) ofLoad();
   try {
     const out = await api("list");
     let roleChanged = false;
@@ -3553,7 +3563,7 @@ async function refresh(quiet) {
     noteApi(out);
     noteSupplies(out.supplies);
     if (roleChanged) applyRole();   // what this person may see changed
-    if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping()) lbLoad();
+    if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping() && (!lbData || !lbFresh)) lbLoad();   // the first time, once it's known who this is
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -6180,6 +6190,7 @@ const LB_DATES_API = 31;                               // ... and with the exact
 const LB_SPLIT_API = 32;                               // ... and with the sales split on a shared job
 const LB_MODES_API = 33;                               // ... and with separate revenue and sales splits, in % or dollars
 const LB_PEOPLE_API = 34;                              // ... and with renaming a person, emails and phone numbers
+const LB_FAST_API = 35;                                // ... and answering with just what changed (quick, frequent checks)
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -6258,7 +6269,7 @@ function lbTouch() { if (lbData) { lbData.v = (lbData.v || 0) + 1; if (lbData.ye
 /** Past years once loaded (their numbers don't change); this year's while a past one is on screen. */
 let lbYearCache = {};
 /** Load the year on screen again from the sheet (after numbers in it were changed). */
-function lbReload() { delete lbYearCache[lbYear()]; return lbLoad(); }
+function lbReload() { delete lbYearCache[lbYear()]; return lbLoad(true); }
 /** The month on screen: the one picked, or the newest with numbers. */
 function lbMonthShown(pick) {
   const recs = lbRecords(), y = lbYear();
@@ -6302,17 +6313,29 @@ let lbSending = {};                     // month key → changes on their way to
 let lbSaving = false, lbSaveTimer = null, lbSaveState = "", lbSaveErr = "";
 /** A month as the sheet has it, with this window's own typing that isn't saved yet laid over it. */
 const lbOver = (k, d) => lbMerge(lbMerge(lbClone(d || {}), lbClone(lbSending[k] || {})), lbClone(lbPending[k] || {}));
-/** Numbers another window of this person just saved (month key → the month as saved). */
-function lbFromPeer(months) {
+/** A month this window has, with the days a save changed put in as the sheet now has them (script 35 answers a typed
+ *  change with just those days: each one whole, or null when nothing is left of it). */
+function lbPatched(have, part) {
+  const m = have && typeof have === "object" ? lbClone(have) : {};
+  if (!m.days || typeof m.days !== "object") m.days = {};
+  for (const [day, d] of Object.entries(part && part.days && typeof part.days === "object" ? part.days : {})) {
+    if (!lbIsDay(day)) continue;
+    if (d && typeof d === "object") m.days[day] = lbClone(d); else delete m.days[day];
+  }
+  if (part && part.reviews && typeof part.reviews === "object") { m.reviews = lbClone(part.reviews); m.rat = part.rat || ""; m.rby = part.rby || ""; }
+  return m;
+}
+/** Numbers another window of this person just saved (month key → the month as saved, or just its changed days). */
+function lbFromPeer(months, part) {
   if (!canSeeLb()) return;
   const now = lbNowYear(), mine = lbData && lbData.year === now ? lbData : lbYearCache[now];
   let got = false;
   for (const [k, d] of Object.entries(months && typeof months === "object" ? months : {})) {
     if (!lbYm(k) || !d || typeof d !== "object") continue;
     if (Number(k.slice(0, 4)) !== now) { delete lbYearCache[Number(k.slice(0, 4))]; continue; }   // a past year: loaded again when it's opened
-    if (mine) { mine.months[k] = lbOver(k, d); got = true; }
+    if (mine) { mine.months[k] = lbOver(k, part && part[k] ? lbPatched(mine.months[k], d) : d); got = true; }
   }
-  if (got && mine === lbData) { lbTouch(); lbShowFresh(); }   // a past year on screen: this year's numbers are there when it's back
+  if (got && mine === lbData) { lbActiveAt = performance.now(); lbTouch(); lbShowFresh(); }   // a past year on screen: this year's numbers are there when it's back
 }
 /** New numbers came in from somewhere else: draw them now, or as soon as nobody is typing or pressing in this window. */
 let lbStale = false;
@@ -6323,33 +6346,78 @@ function lbShowFresh() {
   renderLeaderboard();
 }
 setInterval(() => { if (lbStale) lbShowFresh(); }, 1500);
-async function lbLoad() {
+let lbFresh = false;                    // this window has had the whole year from the sheet (not only its own memory)
+let lbPolledAt = 0;                     // when it last asked the sheet
+let lbSaveSeq = 0;                      // goes up with every save sent: an answer asked for before one is older than the screen
+let lbAskAgain = false;                 // an answer was thrown away for that reason: ask again once the saving is done
+/** The sheet can be asked for just what changed since this window last heard (script 35): this year, already loaded
+ *  whole once in this window, with the stamp of that answer. */
+const lbCanAskSince = () => apiLevel >= LB_FAST_API && lbFresh && !!lbData && lbData.year === lbNowYear() && lbYear() === lbNowYear() && !!lbData.stamp;
+/** Load the Leaderboard. whole: everything for the year (Update, the first load); otherwise only what changed since
+ *  the last answer when the sheet can say so, which is small and quick enough to ask every few seconds. */
+async function lbLoad(whole) {
   if (lbLoading || !session || !canSeeLb()) return;
   const want = lbYear(), kept = lbYearCache[want];
   if (kept && lbData !== kept) { lbData = kept; lbCache = null; if (view.tab === "leaderboard" && !lbTyping()) renderLeaderboard(); }
   if (kept && want < lbNowYear()) return;   // this year is shown at once and then loaded fresh
-  lbLoading = true;
-  if (view.tab === "leaderboard") renderLeaderboard();
+  const since = !whole && lbCanAskSince() ? lbData.stamp : "";
+  const busy = () => lbSaving || Object.keys(lbPending).length > 0;
+  if (since && busy()) { lbAskAgain = true; return; }   // its answer could be older than what's being saved: after the save
+  const seq = lbSaveSeq, asked = lbData;
+  lbLoading = true; lbPolledAt = performance.now();
+  if (!since && view.tab === "leaderboard" && !lbTyping()) renderLeaderboard();
+  let changed = !since;
   try {
-    const out = await api("leaderboard", { year: want });
-    const months = out.months || {};
-    if (want === lbNowYear()) for (const k of new Set(Object.keys(lbPending).concat(Object.keys(lbSending)))) months[k] = lbOver(k, months[k]);   // keep what's still being saved
-    const got = { config: out.config || { teams: [] }, months, names: out.names || {}, canEdit: !!out.canEdit, year: want, at: new Date().toISOString(), v: 0 };
-    if (want < lbNowYear()) lbYearCache[want] = got;
-    for (const c of Object.values(lbYearCache)) c.config = got.config;   // one roster for every year
-    if (want === lbYear()) { lbData = got; lbCache = null; }
-    else if (want === lbNowYear()) lbYearCache[want] = got;
-    lbTouch();
+    const out = await api("leaderboard", since ? { year: want, since } : { year: want });
+    if (since && out.since) {
+      // only what was saved since this window last heard: laid into the numbers it has
+      if (lbData === asked && lbData.stamp === since) {
+        if (busy() || seq !== lbSaveSeq) lbAskAgain = true;
+        else {
+          for (const [k, d] of Object.entries(out.months || {})) if (lbYm(k) && d && typeof d === "object") { lbData.months[k] = d; changed = true; }
+          if (out.config) { lbData.config = out.config; for (const c of Object.values(lbYearCache)) c.config = out.config; changed = true; }
+          if (lbData.canEdit !== !!out.canEdit) { lbData.canEdit = !!out.canEdit; changed = true; }
+          if (out.stamp && out.stamp > lbData.stamp) lbData.stamp = out.stamp;
+          if (changed) { lbActiveAt = performance.now(); lbCache = null; lbTouch(); }
+        }
+      }
+    } else {
+      const months = out.months || {};
+      if (want === lbNowYear()) for (const k of new Set(Object.keys(lbPending).concat(Object.keys(lbSending)))) months[k] = lbOver(k, months[k]);   // keep what's still being saved
+      const got = { config: out.config || { teams: [] }, months, names: out.names || {}, canEdit: !!out.canEdit, year: want, at: new Date().toISOString(), v: 0, stamp: out.stamp || "" };
+      if (want < lbNowYear()) lbYearCache[want] = got;
+      for (const c of Object.values(lbYearCache)) c.config = got.config;   // one roster for every year
+      if (want === lbYear()) { lbData = got; lbCache = null; }
+      else if (want === lbNowYear()) lbYearCache[want] = got;
+      if (want === lbNowYear()) lbFresh = true;
+      lbTouch();
+      changed = true;
+    }
     lbErr = ""; lbOld = false;
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { lbLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
-    lbOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < LB_API);
-    lbErr = lbOld ? "" : errText(e, "Nothing");
+    if (!since) {   // a quick check that failed says nothing: the numbers on screen stay, and it's asked again
+      lbOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < LB_API);
+      lbErr = lbOld ? "" : errText(e, "Nothing");
+      changed = true;
+    }
   } finally {
     lbLoading = false;
-    if (view.tab === "leaderboard" && !lbTyping()) renderLeaderboard();
+    if (since) { if (changed) lbShowFresh(); }   // nothing new: nothing is drawn again
+    else if (view.tab === "leaderboard" && !lbTyping()) renderLeaderboard();
   }
 }
+/* While the Leaderboard is on screen it keeps itself current: it asks the sheet for what changed every 20 seconds
+   (every 90 once nobody has touched this window and nothing new has come in for 10 minutes). Needs script 35; with
+   an older one the 90-second refresh stays as it was. */
+const LB_ASK_FAST = 20000, LB_ASK_SLOW = 90000, LB_ASK_IDLE = 600000;
+let lbActiveAt = performance.now();     // the last tap or key here, or change from somewhere else
+for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, () => { lbActiveAt = performance.now(); }, true);
+setInterval(() => {
+  if (document.visibilityState !== "visible" || !session || !CONFIGURED || offline || view.tab !== "leaderboard" || dlg.open || lbShowState || !lbCanAskSince()) return;
+  const now = performance.now(), every = now - lbActiveAt < LB_ASK_IDLE ? LB_ASK_FAST : LB_ASK_SLOW;
+  if (lbAskAgain ? !lbSaving && !Object.keys(lbPending).length : now - lbPolledAt >= every) { lbAskAgain = false; lbLoad(); }
+}, 2000);
 /** Someone is typing a number: a redraw now would take the box away from under their finger. (A window that isn't
  *  the one in use has nobody typing in it, even if its cursor was left in a box.) */
 const lbTyping = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#lbEnter") && document.hasFocus()); };
@@ -6370,10 +6438,10 @@ async function lbFlush() {
   const writes = Object.entries(lbPending).map(([key, patch]) => ({ key, patch }));
   lbPending = {};
   lbSending = Object.fromEntries(writes.map(w => [w.key, w.patch]));
-  lbSaving = true; lbSaveState = "saving"; lbShowSave();
+  lbSaving = true; lbSaveSeq++; lbSaveState = "saving"; lbShowSave();
   try {
-    const out = await api("lbPut", { year: lbYear(), writes });
-    for (const [k, d] of Object.entries(out.months || {})) lbData.months[k] = lbMerge(lbClone(d), lbClone(lbPending[k] || {}));
+    const out = await api("lbPut", Object.assign({ year: lbYear(), writes }, apiLevel >= LB_FAST_API ? { lean: true } : {}));
+    for (const [k, d] of Object.entries(out.months || {})) lbData.months[k] = lbMerge(out.part && out.part[k] ? lbPatched(lbData.months[k], d) : lbClone(d), lbClone(lbPending[k] || {}));
     if (out.names) lbData.names = Object.assign(lbData.names || {}, out.names);
     lbSaveState = Object.keys(lbPending).length ? "pending" : "saved"; lbSaveErr = "";
   } catch (e) {

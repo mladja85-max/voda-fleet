@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 34;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 35;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -213,6 +213,14 @@ function doGet() {
   return json_({ ok: true, app: "VODA Fleet backend", status: "running" });
 }
 
+/** The settings every request looks at (paused? set up? the sign-in secret), read from Google once a request. */
+let REQ_PROPS_ = null;
+function reqProp_(k) {
+  if (!REQ_PROPS_) REQ_PROPS_ = PropertiesService.getScriptProperties().getProperties() || {};
+  const v = REQ_PROPS_[k];
+  return v === undefined || v === null || v === "" ? null : String(v);
+}
+
 function doPost(e) {
   let req;
   try {
@@ -221,8 +229,9 @@ function doPost(e) {
     return json_({ ok: false, error: "bad_request" });
   }
   // After moveOut this copy is paused: phones keep their unsent changes and send them to the new home once they reopen.
-  if (PropertiesService.getScriptProperties().getProperty("MOVED")) return json_({ ok: false, error: "moved" });
-  if (!PropertiesService.getScriptProperties().getProperty("ACCESS_CODE")) return json_({ ok: false, error: "not_set_up" });
+  REQ_PROPS_ = null;
+  if (reqProp_("MOVED")) return json_({ ok: false, error: "moved" });
+  if (!reqProp_("ACCESS_CODE")) return json_({ ok: false, error: "not_set_up" });
   try {
     if (req.action === "signup") return json_(withLock_(function () { return signup_(req); }));
     if (req.action === "login") return json_(withLock_(function () { return login_(req); }));
@@ -286,7 +295,7 @@ function doPost(e) {
         return json_(withLock_(function () { return mergeChecklist_(req); }));
       case "leaderboard":
         if (!canLb_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(lbRead_(user, req.year));
+        return json_(lbRead_(user, req.year, req.since));
       case "lbPut":
         if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return lbPut_(req); }));
@@ -490,6 +499,8 @@ function publicUser_(u) {
 }
 
 function secret_() {
+  const had = REQ_PROPS_ ? reqProp_("SESSION_SECRET") : null;   // already read with this request's settings
+  if (had) return had;
   const p = PropertiesService.getScriptProperties();
   let k = p.getProperty("SESSION_SECRET");
   if (!k) { k = Utilities.getUuid() + Utilities.getUuid(); p.setProperty("SESSION_SECRET", k); }
@@ -2783,14 +2794,46 @@ function lbSheet_(create) {
 function lbRows_(s) {
   if (!s || s.getLastRow() < 2) return [];
   const w = Math.min(s.getMaxColumns(), LB_COLS.length + LB_MORE);
-  return s.getRange(2, 1, s.getLastRow() - 1, w).getValues().map(function (r, i) {
-    const first = String(r[1] || "");
-    let json = first, long = false;
-    for (let c = LB_COLS.length; c < w; c++) { const t = String(r[c] || ""); if (t) { long = true; json += t.charAt(0) === "~" ? t.slice(1) : t; } }
-    // cells left over from before (an older script saved this row in one cell): the first cell alone is the month
-    if (long) { try { JSON.parse(json); } catch (e) { try { JSON.parse(first); json = first; } catch (e2) { /* keep it all: nothing better */ } } }
-    return { row: i + 2, key: String(r[0]).trim(), json: json, long: long };
+  return s.getRange(2, 1, s.getLastRow() - 1, w).getValues().map(function (r, i) { return lbRowOf_(r, i + 2, w); });
+}
+/** One row of the tab as { row, key, json, long }: the month's text from its "json" cell and the cells after "by". */
+function lbRowOf_(r, row, w) {
+  const first = String(r[1] || "");
+  let json = first, long = false;
+  for (let c = LB_COLS.length; c < w; c++) { const t = String(r[c] || ""); if (t) { long = true; json += t.charAt(0) === "~" ? t.slice(1) : t; } }
+  // cells left over from before (an older script saved this row in one cell): the first cell alone is the month
+  if (long) { try { JSON.parse(json); } catch (e) { try { JSON.parse(first); json = first; } catch (e2) { /* keep it all: nothing better */ } } }
+  return { row: row, key: String(r[0]).trim(), json: json, long: long };
+}
+/** Which row holds which key, from the narrow first column alone: [{ row, key }]. Null when there's no tab, or it
+ *  isn't in this layout (its first cell isn't "key"). Reading a month's text is the slow part; this isn't. */
+function lbKeys_(s) {
+  if (!s) return null;
+  const last = s.getLastRow();
+  if (last < 1) return null;
+  const col = s.getRange(1, 1, last, 1).getValues();
+  if (String(col[0][0]) !== "key") return null;
+  const out = [];
+  for (let i = 1; i < col.length; i++) out.push({ row: i + 1, key: String(col[i][0]).trim() });
+  return out;
+}
+/** Those rows read in full, as lbRows_ gives them. Rows next to each other come in one read; when they're scattered
+ *  over more than a few places the whole tab is read once instead. */
+function lbRowsAt_(s, list) {
+  if (!list.length) return [];
+  const rows = list.slice().sort(function (a, b) { return a.row - b.row; });
+  const blocks = [];
+  rows.forEach(function (r) {
+    const b = blocks[blocks.length - 1];
+    if (b && r.row - b.to <= 3) b.to = r.row; else blocks.push({ from: r.row, to: r.row });   // a row or two between is read along
   });
+  if (blocks.length > 4) { const want = {}; rows.forEach(function (r) { want[r.row] = true; }); return lbRows_(s).filter(function (r) { return want[r.row]; }); }
+  const w = Math.min(s.getMaxColumns(), LB_COLS.length + LB_MORE), out = [];
+  blocks.forEach(function (b) {
+    const vals = s.getRange(b.from, 1, b.to - b.from + 1, w).getValues();
+    rows.forEach(function (r) { if (r.row >= b.from && r.row <= b.to) out.push(lbRowOf_(vals[r.row - b.from], r.row, w)); });
+  });
+  return out;
 }
 /** Saves a month (or the roster) in its row: the first 45,000 characters in "json", the rest in the cells after "by". */
 function lbSaveRow_(s, byKey, key, text, now, by) {
@@ -3000,15 +3043,26 @@ function jobLog_(req) {
   return { ok: true, rows: rows };
 }
 /** Everything for one year: the roster and that year's months. */
-function lbRead_(user, year) {
+/** The roster and one year's months. Only that year's rows are read, not every year's.
+ *  since (the "stamp" of an earlier answer): only the rows saved after it come back, with since echoed, so an app that
+ *  already has the numbers can ask often and gets a few bytes when nothing changed. stamp: the newest save on the tab. */
+function lbRead_(user, year, since) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
-  const out = { ok: true, config: { teams: [], goal: 3000 }, months: {}, canEdit: canLbEdit_(user) };
-  lbRows_(lbSheet_(false)).forEach(function (r) {
+  const ask = typeof since === "string" && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(since) ? since : "";
+  const out = { ok: true, config: { teams: [], goal: 3000 }, months: {}, canEdit: canLbEdit_(user), stamp: "" };
+  if (ask) { out.since = ask; delete out.config; }
+  const s = SpreadsheetApp.getActive().getSheetByName(LB_SHEET);
+  const keys = lbKeys_(s);
+  if (!keys || !keys.length) return out;
+  const ats = s.getRange(2, 3, keys.length, 1).getValues();   // when each row was last saved
+  keys.forEach(function (k, i) { k.at = isDate_(ats[i][0]) ? ats[i][0].toISOString() : String(ats[i][0] || ""); if (k.at > out.stamp) out.stamp = k.at; });
+  const want = keys.filter(function (k) { return (k.key === "config" || (lbYm_(k.key) && k.key.indexOf(y + "-") === 0)) && (!ask || k.at > ask); });
+  lbRowsAt_(s, want).forEach(function (r) {
     if (r.key === "config") out.config = lbParse_(r.json);
-    else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);
+    else out.months[r.key] = lbParse_(r.json);
   });
   // emails and phone numbers go only to those who set up the people (admins, Leaderboard numbers)
-  if (!out.canEdit) (out.config.teams || []).concat(out.config.reviewers || []).forEach(function (p) { if (p) { delete p.email; delete p.phone; } });
+  if (!out.canEdit && out.config) (out.config.teams || []).concat(out.config.reviewers || []).forEach(function (p) { if (p) { delete p.email; delete p.phone; } });
   return out;
 }
 /** A roster being saved keeps what the app that sent it doesn't know about: a person sent without an email, phone or
@@ -3127,11 +3181,16 @@ function lbRename_(req) {
  *  { key, data } replaces the month or the roster ("config") whole. Each day changed is stamped with who saved it. */
 function lbPut_(req) {
   const writes = (Array.isArray(req.writes) ? req.writes : []).slice(0, 14);
-  const s = lbSheet_(true);
+  // only the rows being written are read (a typed number is one month's row, not every year's)
+  let s = SpreadsheetApp.getActive().getSheetByName(LB_SHEET), keys = lbKeys_(s);
+  if (!keys) { s = lbSheet_(true); keys = lbKeys_(s) || []; }   // no tab yet, or one from an older layout: a new one
+  const wanted = {};
+  writes.forEach(function (w) { wanted[String((w && w.key) || "")] = true; });
   const byKey = {};
-  lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
+  lbRowsAt_(s, keys.filter(function (k) { return wanted[k.key]; })).forEach(function (r) { byKey[r.key] = r; });
   const now = new Date().toISOString();
   const out = { ok: true, months: {} };
+  const lean = req.lean === true;   // the app asks for the days it changed back, not the whole month
   const log = [];   // every truck-day whose jobs changed: [at, by, day, truck, jobs]
   writes.forEach(function (w) {
     const key = String((w && w.key) || "");
@@ -3163,7 +3222,17 @@ function lbPut_(req) {
     }
     if (key === "config") { doc.at = now; doc.by = req.by; }
     lbSaveRow_(s, byKey, key, JSON.stringify(doc), now, req.by);
-    if (key === "config") out.config = doc; else out.months[key] = doc;
+    if (key === "config") out.config = doc;
+    else if (lean && !whole) {
+      // just what this save touched, as it stands now: each changed day whole (null: nothing left of it), and the
+      // month's review totals when they were part of it
+      const part = { days: {} };
+      Object.keys(change.days && typeof change.days === "object" ? change.days : {}).forEach(function (day) { part.days[day] = (doc.days && doc.days[day]) || null; });
+      if (change.reviews) { part.reviews = doc.reviews || {}; part.rat = doc.rat || ""; part.rby = doc.rby || ""; }
+      out.months[key] = part;
+      (out.part || (out.part = {}))[key] = true;
+    }
+    else out.months[key] = doc;
   });
   if (log.length) appendRows_(jobLogSheet_(true), JOBLOG_COLS.length, log);
   return out;
