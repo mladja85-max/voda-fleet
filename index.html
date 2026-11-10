@@ -705,6 +705,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-empty { text-align: center; padding: 28px 16px; }
 .lb-notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: .85rem; display: grid; gap: 3px; }
 .lb-notes.warn { color: var(--soon); font-weight: 600; }
+.lb-check-sum { margin: 0; font-weight: 700; }
+.lb-check-sum.ok { color: var(--ok, #1a7f37); }
+.lb-check-sum.warn { color: var(--soon); }
+.lb-check details { margin-top: 4px; }
+.lb-check summary { cursor: pointer; color: var(--muted); font-weight: 600; }
 .lb-focus { border-left: 5px solid #f2b705; gap: 12px; }
 .lb-focus > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
 .lb-focus > summary::-webkit-details-marker { display: none; }
@@ -754,7 +759,18 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-order { display: flex; gap: 2px; align-self: center; }
 .lb-order .btn { min-width: 34px; padding: 4px 8px; font-size: 1rem; }
 .lb-team-top .field { flex: 1 1 140px; }
-.lb-team .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lb-team .nums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* Employees: a check mark (On the leaderboard, Left the company) with its day beside it */
+.lb-days { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: end; }
+.lb-days .check { flex: 0 0 auto; align-items: center; min-height: 38px; font-weight: 600; }
+.lb-days .check input { margin: 0; }
+.lb-days .lb-nosale { font-weight: 400; margin-left: auto; }
+.lb-days .lb-nosale small { display: inline; }
+.lb-days .field { flex: 1 1 140px; max-width: 200px; min-width: 0; }
+.lb-days .field[hidden], .lb-team .t-was[hidden] { display: none; }
+.lb-team .t-was { margin: 0; }
+#lbOffList .lb-order, #lbFormerList .lb-order { display: none; }
+#lbOffList:empty { display: none; }
 .lb-team .field input, .lb-team .field select { padding: 7px 9px; }
 .lb-week-bar { height: 8px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; margin-top: 4px; }
 .lb-week-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
@@ -958,7 +974,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .lb-box span { font-size: .7rem; }
   .lb-box input { padding: 8px 7px; }
   .lb-card { padding: 9px 10px; }
-  .lb-team .nums { grid-template-columns: 1fr; }
+  .lb-days .check { flex-basis: 100%; min-height: 0; }
+  .lb-days .lb-nosale { margin-left: 0; }
 }
 .lb-teams-more { display: flex; flex-wrap: wrap; gap: 4px; }
 .lb-move-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -1600,7 +1617,12 @@ const lbTeamName = v => { const s = String(v == null ? "" : v).replace(/\s+/g, "
 const lbYm = v => (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(v || "")) ? String(v) : "");
 const lbIsDay = v => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(v || ""));
 /** The roster, cleaned: each team once, a unit, the months it's on the board ("" = open), and the people on the
- *  reviews board only (reviewers: helpers who get 5-star reviews but don't run a truck; never ranked). */
+ *  reviews board only (reviewers: helpers who get 5-star reviews but don't run a truck; never ranked).
+ *  The exact days (Employees): on = his first day on the leaderboard (kept only when it isn't the 1st of `from`),
+ *  off = his last day on it (always there with `to`), left = his last day with the company, was = earlier stretches
+ *  on the leaderboard [[first day, last day], ...] for someone who came off and went back on.
+ *  A roster saved before the days were kept has only the months: they count whole, and a team with a last month is
+ *  someone who left then (as it was). */
 function lbCleanConfig(c) {
   const out = { teams: [], goal: LB_GOAL, reviewers: [] };
   const g = c && Number(c.goal);
@@ -1612,7 +1634,25 @@ function lbCleanConfig(c) {
     seen.add(name.toLowerCase());
     let from = lbYm(t.from), to = lbYm(t.to);
     if (from && to && to < from) to = from;
+    let left = lbIsDay(t.left) ? t.left : "";
+    if (left && (!to || left.slice(0, 7) < to)) to = left.slice(0, 7);          // off the leaderboard once he's left
+    if (from && to && to < from) from = to;
     const team = { name, unit: LB_GROUPS.includes(t.unit) ? t.unit : LB_GROUPS[0], from, to };
+    const on = lbIsDay(t.on) && t.on.slice(0, 7) === from ? t.on : "";
+    let off = lbIsDay(t.off) && t.off.slice(0, 7) === to ? t.off : "";
+    if (to && !off) { off = lbLastDay(to); if (!left && t.off === undefined) left = off; }   // months only: he left then
+    if (left && off > left) off = left;
+    if (on && off && off < on) off = on;
+    if (on && on !== from + "-01") team.on = on;
+    if (off) team.off = off;
+    if (left) team.left = left;
+    const first = on || (from ? from + "-01" : "");
+    const was = [];
+    for (const w of (Array.isArray(t.was) ? t.was : []).slice(0, 8)) {
+      const a = Array.isArray(w) && lbIsDay(w[0]) ? w[0] : "", b = Array.isArray(w) && lbIsDay(w[1]) ? w[1] : "";
+      if (b && (!a || a <= b) && first && b < first) was.push([a, b]);
+    }
+    if (was.length) team.was = was.sort((x, y) => x[1].localeCompare(y[1]));
     if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
     if (LB_ROLES[t.role]) team.role = t.role;
     out.teams.push(team);
@@ -1632,9 +1672,25 @@ const LB_ROLES = { assistant: "Assistant", clean1: "Cleaning tech 1", clean2: "C
   rest1: "Restoration tech 1", rest2: "Restoration tech 2", rest3: "Restoration tech 3" };
 /** A reviews-only person by name (any capitals), or null. */
 const lbReviewerOf = (cfg, name) => ((cfg && cfg.reviewers) || []).find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
-const lbOnBoard = (t, key) => (!t.from || t.from <= key) && (!t.to || key <= t.to);
-/** Still with the company in month `key` or later (a team whose last month on the board has passed is a former one). */
-const lbCurrent = (t, key) => !t.to || t.to >= key;
+/** On the leaderboard at some point in month `key` (the stretch he's on now, or an earlier one). */
+const lbOnBoard = (t, key) => ((!t.from || t.from <= key) && (!t.to || key <= t.to))
+  || (t.was || []).some(w => (!w[0] || w[0].slice(0, 7) <= key) && key <= w[1].slice(0, 7));
+const lbLastDay = key => `${key}-${String(lbDaysIn(key)).padStart(2, "0")}`;
+/** His first and last day on the leaderboard ("" = open), from the exact days or the whole months. */
+const lbFirstOn = t => t.on || (t.from ? t.from + "-01" : "");
+const lbLastOn = t => t.off || (t.to ? lbLastDay(t.to) : "");
+/** The stretches he's on the leaderboard: [[first day, last day], ...], "" = open. */
+const lbStretches = t => (t.was || []).concat([[lbFirstOn(t), lbLastOn(t)]]);
+/** On the leaderboard that day ("2026-11-09"): what he makes on other days is his production, not ranked. */
+const lbOnDay = (t, day) => lbStretches(t).some(w => (!w[0] || w[0] <= day) && (!w[1] || day <= w[1]));
+/** On the leaderboard on a day of month `key` up to `today`: someone who starts on the 20th isn't ranked on the 9th. */
+const lbOnBy = (t, key, today) => { const end = today && today < lbLastDay(key) ? today : lbLastDay(key); return lbStretches(t).some(w => (!w[0] || w[0] <= end) && (!w[1] || w[1] >= key + "-01")); };
+/** Still with the company in month `key` (his last day is in it or later). Someone off the leaderboard who hasn't left
+ *  (a tech who became a supervisor) is still an employee. */
+const lbCurrent = (t, key) => !t.left || t.left.slice(0, 7) >= key;
+/** The employees who aren't on the leaderboard in month `key`: the people never on it (helpers), and anyone who's off
+ *  it that month and still with the company. Never ranked; their reviews and the jobs they help on still count. */
+const lbOffBoard = (cfg, key) => cfg.reviewers.concat(cfg.teams.filter(t => !lbOnBoard(t, key) && lbCurrent(t, key)).map(t => Object.assign({ name: t.name, unit: t.unit }, t.role ? { role: t.role } : {})));
 /** The roster entry for a name (any capitals), or null. */
 const lbTeamOf = (cfg, name) => cfg.teams.find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 /** The unit a team is ranked in that month ("2026-11"), or "" when it isn't on the board then. */
@@ -1814,9 +1870,14 @@ function lbBuild(cfgIn, docs, year, opts) {
   const nameOf = n => { const t = lbTeamOf(cfg, n); return t ? t.name : lbTeamName(n); };
   const recs = {}, weeks = {};
   let newest = "";
-  const rec = (key, team) => recs[key + "|" + team] || (recs[key + "|" + team] = { month: key, team, group: lbUnitIn(cfg, team, key),
+  // ranked in a month once he's on the leaderboard on a day of it (up to today). A day he isn't on (before his first
+  // day, after his last) in a month he is: those truck numbers and sales are his production, kept on a second record
+  // that isn't ranked (part: true, no group)
+  const unitIn = (team, key) => { const t = lbTeamOf(cfg, team); return t && lbOnBy(t, key, today) ? t.unit : ""; };
+  const offDay = (team, day) => { const t = lbTeamOf(cfg, team); return !!t && !!unitIn(team, day.slice(0, 7)) && !lbOnDay(t, day); };
+  const rec = (key, team, off) => { const id = key + "|" + team + (off ? "|off" : ""); return recs[id] || (recs[id] = Object.assign({ month: key, team, group: off ? "" : unitIn(team, key),
     revenue: 0, jobs: 0, workDays: 0, techs: 0, sales: 0, up: 0, addon: 0, rugs: 0, extra: 0, saleJobs: 0, reviews: 0,
-    truckDays: 0, saleDays: 0, last: "", helped: 0, creditIn: 0, creditOut: 0 });
+    truckDays: 0, saleDays: 0, last: "", helped: 0, creditIn: 0, creditOut: 0 }, off ? { part: true } : {})); };
   const add = (r, k, v) => { if (v != null) r[k] += v; };
   const keys = Object.keys(docs || {}).filter(k => lbYm(k) && k.startsWith(year + "-")).sort();
   for (const key of keys) {
@@ -1830,10 +1891,11 @@ function lbBuild(cfgIn, docs, year, opts) {
         const team = nameOf(n), e = lbEntry(arr, LB_TRUCK.length);
         if (!team || !e.length) continue;
         typed = true;
-        const r = rec(dkey, team);
+        const off = offDay(team, day), r = rec(dkey, team, off);
         LB_TRUCK.forEach((f, i) => add(r, f.key, e[i]));
         r.truckDays++;
         if (day > r.last) r.last = day;
+        if (off) continue;
         const wk = lbMondayOf(day) + "|" + dkey + "|" + team;
         const w = weeks[wk] || (weeks[wk] = { week: lbMondayOf(day), month: dkey, team, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
         add(w, "jobs", e[0]); add(w, "workDays", e[1]); add(w, "revenue", e[2]);
@@ -1842,7 +1904,7 @@ function lbBuild(cfgIn, docs, year, opts) {
         const team = nameOf(n), e = lbEntry(arr, LB_SALE.length);
         if (!team || !e.length) continue;
         typed = true;
-        const r = rec(dkey, team);
+        const r = rec(dkey, team, offDay(team, day));
         LB_SALE.forEach((f, i) => add(r, f.key, e[i]));
         r.sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0);
         r.saleDays++;
@@ -1862,15 +1924,17 @@ function lbBuild(cfgIn, docs, year, opts) {
           for (const x of lbJobSplit(job, owner).slice(1)) {
             const who = nameOf(x.name);
             if (!who) continue;
-            const r = rec(dkey, who);
+            const whoOff = offDay(who, day), ownOff = offDay(owner, day);
+            const r = rec(dkey, who, whoOff);
             r.helped++;
             if (!job.c || !job.v) continue;
             const amt = job.v * x.pct / 100;
             r.revenue += amt; r.creditIn += amt;
-            const o = rec(dkey, owner);
+            const o = rec(dkey, owner, ownOff);
             o.revenue -= amt; o.creditOut += amt;
             const wk = lbMondayOf(day) + "|" + dkey + "|", ow = weeks[wk + owner];
-            if (ow) ow.revenue -= amt;
+            if (ow && !ownOff) ow.revenue -= amt;
+            if (whoOff) continue;
             const hw = weeks[wk + who] || (weeks[wk + who] = { week: lbMondayOf(day), month: dkey, team: who, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
             hw.revenue += amt;
           }
@@ -1891,7 +1955,7 @@ function lbBuild(cfgIn, docs, year, opts) {
   for (const r of Object.values(recs)) if (r.group && idle(r.month, r.team)) delete recs[r.month + "|" + r.team];
   for (const [wk, w] of Object.entries(weeks)) if (idle(w.month, w.team)) delete weeks[wk];
   for (const w of Object.values(weeks).map(x => [x.week, x.month])) {
-    for (const t of lbBoard(cfg, w[1]).filter(x => !idle(w[1], x.name))) {
+    for (const t of lbBoard(cfg, w[1]).filter(x => unitIn(x.name, w[1]) && !idle(w[1], x.name))) {
       const wk = w[0] + "|" + w[1] + "|" + t.name;
       if (!weeks[wk]) weeks[wk] = { week: w[0], month: w[1], team: t.name, group: t.unit, jobs: 0, workDays: 0, revenue: 0 };
     }
@@ -1899,11 +1963,11 @@ function lbBuild(cfgIn, docs, year, opts) {
   for (let m = 1; m <= 12; m++) {
     const key = lbMonthKey(year, m);
     if (key > lastKey) break;
-    for (const t of lbBoard(cfg, key)) if (!idle(key, t.name)) rec(key, t.name);
+    for (const t of lbBoard(cfg, key)) if (unitIn(t.name, key) && !idle(key, t.name)) rec(key, t.name);
   }
   return {
     cfg,
-    records: Object.values(recs).filter(r => r.month <= lastKey).sort((a, b) => a.month.localeCompare(b.month) || a.team.localeCompare(b.team)),
+    records: Object.values(recs).filter(r => r.month <= lastKey).sort((a, b) => a.month.localeCompare(b.month) || a.team.localeCompare(b.team) || !!a.part - !!b.part),
     weeks: Object.values(weeks).sort((a, b) => a.week.localeCompare(b.week) || a.team.localeCompare(b.team)),
     newest };
 }
@@ -2019,15 +2083,18 @@ function lbTable(rows, metrics) {
 function lbStandings(records, year, month) {
   const key = lbMonthKey(year, month);
   const inMonth = records.filter(r => r.month === key && LB_GROUPS.includes(r.group));
-  const ytdSum = {};
+  const ytdSum = {}, earlyReviews = {};
   for (const r of records) {
-    // only the months the team is on the board: revenue, sales and reviews from before they had a truck don't count
-    if (!r.month.startsWith(year + "-") || r.month > key || !LB_GROUPS.includes(r.group)) continue;
+    if (!r.month.startsWith(year + "-") || r.month > key) continue;
+    // revenue, jobs, days and sales count only in the months the team is on the board; reviews from the months before
+    // (a helper's reviews, like Jose's in June and July) still count toward his year, as on the sheet's reviews list
+    if (!LB_GROUPS.includes(r.group)) { if (r.reviews) earlyReviews[r.team.toLowerCase()] = (earlyReviews[r.team.toLowerCase()] || 0) + r.reviews; continue; }
     const s = ytdSum[r.team] || (ytdSum[r.team] = { revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0, months: 0 });
     for (const f of ["revenue", "jobs", "workDays", "sales", "saleJobs", "reviews"]) s[f] += Number(r[f]) || 0;
     s.months++;
   }
   const monthRows = inMonth.map(r => ({ team: r.team, group: r.group, values: lbMetrics(r) }));
+  for (const r of inMonth) { const s = ytdSum[r.team]; if (s) s.reviews += earlyReviews[r.team.toLowerCase()] || 0; }
   const ytdRows = inMonth.map(r => ({ team: r.team, group: r.group, values: Object.assign(lbMetrics(ytdSum[r.team]), { months: ytdSum[r.team].months }) }));
   const build = (rows, metrics) => ({
     Cleaning: lbTable(rows.filter(x => x.group === "Cleaning"), metrics),
@@ -2057,7 +2124,7 @@ function lbRevRows(records, key, ytd) {
 function lbWeek(weeks, start) {
   const by = {};
   for (const w of weeks) {
-    if (w.week !== start) continue;
+    if (w.week !== start || !w.group) continue;   // a day in a month he isn't on the leaderboard doesn't count
     const x = by[w.team] || (by[w.team] = { team: w.team, group: "", revenue: 0, jobs: 0, workDays: 0 });
     if (w.group) x.group = w.group;
     x.revenue += w.revenue; x.jobs += w.jobs; x.workDays += w.workDays;
@@ -2100,7 +2167,7 @@ function lbSpanSum(cfg, docs, year, from, to) {
   }
   const out = {};
   for (const r of lbBuild(cfg, part, year, { today: to }).records) {
-    if (r.month < from.slice(0, 7)) continue;
+    if (r.month < from.slice(0, 7) || r.part) continue;
     const o = out[r.team] || (out[r.team] = Object.fromEntries(LB_SUM_FIELDS.map(f => [f, 0])));
     for (const f of LB_SUM_FIELDS) o[f] += r[f] || 0;
   }
@@ -2320,7 +2387,7 @@ function lbRevenueDays(tabs, year) {
   }
   for (const [n, vt] of Object.entries(votes)) if (vt.Cleaning !== vt.Restoration) out.inferred[n] = vt.Cleaning > vt.Restoration ? "Cleaning" : "Restoration";
   // reviews: the REVIEWS table that starts in column A on the newest month tab that has one; column A of each month
-  // (5 stars) only
+  // (5 stars) only. A row whose name was cleared on the newest tab (someone who left) is left out, as on the sheet.
   const newestFirst = monthTabs.slice().reverse();
   const anyColA = newestFirst.some(({ t }) => lbReviewTables(t, year).some(x => x.col === 1));
   for (const { t } of newestFirst) {
@@ -2428,9 +2495,9 @@ function lbHistory(revTabs, salesTabs, year) {
   };
   put(rev.days, "t");
   put(sales.days, "s");
-  // every team's reviews are kept for every month (they count only in the months the team is on the board, so moving a
-  // team's From month in Teams brings its earlier reviews in); a name that isn't a team (a helper like Oscar) goes on
-  // the reviews board only
+  // every team's reviews are kept for every month: the months before he's on the leaderboard (a helper's reviews, Jose
+  // in June) count toward his year once he is; a name that isn't a team (a helper like Oscar) goes on the reviews board
+  // only
   const off = new Set(), notTeam = new Set();
   for (const [name, ms] of Object.entries(rev.reviews)) for (const [key, n] of Object.entries(ms)) {
     if (!key.startsWith(year + "-") || key > lastKey) continue;
@@ -2438,7 +2505,7 @@ function lbHistory(revTabs, salesTabs, year) {
     if (!lbTeamOf(config, name)) { notTeam.add(name); continue; }
     if (n && !lbUnitIn(config, name, key)) off.add(name);
   }
-  if (off.size) notes.push(`Reviews from months before a team's truck are kept but not counted (${[...off].join(", ")}). To count them, move the team's From month in Teams.`);
+  if (off.size) notes.push(`Reviews from before ${[...off].join(", ")} went on the leaderboard are kept and count toward their year.`);
   if (notTeam.size) notes.push(`${[...notTeam].join(", ")} ${notTeam.size === 1 ? "isn't a team, so goes" : "aren't teams, so go"} on the reviews board only (not ranked).`);
   config.reviewers = [...notTeam].map(name => ({ name, unit: LB_GROUPS[0] }));
   for (const t of config.teams) {
@@ -2486,6 +2553,45 @@ function lbCombineYears(hists, known) {
 }
 /** The roster after loading past years: everyone already in Teams keeps their unit and end month and starts at their
  *  first month on a truck; teams from those years who aren't in Teams any more are added, ending at their last month. */
+/** Each person's numbers per month, added up from month documents just as typed (before any leaderboard rule):
+ *  { "2026-06": { jose: { name, revenue, jobs, workDays, sales, saleJobs, reviews } } } */
+function lbPersonMonths(months) {
+  const out = {};
+  for (const [key, doc] of Object.entries(months || {})) {
+    if (!lbYm(key)) continue;
+    const add = (n, f, v) => {
+      const name = lbTeamName(n);
+      if (v == null || !name) return;
+      const m = out[key] || (out[key] = {}), k = name.toLowerCase();
+      (m[k] || (m[k] = { name, revenue: 0, jobs: 0, workDays: 0, sales: 0, saleJobs: 0, reviews: 0 }))[f] += v;
+    };
+    for (const d of Object.values((doc && doc.days) || {})) {
+      for (const [n, a] of Object.entries((d && d.t) || {})) { const e = lbEntry(a, LB_TRUCK.length); if (e.length) { add(n, "jobs", e[0]); add(n, "workDays", e[1]); add(n, "revenue", e[2]); } }
+      for (const [n, a] of Object.entries((d && d.s) || {})) { const e = lbEntry(a, LB_SALE.length); if (e.length) { add(n, "sales", (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0)); add(n, "saleJobs", e[4]); } }
+      for (const [n, a] of Object.entries((d && d.r) || {})) { const e = lbEntry(a, LB_REVIEW.length); if (e.length) add(n, "reviews", e[0]); }
+    }
+    for (const [n, v] of Object.entries((doc && doc.reviews) || {})) add(n, "reviews", lbVal(v));
+  }
+  return out;
+}
+const LB_CHECK_FIELDS = [["revenue", "Revenue", true], ["jobs", "Jobs"], ["workDays", "Work days"], ["sales", "Tech sales", true], ["saleJobs", "Jobs with a sale"], ["reviews", "Reviews"]];
+/** The sheet's numbers against the app's, person by person and month by month (the months the sheet has), so it shows
+ *  whether the app holds exactly what the sheets say. → { same, diff: [{ month, name, label, money, sheet, app }] } */
+function lbCheckMonths(sheet, app) {
+  const A = lbPersonMonths(sheet), B = lbPersonMonths(app), out = { same: 0, diff: [] };
+  for (const key of Object.keys(A).sort()) {
+    const names = new Set(Object.keys(A[key]).concat(Object.keys(B[key] || {})));
+    for (const k of [...names].sort()) {
+      const a = A[key][k] || {}, b = (B[key] || {})[k] || {};
+      for (const [f, label, money] of LB_CHECK_FIELDS) {
+        const x = lbRound2(a[f] || 0), y = lbRound2(b[f] || 0);
+        if (x === y) out.same++;
+        else out.diff.push({ month: key, name: a.name || b.name, label, money: !!money, sheet: x, app: y });
+      }
+    }
+  }
+  return out;
+}
 function lbMergeRoster(cur, past, reviewers) {
   const out = lbCleanConfig(cur);
   for (const r of reviewers || []) if (!lbTeamOf(out, r.name) && !lbReviewerOf(out, r.name)) out.reviewers.push(r);
@@ -5748,6 +5854,7 @@ const LB_NOSALE_API = 26;                              // ... and with Estimator
 const LB_REVIEWERS_API = 27;                           // ... and with reviews-only people (cfg.reviewers)
 const LB_ROLES_API = 29;                               // ... and with roles and the pay rates (Payroll)
 const LB_JOBS_API = 30;                                // ... and with a truck's jobs, who worked with him, the split log
+const LB_DATES_API = 31;                               // ... and with the exact days on and off the leaderboard, and Left the company
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -5984,7 +6091,7 @@ function lbMonthsWith() {
 /** The years with teams on a truck (from the roster), oldest first. */
 function lbYearsWith() {
   const now = lbNowYear();
-  const first = Math.min(now, ...lbCleanConfig(lbData && lbData.config).teams.map(t => Number((t.from || "").slice(0, 4)) || now));
+  const first = Math.min(now, ...lbCleanConfig(lbData && lbData.config).teams.flatMap(t => [t.from].concat((t.was || []).map(w => w[0]))).map(f => Number((f || "").slice(0, 4)) || now));
   return Array.from({ length: now - first + 1 }, (_, i) => first + i);
 }
 /** A year picker (only when there's more than one year). */
@@ -6321,7 +6428,7 @@ const LB_JOB_SALES = ["Up sale", "Add-on", "Rugs", "Additional"];
  *  kind picked (Technician: a tech role; Assistant: the assistant role; no role yet: both), never the truck himself. */
 function lbCrewChoices(key, owner, kind, taken) {
   const cfg = lbCfg();
-  const all = cfg.teams.filter(t => lbOnBoard(t, key)).concat(cfg.reviewers);
+  const all = cfg.teams.filter(t => lbOnBoard(t, key)).concat(lbOffBoard(cfg, key));
   const fits = p => (kind === "assistant" ? p.role === "assistant" : p.role && p.role !== "assistant") || !p.role;
   return all.filter(p => p.name.toLowerCase() !== owner.toLowerCase() && !taken.some(n => n.toLowerCase() === p.name.toLowerCase()) && fits(p))
     .sort((a, b) => !a.role - !b.role || a.name.localeCompare(b.name));
@@ -6494,8 +6601,8 @@ function lbReviewsEl(day) {
   // the board, then the reviews-only people (helpers), then anyone else with reviews that day (so they can be cleared)
   const cfg = lbCfg();
   const teams = lbTeamsFor(key, Object.keys(d.r || {}).filter(n => lbEntry(d.r[n], LB_REVIEW.length).length).concat(Object.keys(base).filter(n => lbVal(base[n])))
-    .filter(n => !lbReviewerOf(cfg, n)));
-  teams.splice(teams.findIndex(t => t.off) < 0 ? teams.length : teams.findIndex(t => t.off), 0, ...cfg.reviewers.map(r => ({ name: r.name, unit: r.unit, reviewer: true })));
+    .filter(n => !lbOffBoard(cfg, key).some(p => p.name.toLowerCase() === n.toLowerCase())));
+  teams.splice(teams.findIndex(t => t.off) < 0 ? teams.length : teams.findIndex(t => t.off), 0, ...lbOffBoard(cfg, key).map(r => ({ name: r.name, unit: r.unit, reviewer: true })));
   // a total typed for the whole month before reviews were typed by day: kept, and can be changed or cleared here
   const baseBox = t => lbVal(base[t.name]) ? h("label", { class: "lb-rv-base", "data-team": t.name },
     h("span", null, h("b", { text: `${lbMonthLong(month)} total typed earlier` }), h("small", { text: `From before reviews were typed by day (the sheet's monthly count). It counts on top of the days, so clear it if those reviews are also typed on their day.` })),
@@ -6629,7 +6736,7 @@ async function openPayRates() {
   const months = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
   const nowKey = lbMonthKey(clockNow().getFullYear(), clockNow().getMonth() + 1);
   const people = LB_GROUPS.flatMap(g => cfg.teams.filter(t => t.unit === g && months.some(k => lbOnBoard(t, k)) && lbCurrent(t, nowKey)).map(t => Object.assign({ off: false }, t))
-    .concat(cfg.reviewers.filter(r => r.unit === g).map(r => Object.assign({ off: true }, r))));
+    .concat(lbOffBoard(cfg, nowKey).filter(r => r.unit === g && !months.some(k => { const t = lbTeamOf(cfg, r.name); return t && lbOnBoard(t, k); })).map(r => Object.assign({ off: true }, r))));
   const rate = (n, f) => { const x = Object.entries(rates).find(([k]) => k.toLowerCase() === n.toLowerCase()); return x && typeof x[1][f] === "number" ? String(x[1][f]) : ""; };
   const list = h("div", { class: "pay-list", id: "payList" }, people.map(p => h("div", { class: "pay-person", "data-name": p.name },
     h("div", { class: "pay-head" }, h("strong", { text: p.name }), h("span", { class: `lb-unit ${p.unit}`, text: [p.unit, LB_ROLES[p.role] || "", p.off ? "not ranked" : ""].filter(Boolean).join(" · ") })),
@@ -6756,6 +6863,8 @@ function lbSpanRecs(from, to, withReviews) {
     for (const f of F) o[f] += r[f] || 0;
     if (r.last > o.last) o.last = r.last;
   }
+  // his reviews from the months before he went on the leaderboard count toward his year, as in Standings
+  if (withReviews) for (const r of b.records) if (!r.group && r.reviews && out[r.team] && r.month >= from.slice(0, 7) && r.month <= to.slice(0, 7)) out[r.team].reviews += r.reviews;
   return out;
 }
 /** A Status table ranked by one of its numbers, best first: 1, 2 and 3 in gold, VODA blue and VODA drop blue (a tie
@@ -6875,19 +6984,20 @@ function lbStatusEl() {
       { k: "sales", label: "Month to date", def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) },
       { k: "left", label: "Left to goal", low: true, v: t => gOf(t).left, f: t => { const g = gOf(t); return t.noSale ? "No goal" : g.done ? "Done" : lbMoney(g.left); } },
       { k: "need", label: "Need per day", low: true, v: t => gOf(t).perDay, f: t => { const g = gOf(t); return t.noSale || g.done || !leftOf(t.unit) ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", "", fmt(sum(board, "saleJobs")), lbMoney(lbDiv(sum(board, "sales"), sum(board, "saleJobs"))), lbMoney(sum(board, "up")), lbMoney(sum(board, "addon")), lbMoney(sum(board, "rugs")), lbMoney(sum(board, "extra"))]));
-  // a reviews-only person counts all his reviews (he's never on the board)
-  const ytdRv = name => lbRecords().filter(r => r.team === name && (r.group || lbReviewerOf(cfg, name)) && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
+  // everyone's reviews count from his first one: a helper's (never on the leaderboard), and the months before a tech
+  // went on it. Off the leaderboard this month and still here: listed when he has reviews this year, not ranked
+  const ytdRv = name => lbRecords().filter(r => r.team === name && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
   const monthRv = name => (lbRecords().find(r => r.month === key && r.team === name) || { reviews: 0 }).reviews;
-  const rvOnly = cfg.reviewers.map(r => ({ name: r.name, unit: r.unit, reviewer: true, note: "not ranked" }))
-    .filter(r => !lbPast() || ytdRv(r.name) > 0);
+  const rvOnly = lbOffBoard(cfg, key).map(r => ({ name: r.name, unit: r.unit, reviewer: true, note: "not ranked" }))
+    .filter(r => !board.some(t => t.name === r.name) && (lbReviewerOf(cfg, r.name) && !lbPast() || ytdRv(r.name) > 0));
   const rvOf = t => (!t.reviewer ? R(t).reviews : per === "ytd" ? ytdRv(t.name) : monthRv(t.name));
   const rvBoard = board.concat(rvOnly), rvTotal = rvBoard.reduce((n, t) => n + rvOf(t), 0);
   const reviews = week ? null : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
     per === "ytd" ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbYtdText(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) }], rvBoard, () => true, ["Total", fmt(rvTotal)])
       : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbMonthLong(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) },
         { k: "ytd", label: lbYtdText(month), v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], rvBoard, () => true, ["Total", fmt(rvTotal), fmt(rvBoard.reduce((n, t) => n + ytdRv(t.name), 0))]));
-  const offEl = off.length ? h("div", { class: "panel" }, h("h2", { text: "Numbers not counted" }),
-    h("p", { class: "meta", text: `Typed for a team that isn't on the board in ${lbMonthLong(month)}: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. Fix the team's months in Teams if they should count.` })) : null;
+  const offEl = off.length ? h("div", { class: "panel", id: "lbsOff" }, h("h2", { text: "Not ranked" }),
+    h("p", { class: "meta", text: `Typed in ${lbMonthLong(month)} for days someone wasn't on the leaderboard: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. That revenue and those sales aren't ranked; the reviews count toward his year once he's on the leaderboard. If a day should be ranked, change his Since day in Employees.` })) : null;
   return [
     h("div", { class: "lb-bar" },
       lbSeg(Object.entries(LB_SPER).filter(([k]) => !lbPast() || !LB_WEEKS.includes(k)), per, k => { lbView.sper = k; lbSaveView(); renderLeaderboard(); }, "Period"),
@@ -6929,46 +7039,81 @@ function openLbTeams() {
   const yearsRead = new Set([y, ...Object.keys(lbYearCache).map(Number)]);
   const nowKey = lbMonthKey(clockNow().getFullYear(), clockNow().getMonth() + 1);
   const prevKey = (() => { const d = clockNow(); return d.getMonth() ? lbMonthKey(d.getFullYear(), d.getMonth()) : lbMonthKey(d.getFullYear() - 1, 12); })();
-  const monthOpts = (sel, blank) => {
-    const keys = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
-    if (sel && !keys.includes(sel)) keys.unshift(sel);
-    return [h("option", { value: "", text: blank, selected: !sel }), ...keys.map(k => h("option", { value: k, text: `${lbMonthLong(Number(k.slice(5)))} ${k.slice(0, 4)}`, selected: k === sel }))];
-  };
+  const today = lbToday();
+  const dayLong = d => { const x = lbDate(d); return `${MONTHS[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`; };
+  const startDay = clockNow().getFullYear() === y ? today : `${y}-01-01`;   // a new person's first day (another year open: its January 1)
+  const orig = {};   // each person as saved, by name: his stretch on the leaderboard as it was
   const list = h("div", { class: "lb-teams", id: "lbTeamList" });
-  const rowEl = (t, isNew, former) => {
+  const dateField = (cls, label, value, hidden) => h("div", { class: "field " + cls + "-f", hidden: !!hidden }, h("label", { text: label }),
+    h("input", { type: "date", class: cls, value: value || "", min: "2015-01-01", max: `${clockNow().getFullYear() + 1}-12-31` }));
+  /** One person: unit, role, the On the leaderboard check mark with its exact days, and Left the company with his last
+   *  day. Unticking On the leaderboard asks for his last day on it (today to start with); ticking it for someone who
+   *  came off starts a new stretch (today to start with), and his earlier months stay as they were. */
+  const rowEl = (t, isNew) => {
+    // the check mark is on while he has no last day; with one (also a day still to come) it's off and the day shows
+    const first = lbFirstOn(t), last = lbLastOn(t), onNow = !last;
+    if (!isNew) orig[t.name.toLowerCase()] = t;
+    const ended = !isNew && !!last && last < today;
     const row = h("div", { class: "lb-team", "data-new": isNew ? "1" : null, "data-name": t.name || null },
       h("div", { class: "lb-team-top" },
-        former ? null : h("div", { class: "lb-order" },
-          h("button", { class: "btn ghost small t-up", type: "button", "aria-label": `Move ${t.name || "this person"} up`, title: "Move up", onclick: () => { const p = row.previousElementSibling; if (p) list.insertBefore(row, p); row.querySelector(".t-up").focus(); } }, "↑"),
-          h("button", { class: "btn ghost small t-down", type: "button", "aria-label": `Move ${t.name || "this person"} down`, title: "Move down", onclick: () => { const n = row.nextElementSibling; if (n) list.insertBefore(n, row); row.querySelector(".t-down").focus(); } }, "↓")),
+        h("div", { class: "lb-order" },
+          h("button", { class: "btn ghost small t-up", type: "button", "aria-label": `Move ${t.name || "this person"} up`, title: "Move up", onclick: () => { const p = row.previousElementSibling; if (p) row.parentNode.insertBefore(row, p); row.querySelector(".t-up").focus(); } }, "↑"),
+          h("button", { class: "btn ghost small t-down", type: "button", "aria-label": `Move ${t.name || "this person"} down`, title: "Move down", onclick: () => { const n = row.nextElementSibling; if (n) row.parentNode.insertBefore(n, row); row.querySelector(".t-down").focus(); } }, "↓")),
         isNew ? h("div", { class: "field" }, h("label", { text: "Name" }), h("input", { type: "text", class: "t-name", maxlength: "30", autocomplete: "off", value: t.name || "", placeholder: "First name" }))
           : h("strong", { class: "t-label", text: t.name }),
         isNew ? h("button", { class: "btn ghost small danger", type: "button", onclick: () => row.remove() }, "Remove")
-          : former ? null
           : h("button", { class: "btn ghost small danger t-remove", type: "button", onclick: () => removeTeam(row, t) }, "Remove")),
       h("div", { class: "nums" },
         h("div", { class: "field" }, h("label", { text: "Unit" }), h("select", { class: "t-unit" }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === t.unit })))),
-        h("div", { class: "field" }, h("label", { text: "On the board from" }), h("select", { class: "t-from" }, monthOpts(t.from, `Before ${y}`))),
-        h("div", { class: "field" }, h("label", { text: "Until" }), h("select", { class: "t-to" }, monthOpts(t.to, "Still on the board")))),
-      h("div", { class: "field" }, h("label", { text: "Role" }), lbRoleSelect("t-role", t.role, t.name)),
-      h("label", { class: "check lb-nosale" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
-        h("span", null, "Estimator ", h("small", { text: "(left out of Today's focus and technician sales; still ranked on revenue)" }))),
-      null);
+        h("div", { class: "field" }, h("label", { text: "Role" }), lbRoleSelect("t-role", t.role, t.name))),
+      h("div", { class: "lb-days" },
+        h("label", { class: "check" }, h("input", { type: "checkbox", class: "t-on", checked: onNow }), h("span", null, "On the leaderboard")),
+        dateField("t-since", "Since (first day)", first),
+        dateField("t-until", "Last day on it", last, onNow)),
+      h("p", { class: "hint t-was", hidden: !(t.was || []).length, text: (t.was || []).length ? `Earlier on the leaderboard: ${t.was.map(w => `${w[0] ? dayLong(w[0]) : "the start"} – ${dayLong(w[1])}`).join("; ")}.` : "" }),
+      h("div", { class: "lb-days" },
+        h("label", { class: "check" }, h("input", { type: "checkbox", class: "t-left", checked: !!t.left }), h("span", null, "Left the company")),
+        dateField("t-leftday", "Last day", t.left, !t.left),
+        h("label", { class: "check lb-nosale", title: "Left out of Today's focus and technician sales; still ranked on revenue" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
+          h("span", null, "Estimator ", h("small", { text: "(no sales goal)" })))));
+    const q = c => row.querySelector(c);
+    const show = (c, on) => { q(c + "-f").hidden = !on; };
+    q(".t-on").addEventListener("change", () => {
+      const on = q(".t-on").checked;
+      show(".t-until", !on);
+      if (on) {
+        if (q(".t-left").checked) { q(".t-left").checked = false; show(".t-leftday", false); }
+        if (ended) q(".t-since").value = startDay;       // back on: a new stretch, his earlier months stay
+      } else {
+        if (ended) q(".t-since").value = first;
+        if (!q(".t-until").value) q(".t-until").value = ended ? last : today;
+      }
+    });
+    q(".t-left").addEventListener("change", () => {
+      const gone = q(".t-left").checked;
+      show(".t-leftday", gone);
+      if (!gone) return;
+      if (!q(".t-leftday").value) q(".t-leftday").value = today;
+      if (q(".t-on").checked) { q(".t-on").checked = false; if (ended) q(".t-since").value = first; show(".t-until", true); }
+      if (!q(".t-until").value || q(".t-until").value > q(".t-leftday").value) q(".t-until").value = ended && last <= q(".t-leftday").value ? last : q(".t-leftday").value;
+    });
     return row;
   };
-  // someone who left, or no longer runs a truck (an estimator): with numbers he moves to "No longer on a truck" (his last
-  // month under Until, so the past months keep him); without numbers in any year he's taken off the list
-  // him); without numbers he's taken off the list
+  // off the leaderboard and still with the company (a tech who became a supervisor): listed under Not on the leaderboard
+  const offList = h("div", { class: "lb-teams", id: "lbOffList" });
+  // left the company: his past months stay in the standings as they were
   const formerList = h("div", { class: "lb-teams", id: "lbFormerList" });
-  const formerBox = h("details", { class: "lb-former", id: "lbFormer" }, h("summary"), h("p", { class: "hint", text: "Left the company, or no longer runs a truck (an estimator). Their past months stay in the standings as they were; they're left out of Enter numbers, Pay rates, Worked with and Job history. To put someone back on a truck, set Until to Still on the board." }), formerList);
-  const formerCount = () => { const n = formerList.children.length; formerBox.hidden = !n; formerBox.querySelector("summary").textContent = `No longer on a truck (${n})`; };
+  const formerBox = h("details", { class: "lb-former", id: "lbFormer" }, h("summary"), h("p", { class: "hint", text: "Left the company. Their past months stay in the standings as they were; after their last month they're left out of Enter numbers, Pay rates, Worked with and Job history. Someone who's still here but off a truck (a supervisor, an estimator): untick Left the company and he moves to Not on the leaderboard." }), formerList);
+  const formerCount = () => { const n = formerList.children.length; formerBox.hidden = !n; formerBox.querySelector("summary").textContent = `Former employees (${n})`; };
+  /** Remove: someone added by mistake (no numbers in any year) comes off the list; someone with numbers is marked as
+   *  left the company instead, so his past months stay as they are. */
   const removeTeam = async (row, t) => {
     const k = t.name.toLowerCase(), btn = row.querySelector(".t-remove");
     // every year he was on the board, not only the ones open here: someone with numbers in any year is never deleted
-    const nowY = Number(nowKey.slice(0, 4)), fromV = row.querySelector(".t-from").value || t.from || "";
+    const nowY = Number(nowKey.slice(0, 4)), fromV = (row.querySelector(".t-since").value || lbFirstOn(t) || "").slice(0, 7);
     const first = /^\d{4}-\d{2}$/.test(fromV) ? Number(fromV.slice(0, 4)) : 2018;
     const missing = [];
-    for (let yy = Math.max(first, 2018); yy <= nowY; yy++) if (!yearsRead.has(yy)) missing.push(yy);
+    for (let yy = Math.max(Math.min(first, ...(t.was || []).map(w => Number((w[0] || "2018").slice(0, 4)))), 2018); yy <= nowY; yy++) if (!yearsRead.has(yy)) missing.push(yy);
     if (missing.length) {
       if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
       try { for (const yy of missing) { scanMonths((await api("leaderboard", { year: yy })).months || {}); yearsRead.add(yy); } }
@@ -6976,18 +7121,22 @@ function openLbTeams() {
       if (btn) { btn.disabled = false; btn.textContent = "Remove"; }
     }
     if (!lastNum[k] && !used.has(k)) { row.remove(); toast(`${t.name} comes off the list when you tap Save.`); return; }
-    let until = lastNum[k] ? (lastNum[k] > nowKey ? nowKey : lastNum[k]) : prevKey;   // his last month with numbers
-    const from = row.querySelector(".t-from").value;
-    if (from && until < from) until = from;
-    if (!confirm(`${t.name} has numbers, so his past months stay as they are. Take him off the trucks (No longer on a truck), on the board until ${lbMonthLong(Number(until.slice(5)))} ${until.slice(0, 4)}?`)) return;
-    const sel = row.querySelector(".t-to");
-    if (![...sel.options].some(o => o.value === until)) sel.append(h("option", { value: until, text: `${lbMonthLong(Number(until.slice(5)))} ${until.slice(0, 4)}` }));
-    sel.value = until;
-    if (btn) btn.remove();
+    if (row.querySelector(".t-left").checked) { toast(`${t.name} has numbers, so he stays under Former employees.`); return; }
+    const m = lastNum[k] ? (lastNum[k] > nowKey ? nowKey : lastNum[k]) : prevKey;   // his last month with numbers
+    let day = m === nowKey ? today : lbLastDay(m);
+    const since = row.querySelector(".t-since").value;
+    if (since && day < since) day = since;
+    if (!confirm(`${t.name} has numbers, so his past months stay as they are. Mark him as left the company, last day ${dayLong(day)}?`)) return;
+    row.querySelector(".t-leftday").value = day;
+    row.querySelector(".t-left").checked = true;
+    row.querySelector(".t-left").dispatchEvent(new Event("change"));
     formerList.append(row); formerCount();
-    toast(`${t.name} moves to No longer on a truck when you tap Save.`);
+    toast(`${t.name} moves to Former employees when you tap Save.`);
   };
-  for (const t of cfg.teams) { const former = !lbCurrent(t, nowKey); (former ? formerList : list).append(rowEl(t, false, former)); }
+  for (const t of cfg.teams) {
+    const last = lbLastOn(t);
+    (t.left && t.left <= today ? formerList : last && last <= today ? offList : list).append(rowEl(t, false));
+  }
   formerCount();
   // people on the reviews board only (helpers who get 5-star reviews, no truck): never ranked
   const rvList = h("div", { class: "lb-rvlist", id: "lbRvList" });
@@ -7001,24 +7150,23 @@ function openLbTeams() {
         h("button", { class: "btn ghost small", type: "button", "data-up": r.name || "", "aria-label": `Put ${r.name || "this name"} on the leaderboard`, onclick: () => {
           const name = row.dataset.new ? row.querySelector(".r-name").value.trim() : row.dataset.name;
           if (!name) { err.textContent = "Type the name first."; return; }
-          list.append(rowEl({ name, unit: row.querySelector(".r-unit").value, role: row.querySelector(".r-role").value, from: thisMonth, to: "" }, true));
+          list.append(rowEl({ name, unit: row.querySelector(".r-unit").value, role: row.querySelector(".r-role").value, from: startDay.slice(0, 7), on: startDay, to: "" }, true));
           row.remove();
-          toast(`${name} goes on the leaderboard from ${lbMonthLong(Number(thisMonth.slice(5)))}. Tap Save.`);
+          toast(`${name} goes on the leaderboard from ${dayLong(startDay)}. Change the day if it's another one, then tap Save.`);
         } }, "Put on the leaderboard"),
         h("button", { class: "btn ghost small danger", type: "button", "aria-label": `Remove ${r.name || "this name"}`, onclick: () => row.remove() }, "Remove")));
     return row;
   };
   for (const r of cfg.reviewers) rvList.append(rvRow(r, false));
-  const thisMonth = lbMonthKey(y, clockNow().getFullYear() === y ? clockNow().getMonth() + 1 : 1);
   openDialog(
     h("h3", { id: "dlgTitle", text: "Employees" }),
-    h("p", { class: "hint", text: "On the leaderboard: each truck's team, the unit it's ranked in, its role and the months it counts. A team that took over a truck in September starts in September; one that left in June ends in June. ↑ ↓ set the order of the cards in Enter numbers." }),
+    h("p", { class: "hint", text: "On the leaderboard: ranked in Standings from the day under Since. Revenue, jobs, work days and sales count only on the days someone is on it; his 5-star reviews count from his first one. Untick the check mark to take someone off from a day you pick; tick Left the company when he's gone. ↑ ↓ set the order of the cards in Enter numbers." }),
     list,
-    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: thisMonth, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a person to the leaderboard")),
+    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: startDay.slice(0, 7), on: startDay, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a person to the leaderboard")),
     h("div", { class: "lb-rvsec" },
       h("h4", { text: "Not on the leaderboard" }),
-      h("p", { class: "hint", text: "Helpers and techs who don't compete for a spot yet. Their reviews and the jobs they help on count, and they show at the bottom of their department, but they're never ranked in Standings until you put them on the leaderboard. Removing a name keeps what was typed for it." }),
-      rvList,
+      h("p", { class: "hint", text: "Still with the company, not ranked: helpers and techs who don't compete for a spot yet, and anyone who came off the leaderboard (a tech who became a supervisor). Their reviews and the jobs they help on count. Tick On the leaderboard to rank someone from that day. Removing a helper's name keeps what was typed for it." }),
+      offList, rvList,
       h("div", { class: "lb-rvbtns" },
         h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); } }, "+ Add a person"),
         h("button", { class: "btn ghost small", type: "button", id: "lbRvXl", onclick: () => openLbReviewsXl() }, "Their reviews from Excel…"))),
@@ -7033,15 +7181,26 @@ function openLbTeams() {
         h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
         h("button", { class: "btn primary", type: "button", id: "lbTeamsSave", text: "Save", onclick: async () => {
           const teams = [], names = new Set();
-          for (const row of [...list.children, ...formerList.children]) {
+          for (const row of [...list.children, ...offList.children, ...formerList.children]) {
             const name = row.dataset.new ? lbTeamName(row.querySelector(".t-name").value) : row.dataset.name;
             if (row.dataset.new && !row.querySelector(".t-name").value.trim()) continue;
             if (!name) { err.textContent = "Names take letters only (spaces, ' and - are fine)."; return; }
             if (names.has(name.toLowerCase())) { err.textContent = `${name} is on the list twice.`; return; }
             names.add(name.toLowerCase());
-            const from = row.querySelector(".t-from").value, to = row.querySelector(".t-to").value;
-            if (from && to && to < from) { err.textContent = `${name}: Until is before From.`; return; }
-            const team = { name, unit: row.querySelector(".t-unit").value, from, to };
+            const since = row.querySelector(".t-since").value, onTick = row.querySelector(".t-on").checked, gone = row.querySelector(".t-left").checked;
+            let until = onTick ? "" : row.querySelector(".t-until").value;
+            const left = gone ? row.querySelector(".t-leftday").value : "";
+            if ((since && !lbIsDay(since)) || (until && !lbIsDay(until)) || (left && !lbIsDay(left))) { err.textContent = `${name}: one of the dates isn't a day.`; return; }
+            if (gone && !left) { err.textContent = `${name}: pick his last day with the company.`; return; }
+            if (!onTick && !until && !left) { err.textContent = `${name}: pick his last day on the leaderboard.`; return; }
+            if (left && (!until || until > left)) until = left;      // off the leaderboard once he's left
+            if (since && until && until < since) { err.textContent = `${name}: his last day on the leaderboard is before his first.`; return; }
+            const team = { name, unit: row.querySelector(".t-unit").value, from: since.slice(0, 7), to: until.slice(0, 7), on: since, off: until };
+            if (left) team.left = left;
+            // someone who came off and is back on from a later day: the earlier stretch is kept, so its months stay
+            const o = orig[name.toLowerCase()], was = o ? (o.was || []).slice() : [];
+            if (o && lbLastOn(o) && since && since > lbLastOn(o)) was.push([lbFirstOn(o), lbLastOn(o)]);
+            if (was.length) team.was = was;
             if (row.querySelector(".t-role").value) team.role = row.querySelector(".t-role").value;
             if (row.querySelector(".t-nosale").checked) team.noSale = true;
             teams.push(team);
@@ -7061,6 +7220,9 @@ function openLbTeams() {
           const goal = Number(val("lbGoal").replace(/[$,\s]/g, ""));
           if (!(goal > 0)) { err.textContent = "Type the sales goal as a number, like 3000."; return; }
           if ((teams.concat(reviewers).some(t => t.role) && apiLevel && apiLevel < LB_ROLES_API) || (reviewers.length && apiLevel && apiLevel < LB_REVIEWERS_API)) { err.textContent = "Roles and Not on the leaderboard need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+          // the exact days need the script that keeps them; whole months and "left in his last month" save as before
+          const plain = t => (!t.on || t.on === t.from + "-01") && (!t.off || t.off === lbLastDay(t.to)) && (t.left || "") === (t.to ? lbLastDay(t.to) : "") && !t.was;
+          if (apiLevel && apiLevel < LB_DATES_API && !teams.every(plain)) { err.textContent = "Exact days and Left the company need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "Estimator needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
           try {
@@ -7212,8 +7374,8 @@ function openLbMove() {
           if ($("lbMvRoster").checked && !$("lbMvRoster").disabled) {
             const teams = cfg.teams.map(t => Object.assign({}, t));
             const ft = teams.find(t => t.name.toLowerCase() === plan.from.toLowerCase()), tt = teams.find(t => t.name.toLowerCase() === plan.to.toLowerCase());
-            if (ft && (!ft.to || ft.to >= plan.start) && (!ft.from || ft.from < plan.start) && !plan.end) ft.to = lbPrevMonth(plan.start);
-            if (tt && tt.from && tt.from > plan.start) tt.from = plan.start;
+            if (ft && (!ft.to || ft.to >= plan.start) && (!ft.from || ft.from < plan.start) && !plan.end) { ft.to = lbPrevMonth(plan.start); ft.off = lbLastDay(ft.to); }
+            if (tt && tt.from && tt.from > plan.start) { tt.from = plan.start; delete tt.on; }
             writes.unshift({ key: "config", data: { teams, goal: cfg.goal, reviewers: cfg.reviewers } });
           }
           for (let i = 0; i < writes.length; i += 6) await api("lbPut", { year: y, writes: writes.slice(i, i + 6) });
@@ -7282,12 +7444,30 @@ function openLbHistory() {
             h("td", { class: "lb-hist-teams", text: teams.join(", ") + (isNow && has ? ` · replaces what's typed in the app for ${now}` : "") }));
         });
         const all = lbCombineYears(Object.values(hists), lbData && lbData.config);
+        // the sheet against what's in the app now, for every year found that's open here
+        const checks = rev.years.map(y => {
+          const app = lbData && Number(lbData.year) === y ? lbData.months : (lbYearCache[y] || {}).months;
+          if (!app || !Object.keys(app).length) return null;
+          const c = lbCheckMonths(hists[y].months, app), val = (d, v) => (d.money ? lbMoney(v) : fmt(v));
+          return h("div", { class: "lb-check", "data-year": String(y) },
+            h("p", { class: c.diff.length ? "lb-check-sum warn" : "lb-check-sum ok", text: c.diff.length
+              ? `${y}: ${fmt(c.same)} numbers are the same in the sheet and the app, ${fmt(c.diff.length)} ${c.diff.length === 1 ? "is" : "are"} different.`
+              : `${y}: all ${fmt(c.same)} numbers are the same in the sheet and the app.` }),
+            c.diff.length ? h("details", { open: c.diff.length <= 12 }, h("summary", { text: "What's different" }),
+              h("div", { class: "lb-scroll" }, h("table", { class: "lb-table lb-check-table" },
+                h("thead", null, h("tr", null, ["Month", "Person", "Number", "Sheet", "App"].map(x => h("th", { text: x })))),
+                h("tbody", null, c.diff.slice(0, 200).map(d => h("tr", null, h("td", { text: `${lbMonthLong(Number(d.month.slice(5))).slice(0, 3)} ${d.month.slice(0, 4)}` }), h("td", { text: d.name }), h("td", { text: d.label }), h("td", { text: val(d, d.sheet) }), h("td", { text: val(d, d.app) })))))),
+              c.diff.length > 200 ? h("p", { class: "hint", text: `Showing the first 200 of ${fmt(c.diff.length)}.` }) : null) : null);
+        }).filter(Boolean);
         res.replaceChildren(
           h("h4", { text: "Found" }),
           h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "lbHistYears" },
             h("thead", null, h("tr", null, ["Year", "Months", "Revenue", "Tech sales", "Reviews", "Teams"].map(c => h("th", { text: c })))),
             h("tbody", null, rows))),
-          h("p", { class: "hint", text: `Teams keep their unit and end month in Teams and start at their first month on a truck; anyone from those years who isn't in Teams any more is added with the months they had a truck.${older.length ? ` ${older[0]}–${older[older.length - 1]} are only in the technician sales sheet (no truck revenue), so they aren't loaded.` : ""}` }),
+          checks.length ? h("h4", { text: "Sheet against the app" }) : null,
+          checks.length ? h("p", { class: "hint", text: "Each person's revenue, jobs, work days, tech sales and reviews for each month, as the sheet has them and as the app has them now. Nothing is saved until you tap Load." }) : null,
+          ...checks,
+          h("p", { class: "hint", text: `Everyone already in Employees keeps what's set there (unit, role, the days on and off the leaderboard, the order); anyone new in the sheet is added with the months they had a truck.${older.length ? ` ${older[0]}–${older[older.length - 1]} are only in the technician sales sheet (no truck revenue), so they aren't loaded.` : ""}` }),
           all.warnings.length || all.notes.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${all.warnings.length + all.notes.length})` }),
             all.warnings.length ? h("ul", { class: "lb-notes warn" }, all.warnings.map(w => h("li", { text: w }))) : null,
             all.notes.length ? h("ul", { class: "lb-notes" }, all.notes.map(w => h("li", { text: w }))) : null) : null);
@@ -7306,8 +7486,9 @@ function openLbHistory() {
         b.disabled = true;
         try {
           const cur = lbCleanConfig(lbData && lbData.config);
-          // this year's teams from the sheet, keeping an estimator's tick; the reviews-only people stay (with their unit)
-          let roster = years.includes(now) ? lbCleanConfig({ teams: hists[now].config.teams.map(t => Object.assign({}, t, (lbTeamOf(cur, t.name) || {}).noSale ? { noSale: true } : {})),
+          // everyone already in Employees stays as set there (unit, role, exact days, order); this year's sheet only adds
+          // the names it has that Employees doesn't. The reviews-only people stay (with their unit)
+          let roster = years.includes(now) ? lbCleanConfig({ teams: cur.teams.concat(hists[now].config.teams.filter(t => !lbTeamOf(cur, t.name))),
             goal: cur.goal, reviewers: cur.reviewers.concat(hists[now].config.reviewers || []) }) : cur;
           const past = years.filter(y => y !== now);
           if (past.length) { const all = lbCombineYears(past.map(y => hists[y]), cur); roster = lbMergeRoster(roster, all.teams, all.reviewers); }

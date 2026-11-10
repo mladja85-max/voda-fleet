@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 30;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 31;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2830,7 +2830,10 @@ function lbNums_(a, n) {
   for (let i = 0; i < n; i++) { const v = typeof a[i] === "number" && isFinite(a[i]) ? a[i] : null; out.push(v); if (v !== null) any = true; }
   return any ? out : null;
 }
-/** The roster, cleaned: each team once, a unit, the months it's on the board. */
+function lbDay_(v) { return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(v || "")) ? String(v) : ""; }
+/** The roster, cleaned: each team once, a unit, the months it's on the board, and the exact days set in Employees:
+ *  on / off = his first / last day on the leaderboard, left = his last day with the company, was = earlier stretches
+ *  on the leaderboard [[first day, last day], ...]. */
 function lbConfig_(c) {
   const out = { teams: [], goal: 3000 };
   const g = c && Number(c.goal);
@@ -2843,6 +2846,14 @@ function lbConfig_(c) {
     let from = lbYm_(t.from), to = lbYm_(t.to);
     if (from && to && to < from) to = from;
     const team = { name: name, unit: LB_UNITS.indexOf(t.unit) !== -1 ? t.unit : LB_UNITS[0], from: from, to: to };
+    if (lbDay_(t.on)) team.on = lbDay_(t.on);
+    if (lbDay_(t.off)) team.off = lbDay_(t.off);
+    if (lbDay_(t.left)) team.left = lbDay_(t.left);
+    const was = [];
+    (Array.isArray(t.was) ? t.was : []).slice(0, 8).forEach(function (w) {
+      if (Array.isArray(w) && lbDay_(w[1])) was.push([lbDay_(w[0]), lbDay_(w[1])]);
+    });
+    if (was.length) team.was = was;
     if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
     if (LB_ROLES.indexOf(t.role) !== -1) team.role = t.role;
     out.teams.push(team);
