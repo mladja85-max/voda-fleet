@@ -933,6 +933,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rank .lbs-who, #lbsHelpTable .lbs-who { display: inline-flex; align-items: center; gap: 8px; }
 .lb-paypanel { padding: 10px; }
 .pay-list { display: grid; gap: 10px; }
+.pay-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.pay-wait { color: var(--muted); font-size: .86rem; font-weight: 600; }
+.pay-f input:disabled { opacity: .55; }
 .pay-person { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; background: var(--surface-2); }
 .pay-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .pay-head strong { font-family: var(--font-display); font-size: 1.15rem; text-transform: uppercase; }
@@ -3438,9 +3441,51 @@ function currentValues(t) {
 // The sheet lets one save in at a time. When it's busy (say, right after everyone's phones reopen), a request can time out
 // waiting its turn before it changes anything, so it's safe to try again a couple of times before giving up.
 const isBusy = e => !!(e && e.error === "server" && /lock timeout|holding the lock/i.test(String(e.message || "")));
+/* ---- this person's other windows on the same computer (the installed app next to a browser tab) ----
+   What one window saves, the others show by themselves, without Update. Typed Leaderboard numbers arrive as the sheet
+   saved them; any other change just tells the other windows to load again, quietly. Nothing is sent to another
+   login: a window signed in as someone else ignores it. */
+const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup"]);
+let peers = null;
+try { peers = typeof BroadcastChannel === "function" ? new BroadcastChannel("voda-prime") : null; } catch (e) { peers = null; }
+function tellPeers(msg) { try { if (peers && session) peers.postMessage(Object.assign({ user: session.id }, msg)); } catch (e) { /* this window still has it */ } }
+/** A save went through: tell the other windows. */
+function tellSaved(action, data, out) {
+  if (API_READS.has(action)) return;
+  const typed = action === "lbPut" && Array.isArray(data && data.writes) && data.writes.length > 0 && data.writes.every(w => w && w.patch && w.key !== "config");
+  tellPeers(typed ? { t: "lb", months: (out && out.months) || {} } : { t: "changed", action });
+}
+let peerTimer = null, peerActions = [];
+/** Another window changed something else: load it again here, quietly, a moment later (several saves make one load). */
+function peerChanged(action) {
+  peerActions.push(String(action || ""));
+  clearTimeout(peerTimer);
+  peerTimer = setTimeout(() => {
+    const acts = peerActions; peerActions = [];
+    if (!session || !CONFIGURED) return;
+    if (acts.includes("payPut")) { lbRates = null; lbRatesAsked = false; }
+    if (acts.some(a => /^of/.test(a)) && view.tab === "office" && !dlg.open && !ofTypingNow()) ofLoad();
+    if (acts.some(a => /^lb/.test(a))) { lbYearCache = {}; if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping()) lbLoad(); }
+    if (acts.some(a => !/^(of|lb|pay)/.test(a))) refresh(true);
+  }, 400);
+}
+if (peers) peers.onmessage = e => {
+  const m = e && e.data;
+  if (!m || !session || m.user !== session.id) return;
+  if (m.t === "lb") lbFromPeer(m.months);
+  else if (m.t === "changed") peerChanged(m.action);
+};
+// a redraw never lands between a press and its release (the tap would hit something that's gone). A press that never
+// reports its release (let go outside the window) stops counting after a few seconds, or when the window is left
+let pressedAt = 0;
+const pressing = () => pressedAt > 0 && performance.now() - pressedAt < 5000;
+addEventListener("pointerdown", () => { pressedAt = performance.now(); }, true);
+for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { setTimeout(() => { pressedAt = 0; }, 80); }, true);
+addEventListener("blur", () => { pressedAt = 0; });
+
 async function api(action, data, ms) {
   for (let attempt = 0; ; attempt++) {
-    try { return await apiOnce(action, data, ms); }
+    try { const out = await apiOnce(action, data, ms); tellSaved(action, data, out); return out; }
     catch (e) {
       if (!isBusy(e)) throw e;
       if (attempt >= 2) throw { error: "busy" };
@@ -6253,7 +6298,31 @@ function lbLastSave() {
 
 /* ---- loading and saving ---- */
 let lbPending = {};                     // month key → changes not saved yet
+let lbSending = {};                     // month key → changes on their way to the sheet right now
 let lbSaving = false, lbSaveTimer = null, lbSaveState = "", lbSaveErr = "";
+/** A month as the sheet has it, with this window's own typing that isn't saved yet laid over it. */
+const lbOver = (k, d) => lbMerge(lbMerge(lbClone(d || {}), lbClone(lbSending[k] || {})), lbClone(lbPending[k] || {}));
+/** Numbers another window of this person just saved (month key → the month as saved). */
+function lbFromPeer(months) {
+  if (!canSeeLb()) return;
+  const now = lbNowYear(), mine = lbData && lbData.year === now ? lbData : lbYearCache[now];
+  let got = false;
+  for (const [k, d] of Object.entries(months && typeof months === "object" ? months : {})) {
+    if (!lbYm(k) || !d || typeof d !== "object") continue;
+    if (Number(k.slice(0, 4)) !== now) { delete lbYearCache[Number(k.slice(0, 4))]; continue; }   // a past year: loaded again when it's opened
+    if (mine) { mine.months[k] = lbOver(k, d); got = true; }
+  }
+  if (got && mine === lbData) { lbTouch(); lbShowFresh(); }   // a past year on screen: this year's numbers are there when it's back
+}
+/** New numbers came in from somewhere else: draw them now, or as soon as nobody is typing or pressing in this window. */
+let lbStale = false;
+function lbShowFresh() {
+  if (view.tab !== "leaderboard" || !lbData) { lbStale = false; return; }   // drawn fresh when the Leaderboard opens
+  if (dlg.open || lbShowState || lbTyping() || pressing()) { lbStale = true; return; }
+  lbStale = false;
+  renderLeaderboard();
+}
+setInterval(() => { if (lbStale) lbShowFresh(); }, 1500);
 async function lbLoad() {
   if (lbLoading || !session || !canSeeLb()) return;
   const want = lbYear(), kept = lbYearCache[want];
@@ -6264,7 +6333,7 @@ async function lbLoad() {
   try {
     const out = await api("leaderboard", { year: want });
     const months = out.months || {};
-    if (want === lbNowYear()) for (const [k, p] of Object.entries(lbPending)) months[k] = lbMerge(months[k] || {}, lbClone(p));   // keep what's still being saved
+    if (want === lbNowYear()) for (const k of new Set(Object.keys(lbPending).concat(Object.keys(lbSending)))) months[k] = lbOver(k, months[k]);   // keep what's still being saved
     const got = { config: out.config || { teams: [] }, months, names: out.names || {}, canEdit: !!out.canEdit, year: want, at: new Date().toISOString(), v: 0 };
     if (want < lbNowYear()) lbYearCache[want] = got;
     for (const c of Object.values(lbYearCache)) c.config = got.config;   // one roster for every year
@@ -6281,8 +6350,9 @@ async function lbLoad() {
     if (view.tab === "leaderboard" && !lbTyping()) renderLeaderboard();
   }
 }
-/** Someone is typing a number: a redraw now would take the box away from under their finger. */
-const lbTyping = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#lbEnter")); };
+/** Someone is typing a number: a redraw now would take the box away from under their finger. (A window that isn't
+ *  the one in use has nobody typing in it, even if its cursor was left in a box.) */
+const lbTyping = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#lbEnter") && document.hasFocus()); };
 /** Typed numbers are saved by themselves a moment after the last key, the way a Google Sheet does. */
 function lbQueue(key, patch) {
   if (!lbData) return;
@@ -6299,6 +6369,7 @@ async function lbFlush() {
   if (lbSaving || !Object.keys(lbPending).length) return;
   const writes = Object.entries(lbPending).map(([key, patch]) => ({ key, patch }));
   lbPending = {};
+  lbSending = Object.fromEntries(writes.map(w => [w.key, w.patch]));
   lbSaving = true; lbSaveState = "saving"; lbShowSave();
   try {
     const out = await api("lbPut", { year: lbYear(), writes });
@@ -6309,7 +6380,7 @@ async function lbFlush() {
     for (const w of writes) lbPending[w.key] = lbMerge(w.patch, lbPending[w.key] || {});
     lbSaveState = "error"; lbSaveErr = errText(e, "The numbers");
   } finally {
-    lbSaving = false;
+    lbSaving = false; lbSending = {};
     lbTouch();
     lbShowSave();
     if (Object.keys(lbPending).length && lbSaveState !== "error") lbSaveTimer = setTimeout(lbFlush, 300);
@@ -7070,6 +7141,7 @@ function lbPayRange(per, day) {
 const lbSpanText = (from, to) => { const a = lbDate(from), b = lbDate(to); return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}, ${b.getFullYear()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`; };
 function lbPayrollEl() {
   const b = lbB(), cfg = lbCfg(), y = lbNowYear();
+  lbLoadRates();   // so Pay rates has them the moment it's tapped
   if (!LB_PAY[lbView.pper]) lbView.pper = "week";
   const per = lbView.pper;
   const anchor = lbIsDay(lbView.pday) ? lbView.pday : (b && b.newest) || lbToday();
@@ -7177,9 +7249,10 @@ async function openPayRates() {
       h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
     return;
   }
-  let rates = {};
-  try { rates = ((await api("payRead")).rates || {}).people || {}; lbRates = rates; }
-  catch (e) { toast(e && e.error === "not_allowed" ? "Only admins switched on for Payroll see pay rates." : errText(e, "Nothing")); return; }
+  // The window opens at once: with the rates this window already has, or with empty boxes that fill in a moment.
+  // The newest rates are read from the sheet either way, and nothing can be saved before they're in.
+  const had = lbRates;
+  let rates = had || {};
   // everyone this year: the teams on the board, then the people not on the leaderboard, by unit
   const months = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
   const nowKey = lbMonthKey(clockNow().getFullYear(), clockNow().getMonth() + 1);
@@ -7189,16 +7262,17 @@ async function openPayRates() {
   const list = h("div", { class: "pay-list", id: "payList" }, people.map(p => h("div", { class: "pay-person", "data-name": p.name },
     h("div", { class: "pay-head" }, h("strong", { text: p.name }), h("span", { class: `lb-unit ${p.unit}`, text: [p.unit, LB_ROLES[p.role] || "", p.off ? "not ranked" : ""].filter(Boolean).join(" · ") })),
     h("div", { class: "pay-fields" }, PAY_FIELDS.map(([f, label, unit]) => h("label", { class: "pay-f" }, h("span", { text: `${label} ${unit}` }),
-      h("input", { type: "text", inputmode: "decimal", autocomplete: "off", "data-f": f, value: rate(p.name, f), placeholder: f === "share" ? "50" : "" })))))));
+      h("input", { type: "text", inputmode: "decimal", autocomplete: "off", "data-f": f, value: rate(p.name, f), placeholder: f === "share" ? "50" : "", disabled: !had, oninput: e => { e.target.dataset.typed = "1"; } })))))));
+  const wait = h("span", { class: "pay-wait", id: "payWait", role: "status", text: had ? "Checking the sheet for newer rates…" : "Loading the saved rates…" });
   openDialog(
     h("h3", { id: "dlgTitle", text: "Pay rates" }),
     h("p", { class: "hint", text: "Each person's pay: the day rate, the commission on revenue and on each kind of sale, and his usual share of a shared job (what a % split starts with; blank = an equal share). Only admins switched on for Payroll see this. Roles are set under Employees." }),
-    h("div", null, h("button", { class: "btn small", type: "button", id: "payPeople", onclick: () => { closeDialog(); openLbTeams(); } }, "Add or remove people…")),
+    h("div", { class: "pay-top" }, h("button", { class: "btn small", type: "button", id: "payPeople", onclick: () => { closeDialog(); openLbTeams(); } }, "Add or remove people…"), wait),
     people.length ? list : h("p", { class: "meta", text: "No one yet. Add people under Employees." }),
     err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
       h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
-      h("button", { class: "btn primary", type: "button", id: "paySave", text: "Save", onclick: async () => {
+      h("button", { class: "btn primary", type: "button", id: "paySave", text: "Save", disabled: true, onclick: async () => {
         err.textContent = "";
         const out = {};
         for (const row of list.querySelectorAll(".pay-person")) {
@@ -7216,6 +7290,22 @@ async function openPayRates() {
         try { await api("payPut", { rates: { people: out } }); lbRates = out; closeDialog(); toast("Pay rates saved"); }
         catch (e) { err.textContent = e && e.error === "not_allowed" ? "Only admins switched on for Payroll can change pay rates." : errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
       } }))));
+  let fresh;
+  try { fresh = ((await api("payRead")).rates || {}).people || {}; }
+  catch (e) {
+    if (!wait.isConnected) return;   // the window was closed meanwhile
+    if (e && e.error === "not_allowed") { closeDialog(); toast("Only admins switched on for Payroll see pay rates."); return; }
+    wait.textContent = "";
+    err.textContent = `The saved rates didn't load. ${errText(e, "Nothing")} Close this and open Pay rates again.`;
+    return;
+  }
+  lbRates = rates = fresh;
+  if (!wait.isConnected) return;
+  // a box typed in while they loaded keeps what was typed; every other box shows the sheet's rate
+  for (const row of list.querySelectorAll(".pay-person")) for (const i of row.querySelectorAll("input")) { if (!i.dataset.typed) i.value = rate(row.dataset.name, i.dataset.f); i.disabled = false; }
+  wait.textContent = "";
+  const b = $("paySave");
+  if (b) b.disabled = false;
 }
 
 /* ---- job history: every job, sale and split, for Excel ---- */
@@ -8113,7 +8203,7 @@ const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const ofCfg = () => ofCleanConfig(ofData && ofData.config);
 /** The office person linked to this login. */
 const ofMe = () => (ofData && ofData.me ? ofCfg().people.find(p => p.user === ofData.me) || null : null);
-const ofTypingNow = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#ofView")); };
+const ofTypingNow = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#ofView") && document.hasFocus()); };
 const ofThisYear = () => clockNow().getFullYear();
 
 async function ofLoad(year) {
