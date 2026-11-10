@@ -773,6 +773,55 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-box input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
 .lb-card.bad input { border-color: var(--due); }
 .lb-card-foot { margin: 0; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* a truck typed by job: each job's revenue and sales, who worked with him and the split */
+.lbj-day { display: grid; grid-template-columns: minmax(84px, 110px) 1fr; gap: 10px; align-items: end; }
+.lbj-total { margin: 0 0 9px; font-size: .82rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lbj-job { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--surface-2); display: grid; gap: 7px; }
+.lbj-job.shared { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.lbj-top { display: flex; align-items: center; gap: 8px; }
+.lbj-pickjob { flex: none; }
+.lbj-sel { appearance: none; -webkit-appearance: none; font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; text-transform: uppercase; color: var(--accent); background: var(--accent-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%231f4fbf' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 9px center / 11px 8px; border: 1.5px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 9px; padding: 6px 28px 6px 10px; width: 6.6em; cursor: pointer; }
+.lbj-sel:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+.lbj-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.lbj-lines button { all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer; font-size: .82rem; line-height: 1.35; font-variant-numeric: tabular-nums; color: var(--muted); padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); }
+.lbj-lines li.on button { color: var(--ink); font-weight: 600; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); cursor: default; }
+.lbj-lines button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.lbj-rev { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.lbj-rev span, .lbj-sale span { font-size: .72rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.lbj-job input[type=text] { width: 100%; min-width: 0; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 8px; }
+.lbj-job input[type=text]:focus { outline: none; border-color: var(--accent); }
+.lbj-job input.bad { border-color: var(--due); }
+.lbj-sales { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.lbj-sale { display: grid; gap: 2px; min-width: 0; align-content: end; }
+.lbj-sale span { white-space: normal; line-height: 1.15; }
+.lb-enter:has(.lb-jobs) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+.lbj-crew { display: grid; gap: 5px; }
+.lbj-p { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); }
+.lbj-p .meta { flex: 1; font-size: .78rem; }
+.lbj-p.own { background: transparent; border-style: dashed; padding-right: 10px; }
+.lbj-share { font-weight: 700; font-variant-numeric: tabular-nums; }
+.lbj-pct { display: flex; align-items: center; gap: 3px; font-weight: 700; }
+.lbj-pct input[type=text] { width: 64px; text-align: right; padding: 5px 6px; }
+.lbj-how { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.lbj-how .seg-btn { padding-block: 5px; font-size: .84rem; }
+.lbj-credit { font-size: .86rem; font-weight: 600; align-items: center; }
+.lbj-credit input { margin: 0; }
+.lbj-credit small { display: inline; font-weight: 600; text-transform: uppercase; font-size: .66rem; letter-spacing: .04em; }
+.lbj-add, .lbj-addjob { justify-self: start; }
+.lbj-pick { display: grid; gap: 7px; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.lbj-pick[hidden] { display: none; }
+.lbj-pick .seg { justify-self: start; }
+.lbj-pick select { font: inherit; padding: 8px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); }
+.lbj-pick-btns { display: flex; gap: 8px; }
+.lb-tojobs { justify-self: start; }
+.lbj-from { margin: 0; font-size: .86rem; font-variant-numeric: tabular-nums; }
+.lbj-hist { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.jh-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.jh-form label { display: grid; gap: 3px; font-size: .8rem; font-weight: 600; color: var(--muted); }
+.jh-form input, .jh-form select { font: inherit; color: var(--ink); padding: 8px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface-2); }
+.jh-who { grid-column: 1 / -1; }
+.jh-opts { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
+.jh-opts small { color: var(--muted); font-size: .8rem; }
 .lb-save { position: sticky; bottom: 0; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: .86rem; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lb-save.saved { color: var(--ok); }
 .lb-save.error { color: var(--due); border-color: var(--due); }
@@ -1586,6 +1635,127 @@ function lbDaysLeft(key, today, unit) {
   for (let d = from; d <= lbDaysIn(key); d++) if (lbWorkDay(`${key}-${String(d).padStart(2, "0")}`, unit)) n++;
   return n;
 }
+/* ---- a truck's jobs: what each brought in, who worked with him and how each job is split ---- */
+// j: { "Aaron": [job, ...] }, each job { v: revenue, s: [up sale, add-on, rugs in plant, additional service] (his sales
+// on that job), w: [{ n: name, r: "tech" | "assistant", p: share % }], e: 1 (equal split), c: 1 (the revenue credit is
+// split too) }; the truck's own share is 100 - the others'. A day typed by job saves the truck's day (t) and his sales
+// (s) from its jobs, so everything else reads them as before.
+const LB_JOB_ROLES = { tech: "Technician", assistant: "Assistant" };
+const lbRound2 = v => Math.round((Number(v) || 0) * 100) / 100;
+/** Everyone on a job with his share %, the truck first: [{ name, role, pct }]. */
+function lbJobSplit(job, owner) {
+  const w = (job && Array.isArray(job.w) ? job.w : []).filter(x => x && x.n);
+  if (!w.length) return [{ name: owner, role: "", pct: 100 }];
+  if (job.e) {
+    const each = Math.floor(10000 / (w.length + 1)) / 100;   // 33.33 each; the truck gets what's left (33.34)
+    return [{ name: owner, role: "", pct: lbRound2(100 - each * w.length) }].concat(w.map(x => ({ name: x.n, role: x.r || "", pct: each })));
+  }
+  const others = w.map(x => ({ name: x.n, role: x.r || "", pct: typeof x.p === "number" ? x.p : 0 }));
+  return [{ name: owner, role: "", pct: lbRound2(Math.max(0, 100 - others.reduce((n, x) => n + x.pct, 0))) }].concat(others);
+}
+/** A job list, cleaned the way the server saves it (never the truck himself in the crew). */
+function lbCleanJobs(list, owner) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 20).filter(j => j && typeof j === "object").map(j => {
+    const money = v => (lbVal(v) != null && v >= 0 ? lbRound2(v) : null);
+    const job = { v: money(j.v) };
+    const sales = [0, 1, 2, 3].map(i => money(Array.isArray(j.s) ? j.s[i] : null));
+    while (sales.length && sales[sales.length - 1] == null) sales.pop();
+    if (sales.length) job.s = sales;
+    const w = [];
+    for (const x of (Array.isArray(j.w) ? j.w : []).slice(0, 8)) {
+      const n = lbTeamName(x && x.n);
+      if (!n || (owner && n.toLowerCase() === owner.toLowerCase()) || w.some(y => y.n.toLowerCase() === n.toLowerCase())) continue;
+      const e = { n };
+      if (LB_JOB_ROLES[x.r]) e.r = x.r;
+      if (lbVal(x.p) != null && x.p >= 0 && x.p <= 100) e.p = lbRound2(x.p);
+      w.push(e);
+    }
+    if (w.length) { job.w = w; if (j.e) job.e = 1; if (j.c) job.c = 1; }
+    return job;
+  });
+}
+/** A job's sales added up (0 when none). */
+const lbJobSale = job => ((job && job.s) || []).reduce((n, v) => n + (lbVal(v) || 0), 0);
+/** The truck's sales that day from his jobs: [up sale, add-on, rugs, additional, jobs] (blank kinds stay blank; the
+ *  jobs count every job, for sales per job). [] with no jobs. */
+function lbJobsSales(jobs) {
+  if (!jobs.length) return [];
+  const sum = i => jobs.some(j => j.s && lbVal(j.s[i]) != null) ? lbRound2(jobs.reduce((n, j) => n + ((j.s && lbVal(j.s[i])) || 0), 0)) : null;
+  return lbEntry([sum(0), sum(1), sum(2), sum(3), jobs.length], LB_SALE.length);
+}
+/** Someone added to a job: an equal split, unless his saved share (Pay rates) says otherwise; then the shares are typed
+ *  (the others keep theirs, or an equal share). Changes and returns the job. */
+function lbAddCrew(job, name, kind, share) {
+  const crew = Array.isArray(job.w) ? job.w : [], x = { n: name, r: kind };
+  job.w = crew.concat([x]);
+  const each = Math.floor(10000 / (job.w.length + 1)) / 100;
+  if (!crew.length || job.e) {
+    if (share == null || share === each) { job.e = 1; for (const y of job.w) delete y.p; return job; }
+    delete job.e;
+    for (const y of crew) y.p = each;
+    x.p = share;
+    return job;
+  }
+  x.p = share == null ? each : share;
+  return job;
+}
+/** Job history (a CSV): one line per person per job. */
+const LB_JOB_HEAD = ["Date", "Truck", "Unit", "Job #", "Job revenue", "Up sale", "Add-on sale", "Rugs in plant", "Additional service", "Job sales",
+  "Split", "Person", "Role", "Share %", "Share of the revenue", "Revenue credit split"];
+/** A truck's jobs that day as history lines (who: a name in lower case — only the jobs he was on, with everyone on
+ *  them — or "" for all). */
+function lbJobLines(day, truck, jobs, who, unit) {
+  const out = [];
+  (Array.isArray(jobs) ? jobs : []).forEach((job, i) => {
+    const split = lbJobSplit(job, truck);
+    if (who && !split.some(x => x.name.toLowerCase() === who)) return;
+    const s = [0, 1, 2, 3].map(k => (job.s && lbVal(job.s[k]) != null ? job.s[k] : ""));
+    const kind = split.length < 2 ? "Solo" : job.e ? "Equal" : "Typed %";
+    for (const [k, x] of split.entries()) out.push([day, truck, unit || "", i + 1, lbVal(job.v) ?? "", ...s, lbRound2(lbJobSale(job)), kind, x.name,
+      k ? LB_JOB_ROLES[x.role] || "" : "Truck", x.pct, lbVal(job.v) == null ? "" : lbRound2(job.v * x.pct / 100), split.length < 2 ? "" : job.c ? "Yes" : "No"]);
+  });
+  return out;
+}
+/** Every job typed from day `from` to day `to` in the month documents, as it's saved now. */
+function lbJobRows(docs, from, to, who, unitOf) {
+  const w = String(who || "").toLowerCase(), out = [];
+  for (const key of Object.keys(docs || {}).sort()) {
+    const days = (docs[key] && docs[key].days) || {};
+    for (const day of Object.keys(days).sort()) {
+      if (day < from || day > to || !days[day] || !days[day].j) continue;
+      for (const truck of Object.keys(days[day].j).sort()) out.push(...lbJobLines(day, truck, days[day].j[truck], w, unitOf ? unitOf(truck) : ""));
+    }
+  }
+  return out;
+}
+/** The job log as history lines: every version saved (when, by whom, and whether it's the one that stands now). For
+ *  someone, every version of each truck-day he was ever on, so a change that took him off shows too. */
+function lbJobLogRows(log, who, unitOf, timeText) {
+  const w = String(who || "").toLowerCase(), last = {}, his = new Set();
+  log.forEach((r, i) => {
+    last[`${r.day}|${r.truck}`] = i;
+    if (!w || r.truck.toLowerCase() === w || (r.jobs || []).some(j => (j.w || []).some(x => String(x.n).toLowerCase() === w))) his.add(`${r.day}|${r.truck}`);
+  });
+  const out = [];
+  log.forEach((r, i) => {
+    const k = `${r.day}|${r.truck}`;
+    if (!his.has(k)) return;
+    const pre = [timeText ? timeText(r.at) : r.at, r.by, last[k] === i ? "Yes" : "No"], unit = unitOf ? unitOf(r.truck) : "";
+    const lines = lbJobLines(r.day, r.truck, r.jobs, "", unit);
+    if (!lines.length) out.push(pre.concat([r.day, r.truck, unit, "", "", "", "", "", "", "", "All jobs taken off", "", "", "", "", ""]));
+    for (const l of lines) out.push(pre.concat(l));
+  });
+  return out;
+}
+/** The truck's day from its jobs: [jobs, work day, revenue, # of techs] (# of techs: him and everyone who helped). */
+function lbJobsTruck(jobs, workDay) {
+  const crew = new Set();
+  for (const j of jobs) for (const x of j.w || []) crew.add(x.n.toLowerCase());
+  const rev = jobs.reduce((n, j) => n + (j.v || 0), 0);
+  return lbEntry([jobs.length || null, workDay, jobs.some(j => j.v != null) ? lbRound2(rev) : null, jobs.length ? 1 + crew.size : null], LB_TRUCK.length);
+}
+
 /** Everything the screens show, from the roster and the month documents ({ "2026-11": doc, ... }).
  *  opts.today ("2026-11-08") ends the months shown; opts.until counts only the days up to then (for "a week ago").
  *  → { records: one per team per month (zeros for a team on the board with nothing typed yet), weeks, newest } */
@@ -1602,7 +1772,7 @@ function lbBuild(cfgIn, docs, year, opts) {
   let newest = "";
   const rec = (key, team) => recs[key + "|" + team] || (recs[key + "|" + team] = { month: key, team, group: lbUnitIn(cfg, team, key),
     revenue: 0, jobs: 0, workDays: 0, techs: 0, sales: 0, up: 0, addon: 0, rugs: 0, extra: 0, saleJobs: 0, reviews: 0,
-    truckDays: 0, saleDays: 0, last: "" });
+    truckDays: 0, saleDays: 0, last: "", helped: 0, creditIn: 0, creditOut: 0 });
   const add = (r, k, v) => { if (v != null) r[k] += v; };
   const keys = Object.keys(docs || {}).filter(k => lbYm(k) && k.startsWith(year + "-")).sort();
   for (const key of keys) {
@@ -1637,6 +1807,30 @@ function lbBuild(cfgIn, docs, year, opts) {
       for (const [n, arr] of Object.entries(d.r && typeof d.r === "object" ? d.r : {})) {
         const team = nameOf(n), e = lbEntry(arr, LB_REVIEW.length);
         if (team && e.length && e[0] != null) rec(dkey, team).reviews += e[0];
+      }
+      // shared jobs: everyone who helped counts the job; with the revenue credit split, his share of the job's revenue
+      // moves from the truck to him (to his place on the board, or his production when he isn't ranked)
+      for (const [n, list] of Object.entries(d.j && typeof d.j === "object" ? d.j : {})) {
+        const owner = nameOf(n);
+        if (!owner || !Array.isArray(list)) continue;
+        for (const job of list) {
+          if (!job || !Array.isArray(job.w) || !job.w.length) continue;
+          for (const x of lbJobSplit(job, owner).slice(1)) {
+            const who = nameOf(x.name);
+            if (!who) continue;
+            const r = rec(dkey, who);
+            r.helped++;
+            if (!job.c || !job.v) continue;
+            const amt = job.v * x.pct / 100;
+            r.revenue += amt; r.creditIn += amt;
+            const o = rec(dkey, owner);
+            o.revenue -= amt; o.creditOut += amt;
+            const wk = lbMondayOf(day) + "|" + dkey + "|", ow = weeks[wk + owner];
+            if (ow) ow.revenue -= amt;
+            const hw = weeks[wk + who] || (weeks[wk + who] = { week: lbMondayOf(day), month: dkey, team: who, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
+            hw.revenue += amt;
+          }
+        }
       }
       if (typed && day <= today && day > newest) newest = day;
     }
@@ -1690,7 +1884,10 @@ function lbCleanMonth(d, key) {
       for (const [team, a] of Object.entries(x[p] && typeof x[p] === "object" ? x[p] : {})) { const nm = lbTeamName(team), e = lbEntry(a, n); if (nm && e.length) m[nm] = e; }
       if (Object.keys(m).length) y[p] = m;
     }
-    if (!y.t && !y.s && !y.r) continue;
+    const jm = {};
+    for (const [team, list] of Object.entries(x.j && typeof x.j === "object" ? x.j : {})) { const nm = lbTeamName(team), jl = nm ? lbCleanJobs(list, nm) : []; if (jl.length) jm[nm] = jl; }
+    if (Object.keys(jm).length) y.j = jm;
+    if (!y.t && !y.s && !y.r && !y.j) continue;
     if (x.at) y.at = String(x.at).slice(0, 30);
     if (x.by) y.by = String(x.by).slice(0, 60);
     out.days[day] = y;
@@ -1712,6 +1909,10 @@ function lbMoveNumbers(docs, from, to, fromKey, toKey) {
     const doc = lbCleanMonth(docs[key] || {}, key);
     let changed = false;
     for (const d of Object.values(doc.days)) {
+      if (d.j) {   // a truck's jobs move with it (when the other name has none that day)
+        const src = Object.keys(d.j).find(isFrom);
+        if (src && !d.j[toName]) { d.j[toName] = d.j[src]; delete d.j[src]; changed = true; }
+      }
       for (const p of ["t", "s", "r"]) {
         const part = d[p];
         if (!part) continue;
@@ -5478,6 +5679,7 @@ const LB_RV_API = 23;                                  // ... and with 5-star re
 const LB_NOSALE_API = 26;                              // ... and with Estimator (noSale) on a team
 const LB_REVIEWERS_API = 27;                           // ... and with reviews-only people (cfg.reviewers)
 const LB_ROLES_API = 29;                               // ... and with roles and the pay rates (Payroll)
+const LB_JOBS_API = 30;                                // ... and with a truck's jobs, who worked with him, the split log
 const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
@@ -6007,20 +6209,203 @@ function lbDayTotalText(day) {
 function lbTrucksEl(day) {
   const d = lbDayDoc(day), key = day.slice(0, 7);
   const teams = lbTeamsFor(key, Object.keys(d.t || {}).filter(n => lbEntry(d.t[n], LB_TRUCK.length).length));
+  const jobs = apiLevel >= LB_JOBS_API;
+  // by job (the newest script): a day typed the old way (a day total, no jobs) keeps its boxes until it's switched
+  const card = t => {
+    const e = lbEntry((d.t || {})[t.name], LB_TRUCK.length), has = ((d.j || {})[t.name] || []).length;
+    if (!jobs || (e.length && !has && (e[0] || e[2]))) return lbCard(t, "t", day, LB_TRUCK, e, lbTruckFoot(day, t.name), jobs ? lbToJobsBtn(day, t.name) : null);
+    return lbJobsCard(t, day);
+  };
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
-    teams.length ? teams.map(t => lbCard(t, "t", day, LB_TRUCK, lbEntry((d.t || {})[t.name], LB_TRUCK.length), lbTruckFoot(day, t.name)))
-      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Teams.` }),
-    h("p", { class: "hint", text: "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }));
+    teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
+    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Each job gets its revenue and the truck's sales on it; + Worked with adds who helped and how the job is split. Split credit: each person's share counts for him on the leaderboard (payroll always splits by the shares)." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
+    jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
+}
+
+/* ---- a truck's jobs: revenue, sales, who worked with him, the split ---- */
+let lbRates = null, lbRatesAsked = false;   // pay rates (each person's saved share of a shared job), for Payroll admins
+function lbLoadRates() {
+  if (lbRates || lbRatesAsked || !canSeePayroll() || (apiLevel && apiLevel < LB_ROLES_API)) return;
+  lbRatesAsked = true;
+  api("payRead").then(out => { lbRates = ((out && out.rates) || {}).people || {}; }, () => { lbRatesAsked = false; });
+}
+const lbSavedShare = n => { const x = lbRates && Object.entries(lbRates).find(([k]) => k.toLowerCase() === n.toLowerCase()); return x ? lbVal(x[1].share) : null; };
+const lbJobsOf = (day, team) => lbClone(((lbDayDoc(day).j || {})[team]) || []);
+const lbJobOpen = {};   // "2026-11-09|Aaron" → the job shown on his card (the newest one when not picked)
+/** One line for a job in the card's list: "Job 2 · $300 · Add-on $450 · with Oscar 40%". */
+function lbJobLine(job, i, owner) {
+  const parts = [`Job ${i + 1}`];
+  if (lbVal(job.v) != null) parts.push(lbMoney(job.v));
+  LB_JOB_SALES.forEach((label, k) => { const v = job.s && lbVal(job.s[k]); if (v) parts.push(`${label} ${lbMoney(v)}`); });
+  const crew = lbJobSplit(job, owner).slice(1);
+  if (crew.length) parts.push("with " + crew.map(x => job.e ? x.name : `${x.name} ${x.pct}%`).join(", ") + (job.c ? " (credit split)" : ""));
+  return parts.join(" · ");
+}
+const LB_JOB_SALES = ["Up sale", "Add-on", "Rugs", "Additional"];
+/** The people who can work with a truck: everyone on the board that month and everyone not on the leaderboard, by the
+ *  kind picked (Technician: a tech role; Assistant: the assistant role; no role yet: both), never the truck himself. */
+function lbCrewChoices(key, owner, kind, taken) {
+  const cfg = lbCfg();
+  const all = cfg.teams.filter(t => lbOnBoard(t, key)).concat(cfg.reviewers);
+  const fits = p => (kind === "assistant" ? p.role === "assistant" : p.role && p.role !== "assistant") || !p.role;
+  return all.filter(p => p.name.toLowerCase() !== owner.toLowerCase() && !taken.some(n => n.toLowerCase() === p.name.toLowerCase()) && fits(p))
+    .sort((a, b) => !a.role - !b.role || a.name.localeCompare(b.name));
+}
+/** Save a truck's jobs, with his day (t) and his sales (s) from them; then draw its card again (unless redraw is false). */
+function lbSaveJobs(day, team, jobs, workDay, redraw) {
+  const list = lbCleanJobs(jobs, team), had = ((lbDayDoc(day).j || {})[team] || []).length;
+  const patch = { j: { [team]: list }, t: { [team]: lbJobsTruck(list, workDay) } };
+  if (list.length || had) patch.s = { [team]: lbJobsSales(list) };
+  lbQueue(day.slice(0, 7), { days: { [day]: patch } });
+  const tot = $("lbDayTotal");
+  if (tot) tot.textContent = lbDayTotalText(day);
+  const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);
+  if (wd) wd.classList.toggle("has", lbHasPart(day, "t"));
+  if (redraw !== false) lbRedrawJobs(day, team);
+}
+function lbRedrawJobs(day, team) {
+  const sel = `.lb-card[data-team="${CSS.escape(team)}"][data-part="t"]`;
+  let old = document.querySelector(sel);
+  if (!old) return;
+  const a = document.activeElement;
+  if (a && old.contains(a)) { a.blur(); old = document.querySelector(sel); if (!old) return; }   // a box still being typed in saves first
+  const t = lbTeamsFor(day.slice(0, 7), [team]).find(x => x.name === team) || { name: team, unit: "" };
+  old.replaceWith(lbJobsCard(t, day));
+}
+const lbWorkDayOf = (day, team) => { const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length); return e.length ? e[1] : null; };
+/** The day's sales typed on the Sales tab (up sale … additional), to start Job 1 with. */
+const lbDaySales = (day, team) => lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length).slice(0, 4);
+const lbCardHead = t => h("div", { class: "lb-card-head" }, h("strong", { text: t.name }), t.unit ? h("span", { class: `lb-unit ${t.unit}`, text: t.unit }) : h("span", { class: "lb-unit", text: "Not on the board this month" }));
+/** A day typed as a day total: start typing it by job instead (the day's revenue and sales go on Job 1). */
+const lbToJobsBtn = (day, team) => h("button", { class: "btn ghost small lb-tojobs", type: "button", onclick: () => {
+  const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length);
+  if (!confirm(`Type ${team}'s ${lbDayText(day)} by job? The ${lbMoney(e[2] || 0)} day total and his sales that day go on Job 1; add the other jobs and move the money to them.`)) return;
+  const sales = lbDaySales(day, team);
+  lbSaveJobs(day, team, [{ v: e[2], s: sales }], e[1] == null ? 1 : e[1], false);
+  renderLeaderboard();
+} }, "Type this day by job");
+const lbMoneyIn = v => { const t = String(v).replace(/[$,\s]/g, ""); return t === "" ? null : Number.isFinite(Number(t)) && Number(t) >= 0 ? Number(t) : NaN; };
+function lbJobsCard(t, day) {
+  const team = t.name, key = day.slice(0, 7);
+  const jobs = lbJobsOf(day, team), wday = lbWorkDayOf(day, team);
+  lbLoadRates();
+  const save = redraw => { const w = lbWorkDayOf(day, team); lbSaveJobs(day, team, jobs, w == null && jobs.length ? 1 : w, redraw); };
+  const card = h("div", { class: "lb-card lb-jobs" + (t.off ? " off" : ""), "data-team": team, "data-part": "t" });
+  const foot = h("p", { class: "lb-card-foot" }), total = h("p", { class: "lbj-total" }), list = h("ol", { class: "lbj-lines", "aria-label": `${team}'s jobs` });
+  const openKey = `${day}|${team}`;
+  const open = Math.min(jobs.length - 1, lbJobOpen[openKey] == null ? jobs.length - 1 : lbJobOpen[openKey]);
+  // a line for each job, the open one marked; tap one to open it
+  const lines = () => list.replaceChildren(...(jobs.length > 1 ? jobs.map((x, k) => h("li", { class: k === open ? "on" : "" },
+    h("button", { type: "button", "aria-current": k === open ? "true" : null, onclick: () => { if (k === open) return; lbJobOpen[openKey] = k; lbRedrawJobs(day, team); } }, lbJobLine(x, k, team)))) : []));
+  const refresh = () => { foot.textContent = lbTruckFoot(day, team); total.textContent = lbJobsTotalText(jobs); lines(); };
+  const addJob = () => {
+    // the first job starts with the day's sales typed on the Sales tab, so nothing typed there is lost
+    const first = !jobs.length && lbDaySales(day, team);
+    jobs.push(first && first.length ? { v: null, s: first } : { v: null });
+    lbJobOpen[openKey] = jobs.length - 1;
+    save();
+    const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lbj-v`);
+    if (i) i.focus();
+  };
+  const jobRow = (job, i) => {
+    const split = lbJobSplit(job, team), crew = job.w || [];
+    const typed = crew.length && !job.e;
+    const sum = lbRound2(crew.reduce((n, x) => n + (lbVal(x.p) || 0), 0));
+    const picker = h("div", { class: "lbj-pick", hidden: true });
+    const openPicker = kind => {
+      const choices = lbCrewChoices(key, team, kind, crew.map(x => x.n));
+      picker.replaceChildren(
+        lbSeg(Object.entries(LB_JOB_ROLES), kind, k => openPicker(k), "Technician or assistant"),
+        choices.length ? h("select", { class: "lbj-who", "aria-label": `${LB_JOB_ROLES[kind]} who worked on job ${i + 1}` },
+          choices.map(p => h("option", { value: p.name, text: `${p.name}${p.role ? ` (${LB_ROLES[p.role]})` : ""}` })))
+          : h("span", { class: "meta", text: `No one else to add as ${LB_JOB_ROLES[kind].toLowerCase()}. Roles are set under Employees.` }),
+        h("div", { class: "lbj-pick-btns" },
+          h("button", { class: "btn small primary", type: "button", disabled: !choices.length, onclick: () => {
+            const n = picker.querySelector(".lbj-who").value;
+            lbAddCrew(job, n, kind, lbSavedShare(n));
+            save();
+          } }, "Add"),
+          h("button", { class: "btn small ghost", type: "button", onclick: () => { picker.hidden = true; } }, "Cancel")));
+      picker.hidden = false;
+    };
+    const money = (v, label, onset, cls) => h("input", { type: "text", inputmode: "decimal", autocomplete: "off", class: cls || "", value: v == null ? "" : String(v), "aria-label": label,
+      oninput: e => e.target.classList.toggle("bad", Number.isNaN(lbMoneyIn(e.target.value))),
+      onchange: e => { const v = lbMoneyIn(e.target.value); if (Number.isNaN(v)) return; onset(v); save(false); refresh(); } });
+    return h("div", { class: "lbj-job" + (crew.length ? " shared" : ""), "data-job": String(i + 1) },
+      h("div", { class: "lbj-top" },
+        h("span", { class: "lbj-pickjob" },
+          h("select", { class: "lbj-sel", "aria-label": "Pick a job or add one", onchange: e => {
+            if (e.target.value === "add") addJob();
+            else { lbJobOpen[openKey] = Number(e.target.value); lbRedrawJobs(day, team); }
+          } }, jobs.map((x, k) => h("option", { value: String(k), selected: k === i, text: `Job ${k + 1}` })),
+            h("option", { value: "add", text: `+ Add job ${jobs.length + 1}` }))),
+        h("label", { class: "lbj-rev" }, h("span", { text: "Revenue $" }), money(job.v, `Job ${i + 1} revenue`, v => { job.v = v; }, "lbj-v")),
+        h("button", { class: "btn ghost small lbj-x", type: "button", "aria-label": `Remove job ${i + 1}`, onclick: () => {
+          if ((job.v || lbJobSale(job) || crew.length) && !confirm(`Remove job ${i + 1}${job.v ? ` (${lbMoney(job.v)})` : ""}${lbJobSale(job) ? ` and its ${lbMoney(lbJobSale(job))} in sales` : ""}${crew.length ? ", and who worked on it" : ""}?`)) return;
+          jobs.splice(i, 1); lbJobOpen[openKey] = Math.max(0, i - 1); save();
+        } }, "✕")),
+      h("div", { class: "lbj-sales" }, LB_JOB_SALES.map((label, k) => h("label", { class: "lbj-sale" }, h("span", { text: `${label} $` }),
+        money(job.s && job.s[k] != null ? job.s[k] : null, `Job ${i + 1} ${label.toLowerCase()} sale`, v => { const a = Array.isArray(job.s) ? job.s.slice() : []; while (a.length < 4) a.push(null); a[k] = v; job.s = a; }, "lbj-s")))),
+      crew.length ? h("div", { class: "lbj-crew" },
+        split.map((x, k) => h("div", { class: "lbj-p" + (k ? "" : " own"), "data-who": x.name },
+          h("strong", { text: x.name }), h("span", { class: "meta", text: k ? LB_JOB_ROLES[x.role] || "" : "truck" }),
+          typed && k ? h("label", { class: "lbj-pct" }, h("input", { type: "text", inputmode: "decimal", autocomplete: "off", value: lbVal(crew[k - 1].p) == null ? "" : String(crew[k - 1].p), "aria-label": `${x.name}'s share %`,
+            onchange: e => { const v = Number(e.target.value.replace(/[%,\s]/g, "")); crew[k - 1].p = Number.isFinite(v) && v >= 0 && v <= 100 ? v : 0; save(); } }), "%")
+            : h("span", { class: "lbj-share", text: `${x.pct}%` }),
+          k ? h("button", { class: "btn ghost small", type: "button", "aria-label": `Take ${x.name} off job ${i + 1}`, onclick: () => { job.w = crew.filter((_, z) => z !== k - 1); if (!job.w.length) { delete job.w; delete job.e; delete job.c; } save(); } }, "✕") : null)),
+        h("div", { class: "lbj-how" },
+          lbSeg([["eq", "Equal"], ["pct", "Type %"]], job.e ? "eq" : "pct", k => {
+            if (k === "eq") { job.e = 1; for (const y of crew) delete y.p; }
+            else { delete job.e; const each = Math.floor(10000 / (crew.length + 1)) / 100; for (const y of crew) if (lbVal(y.p) == null) y.p = each; }
+            save();
+          }, `Split of job ${i + 1}`),
+          h("label", { class: "check lbj-credit" }, h("input", { type: "checkbox", checked: !!job.c, onchange: e => { if (e.target.checked) job.c = 1; else delete job.c; save(); } }),
+            h("span", { title: "Ticked: each person's share of this job's revenue counts for him on the leaderboard and in production. Not ticked: it all stays with the truck. Payroll always splits by the shares." }, "Split credit"))),
+        typed && sum > 100 ? h("p", { class: "dlg-err", text: `The others' shares add up to ${sum}%: they can't be over 100%.` }) : null) : null,
+      h("button", { class: "btn ghost small lbj-add", type: "button", onclick: () => openPicker("tech") }, "+ Worked with"),
+      picker);
+  };
+  card.append(
+    lbCardHead(t),
+    h("div", { class: "lbj-day" },
+      lbBox("Work day", wday, { "data-i": "1", oninput: e => {
+        const v = e.target.value.replace(/[,\s]/g, ""), bad = v !== "" && !Number.isFinite(Number(v));
+        e.target.classList.toggle("bad", bad);
+        if (!bad) { lbSaveJobs(day, team, jobs, v === "" ? null : Number(v), false); refresh(); }
+      } }),
+      total),
+    jobs.length ? jobRow(jobs[open], open) : h("button", { class: "btn small lbj-addjob", type: "button", onclick: addJob }, "+ Job 1"),
+    list,
+    foot);
+  refresh();
+  return card;
+}
+function lbJobsTotalText(jobs) {
+  if (!jobs.length) return "No jobs yet: + Job 1";
+  const rev = jobs.reduce((n, j) => n + (lbVal(j.v) || 0), 0), sales = jobs.reduce((n, j) => n + lbJobSale(j), 0);
+  const crew = new Set(jobs.flatMap(j => (j.w || []).map(x => x.n.toLowerCase())));
+  const shared = jobs.filter(j => (j.w || []).length).length;
+  return `${jobs.length} job${jobs.length === 1 ? "" : "s"} · ${lbMoney(rev)} revenue · ${lbMoney(sales)} sales · ${1 + crew.size} tech${crew.size ? "s" : ""}${shared ? ` · ${shared} shared` : ""}`;
+}
+/** Sales tab, a truck typed by job: his sales that day come from his jobs on Trucks. */
+function lbSalesFromJobs(t, day) {
+  const jobs = lbJobsOf(day, t.name), e = lbJobsSales(jobs);
+  return h("div", { class: "lb-card lb-fromjobs" + (t.off ? " off" : ""), "data-team": t.name, "data-part": "s" },
+    lbCardHead(t),
+    h("p", { class: "lbj-from", text: `Typed by job on Trucks (${jobs.length} job${jobs.length === 1 ? "" : "s"}): ` + LB_SALE.slice(0, 4).map((f, i) => `${f.label} ${lbMoney(e[i] || 0)}`).join(" · ") }),
+    h("p", { class: "lb-card-foot", text: lbSaleFoot(day, t.name) }),
+    h("button", { class: "btn ghost small", type: "button", onclick: () => { lbFlush(); lbView.part = "trucks"; lbSaveView(); renderLeaderboard(); } }, "Change on Trucks"));
 }
 function lbSalesEl(day) {
   const d = lbDayDoc(day), key = day.slice(0, 7);
   const teams = lbTeamsFor(key, Object.keys(d.s || {}).filter(n => lbEntry(d.s[n], LB_SALE.length).length));
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
-    teams.length ? teams.map(t => lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name)))
-      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Teams.` }),
-    h("p", { class: "hint", text: "Jobs: the technician's jobs that day, for sale per job." }));
+    teams.length ? teams.map(t => apiLevel >= LB_JOBS_API && ((d.j || {})[t.name] || []).length ? lbSalesFromJobs(t, day)
+      : lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name)))
+      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
+    h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: the technician's jobs that day, for sale per job. A truck typed by job on Trucks gets his sales from his jobs." : "Jobs: the technician's jobs that day, for sale per job." }));
 }
 /** A team's 5-star reviews: that day, the month (with any total typed for the whole month the older way) and the year. */
 function lbReviewFoot(day, team) {
@@ -6139,6 +6524,7 @@ function lbPayrollEl() {
       // a preset starts from the From day shown; From or To typed by hand makes it From – To
       lbSeg(Object.entries(LB_PAY), per, k => { if (k === "custom") { custom(r.from, r.to); return; } lbView.pper = k; lbView.pday = r.from; lbSaveView(); renderLeaderboard(); }, "Pay period"),
       h("button", { class: "btn", type: "button", id: "payRatesBtn", onclick: () => openPayRates() }, "Pay rates"),
+      h("button", { class: "btn", type: "button", id: "jobHistBtn", onclick: () => openJobHistory(r) }, "Job history"),
       h("div", { class: "lb-daybar lb-payrange" },
         h("button", { class: "btn small", type: "button", id: "lbPayPrev", "aria-label": "Earlier", disabled: r.from <= `${y}-01-01`, onclick: () => step(-1) }, "‹"),
         dateBox("lbPayFrom", r.from, "From", v => custom(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
@@ -6163,7 +6549,7 @@ async function openPayRates() {
     return;
   }
   let rates = {};
-  try { rates = ((await api("payRead")).rates || {}).people || {}; }
+  try { rates = ((await api("payRead")).rates || {}).people || {}; lbRates = rates; }
   catch (e) { toast(e && e.error === "not_allowed" ? "Only admins switched on for Payroll see pay rates." : errText(e, "Nothing")); return; }
   // everyone this year: the teams on the board, then the people not on the leaderboard, by unit
   const months = Array.from({ length: 12 }, (_, i) => lbMonthKey(y, i + 1));
@@ -6196,9 +6582,81 @@ async function openPayRates() {
           if (Object.keys(e).length) out[row.dataset.name] = e;
         }
         const b = $("paySave"); b.disabled = true; b.textContent = "Saving…";
-        try { await api("payPut", { rates: { people: out } }); closeDialog(); toast("Pay rates saved"); }
+        try { await api("payPut", { rates: { people: out } }); lbRates = out; closeDialog(); toast("Pay rates saved"); }
         catch (e) { err.textContent = e && e.error === "not_allowed" ? "Only admins switched on for Payroll can change pay rates." : errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
       } }))));
+}
+
+/* ---- job history: every job, sale and split, for Excel ---- */
+/** The month documents from day `from` to day `to` (a year not opened yet is loaded). */
+async function lbMonthsFor(from, to) {
+  const out = {};
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
+    let c = lbData && Number(lbData.year) === y ? lbData : lbYearCache[y];
+    if (!c) c = { months: (await api("leaderboard", { year: y })).months || {} };
+    Object.assign(out, c.months || {});
+  }
+  return out;
+}
+const lbStamp = at => { const d = new Date(at); if (isNaN(d)) return String(at || ""); const p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+function openJobHistory(range) {
+  const cfg = lbCfg(), today = lbToday();
+  if (apiLevel && apiLevel < LB_JOBS_API) {
+    openDialog(h("h3", { id: "dlgTitle", text: "Job history" }),
+      h("p", { class: "dlg-err", text: "Job history needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that." }),
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+    return;
+  }
+  const from0 = range && lbIsDay(range.from) ? range.from : `${today.slice(0, 7)}-01`, to0 = range && lbIsDay(range.to) ? range.to : today;
+  const names = [...new Set(cfg.teams.map(t => t.name).concat(cfg.reviewers.map(r => r.name)))].sort((a, b) => a.localeCompare(b));
+  const unitOf = n => { const t = lbTeamOf(cfg, n) || lbReviewerOf(cfg, n); return t ? t.unit || "" : ""; };
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const fromI = h("input", { type: "date", id: "jhFrom", value: from0, "aria-label": "From" }), toI = h("input", { type: "date", id: "jhTo", value: to0, "aria-label": "To" });
+  const whoI = h("select", { id: "jhWho", "aria-label": "Who" }, h("option", { value: "", text: "Everyone" }), names.map(n => h("option", { value: n, text: n })));
+  const pick = () => {
+    const f = fromI.value, t = toI.value;
+    if (!lbIsDay(f) || !lbIsDay(t) || f > t) { err.textContent = "Pick a From day on or before the To day."; return null; }
+    err.textContent = "";
+    return { from: f, to: t, who: whoI.value };
+  };
+  const file = (kind, q) => `VODA-${kind}-${q.from}-to-${q.to}${q.who ? "-" + q.who.replace(/[^A-Za-z0-9]+/g, "-") : ""}.csv`;
+  const csv = lines => "\ufeff" + lines.map(row => row.map(csvCell).join(",")).join("\r\n");
+  const busy = (b, on, label) => { b.disabled = on; b.textContent = on ? "Getting it…" : label; };
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Job history" }),
+    h("p", { class: "hint", text: "Every day typed by job: each job's revenue and the truck's sales on it, who worked on it, their roles and how it was split. Opens in Excel or Google Sheets." }),
+    h("div", { class: "jh-form" },
+      h("label", null, h("span", { text: "From" }), fromI),
+      h("label", null, h("span", { text: "To" }), toI),
+      h("label", { class: "jh-who" }, h("span", { text: "Who" }), whoI)),
+    h("p", { class: "meta", text: "Someone picked: every job he was on, with everyone on it." }),
+    err,
+    h("div", { class: "jh-opts" },
+      h("button", { class: "btn primary", type: "button", id: "jhJobs", onclick: async e => {
+        const q = pick(), b = e.currentTarget; if (!q) return;
+        busy(b, true, "Jobs");
+        try {
+          const rows = lbJobRows(await lbMonthsFor(q.from, q.to), q.from, q.to, q.who, unitOf);
+          if (!rows.length) { err.textContent = `No jobs typed by job${q.who ? ` with ${q.who}` : ""} from ${lbDayText(q.from)} to ${lbDayText(q.to)}.`; return; }
+          downloadFile(file("Jobs", q), csv([LB_JOB_HEAD].concat(rows)), "text/csv;charset=utf-8");
+          toast(`${rows.length} line${rows.length === 1 ? "" : "s"} downloaded`);
+        } catch (x) { err.textContent = errText(x, "Nothing"); }
+        finally { busy(b, false, "Jobs"); }
+      } }, "Jobs"),
+      h("small", { text: "Each job as it's saved now." }),
+      h("button", { class: "btn", type: "button", id: "jhLog", onclick: async e => {
+        const q = pick(), b = e.currentTarget; if (!q) return;
+        busy(b, true, "Every change");
+        try {
+          const rows = lbJobLogRows((await api("jobLog", { from: q.from, to: q.to })).rows || [], q.who, unitOf, lbStamp);
+          if (!rows.length) { err.textContent = `No changes saved${q.who ? ` with ${q.who}` : ""} from ${lbDayText(q.from)} to ${lbDayText(q.to)}.`; return; }
+          downloadFile(file("Job-changes", q), csv([["Saved at", "Saved by", "Stands now"].concat(LB_JOB_HEAD)].concat(rows)), "text/csv;charset=utf-8");
+          toast(`${rows.length} line${rows.length === 1 ? "" : "s"} downloaded`);
+        } catch (x) { err.textContent = x && x.error === "not_allowed" ? "Only people who enter the numbers can download the changes." : errText(x, "Nothing"); }
+        finally { busy(b, false, "Every change"); }
+      } }, "Every change"),
+      h("small", { text: "Each version ever saved: when, by whom, and the one that stands now. To explain a job or split months later." })),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
 }
 
 /* ---- status: what's typed, and every team's numbers ---- */

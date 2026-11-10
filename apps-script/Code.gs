@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 29;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 30;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -290,6 +290,9 @@ function doPost(e) {
       case "lbPut":
         if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return lbPut_(req); }));
+      case "jobLog":
+        if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(jobLog_(req));
       case "office":
         if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
         return json_(ofRead_(user, req.year));
@@ -2738,7 +2741,17 @@ const LB_UNITS = ["Cleaning", "Restoration"];
 // What each person does (Employees): pay rates are set by role and person under Payroll
 const LB_ROLES = ["assistant", "clean1", "clean2", "clean3", "rest1", "rest2", "rest3"];
 const LB_PARTS = { t: 4, s: 5, r: 1 };   // a truck's day: jobs, work day, revenue, # of techs; a technician's day: up sale, add-on, rugs in plant, additional service, jobs; a team's 5-star reviews that day
-const LB_MAX_JSON = 45000;          // one cell holds 50,000 characters; a month is about 7,000
+// One cell holds 50,000 characters. A month typed as day totals is about 7,000; typed by job (each job's revenue,
+// sales and crew) a busy month can pass 45,000, so the rest goes on in the cells after "by" (each starts with "~").
+const LB_CELL = 45000, LB_MORE = 3;
+const LB_MAX_JSON = LB_CELL * (1 + LB_MORE);
+// A truck's jobs that day ("j": { "Aaron": [job, ...] }), each { v: revenue, s: [up sale, add-on, rugs in plant,
+// additional service] (his sales on that job), w: [{ n: name, r: "tech" | "assistant", p: share % }] (who worked with
+// him), e: 1 (equal split), c: 1 (the revenue credit is split too) }; his own share is 100 - the others'. Every change
+// to a truck's jobs is kept on the "Job log" tab, so any job, person or split can be looked up later.
+const LB_MAX_JOBS = 20, LB_MAX_CREW = 8;
+const JOBLOG_SHEET = "Job log";
+const JOBLOG_COLS = ["at", "by", "day", "truck", "jobs"];
 
 function canLb_(user) { return canSee_(user, "leaderboard") || canSee_(user, "leaderboard-import"); }
 function canLbEdit_(user) { return canSee_(user, "leaderboard-import"); }
@@ -2763,9 +2776,32 @@ function lbSheet_(create) {
 }
 function lbRows_(s) {
   if (!s || s.getLastRow() < 2) return [];
-  return s.getRange(2, 1, s.getLastRow() - 1, LB_COLS.length).getValues().map(function (r, i) {
-    return { row: i + 2, key: String(r[0]).trim(), json: String(r[1] || "") };
+  const w = Math.min(s.getMaxColumns(), LB_COLS.length + LB_MORE);
+  return s.getRange(2, 1, s.getLastRow() - 1, w).getValues().map(function (r, i) {
+    const first = String(r[1] || "");
+    let json = first, long = false;
+    for (let c = LB_COLS.length; c < w; c++) { const t = String(r[c] || ""); if (t) { long = true; json += t.charAt(0) === "~" ? t.slice(1) : t; } }
+    // cells left over from before (an older script saved this row in one cell): the first cell alone is the month
+    if (long) { try { JSON.parse(json); } catch (e) { try { JSON.parse(first); json = first; } catch (e2) { /* keep it all: nothing better */ } } }
+    return { row: i + 2, key: String(r[0]).trim(), json: json, long: long };
   });
+}
+/** Saves a month (or the roster) in its row: the first 45,000 characters in "json", the rest in the cells after "by". */
+function lbSaveRow_(s, byKey, key, text, now, by) {
+  if (text.length > LB_MAX_JSON) throw new Error("The " + key + " numbers are too long to save.");
+  const parts = [];
+  for (let i = 0; i < text.length; i += LB_CELL) parts.push(text.slice(i, i + LB_CELL));
+  if (!parts.length) parts.push("");
+  if (byKey[key]) s.getRange(byKey[key].row, 2, 1, 3).setValues([[parts[0], now, by]]);
+  else { appendRows_(s, LB_COLS.length, [[key, parts[0], now, by]]); byKey[key] = { row: s.getLastRow(), key: key }; }
+  if (parts.length > 1 || byKey[key].long) {
+    const more = [];
+    for (let i = 1; i <= LB_MORE; i++) more.push(parts[i] ? "~" + parts[i] : "");
+    if (s.getMaxColumns() < LB_COLS.length + LB_MORE) s.insertColumnsAfter(s.getMaxColumns(), LB_COLS.length + LB_MORE - s.getMaxColumns());
+    s.getRange(byKey[key].row, LB_COLS.length + 1, 1, LB_MORE).setNumberFormat("@").setValues([more]);
+  }
+  byKey[key].long = parts.length > 1;
+  byKey[key].json = text;
 }
 function lbParse_(text) {
   try { const o = JSON.parse(text || "{}"); return o && typeof o === "object" && !Array.isArray(o) ? o : {}; } catch (e) { return {}; }
@@ -2840,7 +2876,13 @@ function lbMonth_(d, key) {
       });
       if (Object.keys(m).length) y[p] = m;
     });
-    if (!y.t && !y.s && !y.r) return;
+    const jm = {};
+    Object.keys(x.j && typeof x.j === "object" ? x.j : {}).forEach(function (team) {
+      const name = lbTeam_(team), list = name ? lbJobs_(x.j[team], name) : null;
+      if (list) jm[name] = list;
+    });
+    if (Object.keys(jm).length) y.j = jm;
+    if (!y.t && !y.s && !y.r && !y.j) return;
     if (x.at) y.at = supText_(x.at, 30);
     if (x.by) y.by = supText_(x.by, 60);
     out.days[day] = y;
@@ -2853,6 +2895,58 @@ function lbMonth_(d, key) {
   if (d && d.rat) out.rat = supText_(d.rat, 30);
   if (d && d.rby) out.rby = supText_(d.rby, 60);
   return out;
+}
+/** A truck's jobs that day, cleaned: up to 20 jobs, each with its revenue (or blank), who worked with him (up to 8,
+ *  never himself), their shares, the equal-split and revenue-credit marks. null when there are none. */
+function lbJobs_(list, owner) {
+  if (!Array.isArray(list)) return null;
+  const out = [];
+  list.slice(0, LB_MAX_JOBS).forEach(function (j) {
+    if (!j || typeof j !== "object") return;
+    const money = function (v) { return typeof v === "number" && isFinite(v) && v >= 0 && v <= 1e6 ? Math.round(v * 100) / 100 : null; };
+    const job = { v: money(j.v) };
+    const sales = [0, 1, 2, 3].map(function (i) { return money(Array.isArray(j.s) ? j.s[i] : null); });
+    while (sales.length && sales[sales.length - 1] == null) sales.pop();
+    if (sales.length) job.s = sales;
+    const w = [];
+    (Array.isArray(j.w) ? j.w : []).slice(0, LB_MAX_CREW).forEach(function (x) {
+      const n = lbTeam_(x && x.n);
+      if (!n || (owner && n.toLowerCase() === owner.toLowerCase()) || w.some(function (y) { return y.n.toLowerCase() === n.toLowerCase(); })) return;
+      const e = { n: n };
+      if (x.r === "tech" || x.r === "assistant") e.r = x.r;
+      if (typeof x.p === "number" && isFinite(x.p) && x.p >= 0 && x.p <= 100) e.p = Math.round(x.p * 100) / 100;
+      w.push(e);
+    });
+    if (w.length) { job.w = w; if (j.e) job.e = 1; if (j.c) job.c = 1; }
+    out.push(job);
+  });
+  return out.length ? out : null;
+}
+function jobLogSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(JOBLOG_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(JOBLOG_SHEET);
+    s.getRange(1, 1, 1, JOBLOG_COLS.length).setValues([JOBLOG_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:E").setNumberFormat("@");
+  }
+  return s;
+}
+/** The job log from day `from` to day `to`: every saved version of every truck's jobs, oldest first. */
+function jobLog_(req) {
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.from || "")) ? String(req.from) : "0000-00-00";
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.to || "")) ? String(req.to) : "9999-99-99";
+  const s = jobLogSheet_(false);
+  const rows = [];
+  if (s && s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, JOBLOG_COLS.length).getValues().forEach(function (r) {
+    const day = String(r[2]);
+    if (day < from || day > to || rows.length >= 8000) return;
+    let jobs = [];
+    try { jobs = JSON.parse(String(r[4] || "[]")); } catch (e) { jobs = []; }
+    rows.push({ at: String(r[0]), by: String(r[1]), day: day, truck: String(r[3]), jobs: Array.isArray(jobs) ? jobs : [] });
+  });
+  return { ok: true, rows: rows };
 }
 /** Everything for one year: the roster and that year's months. */
 function lbRead_(user, year) {
@@ -2873,6 +2967,7 @@ function lbPut_(req) {
   lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
   const now = new Date().toISOString();
   const out = { ok: true, months: {} };
+  const log = [];   // every truck-day whose jobs changed: [at, by, day, truck, jobs]
   writes.forEach(function (w) {
     const key = String((w && w.key) || "");
     const whole = w && w.data && typeof w.data === "object";
@@ -2881,6 +2976,7 @@ function lbPut_(req) {
     let doc;
     if (key === "config") doc = lbConfig_(change);
     else {
+      const before = byKey[key] ? lbMonth_(lbParse_(byKey[key].json), key) : { days: {} };
       doc = lbMerge_(whole ? {} : lbParse_(byKey[key] ? byKey[key].json : ""), change);
       if (!whole) {
         Object.keys(change.days && typeof change.days === "object" ? change.days : {}).forEach(function (day) {
@@ -2889,15 +2985,22 @@ function lbPut_(req) {
         if (change.reviews) { doc.rat = now; doc.rby = req.by; }
       }
       doc = lbMonth_(doc, key);
+      if (!whole) Object.keys(change.days && typeof change.days === "object" ? change.days : {}).forEach(function (day) {
+        const cj = change.days[day] && change.days[day].j;
+        if (!cj || typeof cj !== "object") return;
+        Object.keys(cj).forEach(function (team) {
+          const name = lbTeam_(team);
+          if (!name) return;
+          const was = JSON.stringify(((before.days[day] || {}).j || {})[name] || []), now2 = JSON.stringify(((doc.days[day] || {}).j || {})[name] || []);
+          if (was !== now2) log.push([now, req.by, day, name, now2]);
+        });
+      });
     }
     if (key === "config") { doc.at = now; doc.by = req.by; }
-    const text = JSON.stringify(doc);
-    if (text.length > LB_MAX_JSON) throw new Error("The " + key + " numbers are too long to save.");
-    if (byKey[key]) s.getRange(byKey[key].row, 2, 1, 3).setValues([[text, now, req.by]]);
-    else { appendRows_(s, LB_COLS.length, [[key, text, now, req.by]]); byKey[key] = { row: s.getLastRow(), key: key }; }
-    byKey[key].json = text;
+    lbSaveRow_(s, byKey, key, JSON.stringify(doc), now, req.by);
     if (key === "config") out.config = doc; else out.months[key] = doc;
   });
+  if (log.length) appendRows_(jobLogSheet_(true), JOBLOG_COLS.length, log);
   return out;
 }
 
@@ -3026,11 +3129,7 @@ function ofPut_(req) {
       }
       doc = ofMonth_(lbMerge_(whole ? {} : lbParse_(byKey[key] ? byKey[key].json : ""), change), key);
     }
-    const text = JSON.stringify(doc);
-    if (text.length > LB_MAX_JSON) throw new Error("The " + key + " numbers are too long to save.");
-    if (byKey[key]) s.getRange(byKey[key].row, 2, 1, 3).setValues([[text, now, req.by]]);
-    else { appendRows_(s, LB_COLS.length, [[key, text, now, req.by]]); byKey[key] = { row: s.getLastRow(), key: key }; }
-    byKey[key].json = text;
+    lbSaveRow_(s, byKey, key, JSON.stringify(doc), now, req.by);
     if (key === "config") out.config = doc; else out.months[key] = doc;
   });
   return out;
