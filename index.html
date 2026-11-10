@@ -709,6 +709,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-check-sum.ok { color: var(--ok, #1a7f37); }
 .lb-check-sum.warn { color: var(--soon); }
 .lb-check details { margin-top: 4px; }
+.dlg > .lb-src, .lb-src > * { min-width: 0; }   /* a wide table scrolls in its own box; the window never goes sideways */
+.lb-keep { border: 1px solid var(--line, #d0d7de); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; }
+.lb-keep .hint { margin: 0; }
 .lb-check summary { cursor: pointer; color: var(--muted); font-weight: 600; }
 .lb-focus { border-left: 5px solid #f2b705; gap: 12px; }
 .lb-focus > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
@@ -2573,6 +2576,46 @@ function lbPersonMonths(months) {
     for (const [n, v] of Object.entries((doc && doc.reviews) || {})) add(n, "reviews", lbVal(v));
   }
   return out;
+}
+/** Loading this year from Excel without losing what was typed in the app. The sheet's months, except on a day typed in
+ *  Enter numbers (the server stamps those days with who saved them; Excel loads and Move numbers never do): there each
+ *  truck the app has keeps the app's truck day, sales, reviews and jobs, and the sheet only fills the trucks and boxes
+ *  the app doesn't have that day. A month's reviews typed in the app keep the app's number for each person typed.
+ *  Months only the app has keep their typed days too. → { months, days: [{ day, by, names }], reviewMonths: [key] } */
+function lbKeepTyped(sheet, app) {
+  const copy = v => JSON.parse(JSON.stringify(v));
+  // the app's numbers under the name as the sheet spells it (or the app's spelling when the sheet doesn't have him)
+  const put = (m, name, v) => { const k = Object.keys(m).find(x => x.toLowerCase() === name.toLowerCase()); m[k || name] = copy(v); return k || name; };
+  const months = {}, days = [], reviewMonths = [];
+  const keys = [...new Set(Object.keys(sheet || {}).concat(Object.keys(app || {})))].filter(lbYm).sort();
+  for (const key of keys) {
+    const s = sheet && sheet[key] ? copy(sheet[key]) : { days: {}, reviews: {} }, a = (app && app[key]) || {};
+    if (!s.days || typeof s.days !== "object") s.days = {};
+    if (!s.reviews || typeof s.reviews !== "object") s.reviews = {};
+    for (const day of Object.keys(a.days && typeof a.days === "object" ? a.days : {}).sort()) {
+      const x = a.days[day];
+      if (!x || typeof x !== "object" || !(x.at || x.by) || !lbIsDay(day) || day.slice(0, 7) !== key) continue;
+      const had = s.days[day] && typeof s.days[day] === "object", y = had ? s.days[day] : {}, names = {};
+      for (const p of ["t", "s", "r", "j"]) for (const [n, v] of Object.entries(x[p] && typeof x[p] === "object" ? x[p] : {})) {
+        const name = lbTeamName(n);
+        if (!name || v == null) continue;
+        const kept = put(y[p] && typeof y[p] === "object" ? y[p] : (y[p] = {}), name, v);
+        names[kept.toLowerCase()] = kept;
+      }
+      if (!Object.keys(names).length) continue;
+      if (!had) s.days[day] = y;
+      if (x.at) y.at = x.at;
+      if (x.by) y.by = x.by;
+      days.push({ day, by: x.by ? String(x.by) : "", names: Object.values(names).sort() });
+    }
+    if (a.rat || a.rby) {
+      let any = false;
+      for (const [n, v] of Object.entries(a.reviews && typeof a.reviews === "object" ? a.reviews : {})) { const name = lbTeamName(n); if (name && lbVal(v) != null) { put(s.reviews, name, v); any = true; } }
+      if (any) { if (a.rat) s.rat = a.rat; if (a.rby) s.rby = a.rby; reviewMonths.push(key); }
+    }
+    if (Object.keys(s.days).length || Object.keys(s.reviews).length || sheet && sheet[key]) months[key] = s;
+  }
+  return { months, days, reviewMonths };
 }
 const LB_CHECK_FIELDS = [["revenue", "Revenue", true], ["jobs", "Jobs"], ["workDays", "Work days"], ["sales", "Tech sales", true], ["saleJobs", "Jobs with a sale"], ["reviews", "Reviews"]];
 /** The sheet's numbers against the app's, person by person and month by month (the months the sheet has), so it shows
@@ -7393,6 +7436,9 @@ function openLbHistory() {
   const res = h("div", { class: "lb-src", id: "lbHistResult", hidden: true });
   const status = h("p", { class: "lb-dl-status", id: "lbHistStatus", role: "status" });
   let hists = {}, armed = false;
+  // this year's months as the app has them now, for the check and for keeping the days typed in the app
+  const appMonths = y => (lbData && Number(lbData.year) === y ? lbData.months : (lbYearCache[y] || {}).months) || {};
+  const keepOn = () => { const k = $("lbHistKeep"); return !k || k.checked; };
   const picked = () => [...document.querySelectorAll("#lbHistYears input:checked")].map(x => Number(x.value));
   const label = () => { const n = picked().length; return n ? `Load ${n} year${n === 1 ? "" : "s"}` : "Pick a year"; };
   const refresh = () => { const b = $("lbHistGo"); if (!b) return; armed = false; b.disabled = !picked().length; b.textContent = label(); };
@@ -7437,17 +7483,36 @@ function openLbHistory() {
             for (const v of Object.values(d.reviews || {})) t.reviews += lbVal(v) || 0;
           }
           const teams = [...new Set(Object.values(hy.board).flat())];
-          const isNow = y === now, has = isNow && lbData && Object.keys((lbYearCache[now] || (lbData.year === now ? lbData : {})).months || {}).length;
+          const isNow = y === now, has = isNow && Object.keys(appMonths(now)).length;
           return h("tr", null,
             h("td", null, h("label", { class: "check" }, h("input", { type: "checkbox", value: String(y), checked: !isNow || !has, onchange: refresh }), h("span", { text: String(y) }))),
             h("td", { text: String(Object.keys(hy.months).length) }), h("td", { text: lbMoney(t.revenue) }), h("td", { text: lbMoney(t.sales) }), h("td", { text: fmt(t.reviews) }),
-            h("td", { class: "lb-hist-teams", text: teams.join(", ") + (isNow && has ? ` · replaces what's typed in the app for ${now}` : "") }));
+            h("td", { class: "lb-hist-teams", text: teams.join(", ") + (isNow && has ? ` · replaces the app's ${now} numbers (see below for the days typed in the app)` : "") }));
         });
+        // this year: the days typed in the app keep their numbers (ticked), and what would still differ after loading
+        let keepEl = null;
+        if (hists[now] && Object.keys(appMonths(now)).length) {
+          const kt = lbKeepTyped(hists[now].months, appMonths(now));
+          if (kt.days.length || kt.reviewMonths.length) {
+            const after = lbCheckMonths(hists[now].months, kt.months).diff.length;
+            const byMonth = {};
+            for (const d of kt.days) (byMonth[d.day.slice(0, 7)] || (byMonth[d.day.slice(0, 7)] = [])).push(Number(d.day.slice(8)));
+            const who = [...new Set(kt.days.map(d => d.by).filter(Boolean))];
+            const list = Object.entries(byMonth).map(([k, ds]) => `${lbMonthLong(Number(k.slice(5))).slice(0, 3)} ${ds.join(", ")}`).join(" · ");
+            keepEl = h("div", { class: "lb-keep", id: "lbHistKeepBox" },
+              h("label", { class: "check" }, h("input", { type: "checkbox", id: "lbHistKeep", checked: true }),
+                h("span", null, h("strong", { text: "Keep what's typed in the app" }), ` (${kt.days.length} day${kt.days.length === 1 ? "" : "s"}${kt.reviewMonths.length ? `, reviews in ${kt.reviewMonths.map(k => lbMonthLong(Number(k.slice(5))).slice(0, 3)).join(", ")}` : ""})`)),
+              h("p", { class: "hint", id: "lbHistKeepDays", text: (list ? `${list}${who.length ? ` · typed by ${who.join(", ")}` : ""}. ` : "") +
+                `On those days each truck the app has keeps the app's numbers and jobs; the sheet fills everything else. ` +
+                (after ? `After loading, ${fmt(after)} number${after === 1 ? "" : "s"} will still differ from the sheet, all on those days.` : "After loading, the app and the sheet will match.") +
+                " Untick to replace them with the sheet too." }));
+          }
+        }
         const all = lbCombineYears(Object.values(hists), lbData && lbData.config);
         // the sheet against what's in the app now, for every year found that's open here
         const checks = rev.years.map(y => {
-          const app = lbData && Number(lbData.year) === y ? lbData.months : (lbYearCache[y] || {}).months;
-          if (!app || !Object.keys(app).length) return null;
+          const app = appMonths(y);
+          if (!Object.keys(app).length) return null;
           const c = lbCheckMonths(hists[y].months, app), val = (d, v) => (d.money ? lbMoney(v) : fmt(v));
           return h("div", { class: "lb-check", "data-year": String(y) },
             h("p", { class: c.diff.length ? "lb-check-sum warn" : "lb-check-sum ok", text: c.diff.length
@@ -7459,7 +7524,7 @@ function openLbHistory() {
                 h("tbody", null, c.diff.slice(0, 200).map(d => h("tr", null, h("td", { text: `${lbMonthLong(Number(d.month.slice(5))).slice(0, 3)} ${d.month.slice(0, 4)}` }), h("td", { text: d.name }), h("td", { text: d.label }), h("td", { text: val(d, d.sheet) }), h("td", { text: val(d, d.app) })))))),
               c.diff.length > 200 ? h("p", { class: "hint", text: `Showing the first 200 of ${fmt(c.diff.length)}.` }) : null) : null);
         }).filter(Boolean);
-        res.replaceChildren(
+        res.replaceChildren(...[   // (blanks dropped: replaceChildren would show null as text)
           h("h4", { text: "Found" }),
           h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "lbHistYears" },
             h("thead", null, h("tr", null, ["Year", "Months", "Revenue", "Tech sales", "Reviews", "Teams"].map(c => h("th", { text: c })))),
@@ -7467,10 +7532,11 @@ function openLbHistory() {
           checks.length ? h("h4", { text: "Sheet against the app" }) : null,
           checks.length ? h("p", { class: "hint", text: "Each person's revenue, jobs, work days, tech sales and reviews for each month, as the sheet has them and as the app has them now. Nothing is saved until you tap Load." }) : null,
           ...checks,
+          keepEl,
           h("p", { class: "hint", text: `Everyone already in Employees keeps what's set there (unit, role, the days on and off the leaderboard, the order); anyone new in the sheet is added with the months they had a truck.${older.length ? ` ${older[0]}–${older[older.length - 1]} are only in the technician sales sheet (no truck revenue), so they aren't loaded.` : ""}` }),
           all.warnings.length || all.notes.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${all.warnings.length + all.notes.length})` }),
             all.warnings.length ? h("ul", { class: "lb-notes warn" }, all.warnings.map(w => h("li", { text: w }))) : null,
-            all.notes.length ? h("ul", { class: "lb-notes" }, all.notes.map(w => h("li", { text: w }))) : null) : null);
+            all.notes.length ? h("ul", { class: "lb-notes" }, all.notes.map(w => h("li", { text: w }))) : null) : null].filter(Boolean));
         res.hidden = false;
         refresh();
       } catch (x) { status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
@@ -7493,9 +7559,20 @@ function openLbHistory() {
           const past = years.filter(y => y !== now);
           if (past.length) { const all = lbCombineYears(past.map(y => hists[y]), cur); roster = lbMergeRoster(roster, all.teams, all.reviewers); }
           const writes = [{ key: "config", data: roster }];
+          // this year: merged with the server's months as they are right now (anything still being typed saved first),
+          // so a day typed a minute ago on another phone keeps its numbers too
+          const load = {};
+          for (const y of years) load[y] = hists[y].months;
+          let appNow = appMonths(now);
+          if (years.includes(now) && keepOn()) {
+            b.textContent = "Reading the app's numbers…";
+            if (lbYear() === now) await lbFlush();
+            appNow = (await api("leaderboard", { year: now })).months || {};
+            load[now] = lbKeepTyped(hists[now].months, appNow).months;
+          }
           for (const y of years.sort((x, z) => z - x)) for (let m = 1; m <= 12; m++) {
             const k = lbMonthKey(y, m);
-            if (hists[y].months[k] || y < now || (lbData && lbData.months && lbData.months[k])) writes.push({ key: k, data: hists[y].months[k] || { days: {}, reviews: {} } });
+            if (load[y][k] || y < now || (y === now && appNow[k])) writes.push({ key: k, data: load[y][k] || { days: {}, reviews: {} } });
           }
           for (let i = 0; i < writes.length; i += 8) {
             b.textContent = `Saving ${Math.min(100, Math.round((i / writes.length) * 100))}%…`;
