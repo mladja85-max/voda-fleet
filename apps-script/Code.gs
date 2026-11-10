@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 35;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 36;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2965,6 +2965,13 @@ function lbMonth_(d, key) {
       if (list) jm[name] = list;
     });
     if (Object.keys(jm).length) y.j = jm;
+    // who helped on a day total (a day typed as its number of jobs and revenue, not job by job)
+    const hm = {};
+    Object.keys(x.h && typeof x.h === "object" ? x.h : {}).forEach(function (team) {
+      const name = lbTeam_(team), list = name ? lbDayHelp_(x.h[team], name) : null;
+      if (list) hm[name] = list;
+    });
+    if (Object.keys(hm).length) y.h = hm;
     if (!y.t && !y.s && !y.r && !y.j) return;
     if (x.at) y.at = supText_(x.at, 30);
     if (x.by) y.by = supText_(x.by, 60);
@@ -2982,6 +2989,39 @@ function lbMonth_(d, key) {
 /** A truck's jobs that day, cleaned: up to 20 jobs, each with its revenue (or blank), who worked with him (up to 8,
  *  never himself) and how the revenue and the sales are split (today's marks and shares, or the older ones as they
  *  were sent). null when there are none. */
+/** Who helped on a truck's day total, cleaned: [{ n, r, j, a, b }]: his name and role, the jobs he was on (0 to 99),
+ *  his part of the day's revenue in dollars and of each kind of sale. Never the truck himself, nobody twice. Null
+ *  when nobody's left. */
+function lbDayHelp_(list, owner) {
+  if (!Array.isArray(list)) return null;
+  const money = function (v) { return typeof v === "number" && isFinite(v) && v >= 0 && v <= 1e6 ? Math.round(v * 100) / 100 : null; };
+  const out = [];
+  list.slice(0, LB_MAX_CREW).forEach(function (h) {
+    const n = lbTeam_(h && h.n);
+    if (!n || (owner && n.toLowerCase() === owner.toLowerCase()) || out.some(function (o) { return o.n.toLowerCase() === n.toLowerCase(); })) return;
+    const e = { n: n };
+    if (h.r === "tech" || h.r === "assistant") e.r = h.r;
+    if (typeof h.j === "number" && isFinite(h.j) && h.j >= 0 && h.j <= 99) e.j = Math.round(h.j * 100) / 100;
+    if (money(h.a) != null) e.a = money(h.a);
+    if (Array.isArray(h.b)) { const b = [0, 1, 2, 3].map(function (k) { return money(h.b[k]); }); while (b.length && b[b.length - 1] == null) b.pop(); if (b.length) e.b = b; }
+    out.push(e);
+  });
+  return out.length ? out : null;
+}
+/** A truck's day total as the job log keeps it: one line that stands for the day (k: "day"), with its revenue, its
+ *  sales, and who helped with their dollars. [] when the day is typed by job or has no total. */
+function lbDayJobLog_(d, name) {
+  if (!d || typeof d !== "object" || (((d.j || {})[name]) || []).length) return [];
+  const t = (d.t || {})[name], s = (d.s || {})[name], hl = (d.h || {})[name];
+  if (!Array.isArray(t)) return [];
+  const job = { v: typeof t[2] === "number" ? t[2] : null };
+  const sales = Array.isArray(s) ? s.slice(0, 4).map(function (v) { return typeof v === "number" ? v : null; }) : [];
+  while (sales.length && sales[sales.length - 1] == null) sales.pop();
+  if (sales.length) job.s = sales;
+  if (Array.isArray(hl) && hl.length) { job.w = hl; job.x = "a"; job.y = "a"; }
+  job.k = "day";
+  return [job];
+}
 function lbJobs_(list, owner) {
   if (!Array.isArray(list)) return null;
   const out = [];
@@ -3135,8 +3175,9 @@ function lbRename_(req) {
     Object.keys(doc.days && typeof doc.days === "object" ? doc.days : {}).forEach(function (day) {
       const d = doc.days[day];
       if (!d || typeof d !== "object") return;
-      ["t", "s", "r", "j"].forEach(function (p) { if (keys(d[p])) changed = true; });
+      ["t", "s", "r", "j", "h"].forEach(function (p) { if (keys(d[p])) changed = true; });
       Object.keys(d.j && typeof d.j === "object" ? d.j : {}).forEach(function (truck) { if (crew(d.j[truck])) changed = true; });
+      Object.keys(d.h && typeof d.h === "object" ? d.h : {}).forEach(function (truck) { if (crew([{ w: d.h[truck] }])) changed = true; });
     });
     if (keys(doc.reviews)) changed = true;
     if (changed) docs.push({ key: r.key, doc: doc });
@@ -3216,6 +3257,17 @@ function lbPut_(req) {
           const name = lbTeam_(team);
           if (!name) return;
           const was = JSON.stringify(((before.days[day] || {}).j || {})[name] || []), now2 = JSON.stringify(((doc.days[day] || {}).j || {})[name] || []);
+          if (was !== now2) log.push([now, req.by, day, name, now2]);
+        });
+      });
+      // ... and every truck-day whose day-total helpers changed: the day's line, with who helped and their dollars
+      if (!whole) Object.keys(change.days && typeof change.days === "object" ? change.days : {}).forEach(function (day) {
+        const ch = change.days[day] && change.days[day].h;
+        if (!ch || typeof ch !== "object") return;
+        Object.keys(ch).forEach(function (team) {
+          const name = lbTeam_(team);
+          if (!name || ((((doc.days[day] || {}).j || {})[name]) || []).length) return;   // typed by job now: its jobs are logged above
+          const was = JSON.stringify(lbDayJobLog_(before.days[day], name)), now2 = JSON.stringify(lbDayJobLog_(doc.days[day], name));
           if (was !== now2) log.push([now, req.by, day, name, now2]);
         });
       });
