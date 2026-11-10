@@ -2039,6 +2039,17 @@ function lbLatestMonth(records, year) {
 }
 /** Each team's revenue for one week (Monday), both parts added when the week crosses into a new month. Only teams on
  *  the board that week are ranked. */
+/** Revenue this month (ytd false) or this year to date (ytd true) for the presentation: everyone on the board in month
+ *  `key` (people who left are out), his revenue and jobs that month, or added up from January to that month (only the
+ *  months he was on the board). → [{ team, group, revenue, jobs, perJob }] */
+function lbRevRows(records, key, ytd) {
+  const y = key.slice(0, 4);
+  return records.filter(r => r.month === key && r.group).map(r => {
+    const mine = ytd ? records.filter(x => x.group && x.team.toLowerCase() === r.team.toLowerCase() && x.month.startsWith(y + "-") && x.month <= key) : [r];
+    const revenue = mine.reduce((n, x) => n + (x.revenue || 0), 0), jobs = mine.reduce((n, x) => n + (x.jobs || 0), 0);
+    return { team: r.team, group: r.group, revenue, jobs, perJob: lbDiv(revenue, jobs) };
+  });
+}
 function lbWeek(weeks, start) {
   const by = {};
   for (const w of weeks) {
@@ -7748,6 +7759,11 @@ function lbSlides() {
     slides.push(() => lbPodium(rows, per, g, per === "month" ? `${mname} · month to date` : `Year to date · ${lbYtdText(month)}, ${y}`, key));
   }
   if (wk) slides.push(() => lbWeekSlide(wk));
+  // revenue this month and this year, the same bars
+  if (lbRevRows(recs, key, false).length) {
+    slides.push(() => lbRevSlide(lbRevRows(lbRecords(), key, false), `${mname} · month to date`, "Revenue this month"));
+    slides.push(() => lbRevSlide(lbRevRows(lbRecords(), key, true), `Year to date · ${lbYtdText(month)}, ${y}`, "Revenue this year"));
+  }
   return slides;
 }
 function lbStat(x, per) {
@@ -7771,14 +7787,16 @@ function lbPodium(rows, per, g, kicker, key) {
       lbMoveEl(lbMove(per, g, x.team, x.place, key), "move"),
       h("span", { class: "st" }, lbStat(x, per), h("small", { text: `Score ${x.score}` }))))) : h("div"));
 }
-function lbWeekSlide(start) {
-  const rows = lbWeek(lbB().weeks, start);
-  const max = Math.max(1, ...rows.map(r => r.revenue));
-  return h("section", { class: "lbs-slide" },
-    h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: `Week of ${lbWeekText(start)}` }), h("h2", { text: "Revenue this week" })),
+const lbWeekSlide = start => lbRevSlide(lbWeek(lbB().weeks, start), `Week of ${lbWeekText(start)}`, "Revenue this week");
+/** Each unit's people with a bar for their revenue (highest first), their jobs and revenue per job. The bars are
+ *  measured within the unit (its best is the full bar): Cleaning is compared with Cleaning, Restoration with Restoration. */
+function lbRevSlide(rows, kicker, title) {
+  return h("section", { class: "lbs-slide", "data-slide": title },
+    h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: kicker }), h("h2", { text: title })),
       h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
     h("div", { class: "lbs-week" }, LB_GROUPS.map(g => {
       const list = rows.filter(r => r.group === g).sort((a, b) => b.revenue - a.revenue);
+      const max = Math.max(1, ...list.map(r => r.revenue));
       return list.length ? [h("div", { class: "lbs-wgroup", text: g }), list.map(r => h("div", { class: `lbs-wrow ${g}`, "data-team": r.team },
         h("span", { class: "nm", text: r.team }), h("span", { class: "bar" }, h("i", { style: `width:${Math.max(2, Math.round(r.revenue / max * 100))}%` })),
         h("span", { class: "v" }, lbMoney(r.revenue), h("small", { text: `${fmt(r.jobs)} jobs · ${lbMoney(r.perJob)}/job` }))))] : null;
