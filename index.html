@@ -883,6 +883,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbj-help ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .lbj-help li { overflow-wrap: anywhere; }
 .lbj-add, .lbj-addjob { justify-self: start; }
+.lbj-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .lbj-pick { display: grid; gap: 7px; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .lbj-pick[hidden] { display: none; }
 .lbj-pick .seg { justify-self: start; }
@@ -6815,10 +6816,15 @@ function lbDayTotalText(day) {
 const lbTruckTeams = day => { const d = lbDayDoc(day); return lbTeamsFor(day.slice(0, 7), Object.keys(d.t || {}).filter(n => lbEntry(d.t[n], LB_TRUCK.length).length).concat(lbHelpers(day))); };
 /** One person's Trucks card. By job (the newest script): a day typed the old way (a day total, no jobs) keeps its
  *  boxes until it's switched. */
+/** Cards switched to "Day total" before anything is typed on them ("2026-11-10|John"). Once the day has its number of
+ *  jobs or its revenue, those numbers say it's a day total, on every device. */
+const lbTotals = {};
+/** A truck's card for a day: job by job, or the day's totals (Jobs, Work day, Revenue, # of techs) when the day was
+ *  typed that way or Day total was tapped on it. */
 function lbTruckCard(t, day) {
   const d = lbDayDoc(day), jobs = apiLevel >= LB_JOBS_API;
   const e = lbEntry((d.t || {})[t.name], LB_TRUCK.length), has = ((d.j || {})[t.name] || []).length;
-  if (!jobs || (e.length && !has && (e[0] || e[2]))) return lbCard(t, "t", day, LB_TRUCK, e, lbTruckFoot(day, t.name), [jobs ? lbToJobsBtn(day, t.name) : null, lbHelpEl(day, t.name)]);
+  if (!jobs || (!has && (lbTotals[`${day}|${t.name}`] || (e.length && (e[0] || e[2]))))) return lbCard(t, "t", day, LB_TRUCK, e, lbTruckFoot(day, t.name), [jobs ? lbToJobsBtn(day, t.name) : null, lbHelpEl(day, t.name)]);
   return lbJobsCard(t, day);
 }
 /** A truck's jobs changed: the cards of the people who help on them follow. A new helper gets a card; someone who no
@@ -6856,7 +6862,7 @@ function lbTrucksEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
-    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Each job gets its revenue and the truck's sales. + Worked with adds who helped: he gets the job and a work day by itself. Revenue and Sales each split their own way: Off, Equal, % or $; the truck keeps the rest." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
+    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Each job gets its revenue and the truck's sales. + Worked with adds who helped: he gets the job and a work day by itself. Revenue and Sales each split their own way: Off, Equal, % or $; the truck keeps the rest. Day total: type the day's number of jobs and its revenue in one go instead (his sales that day go under Technician sales; no shared jobs or splits on such a day)." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
     jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
 }
 
@@ -6945,7 +6951,7 @@ function lbRedrawJobs(day, team) {
   const a = document.activeElement;
   if (a && old.contains(a)) { a.blur(); old = document.querySelector(sel); if (!old) return; }   // a box still being typed in saves first
   const t = lbTeamsFor(day.slice(0, 7), [team]).find(x => x.name === team) || { name: team, unit: "" };
-  old.replaceWith(lbJobsCard(t, day));
+  old.replaceWith(lbTruckCard(t, day));   // by job, or the day's totals once Day total is picked
 }
 const lbWorkDayOf = (day, team) => { const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length); return e.length ? e[1] : null; };
 /** The day's sales typed on the Sales tab (up sale … additional), to start Job 1 with. */
@@ -6955,11 +6961,15 @@ const lbCardHead = t => h("div", { class: "lb-card-head" }, h("strong", { text: 
 /** A day typed as a day total: start typing it by job instead (the day's revenue and sales go on Job 1). */
 const lbToJobsBtn = (day, team) => h("button", { class: "btn ghost small lb-tojobs", type: "button", onclick: () => {
   const e = lbEntry((lbDayDoc(day).t || {})[team], LB_TRUCK.length);
+  delete lbTotals[`${day}|${team}`];
+  if (!e.length || !(e[0] || e[2])) { lbRedrawJobs(day, team); return; }   // no jobs or revenue typed yet: just the other card
   if (!confirm(`Type ${team}'s ${lbDayText(day)} by job? The ${lbMoney(e[2] || 0)} day total and his sales that day go on Job 1; add the other jobs and move the money to them.`)) return;
   const sales = lbDaySales(day, team);
   lbSaveJobs(day, team, [{ v: e[2], s: sales }], e[1] == null ? 1 : e[1], false);
   renderLeaderboard();
 } }, "Type this day by job");
+/** A job with nothing on it yet: no revenue, no sales, nobody who worked with him. */
+const lbJobBlank = j => !lbVal(j && j.v) && !lbJobSale(j) && !((j && j.w) || []).length;
 const lbMoneyIn = v => { const t = String(v).replace(/[$,\s]/g, ""); return t === "" ? null : Number.isFinite(Number(t)) && Number(t) >= 0 ? Number(t) : NaN; };
 function lbJobsCard(t, day) {
   const team = t.name, key = day.slice(0, 7);
@@ -6991,8 +7001,27 @@ function lbJobsCard(t, day) {
     const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lbj-v`);
     if (i) i.focus();
   };
+  // Day total: the day's number of jobs and its revenue in one go, instead of each job. Offered while there's no job
+  // with anything on it (blank jobs are dropped); the cursor goes to Jobs
+  const dayTotal = () => {
+    if (!jobs.every(lbJobBlank)) { lbRedrawJobs(day, team); return; }   // a job got numbers meanwhile: it stays
+    lbTotals[openKey] = true;
+    if (jobs.length) { jobs.length = 0; save(false); }
+    lbRedrawJobs(day, team);
+    const i = document.querySelector(`.lb-card[data-team="${CSS.escape(team)}"][data-part="t"] .lb-boxes input`);
+    if (i) i.focus();
+  };
   const jobRow = (job, i) => {
     const crew = job.w || [], old = apiLevel < LB_MODES_API;
+    // the job picker, with "Day total instead" only while no job has anything on it (it goes as soon as one does)
+    const totalOpt = h("option", { value: "total", text: "Day total instead" });
+    const sel = h("select", { class: "lbj-sel", "aria-label": "Pick a job or add one", onchange: e => {
+      if (e.target.value === "add") addJob();
+      else if (e.target.value === "total") dayTotal();
+      else { lbJobOpen[openKey] = Number(e.target.value) || 0; lbRedrawJobs(day, team); }
+    } }, jobs.map((x, k) => h("option", { value: String(k), selected: k === i, text: `Job ${k + 1}` })),
+      h("option", { value: "add", text: `+ Add job ${jobs.length + 1}` }));
+    updaters.push(() => { if (!jobs.every(lbJobBlank)) totalOpt.remove(); else if (!totalOpt.isConnected) sel.append(totalOpt); });
     const picker = h("div", { class: "lbj-pick", hidden: true });
     const openPicker = kind => {
       const choices = lbCrewChoices(key, team, kind, crew.map(x => x.n));
@@ -7089,12 +7118,7 @@ function lbJobsCard(t, day) {
     };
     return h("div", { class: "lbj-job" + (crew.length ? " shared" : ""), "data-job": String(i + 1) },
       h("div", { class: "lbj-top" },
-        h("span", { class: "lbj-pickjob" },
-          h("select", { class: "lbj-sel", "aria-label": "Pick a job or add one", onchange: e => {
-            if (e.target.value === "add") addJob();
-            else { lbJobOpen[openKey] = Number(e.target.value); lbRedrawJobs(day, team); }
-          } }, jobs.map((x, k) => h("option", { value: String(k), selected: k === i, text: `Job ${k + 1}` })),
-            h("option", { value: "add", text: `+ Add job ${jobs.length + 1}` }))),
+        h("span", { class: "lbj-pickjob" }, sel),
         h("label", { class: "lbj-rev" }, h("span", { text: "Revenue $" }), money(job.v, `Job ${i + 1} revenue`, v => { job.v = v; }, "lbj-v")),
         h("button", { class: "btn ghost small lbj-x", type: "button", "aria-label": `Remove job ${i + 1}`, onclick: () => {
           if ((job.v || lbJobSale(job) || crew.length) && !confirm(`Remove job ${i + 1}${job.v ? ` (${lbMoney(job.v)})` : ""}${lbJobSale(job) ? ` and its ${lbMoney(lbJobSale(job))} in sales` : ""}${crew.length ? ", and who worked on it" : ""}?`)) return;
@@ -7122,14 +7146,16 @@ function lbJobsCard(t, day) {
       } }),
       total),
     lbHelpEl(day, team),
-    jobs.length ? jobRow(jobs[open], open) : h("button", { class: "btn small lbj-addjob", type: "button", onclick: addJob }, "+ Job 1"),
+    jobs.length ? jobRow(jobs[open], open) : h("div", { class: "lbj-start" },
+      h("button", { class: "btn small lbj-addjob", type: "button", onclick: addJob }, "+ Job 1"),
+      h("button", { class: "btn ghost small lbj-daytotal", type: "button", title: "Type the day's number of jobs and total revenue instead of each job", onclick: dayTotal }, "Day total")),
     list,
     foot].filter(Boolean));
   refresh();
   return card;
 }
 function lbJobsTotalText(jobs) {
-  if (!jobs.length) return "No jobs yet: + Job 1";
+  if (!jobs.length) return "No jobs yet: + Job 1, or Day total";
   const check = jobs.map((j, k) => (lbJobFlag(j) ? k + 1 : 0)).filter(Boolean);
   const rev = jobs.reduce((n, j) => n + (lbVal(j.v) || 0), 0), sales = jobs.reduce((n, j) => n + lbJobSale(j), 0);
   const crew = new Set(jobs.flatMap(j => (j.w || []).map(x => x.n.toLowerCase())));
