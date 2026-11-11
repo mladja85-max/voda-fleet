@@ -674,7 +674,16 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pay-kpi b { display: block; font-family: var(--font-display); font-size: clamp(1.15rem, 2.2vw, 1.75rem); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pay-kpi.span b { font-size: clamp(1rem, 1.7vw, 1.35rem); white-space: normal; }
 .pay-kpi.span span { display: block; color: var(--muted); font-size: .8rem; }
-@media (max-width: 760px) { .pay-kpis { display: none; } }
+/* a phone: the dates on the line, and the four numbers in one thin row under it */
+.pay-strip { display: none; }
+@media (max-width: 760px) {
+  .pay-kpis, #lbPaySpan .pay-nums { display: none; }
+  .pay-strip { display: grid; grid-template-columns: 1.35fr 1.1fr .8fr .9fr; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: -6px 0 0; }
+  .pay-strip div { padding: 6px 8px; min-width: 0; }
+  .pay-strip div + div { border-left: 1px solid var(--line); }
+  .pay-strip small { display: block; font-size: .62rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .pay-strip b { display: block; font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+}
 @media (min-width: 761px) { #lbPaySpan { display: none; } }
 .lb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .lb-row { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
@@ -7810,7 +7819,10 @@ function lbPayrollEl() {
         dateBox("lbPayTo", r.to, "To", v => custom(v < r.from ? v : r.from, v)),
         h("button", { class: "btn small", type: "button", id: "lbPayNext", "aria-label": "Later", disabled: r.to >= `${y}-12-31`, onclick: () => step(1) }, "›"))),
     h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), spanText ? ` · ${spanText}` : "", capText,
-      ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue · ${lbMoney(all.sales)} sales`),
+      h("span", { class: "pay-nums", text: ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue · ${lbMoney(all.sales)} sales` })),
+    // a phone: the same four numbers in one thin row (the tiles would push the table down)
+    h("div", { class: "pay-strip", id: "lbPayStrip" }, [["Revenue", lbMoney(all.rev)], ["Sales", lbMoney(all.sales)], ["Jobs", fmt(all.jobs)], ["Work days", fmt(all.days)]].map(([k, v]) =>
+      h("div", { "data-k": k.toLowerCase().replace(" ", "") }, h("small", { text: k }), h("b", { text: v })))),
     // a PC or tablet: the same numbers as tiles (the line above is a phone's)
     h("div", { class: "pay-kpis", id: "lbPayTiles" },
       h("div", { class: "pay-kpi span" }, h("small", { text: { week: "Pay week", two: "2 weeks", month: "Month" }[per] || "From – To" }), h("b", { text: label }),
