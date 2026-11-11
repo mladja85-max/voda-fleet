@@ -6040,7 +6040,7 @@ function supOrdersBody(sc) {
         admin ? h("span", { class: "ord-tip", text: "Tap a line to change it" }) : null,
         h("div", { class: "ord-tools" },
           h("button", { class: "btn small", type: "button", id: "supShare", text: "Share list", onclick: () => supShare(sc) }),
-          admin && ready.length > 1 ? h("button", { class: "btn small", type: "button", id: "supAllOrdered", text: "All ordered", onclick: ev => {
+          admin && ready.length > 1 ? h("button", { class: "btn small", type: "button", id: "supAllOrdered", text: "Mark all ordered", onclick: ev => {
             const b = ev.currentTarget;
             if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = `Tap again: mark all ${ready.length} ordered`; return; }
             supChange({ ids: ready.map(r => r.id), status: "Ordered" }, `${ready.length} items marked ordered`);
@@ -6064,8 +6064,8 @@ function ordRow(r, admin) {
     onclick: ev => { ev.stopPropagation(); onclick(); } });
   const open = OPEN(r);
   const act = !admin || r.pending ? null
-    : r.status === "To order" ? btn("✓ Ordered", "primary", () => supChange({ ids: [r.id], status: "Ordered" }, `${r.product}: ordered`))
-    : r.status === "Ordered" ? btn("✓ Received", "primary", () => supChange({ ids: [r.id], status: "Received" }, `${r.product}: received`))
+    : r.status === "To order" ? btn("Mark ordered", "primary", () => supChange({ ids: [r.id], status: "Ordered" }, `${r.product}: ordered`))
+    : r.status === "Ordered" ? btn("Mark received", "primary", () => supChange({ ids: [r.id], status: "Received" }, `${r.product}: received`))
     : btn("Undo", "ghost", () => supChange({ ids: [r.id], status: r.status === "Received" ? "Ordered" : "To order" }, `${r.product}: back on the list`));
   const tapToChange = admin && open && !r.pending;   // admins: tap the line to change how many or remove it
   return h("li", { class: "ord-row" + (r.pending ? " pending" : "") + (act ? " has-act" : "") + (tapToChange ? " tappable" : ""), "data-r": r.id,
@@ -6966,8 +6966,6 @@ function lbTyped(day, part, team, n) {
     // his sales' Jobs (for sale per job) follow the day's Jobs, unless a different number was typed under Technician sales
     const s = lbEntry((lbDayDoc(day).s || {})[team], LB_SALE.length);
     if (s.slice(0, 4).some(v => v != null) && (s[4] == null || s[4] === (was[0] ?? null)) && s[4] !== (arr[0] ?? null)) patch.s = { [team]: lbEntry(s.slice(0, 4).concat([arr[0] ?? null]), LB_SALE.length) };
-    const sj = card.querySelector('.lbt-sales input[data-k="4"]');   // Sale jobs, left blank: the day's Jobs, in grey
-    if (sj) { if (arr[0] == null) sj.removeAttribute("placeholder"); else sj.setAttribute("placeholder", String(arr[0])); }
   }
   lbQueue(day.slice(0, 7), { days: { [day]: patch } });
   const foot = card.querySelector(".lb-card-foot");
@@ -7058,14 +7056,13 @@ const lbDayActs = (day, team, saleOn) => h("span", { class: "lbt-acts" },
   h("button", { class: "btn small lbt-help", type: "button", title: "Who worked with him that day", onclick: () => lbHelpAdd(day, team) }, "+ Help"));
 function lbTotalCard(t, day) {
   const team = t.name, d = lbDayDoc(day), e = lbEntry((d.t || {})[team], LB_TRUCK.length), s = lbEntry((d.s || {})[team], LB_SALE.length);
-  const pd = lbDayOf(day, team), helpDay = !!(pd && pd.helpDay);   // he helped on someone's job and typed no work day: it counts as 1
   const saleOn = !!lbSaleOpen[`${day}|${team}`] || s.slice(0, 4).some(v => v != null) || lbSaleJobsTyped(s, e) != null;
   const head = lbCardHead(t);
   head.append(lbDayActs(day, team, saleOn));
   return h("div", { class: "lb-card lb-total" + (t.off ? " off" : ""), "data-team": team, "data-part": "t" }, ...[
     head,
     h("div", { class: "lb-boxes n4" }, LB_TRUCK.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), e[i],
-      Object.assign({ "data-i": String(i), oninput: () => lbTyped(day, "t", team, LB_TRUCK.length) }, i === 1 && helpDay ? { placeholder: "1" } : {})))),
+      { "data-i": String(i), oninput: () => lbTyped(day, "t", team, LB_TRUCK.length) }))),
     saleOn ? lbSaleRow(day, team) : null,
     saleOn ? lbSaleGoal(day, team) : null,
     lbHelpRows(day, team),
@@ -7097,7 +7094,7 @@ function lbSaleRow(day, team) {
   const d = lbDayDoc(day), s = lbEntry((d.s || {})[team], LB_SALE.length), t = lbEntry((d.t || {})[team], LB_TRUCK.length), kinds = lbDayKinds(day, s);
   const typed = () => lbDaySaleTyped(day, team);
   // Sale jobs: how many of the day's jobs he sold on. Left blank it's the day's Jobs (shown in grey)
-  const jobs = lbBox("Sale jobs", lbSaleJobsTyped(s, t), { "data-k": "4", inputmode: "numeric", placeholder: t[0] == null ? null : String(t[0]), title: "How many of the day's jobs he sold on. Left blank: all the day's jobs", oninput: typed });
+  const jobs = lbBox("Sale jobs", lbSaleJobsTyped(s, t), { "data-k": "4", inputmode: "numeric", title: "How many of the day's jobs he sold on. Left blank: all the day's jobs", oninput: typed });
   jobs.classList.add("lbt-sj");
   return h("div", { class: `lbt-row lbt-sales n${kinds.length + 1}` }, kinds.map(k => lbBox(`${LB_JOB_SALES[k]} $`, s[k], { "data-k": String(k), oninput: typed })), jobs);
 }
@@ -7184,7 +7181,7 @@ function lbHelpRow(day, team, x, open) {
     h("button", { class: "lbh-fold", type: "button", "aria-expanded": String(!!open), title: "Open his boxes", onclick: () => lbHelpShow(day, team, row) }, h("span", { class: "lbh-sum" }), h("span", { class: "lbh-chev", "aria-hidden": "true", text: "▾" })),
     h("div", { class: `lbh-f k${kinds.length}` },
       h("label", { class: "lb-box lbh-who" }, h("span", { text: "Who helped" }), pick),
-      box("lbh-j", "Jobs", x ? x.j : null, { "data-f": "j", inputmode: "numeric", placeholder: "1" }),
+      box("lbh-j", "Jobs", x ? x.j : null, { "data-f": "j", inputmode: "numeric", title: "The jobs he was on. Left blank: 1" }),
       box("lbh-a", "Revenue $", x ? x.a : null, { "data-f": "a" }),
       kinds.map(k => box("lbh-b", `${LB_JOB_SALES[k]} $`, x && x.b ? x.b[k] : null, { "data-f": "b", "data-k": String(k) })),
       h("button", { class: "btn ghost small lbh-x", type: "button", "aria-label": x ? `Take ${x.n} off` : "Remove this line", onclick: () => lbHelpOff(day, team, row) }, "✕"),
@@ -7299,8 +7296,6 @@ function lbSyncHelpCards(day, team) {
     else if (old) old.remove();
     else if (fresh) { const at = c.querySelector(".lbj-day"); if (at) at.after(fresh); else c.append(fresh); }
     if (!old && !fresh) continue;   // not a helper, before or now
-    const pd = lbDayOf(day, t.name), wd = c.querySelector('.lbj-day input, .lb-boxes.n4 input[data-i="1"]');
-    if (wd) { if (pd && pd.helpDay) wd.setAttribute("placeholder", "1"); else wd.removeAttribute("placeholder"); }
     if (t.name === team) continue;
     const foot = c.querySelector(".lb-card-foot");
     if (foot) foot.textContent = lbTruckFoot(day, t.name);
@@ -7431,7 +7426,6 @@ function lbJobsCard(t, day) {
   // a line for each job, the open one marked; tap one to open it
   const lines = () => list.replaceChildren(...(jobs.length > 1 ? jobs.map((x, k) => h("li", { class: k === open ? "on" : "" },
     h("button", { type: "button", "aria-current": k === open ? "true" : null, onclick: () => { if (k === open) return; lbJobOpen[openKey] = k; lbRedrawJobs(day, team); } }, lbJobLine(x, k, team)))) : []));
-  const pd = lbDayOf(day, team), helpDay = !!(pd && pd.helpDay);   // he helped on a shared job and typed no work day: it counts as 1
   const flag = h("p", { class: "lbj-flag", role: "alert", hidden: true });
   const updaters = [];   // what follows the open job's numbers as they're typed (what the truck keeps, shares that don't fit)
   const refresh = () => {
@@ -7587,7 +7581,7 @@ function lbJobsCard(t, day) {
   card.append(...[   // (blanks dropped: append would show null as text)
     head,
     h("div", { class: "lbj-day" },
-      lbBox("Work day", wday, { "data-i": "1", placeholder: helpDay ? "1" : null, oninput: e => {
+      lbBox("Work day", wday, { "data-i": "1", oninput: e => {
         const v = e.target.value.replace(/[,\s]/g, ""), bad = v !== "" && !Number.isFinite(Number(v));
         e.target.classList.toggle("bad", bad);
         if (!bad) { lbSaveJobs(day, team, jobs, v === "" ? null : Number(v), false); refresh(); }
