@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 36;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 37;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -297,8 +297,8 @@ function doPost(e) {
         if (!canLb_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(lbRead_(user, req.year, req.since));
       case "lbPut":
-        if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(withLock_(function () { return lbPut_(req); }));
+        if (!canLbReviews_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return lbPut_(req, !canLbEdit_(user), lbRvOnly_(user)); }));
       case "lbRename":
         if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return lbRename_(req); }));
@@ -2721,8 +2721,8 @@ function supplyEmailTest() {
 }
 
 /* ---------------- who sees what ---------------- */
-// Users tab, column M (access): what a technician sees, comma-separated: "trucks", "leaderboard", "leaderboard-import"
-// and/or checklist IDs.
+// Users tab, column M (access): what a technician sees, comma-separated: "trucks", "leaderboard", "leaderboard-import",
+// "leaderboard-reviews" (types the 5-star reviews and sees nothing else of the leaderboard), "office" and/or checklist IDs.
 // Empty means Trucks only (how every technician worked before checklists). "-" means nothing yet. Admins see everything.
 
 const ACCESS_DEFAULT = ["trucks"];
@@ -2750,7 +2750,7 @@ function cleanAccess_(raw) {
 
 const LB_SHEET = "Leaderboard";
 const LB_COLS = ["key", "json", "updatedAt", "by"];
-const LB_ACCESS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers and sets up the teams
+const LB_ACCESS = ["leaderboard", "leaderboard-import", "leaderboard-reviews"];   // sees the standings; types the numbers and sets up the teams; types the 5-star reviews
 const LB_UNITS = ["Cleaning", "Restoration"];
 // What each person does (Employees): pay rates are set by role and person under Payroll
 const LB_ROLES = ["assistant", "clean1", "clean2", "clean3", "rest1", "rest2", "rest3"];
@@ -2770,8 +2770,32 @@ const LB_MAX_JOBS = 20, LB_MAX_CREW = 8;
 const JOBLOG_SHEET = "Job log";
 const JOBLOG_COLS = ["at", "by", "day", "truck", "jobs"];
 
-function canLb_(user) { return canSee_(user, "leaderboard") || canSee_(user, "leaderboard-import"); }
+function canLb_(user) { return canSee_(user, "leaderboard") || canSee_(user, "leaderboard-import") || canSee_(user, "leaderboard-reviews"); }
 function canLbEdit_(user) { return canSee_(user, "leaderboard-import"); }
+/** Types the 5-star reviews (and saves nothing else). */
+function canLbReviews_(user) { return canLbEdit_(user) || canSee_(user, "leaderboard-reviews"); }
+/** Sees only the reviews: no standings, no revenue, no sales. */
+function lbRvOnly_(user) { return !canSee_(user, "leaderboard") && !canLbEdit_(user) && canSee_(user, "leaderboard-reviews"); }
+/** A month as a reviews-only person gets it: each day's 5-star reviews and the month's typed totals, nothing else. */
+function lbRvView_(doc) {
+  if (!doc || typeof doc !== "object") return doc;
+  const out = { days: {}, reviews: doc.reviews || {} };
+  Object.keys(doc.days || {}).forEach(function (day) { const d = doc.days[day]; if (d && d.r) out.days[day] = { r: d.r }; });
+  if (doc.rat) out.rat = doc.rat;
+  if (doc.rby) out.rby = doc.rby;
+  return out;
+}
+/** What a reviews-only person may save: each day's 5-star reviews and the month's typed totals. Null: nothing. */
+function lbRvPatch_(patch) {
+  if (!patch || typeof patch !== "object") return null;
+  const out = {};
+  Object.keys(patch.days && typeof patch.days === "object" ? patch.days : {}).forEach(function (day) {
+    const d = patch.days[day];
+    if (d && typeof d === "object" && d.r && typeof d.r === "object") (out.days || (out.days = {}))[day] = { r: d.r };
+  });
+  if (patch.reviews && typeof patch.reviews === "object") out.reviews = patch.reviews;
+  return Object.keys(out).length ? out : null;
+}
 
 /** The Leaderboard tab (made the first time something is saved). A tab of that name from an older layout is kept as
  *  "Leaderboard (old)". */
@@ -3101,6 +3125,8 @@ function lbRead_(user, year, since) {
     if (r.key === "config") out.config = lbParse_(r.json);
     else out.months[r.key] = lbParse_(r.json);
   });
+  // someone who only types the reviews gets only the reviews
+  if (lbRvOnly_(user)) Object.keys(out.months).forEach(function (k) { out.months[k] = lbRvView_(out.months[k]); });
   // emails and phone numbers go only to those who set up the people (admins, Leaderboard numbers)
   if (!out.canEdit && out.config) (out.config.teams || []).concat(out.config.reviewers || []).forEach(function (p) { if (p) { delete p.email; delete p.phone; } });
   return out;
@@ -3220,8 +3246,14 @@ function lbRename_(req) {
 }
 /** Saves changes: { writes: [{ key: "2026-11", patch }] } merges a change into that month (a blank entry clears it);
  *  { key, data } replaces the month or the roster ("config") whole. Each day changed is stamped with who saved it. */
-function lbPut_(req) {
-  const writes = (Array.isArray(req.writes) ? req.writes : []).slice(0, 14);
+/** rvSave: saves only the 5-star reviews (someone ticked for Leaderboard reviews, not Leaderboard numbers): the
+ *  roster, a whole month and anything else in a change are left out. rvRead: answers with only the reviews. */
+function lbPut_(req, rvSave, rvRead) {
+  let writes = (Array.isArray(req.writes) ? req.writes : []).slice(0, 14);
+  if (rvSave) writes = writes.map(function (w) {
+    const patch = w && lbYm_(w.key) && !(w.data && typeof w.data === "object") ? lbRvPatch_(w.patch) : null;
+    return patch ? { key: w.key, patch: patch } : null;
+  }).filter(Boolean);
   // only the rows being written are read (a typed number is one month's row, not every year's)
   let s = SpreadsheetApp.getActive().getSheetByName(LB_SHEET), keys = lbKeys_(s);
   if (!keys) { s = lbSheet_(true); keys = lbKeys_(s) || []; }   // no tab yet, or one from an older layout: a new one
@@ -3287,6 +3319,12 @@ function lbPut_(req) {
     else out.months[key] = doc;
   });
   if (log.length) appendRows_(jobLogSheet_(true), JOBLOG_COLS.length, log);
+  if (rvRead) Object.keys(out.months).forEach(function (k) {
+    const m = out.months[k];
+    if (!out.part || !out.part[k]) { out.months[k] = lbRvView_(m); return; }
+    // just what this save touched: each day's reviews (null: none left)
+    Object.keys(m.days || {}).forEach(function (day) { const d = m.days[day]; m.days[day] = d && d.r ? { r: d.r } : null; });
+  });
   return out;
 }
 
