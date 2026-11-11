@@ -900,6 +900,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbt-lines:empty { display: none; }
 .lbt-keeps { margin: 0; font-size: .8rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .lbt-wait { margin: 0; }
+.lbt-goal { margin: -3px 0 0; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* who helped. Narrow (a phone): each helper is one line of text; tapped, his boxes open in two rows, with ✕ (take him
    off) and ▴ (close) at their ends. Wide (a PC): every helper is one line of boxes, always open */
 .lbt-helps { container-type: inline-size; display: grid; gap: 6px; }
@@ -6833,6 +6834,11 @@ function lbHowEl() {
 
 /* ---- entering the numbers ---- */
 const LB_PARTS = { trucks: "Trucks", sales: "Technician sales", reviews: "Reviews" };
+/** The parts of Enter numbers. His sales are typed on his Trucks card (+ Sale), the same numbers, so Technician sales
+ *  isn't a part of its own; only a Google script too old for that card still shows it. */
+const lbParts = () => (apiLevel && apiLevel < LB_JOBS_API ? LB_PARTS : { trucks: LB_PARTS.trucks, reviews: LB_PARTS.reviews });
+/** A day has something typed for a part. Trucks counts his sales too when they're typed there. */
+const lbDayHas = (day, pk) => lbHasPart(day, pk) || (pk === "t" && !lbParts().sales && lbHasPart(day, "s"));
 function lbEnterDay() {
   const y = lbYear(), today = lbToday();
   let d = lbIsDay(lbView.day) ? lbView.day : (today.startsWith(y + "-") ? today : `${y}-12-31`);
@@ -6862,9 +6868,9 @@ function lbGoDay(day) {
   renderLeaderboard();
 }
 function lbEnterEl() {
-  const y = lbYear(), part = LB_PARTS[lbView.part] ? lbView.part : "trucks";
+  const P = lbParts(), y = lbYear(), part = P[lbView.part] ? lbView.part : "trucks";
   const day = lbEnterDay(), key = day.slice(0, 7), month = Number(key.slice(5));
-  const parts = lbSeg(Object.entries(LB_PARTS).map(([k, t]) => [k, lbTabText(t)]), part, k => { lbFlush(); lbCardsLeft(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
+  const parts = lbSeg(Object.entries(P).map(([k, t]) => [k, lbTabText(t)]), part, k => { lbFlush(); lbCardsLeft(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
   parts.classList.add("lb-parts");
   const out = [h("div", { class: "lb-bar" }, parts)];
   {
@@ -6879,7 +6885,7 @@ function lbEnterEl() {
       h("div", { class: "lb-week", role: "group", "aria-label": "This week" }, Array.from({ length: 7 }, (_, i) => {
         const d = lbAddDays(mon, i), dt = lbDate(d);
         if (!d.startsWith(y + "-")) return h("span");
-        return h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : "") + (lbHasPart(d, pk) ? " has" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => lbGoDay(d) },
+        return h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : "") + (lbDayHas(d, pk) ? " has" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => lbGoDay(d) },
           h("small", { text: LB_WD[dt.getDay()] }), String(dt.getDate()));
       })));
     out.push(part === "trucks" ? lbTrucksEl(day) : part === "sales" ? lbSalesEl(day)
@@ -6932,7 +6938,7 @@ function lbTyped(day, part, team, n) {
   const tot = $("lbDayTotal");
   if (tot) tot.textContent = lbDayTotalText(day);
   const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);
-  if (wd) wd.classList.toggle("has", lbHasPart(day, part));
+  if (wd) wd.classList.toggle("has", lbDayHas(day, part));
   if (total) lbTotalSync(day, team);
 }
 const lbRecOf = (key, team) => lbRecords().find(r => r.month === key && r.team.toLowerCase() === team.toLowerCase()) || null;
@@ -6953,6 +6959,13 @@ function lbSaleFoot(day, team) {
   if (t && t.noSale) return `${dayTxt} · Month: ${lbMoney(g.mtd)} (no sales goal)`;
   return `${dayTxt} · Month: ${lbMoney(g.mtd)} of ${lbMoney(lbCfg().goal)}${g.done ? ", goal reached" : `, ${lbMoney(g.left)} to go`}`;
 }
+/** His sales this month against the goal: "Sales this month: $350 of $3,000, $2,650 to go". */
+function lbSaleGoalText(day, team) {
+  const r = lbRecOf(day.slice(0, 7), team) || { sales: 0 }, t = lbTeamOf(lbCfg(), team);
+  const g = lbGoal(r, lbCfg().goal, lbDaysLeft(day.slice(0, 7), lbToday(), t ? t.unit : ""));
+  if (t && t.noSale) return `Sales this month: ${lbMoney(g.mtd)} (no sales goal)`;
+  return `Sales this month: ${lbMoney(g.mtd)} of ${lbMoney(lbCfg().goal)}${g.done ? ", goal reached" : `, ${lbMoney(g.left)} to go`}`;
+}
 function lbDayTotalText(day) {
   const d = lbDayDoc(day);
   let rev = 0, jobs = 0, sales = 0;
@@ -6962,9 +6975,10 @@ function lbDayTotalText(day) {
   for (const a of Object.values(d.r || {})) { const e = lbEntry(a, LB_REVIEW.length); if (e.length) reviews += e[0] || 0; }
   return `${lbDayText(day)} total: ${lbMoney(rev)} revenue · ${fmt(jobs)} jobs · ${lbMoney(sales)} technician sales · ${fmt(reviews)} five-star review${reviews === 1 ? "" : "s"}`;
 }
-/** Trucks' cards for a day: everyone on the board, anyone else with truck numbers, and everyone who helped on a
- *  shared job that day (on the leaderboard or not). */
-const lbTruckTeams = day => { const d = lbDayDoc(day); return lbTeamsFor(day.slice(0, 7), Object.keys(d.t || {}).filter(n => lbEntry(d.t[n], LB_TRUCK.length).length).concat(lbHelpers(day))); };
+/** Trucks' cards for a day: everyone on the board, anyone else with truck numbers or sales that day (so what's typed
+ *  can always be seen and changed), and everyone who helped on a shared job that day (on the leaderboard or not). */
+const lbTruckTeams = day => { const d = lbDayDoc(day); return lbTeamsFor(day.slice(0, 7), Object.keys(d.t || {}).filter(n => lbEntry(d.t[n], LB_TRUCK.length).length)
+  .concat(lbParts().sales ? [] : Object.keys(d.s || {}).filter(n => lbEntry(d.s[n], LB_SALE.length).length), lbHelpers(day))); };
 /** A truck's card for a day: the day's totals (Jobs, Work day, Revenue, # of techs) with + Sale and + Help at the top
  *  right. A day that was typed job by job (there's no button to start one any more) keeps its job card. */
 function lbTruckCard(t, day) {
@@ -7016,6 +7030,7 @@ function lbTotalCard(t, day) {
     h("div", { class: "lb-boxes n4" }, LB_TRUCK.map((f, i) => lbBox(f.label + (f.money ? " $" : ""), e[i],
       Object.assign({ "data-i": String(i), oninput: () => lbTyped(day, "t", team, LB_TRUCK.length) }, i === 1 && helpDay ? { placeholder: "1" } : {})))),
     saleOn ? lbSaleRow(day, team) : null,
+    saleOn ? lbSaleGoal(day, team) : null,
     lbHelpRows(day, team),
     lbTotalLines(day, team),
     h("p", { class: "lb-card-foot", text: lbTruckFoot(day, team) }),
@@ -7028,13 +7043,16 @@ function lbTotalSync(day, team) {
   const old = card && card.querySelector(".lbt-lines");
   if (old) old.replaceWith(lbTotalLines(day, team));
   if (card) lbHelpSums(card, day, team);
+  const goal = card && card.querySelector(".lbt-goal");
+  if (goal) goal.textContent = lbSaleGoalText(day, team);
   const foot = card && card.querySelector(".lb-card-foot");
   if (foot) foot.textContent = lbTruckFoot(day, team);
   const tot = $("lbDayTotal");
   if (tot) tot.textContent = lbDayTotalText(day);
   lbSyncHelpCards(day, team);
 }
-/* ---- + Sale: his sales that day, in a row under the day's boxes (the same numbers as under Technician sales) ---- */
+/* ---- + Sale: his sales that day, in a row under the day's boxes, with his month against the sales goal under it ---- */
+const lbSaleGoal = (day, team) => h("p", { class: "lbt-goal", text: lbSaleGoalText(day, team) });
 /** The jobs he sold on, typed for a day total (for sale per job): the number in his sales, when it isn't just the
  *  day's Jobs (null: left blank, so the day's Jobs count). */
 const lbSaleJobsTyped = (s, t) => (s[4] != null && s[4] !== (t[0] ?? null) ? s[4] : null);
@@ -7052,11 +7070,11 @@ function lbSaleToggle(day, team) {
   if (!card) return;
   const row = card.querySelector(".lbt-sales"), btn = card.querySelector(".lbt-sale");
   const mark = on => { if (btn) { btn.classList.toggle("on", on); btn.setAttribute("aria-expanded", String(on)); } };
-  if (row && [...row.querySelectorAll("input")].every(i => i.value.trim() === "")) { delete lbSaleOpen[key]; row.remove(); mark(false); return; }
+  if (row && [...row.querySelectorAll("input")].every(i => i.value.trim() === "")) { delete lbSaleOpen[key]; row.remove(); for (const g of card.querySelectorAll(".lbt-goal")) g.remove(); mark(false); return; }
   if (row) { row.querySelector("input").focus(); return; }
   lbSaleOpen[key] = true;
   const fresh = lbSaleRow(day, team);
-  card.querySelector(".lb-boxes").after(fresh);
+  card.querySelector(".lb-boxes").after(fresh, lbSaleGoal(day, team));
   mark(true);
   fresh.querySelector("input").focus();
 }
@@ -7077,6 +7095,8 @@ function lbDaySaleTyped(day, team) {
   if (bad) return;
   const any = v.some(x => x != null);
   lbQueue(day.slice(0, 7), { days: { [day]: { s: { [team]: lbEntry(v.concat([jobs != null ? jobs : any ? t[0] ?? null : null]), LB_SALE.length) } } } });
+  const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);   // the day's dot in the week strip
+  if (wd) wd.classList.toggle("has", lbDayHas(day, "t"));
   lbTotalSync(day, team);
 }
 /* ---- + Help: who worked with him, in the card. Each helper is a line of boxes: who, the jobs he was on, his dollars
@@ -7339,7 +7359,7 @@ function lbSaveJobs(day, team, jobs, workDay, redraw) {
   const tot = $("lbDayTotal");
   if (tot) tot.textContent = lbDayTotalText(day);
   const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);
-  if (wd) wd.classList.toggle("has", lbHasPart(day, "t"));
+  if (wd) wd.classList.toggle("has", lbDayHas(day, "t"));
   if (redraw !== false) lbRedrawJobs(day, team);
   lbSyncHelpCards(day, team);
 }
@@ -7971,7 +7991,7 @@ function lbPerformanceEl() {
       const tr = lbEntry((dd.t || {})[t.name], LB_TRUCK.length).length > 0, sa = lbEntry((dd.s || {})[t.name], LB_SALE.length).length > 0;
       const cls = [d > today ? "future" : "", d === today ? "today" : "", lbDate(d).getDay() === 0 || lbHoliday(d) ? "sun" : "", tr ? "t" : "", sa ? "s" : ""].filter(Boolean).join(" ");
       const label = `${t.name}, ${lbDayText(d)}: ${tr ? "truck numbers" : "no truck numbers"}, ${sa ? "sales" : "no sales"}`;
-      return h("td", { class: cls }, edit && d <= today && !lbPast() ? h("button", { type: "button", "aria-label": label, title: label, onclick: () => { lbView.tab = "enter"; lbView.part = tr || !sa ? "trucks" : "sales"; lbView.day = d; lbSaveView(); renderLeaderboard(); } }) : h("i", { title: label }));
+      return h("td", { class: cls }, edit && d <= today && !lbPast() ? h("button", { type: "button", "aria-label": label, title: label, onclick: () => { lbView.tab = "enter"; lbView.part = tr || !sa || !lbParts().sales ? "trucks" : "sales"; lbView.day = d; lbSaveView(); renderLeaderboard(); } }) : h("i", { title: label }));
     }))))));
   const typedEl = days.length ? h("div", { class: "panel", id: "lbsTyped" }, h("h2", { text: "Days typed" }),
     h("p", { class: "lb-sub" }, h("i", { class: "lb-key t" }), " truck numbers ", h("i", { class: "lb-key s" }), " technician sales ", h("i", { class: "lb-key ts" }), " both", edit && !lbPast() ? " · tap a day to open it" : ""),
