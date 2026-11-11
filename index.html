@@ -2006,12 +2006,14 @@ function lbCleanJobs(list, owner, format) {
 }
 /** A job's sales added up (0 when none). */
 const lbJobSale = job => ((job && job.s) || []).reduce((n, v) => n + (lbVal(v) || 0), 0);
-/** The truck's sales that day from his jobs: [up sale, add-on, rugs, additional, jobs] (blank kinds stay blank; the
- *  jobs count every job, for sales per job). [] with no jobs. */
+/** How many of these jobs he sold on: the jobs that have a sale. */
+const lbSoldOn = jobs => (Array.isArray(jobs) ? jobs : []).filter(j => lbJobSale(j) > 0).length;
+/** The truck's sales that day from his jobs: [up sale, add-on, rugs, additional, sale jobs] (blank kinds stay blank;
+ *  sale jobs: the jobs he sold on, so a job with no sale isn't one). [] with no jobs, or no sale on any of them. */
 function lbJobsSales(jobs) {
   if (!jobs.length) return [];
   const sum = i => jobs.some(j => j.s && lbVal(j.s[i]) != null) ? lbRound2(jobs.reduce((n, j) => n + ((j.s && lbVal(j.s[i])) || 0), 0)) : null;
-  return lbEntry([sum(0), sum(1), sum(2), sum(3), jobs.length], LB_SALE.length);
+  return lbEntry([sum(0), sum(1), sum(2), sum(3), lbSoldOn(jobs) || null], LB_SALE.length);
 }
 /** Someone added to a job (in today's format). Nothing is split by that: he gets the job and the work day. Where the
  *  revenue or the sales are already split by typed %, he starts with his saved share (Pay rates) or an equal one.
@@ -2102,13 +2104,15 @@ function lbPersonDay(d, name, spell) {
   if (!t.length && !s.length && !help.length) return null;
   const helpDay = help.length > 0 && t[1] == null;
   const sum = (list, f) => list.reduce((n, x) => n + f(x), 0);
+  // the jobs he sold on: counted from his job list on a day typed by job, else the number typed with his sales
+  const js = mine(d && d.j), soldOn = Array.isArray(js) && js.length ? lbSoldOn(js) : s[4] || 0;
   return { own: t, ownSales: s, help, gave, helpDay,
     jobs: (t[0] || 0) + sum(help, lbShareJobs),
     workDays: helpDay ? 1 : t[1] || 0,
     revenue: lbRound2((t[2] || 0) + sum(help, x => x.revenue) - sum(gave, x => x.revenue)),
     techs: t[3] || 0,
     sales: [0, 1, 2, 3].map(k => lbRound2((s[k] || 0) + sum(help, x => x.sales[k]) - sum(gave, x => x.sales[k]))),
-    saleJobs: (s[4] || 0) + sum(help, lbShareJobs) };
+    saleJobs: soldOn + sum(help, lbShareJobs) };
 }
 /** The people not on the leaderboard (helpers) with numbers in these records: a job and a work day for each shared
  *  job they worked on, their share of what was split, and anything typed on their own card.
@@ -2909,7 +2913,7 @@ function lbPersonMonths(months) {
     };
     for (const d of Object.values((doc && doc.days) || {})) {
       for (const [n, a] of Object.entries((d && d.t) || {})) { const e = lbEntry(a, LB_TRUCK.length); if (e.length) { add(n, "jobs", e[0]); add(n, "workDays", e[1]); add(n, "revenue", e[2]); } }
-      for (const [n, a] of Object.entries((d && d.s) || {})) { const e = lbEntry(a, LB_SALE.length); if (e.length) { add(n, "sales", (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0)); add(n, "saleJobs", e[4]); } }
+      for (const [n, a] of Object.entries((d && d.s) || {})) { const e = lbEntry(a, LB_SALE.length); if (e.length) { add(n, "sales", (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0)); const js = d.j && d.j[n]; add(n, "saleJobs", Array.isArray(js) && js.length ? lbSoldOn(js) : e[4]); } }
       for (const [n, a] of Object.entries((d && d.r) || {})) { const e = lbEntry(a, LB_REVIEW.length); if (e.length) add(n, "reviews", e[0]); }
     }
     for (const [n, v] of Object.entries((doc && doc.reviews) || {})) add(n, "reviews", lbVal(v));
@@ -6936,7 +6940,11 @@ function lbTyped(day, part, team, n) {
 const lbRecOf = (key, team) => lbRecords().find(r => r.month === key && r.team.toLowerCase() === team.toLowerCase()) || null;
 function lbTruckFoot(day, team) {
   const p = lbDayOf(day, team), r = lbRecOf(day.slice(0, 7), team);   // his own day and the shared jobs he helped on
-  const dayTxt = p && (p.own.length || p.help.length) ? `Day: ${lbMoney(p.revenue)}${p.jobs ? ` · ${lbMoney(p.revenue / p.jobs)}/job` : ""}` : "Nothing typed for this day";
+  const bits = p && (p.own.length || p.help.length) ? [`${lbMoney(p.revenue)}${p.jobs ? ` · ${lbMoney(p.revenue / p.jobs)}/job` : ""}`] : [];
+  // a day total: his sales that day and the jobs he sold on (a day typed by job has them in its own line of totals)
+  const sold = p ? p.sales.reduce((n, v) => n + v, 0) : 0;
+  if (p && !((lbDayDoc(day).j || {})[team] || []).length && (sold || p.ownSales[4] != null)) bits.push(`sales ${lbMoney(sold)}${p.saleJobs ? ` on ${fmt(p.saleJobs)} job${p.saleJobs === 1 ? "" : "s"}` : ""}`);
+  const dayTxt = bits.length ? `Day: ${bits.join(" · ")}` : "Nothing typed for this day";
   return r ? `${dayTxt} · ${lbMonthLong(Number(day.slice(5, 7)))}: ${lbMoney(r.revenue)}, ${fmt(r.jobs)} jobs, ${fmt(r.workDays)} days` : dayTxt;
 }
 function lbSaleFoot(day, team) {
@@ -7570,8 +7578,8 @@ function lbJobsTotalText(jobs) {
   const check = jobs.map((j, k) => (lbJobFlag(j) ? k + 1 : 0)).filter(Boolean);
   const rev = jobs.reduce((n, j) => n + (lbVal(j.v) || 0), 0), sales = jobs.reduce((n, j) => n + lbJobSale(j), 0);
   const crew = new Set(jobs.flatMap(j => (j.w || []).map(x => x.n.toLowerCase())));
-  const shared = jobs.filter(j => (j.w || []).length).length;
-  return `${jobs.length} job${jobs.length === 1 ? "" : "s"} · ${lbMoney(rev)} revenue · ${lbMoney(sales)} sales · ${1 + crew.size} tech${crew.size ? "s" : ""}${shared ? ` · ${shared} shared` : ""}` +
+  const shared = jobs.filter(j => (j.w || []).length).length, sold = lbSoldOn(jobs);
+  return `${jobs.length} job${jobs.length === 1 ? "" : "s"}${sold ? ` · sold on ${sold}` : ""} · ${lbMoney(rev)} revenue · ${lbMoney(sales)} sales · ${1 + crew.size} tech${crew.size ? "s" : ""}${shared ? ` · ${shared} shared` : ""}` +
     (check.length ? ` · ⚠ check job ${check.join(", ")}` : "");
 }
 /** Sales tab, a truck typed by job: his sales that day come from his jobs on Trucks. */
@@ -7580,7 +7588,7 @@ function lbSalesFromJobs(t, day) {
   const p = lbDayOf(day, t.name), gave = p ? p.gave.filter(x => x.splitSales && x.sales.some(Boolean)) : [];
   return h("div", { class: "lb-card lb-fromjobs" + (t.off ? " off" : ""), "data-team": t.name, "data-part": "s" },
     lbCardHead(t),
-    h("p", { class: "lbj-from", text: `Typed by job on Trucks (${jobs.length} job${jobs.length === 1 ? "" : "s"}): ` + lbDayKinds(day, e).map(i => `${LB_SALE[i].label} ${lbMoney(e[i] || 0)}`).join(" · ") }),
+    h("p", { class: "lbj-from", text: `Typed by job on Trucks (${jobs.length} job${jobs.length === 1 ? "" : "s"}, sold on ${lbSoldOn(jobs)}): ` + lbDayKinds(day, e).map(i => `${LB_SALE[i].label} ${lbMoney(e[i] || 0)}`).join(" · ") }),
     gave.length ? h("p", { class: "lbj-from lbj-after", text: `After the split with ${[...new Set(gave.map(x => x.who))].join(", ")}: ` + LB_SALE.slice(0, 4).map((f, i) => (e[i] ? `${f.label} ${lbCash(p.sales[i])}` : "")).filter(Boolean).join(" · ") }) : null,
     lbHelpEl(day, t.name, true),
     h("p", { class: "lb-card-foot", text: lbSaleFoot(day, t.name) }),
