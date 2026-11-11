@@ -994,6 +994,10 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pay-f { display: grid; gap: 2px; font-size: .74rem; font-weight: 600; color: var(--muted); }
 .pay-f input { font: inherit; font-size: .95rem; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
 .lb-payrange { flex-wrap: wrap; align-items: end; }
+.pay-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Performance: From and To always on a line of their own under the periods, so nothing moves when Month (with its
+   month picker) and the other periods are switched */
+.lb-bar > #lbRange { flex-basis: 100%; }
 /* a PC: "From [date] To [date]" with ‹ › on the buttons' line, each control as tall as Pay rates and Job history */
 @media (min-width: 431px) {
   .lb-payrange { align-items: center; gap: 8px; }
@@ -6625,7 +6629,10 @@ function renderLeaderboard() {
     h("h2", { class: "lb-title", text: "Leaderboard" }),
     h("div", { class: "lb-acts" },
       lbView.tab === "performance" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null,
-      edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Employees") : null));
+      edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Employees") : null,
+      // Payroll's own tools, up here with Employees, away from its days (a phone: a row of their own on Payroll, so
+      // this line keeps its height and the tabs don't move)
+      lbView.tab === "payroll" && canSeePayroll() && cfg.teams.length && !lbNarrow() ? lbPayTools() : null));
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
     Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
       title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
@@ -6845,7 +6852,7 @@ function lbWeekRank(start, group) {
 function lbHowEl() {
   return h("details", { class: "panel lb-how" }, h("summary", { text: "How the ranking works" }),
     h("p", { text: "Teams are ranked inside Cleaning, inside Restoration, and across the whole company, the same way the 5. Revenue per truck sheet did it." }),
-    h("p", { text: "A month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews. A week (Week to date, Last week) is ranked on its revenue alone. From – To is ranked like a month, on the same six numbers added up over the days picked (a month's 5-star reviews typed as one total, from before reviews were typed by day, count only when that whole month is picked)." }),
+    h("p", { text: "A month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews. A week (Week to date, Last week) is ranked on its revenue alone. Days typed in From and To (From – To) are ranked like a month, on the same six numbers added up over those days (a month's 5-star reviews typed as one total, from before reviews were typed by day, count only when that whole month is picked)." }),
     h("p", { text: "On each number the best team gets 1, the next 2, and so on (a tie shares the number). Those add up to the score: the lowest score is #1. Equal scores share the place and the next team takes the next number (1, 1, 2)." }),
     h("p", { text: `Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Technician sales = up sale + add-on + additional service${lbRugsLast() ? " (and rugs in plant up to its last sale)" : ""}. Sale per job = technician sales ÷ the technician's jobs. Reviews are 5-star reviews only. A team counts only in the months it's on the board (Teams), so a team that took over a truck later in the year counts from that month.` }),
     h("p", { text: "▲ and ▼ show a move up or down since a week before the newest day typed in." }));
@@ -7650,6 +7657,7 @@ function lbReviewsEl(day) {
 
 /* ---- payroll: every tech's truck numbers day by day for a week, two weeks or a month (admins switched on) ---- */
 const LB_PAY = { week: "Week", two: "2 weeks", month: "Month", custom: "From – To" };
+const LB_PAY_BTNS = ["week", "two", "month"];   // the period buttons: From – To is picked with the From and To boxes beside them
 const LB_PAY_MAX = 93;   // days a From – To view can cover (a quarter)
 const lbDayCount = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1;
 /** The pay week runs Sunday to Saturday. "2026-11-09" → "2026-11-08". */
@@ -7662,20 +7670,33 @@ function lbPayRange(per, day) {
   return { from: sun, to: lbAddDays(sun, per === "two" ? 13 : 6) };
 }
 const lbSpanText = (from, to) => { const a = lbDate(from), b = lbDate(to); return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}, ${b.getFullYear()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`; };
-function lbPayrollEl() {
-  const b = lbB(), cfg = lbCfg(), y = lbNowYear();
-  lbLoadRates();   // so Pay rates has them the moment it's tapped
+/** A phone's width (the same line the page's phone layout starts at). */
+const lbNarrow = () => typeof matchMedia === "function" && matchMedia("(max-width: 430px)").matches;
+/** Pay rates and Job history (Job history opens on the days shown): beside Employees, or a phone's row on Payroll. */
+const lbPayTools = () => [
+  h("button", { class: "btn", type: "button", id: "payRatesBtn", onclick: () => openPayRates() }, "Pay rates"),
+  h("button", { class: "btn", type: "button", id: "jobHistBtn", onclick: () => openJobHistory(lbPayView().r) }, "Job history")];
+// a phone turned (or a window made narrow or wide) on Payroll: the two buttons go to their place for that width
+if (typeof matchMedia === "function") matchMedia("(max-width: 430px)").addEventListener("change", () => {
+  if (typeof view !== "undefined" && view.tab === "leaderboard" && lbView.tab === "payroll" && !document.querySelector("dialog[open]")) renderLeaderboard();
+});
+/** The days Payroll shows: { per, r: { from, to } }. From – To: any two days (up to LB_PAY_MAX days); the others:
+ *  the pay week, two weeks or month of the anchor day. */
+function lbPayView() {
+  const b = lbB();
   if (!LB_PAY[lbView.pper]) lbView.pper = "week";
   const per = lbView.pper;
   const anchor = lbIsDay(lbView.pday) ? lbView.pday : (b && b.newest) || lbToday();
-  // From – To: any two days (up to LB_PAY_MAX days); the others: the pay week, two weeks or month of the anchor day
-  let r;
-  if (per === "custom") {
-    const f = lbIsDay(lbView.pfrom) ? lbView.pfrom : lbPayRange("week", anchor).from;
-    let t = lbIsDay(lbView.pto) && lbView.pto >= f ? lbView.pto : lbAddDays(f, 6);
-    if (lbDayCount(f, t) > LB_PAY_MAX) t = lbAddDays(f, LB_PAY_MAX - 1);
-    r = { from: f, to: t };
-  } else r = lbPayRange(per, anchor);
+  if (per !== "custom") return { per, r: lbPayRange(per, anchor) };
+  const f = lbIsDay(lbView.pfrom) ? lbView.pfrom : lbPayRange("week", anchor).from;
+  let t = lbIsDay(lbView.pto) && lbView.pto >= f ? lbView.pto : lbAddDays(f, 6);
+  if (lbDayCount(f, t) > LB_PAY_MAX) t = lbAddDays(f, LB_PAY_MAX - 1);
+  return { per, r: { from: f, to: t } };
+}
+function lbPayrollEl() {
+  const b = lbB(), cfg = lbCfg(), y = lbNowYear();
+  lbLoadRates();   // so Pay rates has them the moment it's tapped
+  const { per, r } = lbPayView();
   const len = lbDayCount(r.from, r.to);
   const go = day => { lbView.pday = day; lbSaveView(); renderLeaderboard(); };
   const custom = (from, to) => { lbView.pper = "custom"; lbView.pfrom = from; lbView.pto = to; lbView.pday = from; lbSaveView(); renderLeaderboard(); };
@@ -7744,11 +7765,10 @@ function lbPayrollEl() {
   const dateBox = (id, value, aria, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: aria }),
     h("input", { id, type: "date", value, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": aria, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
   return [
+    lbNarrow() ? h("div", { class: "pay-tools" }, lbPayTools()) : null,
     h("div", { class: "lb-bar" },
-      // a preset starts from the From day shown; From or To typed by hand makes it From – To
-      lbSeg(Object.entries(LB_PAY), per, k => { if (k === "custom") { custom(r.from, r.to); return; } lbView.pper = k; lbView.pday = r.from; lbSaveView(); renderLeaderboard(); }, "Pay period"),
-      h("button", { class: "btn", type: "button", id: "payRatesBtn", onclick: () => openPayRates() }, "Pay rates"),
-      h("button", { class: "btn", type: "button", id: "jobHistBtn", onclick: () => openJobHistory(r) }, "Job history"),
+      // a period starts from the From day shown; any day typed in From or To makes it From – To (no button lit then)
+      lbSeg(LB_PAY_BTNS.map(k => [k, LB_PAY[k]]), per, k => { lbView.pper = k; lbView.pday = r.from; lbSaveView(); renderLeaderboard(); }, "Pay period"),
       h("div", { class: "lb-daybar lb-payrange" },
         h("button", { class: "btn small", type: "button", id: "lbPayPrev", "aria-label": "Earlier", disabled: r.from <= `${y}-01-01`, onclick: () => step(-1) }, "‹"),
         dateBox("lbPayFrom", r.from, "From", v => custom(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
@@ -8106,39 +8126,45 @@ function lbPerformanceEl() {
   const last = lbLastSave();
   const spanEl = span ? h("span", { id: "lbSpan" }, h("strong", { text: per === "ytd" ? `${spanText}, ${y}` : custom ? spanText : `Week of ${spanText}` }),
     per === "wtd" ? " (so far)" : custom ? ` · ${len} day${len === 1 ? "" : "s"}` : "") : null;
-  // From – To: the days, picked like Payroll's. ‹ › go back or ahead as many days (whole months when whole months are
-  // picked); only the year shown is loaded, so the days stay inside it
+  // From and To always show the days on screen (the month, the week, the year to date or the days picked); a day typed
+  // in either makes it From – To, as on Payroll. ‹ ›: Month goes month by month; the year to date stays put; anything
+  // else goes back or ahead as many days (whole months when whole months are picked). Only the year shown is loaded,
+  // so the days stay inside it
   const first = `${y}-01-01`, lastDay = `${y}-12-31`;
   const setRange = (from, to) => { lbView.per = "custom"; lbView.rfrom = from; lbView.rto = to < from ? from : to; lbView.open = ""; lbSaveView(); renderLeaderboard(); };
   const monthEnd = k => `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`;
+  const shown = span || { from: `${key}-01`, to: monthEnd(key) }, shownLen = lbDayCount(shown.from, shown.to);
+  const mlist = lbMonthsWith(), mi = mlist.indexOf(month);
+  const canPrev = per === "month" ? mi > 0 : per === "ytd" ? false : shown.from > first;
+  const canNext = per === "month" ? mi >= 0 && mi < mlist.length - 1 : per === "ytd" ? false : shown.to < lastDay;
   const addMonths = (k, n) => { const t = Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1 + n; return lbMonthKey(Math.floor(t / 12), (t % 12) + 1); };
   const step = n => {
+    if (per === "month") { lbView.month = mlist[mi + n]; lbView.open = ""; lbSaveView(); renderLeaderboard(); return; }
     let f, t;
-    if (span.from.endsWith("-01") && span.to === monthEnd(span.to.slice(0, 7))) {
-      const m = (Number(span.to.slice(0, 4)) - Number(span.from.slice(0, 4))) * 12 + Number(span.to.slice(5, 7)) - Number(span.from.slice(5, 7)) + 1;
-      f = `${addMonths(span.from.slice(0, 7), n * m)}-01`; t = monthEnd(addMonths(span.to.slice(0, 7), n * m));
-    } else { f = lbAddDays(span.from, len * n); t = lbAddDays(span.to, len * n); }
+    if (shown.from.endsWith("-01") && shown.to === monthEnd(shown.to.slice(0, 7))) {
+      const m = (Number(shown.to.slice(0, 4)) - Number(shown.from.slice(0, 4))) * 12 + Number(shown.to.slice(5, 7)) - Number(shown.from.slice(5, 7)) + 1;
+      f = `${addMonths(shown.from.slice(0, 7), n * m)}-01`; t = monthEnd(addMonths(shown.to.slice(0, 7), n * m));
+    } else { f = lbAddDays(shown.from, shownLen * n); t = lbAddDays(shown.to, shownLen * n); }
     if (f < first) f = first;
     if (t > lastDay) t = lastDay;
     if (f <= t) setRange(f, t);
   };
   const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
     h("input", { id, type: "date", value, min: first, max: lastDay, "aria-label": label, onchange: e => { if (lbIsDay(e.target.value) && e.target.value >= first && e.target.value <= lastDay) onpick(e.target.value); } }));
-  const rangeEl = custom ? h("div", { class: "lb-daybar lb-payrange", id: "lbRange" },
-    h("button", { class: "btn small", type: "button", id: "lbRangePrev", "aria-label": "Earlier", disabled: span.from <= first, onclick: () => step(-1) }, "‹"),
-    dateBox("lbRangeFrom", span.from, "From", v => setRange(v, v > span.to ? lbAddDays(v, len - 1) > lastDay ? lastDay : lbAddDays(v, len - 1) : span.to)),
-    dateBox("lbRangeTo", span.to, "To", v => setRange(v < span.from ? v : span.from, v)),
-    h("button", { class: "btn small", type: "button", id: "lbRangeNext", "aria-label": "Later", disabled: span.to >= lastDay, onclick: () => step(1) }, "›")) : null;
-  // the days on screen, for From – To to start from: the month picked, the week, or the year to date
-  const shown = span || { from: `${key}-01`, to: monthEnd(key) };
+  const rangeEl = h("div", { class: "lb-daybar lb-payrange", id: "lbRange" },
+    h("button", { class: "btn small", type: "button", id: "lbRangePrev", "aria-label": "Earlier", disabled: !canPrev, onclick: () => step(-1) }, "‹"),
+    dateBox("lbRangeFrom", shown.from, "From", v => setRange(v, v > shown.to ? lbAddDays(v, shownLen - 1) > lastDay ? lastDay : lbAddDays(v, shownLen - 1) : shown.to)),
+    dateBox("lbRangeTo", shown.to, "To", v => setRange(v < shown.from ? v : shown.from, v)),
+    h("button", { class: "btn small", type: "button", id: "lbRangeNext", "aria-label": "Later", disabled: !canNext, onclick: () => step(1) }, "›"));
+
   const sub = h("p", { class: "lb-sub", id: "lbSub" }, spanEl, spanEl ? " · " : null,
     ...(b.newest ? ["Numbers through ", h("strong", { text: lbDayText(b.newest) }),
       last.at ? ` · saved ${fmtWhen(last.at)} ${fmtTime(new Date(last.at))}${lbWho(last.by) ? " by " + lbWho(last.by) : ""}` : null]
       : [lbPast() ? `No numbers for ${y}.` : "No numbers typed yet this year."]).filter(Boolean));
   return [
     h("div", { class: "lb-bar" },
-      lbSeg(Object.entries(LB_PER).filter(([k]) => !lbPast() || !LB_WEEK_PER.includes(k)).map(([k, t]) => [k, lbTabText(t)]), per, k => {
-        if (k === "custom") { if (!custom) setRange(shown.from, shown.to); return; }   // From – To starts from the days on screen
+      // the periods (From – To is the From and To boxes: no button of its own, none lit while it's on)
+      lbSeg(Object.entries(LB_PER).filter(([k]) => k !== "custom" && (!lbPast() || !LB_WEEK_PER.includes(k))).map(([k, t]) => [k, lbTabText(t)]), per, k => {
         lbView.per = k; lbView.open = ""; lbSaveView(); renderLeaderboard(); }, "Period"),
       h("div", { class: "lb-when" }, lbYearSelect("lbYear"), per === "month" ? lbMonthSelect("lbMonth", month, m => { lbView.month = m; lbView.open = ""; lbSaveView(); renderLeaderboard(); }) : null),
       rangeEl),
