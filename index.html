@@ -667,6 +667,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .lb-sub { margin: -4px 0 0; color: var(--muted); font-size: .88rem; }
 .lb-sub strong { color: var(--ink); }
+/* Payroll: the period's totals as tiles on a PC or tablet; a phone keeps the one line under the dates (room for the table) */
+.pay-kpis { display: grid; grid-template-columns: 1.35fr repeat(4, 1fr); gap: 10px; margin: 2px 0 2px; }
+.pay-kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 15px; min-width: 0; }
+.pay-kpi small { display: block; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pay-kpi b { display: block; font-family: var(--font-display); font-size: clamp(1.15rem, 2.2vw, 1.75rem); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pay-kpi.span b { font-size: clamp(1rem, 1.7vw, 1.35rem); white-space: normal; }
+.pay-kpi.span span { display: block; color: var(--muted); font-size: .8rem; }
+@media (max-width: 760px) { .pay-kpis { display: none; } }
+@media (min-width: 761px) { #lbPaySpan { display: none; } }
 .lb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .lb-row { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .lb-row > button { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 14px; padding: 12px 14px; }
@@ -7777,6 +7786,8 @@ function lbPayrollEl() {
     }
   });
   const tot = teams.map(t => sum(days, t.name));
+  const spanText = per === "week" || per === "two" ? "Sunday to Saturday" : per === "custom" ? `${len} day${len === 1 ? "" : "s"}` : "";
+  const capText = per === "custom" && lbIsDay(lbView.pto) && lbDayCount(r.from, lbView.pto) > LB_PAY_MAX ? ` (up to ${LB_PAY_MAX} days at a time)` : "";
   const all = tot.reduce((a, x) => ({ jobs: a.jobs + x.jobs, days: a.days + x.days, rev: a.rev + x.rev, sales: a.sales + x.sales, techs: a.techs + x.techs }), { jobs: 0, days: 0, rev: 0, sales: 0, techs: 0 });
   const grid = h("div", { class: "lb-scroll lb-payscroll" }, h("table", { class: "lb-pay", id: "lbPay" },
     h("thead", null,
@@ -7798,9 +7809,14 @@ function lbPayrollEl() {
         dateBox("lbPayFrom", r.from, "From", v => custom(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
         dateBox("lbPayTo", r.to, "To", v => custom(v < r.from ? v : r.from, v)),
         h("button", { class: "btn small", type: "button", id: "lbPayNext", "aria-label": "Later", disabled: r.to >= `${y}-12-31`, onclick: () => step(1) }, "›"))),
-    h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), per === "week" || per === "two" ? " · Sunday to Saturday" : per === "custom" ? ` · ${len} day${len === 1 ? "" : "s"}` : "",
-      per === "custom" && lbIsDay(lbView.pto) && lbDayCount(r.from, lbView.pto) > LB_PAY_MAX ? ` (up to ${LB_PAY_MAX} days at a time)` : "",
+    h("p", { class: "lb-sub", id: "lbPaySpan" }, h("strong", { text: label }), spanText ? ` · ${spanText}` : "", capText,
       ` · ${fmt(all.jobs)} jobs · ${fmt(all.days)} work days · ${lbMoney(all.rev)} revenue · ${lbMoney(all.sales)} sales`),
+    // a PC or tablet: the same numbers as tiles (the line above is a phone's)
+    h("div", { class: "pay-kpis", id: "lbPayTiles" },
+      h("div", { class: "pay-kpi span" }, h("small", { text: { week: "Pay week", two: "2 weeks", month: "Month" }[per] || "From – To" }), h("b", { text: label }),
+        h("span", { text: [spanText, capText.trim().replace(/^\((.*)\)$/, "$1"), teams.length ? `${teams.length} ${teams.length === 1 ? "person" : "people"}` : ""].filter(Boolean).join(" · ") })),
+      [["Revenue", lbMoney(all.rev)], ["Sales", lbMoney(all.sales)], ["Jobs", fmt(all.jobs)], ["Work days", fmt(all.days)]].map(([k, v]) =>
+        h("div", { class: "pay-kpi", "data-k": k.toLowerCase().replace(" ", "") }, h("small", { text: k }), h("b", { text: v })))),
     teams.length ? h("div", { class: "panel lb-paypanel" }, grid)
       : h("p", { class: "meta", text: "No teams on a truck then." })];
 }
