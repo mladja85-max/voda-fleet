@@ -982,6 +982,17 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-rank .lbs-sort i { font-style: normal; }
 .lb-rank td.on { font-weight: 700; color: var(--ink); }
 .lb-rank .lbs-who, #lbsHelpTable .lbs-who { display: inline-flex; align-items: center; gap: 8px; }
+/* a phone: the name column takes at most 45% of the screen, so the numbers fit beside it. A long name is cut with
+   "…" (the whole name shows when it's held or pointed at), "not ranked" goes under it, and the headings can take two
+   lines */
+@media (max-width: 430px) {
+  .lb-rank .lbs-who, #lbsHelpTable .lbs-who { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 0; width: max-content; max-width: 45vw; }
+  .lbs-who .lbs-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lbs-who .lbs-note { flex-basis: 100%; line-height: 1.2; }
+  .lbs-who .lbs-place ~ .lbs-note { padding-left: 28px; }
+  .lb-rank thead th .lbs-sort, #lbsHelpTable thead th { white-space: normal; line-height: 1.2; }
+  .lb-rank thead th:not(:first-child) { min-width: 3.4em; }
+}
 .lb-paypanel { padding: 10px; }
 .pay-list { display: grid; gap: 10px; }
 .pay-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
@@ -6342,7 +6353,7 @@ const LB_SHORT = { "Technician sales": "Sales", "Whole company": "Company", "Wee
 /** A tab's name: the long one, and on a phone the short one. */
 /** This year's jobs to check (sales over the job's revenue, or sales with no revenue), newest first. */
 const lbToCheck = () => { const y = lbYear(); return lbData ? lbJobFlags(lbData.months, `${y}-01-01`, `${y}-12-31`) : []; };
-const lbTabText = t => LB_SHORT[t] ? [h("span", { class: "t-long", text: t }), h("span", { class: "t-short", text: LB_SHORT[t] })] : t;
+const lbTabText = (t, short) => (short || LB_SHORT[t]) ? [h("span", { class: "t-long", text: t }), h("span", { class: "t-short", text: short || LB_SHORT[t] })] : t;
 const PAY_API = 28;                                     // the Google script version with the per-admin Payroll switch
 /** Payroll: admins switched on in Settings > Users only. */
 const canSeePayroll = () => isAdmin() && userAccess().includes("payroll");
@@ -7973,15 +7984,17 @@ function lbRankTable(id, cols, list, has, foot) {
     rows = live.map((t, i) => ({ t, p: rk[i], medal: low || vals[i] > 0 })).sort((a, b) => a.p - b.p || a.t.name.localeCompare(b.t.name)).concat(idle.map(t => ({ t, p: null })));
   }
   const pick = key => { lbView.ssort = Object.assign({}, lbView.ssort, { [id]: { k: key, flip: key === k ? !flip : false } }); lbSaveView(); renderLeaderboard(); };
-  const head = (key, label) => {
+  const head = (key, lbl) => {
+    const label = Array.isArray(lbl) ? lbl[0] : lbl, shown = Array.isArray(lbl) ? lbTabText(lbl[0], lbl[1]) : lbl;
     const on = key === k, dir = key === "name" ? (flip ? "descending" : "ascending") : (flip ? !(col && col.low) : !!(col && col.low)) ? "ascending" : "descending";
     return h("th", { "aria-sort": on ? dir : "none", class: on ? "on" : "" },
-      h("button", { type: "button", class: "lbs-sort", "data-k": key, title: key === "name" ? "A to Z" : `Rank by ${label.toLowerCase()}`, onclick: () => pick(key) }, label, on ? h("i", { text: flip ? " ▲" : " ▼" }) : null));
+      h("button", { type: "button", class: "lbs-sort", "data-k": key, title: key === "name" ? "A to Z" : `Rank by ${label.toLowerCase()}`, onclick: () => pick(key) }, shown, on ? h("i", { text: flip ? " ▲" : " ▼" }) : null));
   };
   return h("div", { class: "lb-scroll" }, h("table", { class: "lb-table lb-rank", id, "data-k": k },
     h("thead", null, h("tr", null, head("name", cols[0].label), cols.slice(1).map(c => head(c.k, c.label)))),
     h("tbody", null, rows.map(({ t, p, medal }) => h("tr", { "data-team": t.name },
-      h("th", null, h("span", { class: "lbs-who" }, k === "name" ? null : h("span", { class: "lbs-place" + (p && p <= 3 && medal ? ` p${p}` : ""), text: p ? String(p) : "–" }), t.name, t.note ? h("small", { class: "lbs-note", text: t.note }) : null)),
+      h("th", null, h("span", { class: "lbs-who" }, k === "name" ? null : h("span", { class: "lbs-place" + (p && p <= 3 && medal ? ` p${p}` : ""), text: p ? String(p) : "–" }),
+        h("span", { class: "lbs-name", title: t.name, text: t.name }), t.note ? h("small", { class: "lbs-note", text: t.note }) : null)),
       cols.slice(1).map(c => h("td", { class: c.k === k ? "on" : "", text: c.f(t) }))))),
     foot ? h("tfoot", null, h("tr", null, foot.map((c, i) => h(i ? "td" : "th", { text: c })))) : null));
 }
@@ -8100,9 +8113,9 @@ function lbPerformanceEl() {
   const rvOf = t => (!t.reviewer ? R(t).reviews : custom ? spanRv(t.name) : per === "ytd" ? ytdRv(t.name) : monthRv(t.name));
   const rvBoard = board.concat(rvOnly), rvTotal = rvBoard.reduce((n, t) => n + rvOf(t), 0);
   const reviews = week ? h("p", { class: "meta", id: "lbsNoReviews", text: "5-star reviews are counted by month: see them under Month or Year to date." }) : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
-    per === "ytd" || custom ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: custom ? "Reviews" : lbYtdText(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) }], rvBoard, () => true, ["Total", fmt(rvTotal)])
-      : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: lbMonthLong(month), def: true, v: rvOf, f: t => fmt(rvOf(t)) },
-        { k: "ytd", label: lbYtdText(month), v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], rvBoard, () => true, ["Total", fmt(rvTotal), fmt(rvBoard.reduce((n, t) => n + ytdRv(t.name), 0))]));
+    per === "ytd" || custom ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: custom ? "Reviews" : [lbYtdText(month), "Year"], def: true, v: rvOf, f: t => fmt(rvOf(t)) }], rvBoard, () => true, ["Total", fmt(rvTotal)])
+      : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: [lbMonthLong(month), lbMonthLong(month).slice(0, 3)], def: true, v: rvOf, f: t => fmt(rvOf(t)) },
+        { k: "ytd", label: [lbYtdText(month), "Year"], v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], rvBoard, () => true, ["Total", fmt(rvTotal), fmt(rvBoard.reduce((n, t) => n + ytdRv(t.name), 0))]));
   const offEl = off.length ? h("div", { class: "panel", id: "lbsOff" }, h("h2", { text: "Not ranked" }),
     h("p", { class: "meta", text: `Typed in ${lbMonthLong(month)} for days someone wasn't on the leaderboard: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. That revenue and those sales aren't ranked; the reviews count toward his year once he's on the leaderboard. If a day should be ranked, change his Since day in Employees.` })) : null;
   // jobs to check, for those who type the numbers: sales that add up to more than the job's revenue
@@ -8119,7 +8132,7 @@ function lbPerformanceEl() {
   const helpEl = helpers.length ? h("div", { class: "panel", id: "lbsHelpers" }, h("h2", { text: "Not on the leaderboard" }),
     h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "lbsHelpTable" },
       h("thead", null, h("tr", null, ["Helper", "Jobs", "Days", "Revenue", "Sales"].map(c => h("th", { text: c })))),
-      h("tbody", null, helpers.map(x => h("tr", { "data-team": x.name }, h("th", null, h("span", { class: "lbs-who" }, x.name, x.unit ? h("small", { class: "lbs-note", text: x.unit }) : null)),
+      h("tbody", null, helpers.map(x => h("tr", { "data-team": x.name }, h("th", null, h("span", { class: "lbs-who" }, h("span", { class: "lbs-name", title: x.name, text: x.name }), x.unit ? h("small", { class: "lbs-note", text: x.unit }) : null)),
         h("td", { text: fmt(x.jobs) }), h("td", { text: fmt(x.workDays) }), h("td", { text: lbMoney(x.revenue) }), h("td", { text: lbMoney(x.sales) })))))),
     h("p", { class: "meta", text: "Not ranked. A job and a work day for each shared job they worked on, their share where the job is split, and anything typed on their own card." })) : null;
   // one line under the pickers: the days this covers, the newest day typed, the last save
