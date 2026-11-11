@@ -3694,7 +3694,7 @@ async function refresh(quiet) {
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     noteApi(out);
     noteSupplies(out.supplies);
-    if (roleChanged) applyRole();   // what this person may see changed
+    if (roleChanged) { lbForget(); applyRole(); }   // what this person may see changed (and so the leaderboard numbers they get)
     if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping() && (!lbData || !lbFresh)) lbLoad();   // the first time, once it's known who this is
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
@@ -4069,6 +4069,7 @@ function showSignIn(message, mode) {
 
 function signOut(message) {
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
+  lbForget();
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
@@ -5429,7 +5430,7 @@ async function openUsers() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
     h("p", { text: apiLevel >= SUP_API
-      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings) and Leaderboard numbers (they type each day's numbers and set up the teams)."
+      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)."
       : "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
     h("fieldset", null, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
@@ -6297,6 +6298,7 @@ function accessChips(selected, onchange, idPrefix) {
   const lists = (supplies && supplies.lists) || [];
   const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]),
     apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
+    apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
     apiLevel >= OF_API ? [["office", "Office"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
@@ -6324,7 +6326,8 @@ const LB_MODES_API = 33;                               // ... and with separate 
 const LB_PEOPLE_API = 34;                              // ... and with renaming a person, emails and phone numbers
 const LB_FAST_API = 35;                                // ... and answering with just what changed (quick, frequent checks)
 const LB_DAYHELP_API = 36;                             // ... and keeping who helped on a day total
-const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import"];   // sees the standings; types the numbers
+const LB_RVONLY_API = 37;                              // ... and someone who types only the 5-star reviews
+const LB_ACCESS_KEYS = ["leaderboard", "leaderboard-import", "leaderboard-reviews"];   // sees the standings; types the numbers; types the 5-star reviews
 const K_LB = "voda.lb2", K_LB_VIEW = "voda.lbView2";
 let lbData = store.get(K_LB);                          // { config, months: { "2026-11": doc }, names, canEdit, year, at }
 let lbLoading = false, lbErr = "", lbOld = false;
@@ -6338,6 +6341,10 @@ const LB_PER = { lastweek: "Last week", wtd: "Week to date", month: "Month", ytd
 const LB_WEEK_PER = ["wtd", "lastweek"];
 const canSeeLb = () => isAdmin() || userAccess().some(a => LB_ACCESS_KEYS.includes(a));
 const canEditLb = () => isAdmin() || userAccess().includes("leaderboard-import");
+/** Sees Performance (the standings): Admins, Leaderboard, Leaderboard numbers. */
+const lbSeesBoard = () => isAdmin() || userAccess().some(a => a === "leaderboard" || a === "leaderboard-import");
+/** Types only the 5-star reviews (ticked for Leaderboard reviews, not Leaderboard numbers): Production shows Reviews alone. */
+const lbRvTyper = () => !(canEditLb() && (!lbData || lbData.canEdit !== false)) && userAccess().includes("leaderboard-reviews");
 const lbNowYear = () => clockNow().getFullYear();
 /** The year on screen: a past year picked in Performance (Enter numbers is always this year). */
 const lbYear = () => (lbView.year && lbView.year < lbNowYear() && lbView.tab !== "enter" && lbView.tab !== "payroll" ? lbView.year : lbNowYear());
@@ -6417,6 +6424,13 @@ function lbAgo() {
   if (!b) return null;
   if (b.ago === undefined) b.ago = lbWeekAgo(lbData.config, lbData.months, lbYear(), b.newest);
   return b.ago;
+}
+/** Drop the leaderboard numbers kept on this device (signed out, or what this person may see changed): the next
+ *  load gets them fresh, only what they may see. Numbers still being saved are kept until they're saved. */
+function lbForget() {
+  lbYearCache = {}; lbFresh = false;
+  if (lbSaving || Object.keys(lbPending).length) return;
+  lbData = null; lbCache = null; store.del(K_LB);
 }
 function lbTouch() { if (lbData) { lbData.v = (lbData.v || 0) + 1; if (lbData.year === lbNowYear()) store.set(K_LB, lbData); } }
 /** Past years once loaded (their numbers don't change); this year's while a past one is on screen. */
@@ -6633,8 +6647,9 @@ function renderLeaderboard() {
     return;
   }
   const edit = canEditLb() && lbData.canEdit !== false;
-  if (!LB_TABS[lbView.tab] || (!edit && lbView.tab === "enter")) lbView.tab = "performance";
-  if (lbView.tab === "payroll" && !canSeePayroll()) lbView.tab = "performance";
+  // Performance for whoever sees the standings; Production for whoever types numbers or reviews; Payroll as switched on
+  const tabOk = k => (k === "performance" ? lbSeesBoard() : k === "enter" ? edit || lbRvTyper() : k === "payroll" && canSeePayroll());
+  if (!LB_TABS[lbView.tab] || !tabOk(lbView.tab)) lbView.tab = lbSeesBoard() ? "performance" : "enter";
   const cfg = lbCfg();
   const top = h("div", { class: "lb-top" },
     h("h2", { class: "lb-title", text: "Leaderboard" }),
@@ -6645,7 +6660,7 @@ function renderLeaderboard() {
       // this line keeps its height and the tabs don't move)
       lbView.tab === "payroll" && canSeePayroll() && cfg.teams.length && !lbNarrow() ? lbPayTools() : null));
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
-    Object.entries(LB_TABS).filter(([k]) => (k !== "enter" || edit) && (k !== "payroll" || canSeePayroll())).map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
+    Object.entries(LB_TABS).filter(([k]) => tabOk(k)).map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
       title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
       onclick: () => { if (lbView.tab === "enter") { lbFlush(); lbCardsLeft(); } lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, lbTabText(t))));
   if (!cfg.teams.length) {
@@ -6905,7 +6920,7 @@ function lbGoDay(day) {
   renderLeaderboard();
 }
 function lbEnterEl() {
-  const P = lbParts(), y = lbYear(), part = P[lbView.part] ? lbView.part : "trucks";
+  const P = lbRvTyper() ? { reviews: LB_PARTS.reviews } : lbParts(), y = lbYear(), part = P[lbView.part] ? lbView.part : Object.keys(P)[0];
   const day = lbEnterDay(), key = day.slice(0, 7), month = Number(key.slice(5));
   const parts = lbSeg(Object.entries(P).map(([k, t]) => [k, lbTabText(t)]), part, k => { lbFlush(); lbCardsLeft(); lbView.part = k; lbSaveView(); renderLeaderboard(); }, "What to enter");
   parts.classList.add("lb-parts");
@@ -7003,6 +7018,10 @@ function lbSaleGoalText(day, team) {
 }
 function lbDayTotalText(day) {
   const d = lbDayDoc(day);
+  if (lbRvTyper()) {   // types only the reviews: only the reviews
+    const n = Object.values(d.r || {}).reduce((sum, a) => sum + (lbEntry(a, LB_REVIEW.length)[0] || 0), 0);
+    return `${lbDayText(day)} total: ${fmt(n)} five-star review${n === 1 ? "" : "s"}`;
+  }
   let rev = 0, jobs = 0, sales = 0;
   for (const a of Object.values(d.t || {})) { const e = lbEntry(a, LB_TRUCK.length); if (e.length) { rev += e[2] || 0; jobs += e[0] || 0; } }
   for (const a of Object.values(d.s || {})) { const e = lbEntry(a, LB_SALE.length); if (e.length) sales += (e[0] || 0) + (e[1] || 0) + (e[2] || 0) + (e[3] || 0); }
