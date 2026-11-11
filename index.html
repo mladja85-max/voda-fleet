@@ -6321,8 +6321,8 @@ const lbDayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,
 const lbToday = () => lbDayKey(clockNow());
 const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0)).toLocaleString("en-US");
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
-const LB_TABS = { performance: "Performance", enter: "Enter numbers", payroll: "Payroll" };
-const LB_SHORT = { "Enter numbers": "Numbers", "Technician sales": "Sales", "Whole company": "Company", "Week to date": "Week", "Year to date": "Year" };   // a phone's names, so every row of buttons fits on one line
+const LB_TABS = { performance: "Performance", enter: "Production", payroll: "Payroll" };   // Production: where each day's numbers are typed
+const LB_SHORT = { "Technician sales": "Sales", "Whole company": "Company", "Week to date": "Week", "Year to date": "Year" };   // a phone's names, so every row of buttons fits on one line
 /** A tab's name: the long one, and on a phone the short one. */
 /** This year's jobs to check (sales over the job's revenue, or sales with no revenue), newest first. */
 const lbToCheck = () => { const y = lbYear(); return lbData ? lbJobFlags(lbData.months, `${y}-01-01`, `${y}-12-31`) : []; };
@@ -6620,7 +6620,7 @@ function renderLeaderboard() {
   if (!cfg.teams.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
       h("h2", { text: "No teams yet" }),
-      h("p", { class: "meta", text: edit ? "Tap Teams and add each truck's team with its unit (Cleaning or Restoration). Then type each day's numbers under Enter numbers." : "An admin hasn't set up the teams yet." }),
+      h("p", { class: "meta", text: edit ? "Tap Teams and add each truck's team with its unit (Cleaning or Restoration). Then type each day's numbers under Production." : "An admin hasn't set up the teams yet." }),
       edit ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbTeams() }, "Add teams")) : null),
       ...(lbErr ? [h("p", { class: "dlg-err", text: lbErr })] : []));
     return;
@@ -6812,7 +6812,7 @@ function lbWeekRank(start, group) {
   const all = lbWeek(lbB().weeks, start);
   const list = group === "Company" ? all : all.filter(r => r.group === group);
   if (!list.length) return h("p", { class: "meta", id: "lbWeek", text: all.length ? `No ${group} trucks on the leaderboard that week.`
-    : `Nothing typed for the week of ${lbWeekText(start)}${start === lbThisMonday() ? " yet" : ""}. A week is ranked from the trucks' days under Enter numbers.` });
+    : `Nothing typed for the week of ${lbWeekText(start)}${start === lbThisMonday() ? " yet" : ""}. A week is ranked from the trucks' days under Production.` });
   const max = Math.max(1, ...list.map(r => r.revenue));
   const ranks = lbRanks(list.map(r => r.revenue));
   return h("ol", { class: "lb-list", id: "lbWeek" }, list.map((r, i) => [ranks[i], r]).sort((a, b) => a[0] - b[0] || a[1].team.localeCompare(b[1].team)).map(([p, r]) =>
@@ -6833,8 +6833,8 @@ function lbHowEl() {
 }
 
 /* ---- entering the numbers ---- */
-const LB_PARTS = { trucks: "Trucks", sales: "Technician sales", reviews: "Reviews" };
-/** The parts of Enter numbers. His sales are typed on his Trucks card (+ Sale), the same numbers, so Technician sales
+const LB_PARTS = { trucks: "Revenue & sales", sales: "Technician sales", reviews: "Reviews" };   // (key "trucks": the cards were once called Trucks)
+/** The parts of Production. His sales are typed on his Revenue & sales card (+ Sale), the same numbers, so Technician sales
  *  isn't a part of its own; only a Google script too old for that card still shows it. */
 const lbParts = () => (apiLevel && apiLevel < LB_JOBS_API ? LB_PARTS : { trucks: LB_PARTS.trucks, reviews: LB_PARTS.reviews });
 /** A day has something typed for a part. Trucks counts his sales too when they're typed there. */
@@ -7572,17 +7572,17 @@ function lbJobsTotalText(jobs) {
   return `${jobs.length} job${jobs.length === 1 ? "" : "s"}${sold ? ` · sold on ${sold}` : ""} · ${lbMoney(rev)} revenue · ${lbMoney(sales)} sales · ${1 + crew.size} tech${crew.size ? "s" : ""}${shared ? ` · ${shared} shared` : ""}` +
     (check.length ? ` · ⚠ check job ${check.join(", ")}` : "");
 }
-/** Sales tab, a truck typed by job: his sales that day come from his jobs on Trucks. */
+/** Sales tab, a truck typed by job: his sales that day come from his jobs on Revenue & sales. */
 function lbSalesFromJobs(t, day) {
   const jobs = lbJobsOf(day, t.name), e = lbJobsSales(jobs);
   const p = lbDayOf(day, t.name), gave = p ? p.gave.filter(x => x.splitSales && x.sales.some(Boolean)) : [];
   return h("div", { class: "lb-card lb-fromjobs" + (t.off ? " off" : ""), "data-team": t.name, "data-part": "s" },
     lbCardHead(t),
-    h("p", { class: "lbj-from", text: `Typed by job on Trucks (${jobs.length} job${jobs.length === 1 ? "" : "s"}, sold on ${lbSoldOn(jobs)}): ` + lbDayKinds(day, e).map(i => `${LB_SALE[i].label} ${lbMoney(e[i] || 0)}`).join(" · ") }),
+    h("p", { class: "lbj-from", text: `Typed by job on Revenue & sales (${jobs.length} job${jobs.length === 1 ? "" : "s"}, sold on ${lbSoldOn(jobs)}): ` + lbDayKinds(day, e).map(i => `${LB_SALE[i].label} ${lbMoney(e[i] || 0)}`).join(" · ") }),
     gave.length ? h("p", { class: "lbj-from lbj-after", text: `After the split with ${[...new Set(gave.map(x => x.who))].join(", ")}: ` + LB_SALE.slice(0, 4).map((f, i) => (e[i] ? `${f.label} ${lbCash(p.sales[i])}` : "")).filter(Boolean).join(" · ") }) : null,
     lbHelpEl(day, t.name, true),
     h("p", { class: "lb-card-foot", text: lbSaleFoot(day, t.name) }),
-    h("button", { class: "btn ghost small", type: "button", onclick: () => { lbFlush(); lbView.part = "trucks"; lbSaveView(); renderLeaderboard(); } }, "Change on Trucks"));
+    h("button", { class: "btn ghost small", type: "button", onclick: () => { lbFlush(); lbView.part = "trucks"; lbSaveView(); renderLeaderboard(); } }, "Change on Revenue & sales"));
 }
 function lbSalesEl(day) {
   const d = lbDayDoc(day), key = day.slice(0, 7);
@@ -7593,7 +7593,7 @@ function lbSalesEl(day) {
       : lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name), lbHelpEl(day, t.name, true),
         i => i === 2 && !lbDayKinds(day, lbEntry((d.s || {})[t.name], LB_SALE.length)).includes(2)))
       : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
-    h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: how many of his jobs that day he sold on, for sale per job (the same number as Sale jobs on Trucks). A truck typed by job on Trucks gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }));
+    h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: how many of his jobs that day he sold on, for sale per job (the same number as Sale jobs on Revenue & sales). A truck typed by job on Revenue & sales gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }));
 }
 /** A team's 5-star reviews: that day, the month (with any total typed for the whole month the older way) and the year. */
 function lbReviewFoot(day, team) {
@@ -8234,7 +8234,7 @@ function openLbTeams() {
   const offList = h("div", { class: "lb-teams", id: "lbOffList" });
   // left the company: his past months stay in the standings as they were
   const formerList = h("div", { class: "lb-teams", id: "lbFormerList" });
-  const formerBox = h("details", { class: "lb-former", id: "lbFormer" }, h("summary"), h("p", { class: "hint", text: "Left the company. Their past months stay in the standings as they were; after their last month they're left out of Enter numbers, Pay rates, Worked with and Job history. Someone who's still here but off a truck (a supervisor, an estimator): untick Left the company and he moves to Not on the leaderboard." }), formerList);
+  const formerBox = h("details", { class: "lb-former", id: "lbFormer" }, h("summary"), h("p", { class: "hint", text: "Left the company. Their past months stay in the standings as they were; after their last month they're left out of Production, Pay rates, Worked with and Job history. Someone who's still here but off a truck (a supervisor, an estimator): untick Left the company and he moves to Not on the leaderboard." }), formerList);
   const formerCount = () => { const n = formerList.children.length; formerBox.hidden = !n; formerBox.querySelector("summary").textContent = `Former employees (${n})`; };
   /** Remove: someone added by mistake (no numbers in any year) comes off the list; someone with numbers is marked as
    *  left the company instead, so his past months stay as they are. */
@@ -8295,7 +8295,7 @@ function openLbTeams() {
   for (const r of cfg.reviewers) rvList.append(rvRow(r, false));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Employees" }),
-    h("p", { class: "hint", text: "On the leaderboard: ranked in Performance from the day under Since. Revenue, jobs, work days and sales count only on the days someone is on it; his 5-star reviews count from his first one. Untick the check mark to take someone off from a day you pick; tick Left the company when he's gone. ↑ ↓ set the order of the cards in Enter numbers." }),
+    h("p", { class: "hint", text: "On the leaderboard: ranked in Performance from the day under Since. Revenue, jobs, work days and sales count only on the days someone is on it; his 5-star reviews count from his first one. Untick the check mark to take someone off from a day you pick; tick Left the company when he's gone. ↑ ↓ set the order of the cards in Production." }),
     list,
     h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: startDay.slice(0, 7), on: startDay, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a person to the leaderboard")),
     h("div", { class: "lb-rvsec" },
