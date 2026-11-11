@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VODA Prime</title>
-<meta name="description" content="VODA Prime: truck maintenance, checklists and the team leaderboard for VODA Cleaning &amp; Restoration.">
+<title>VODA Hub</title>
+<meta name="description" content="VODA Hub: truck maintenance, checklists, the team leaderboard, payroll and office scorecards for VODA Cleaning &amp; Restoration.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="VODA Prime">
+<meta name="apple-mobile-web-app-title" content="VODA Hub">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121a23" media="(prefers-color-scheme: dark)">
@@ -1023,7 +1023,30 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pay-f { display: grid; gap: 2px; font-size: .74rem; font-weight: 600; color: var(--muted); }
 .pay-f input { font: inherit; font-size: .95rem; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
 .lb-payrange { flex-wrap: wrap; align-items: end; }
-.pay-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Settings: a card for who's signed in, then lists of lines that open things */
+.st-me { display: flex; align-items: center; gap: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.st-av { width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font: 700 1.15rem var(--font-display); flex: none; }
+.st-me b { display: block; font-size: 1.02rem; }
+.st-me small { color: var(--muted); font-size: .85rem; }
+.st-grp { margin: 6px 4px -4px; font-size: .7rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.st-list { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.st-row { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px; cursor: pointer; }
+.st-row + .st-row, .st-pass + .st-row, .st-row + .st-pass:not(:empty) { border-top: 1px solid var(--line); }
+.st-row:hover, .st-row:focus-visible { background: var(--surface-2); }
+.st-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.st-row[disabled] { opacity: .7; cursor: progress; }
+.st-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
+.st-ic svg { width: 18px; height: 18px; }
+.st-txt { flex: 1; min-width: 0; }
+.st-txt b { display: block; font-size: .95rem; font-weight: 600; }
+.st-txt small { display: block; color: var(--muted); font-size: .78rem; line-height: 1.25; }
+.st-go { color: var(--muted); font-size: 1.25rem; line-height: 1; transition: transform .15s; }
+.st-row[aria-expanded="true"] .st-go { transform: rotate(90deg); }
+.st-row.out b { color: var(--due); }
+.st-row.out .st-ic { background: var(--due-bg); color: var(--due); }
+.st-pass { display: grid; gap: 10px; padding: 0 14px; }
+.st-pass:not(:empty) { padding: 12px 14px 14px; background: var(--surface-2); }
+.st-ver { text-align: center; color: var(--muted); font-size: .75rem; margin: 0; }
 /* Performance: From and To always on a line of their own under the periods, so nothing moves when Month (with its
    month picker) and the other periods are switched */
 .lb-bar > #lbRange { flex-basis: 100%; }
@@ -1372,7 +1395,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 <header class="topbar">
   <div class="brand">
     <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2b3c"/><path d="M256 92 C318 180 384 248 384 318 A128 128 0 0 1 128 318 C128 248 194 180 256 92 Z" fill="#2fa4da"/> <path d="M196 318 L240 362 L320 272" fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <h1>VODA Prime</h1>
+    <h1>VODA Hub</h1>
   </div>
   <div class="sync" id="syncbar" hidden>
     <span id="syncText">Loading…</span>
@@ -3189,7 +3212,7 @@ function lbPdf(jpegs, width, height, title) {
   add(new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52, 10, 37, 226, 227, 207, 211, 10])); // %PDF-1.4 and a binary marker
   obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
   obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${jpegs.length} >>`);
-  obj(3, `<< /Title ${pdfText(title || "VODA Leaderboard")} /Producer (VODA Prime) >>`);
+  obj(3, `<< /Title ${pdfText(title || "VODA Leaderboard")} /Producer (VODA Hub) >>`);
   jpegs.forEach((jpg, i) => {
     const page = 4 + 3 * i, draw = enc.encode(`q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`);
     obj(page, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${page + 2} 0 R >> >> /Contents ${page + 1} 0 R >>`);
@@ -3668,7 +3691,7 @@ async function apiOnce(action, data, ms) {
     throw { error: "network" };
   } finally { clearTimeout(timer); }
 }
-const MOVED_TEXT = "VODA Prime is moving to its new home. Close the app and open it again in a few minutes. Anything you entered stays on this phone and is sent after that.";
+const MOVED_TEXT = "VODA Hub is moving to its new home. Close the app and open it again in a few minutes. Anything you entered stays on this phone and is sent after that.";
 function errText(e, what) {
   const code = e && e.error;
   if (code === "offline") return `No connection. ${what || "Your numbers"} stay on this phone. Try again when you're back online.`;
@@ -4079,7 +4102,7 @@ function showSignIn(message, mode) {
   $("gate").replaceChildren(
     h("h2", { text: mode === "login" ? "Sign in" : "Set up your account" }),
     h("p", { text: mode === "login"
-      ? (hadOldSession ? "VODA Prime has a login for each person. Sign in, or tap “I have a code” if you were given one." : "Sign in with your own username and passcode.")
+      ? (hadOldSession ? "VODA Hub has a login for each person. Sign in, or tap “I have a code” if you were given one." : "Sign in with your own username and passcode.")
       : "Enter the code an admin gave you, then pick your username and passcode. Setting up the app for the very first time? Use the access code on the Setup tab of the Google Sheet." }),
     form, h("p", null, other));
   if (!isTouch()) setTimeout(() => { const el = $(mode === "code" ? "gateCode" : "gateUser"); if (el) el.focus(); }, 50);
@@ -5338,38 +5361,85 @@ function openEdit(id) {
   }
 }
 
+/* Settings: who's signed in; the team and pay windows this person may open (Users and invites, Employees, Pay rates,
+   Job history); their own passcode; signing out. */
+const ST_ICONS = {
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  emp: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M15 8h2M15 12h2M7 16h10"/>',
+  pay: '<path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  hist: '<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>',
+  key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+  out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>' };
+const stIcon = k => { const s = h("span", { class: "st-ic", "aria-hidden": "true" }); s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ST_ICONS[k]}</svg>`; return s; };
+/** One line of Settings: an icon, what it is, a few words on what's inside, and › when it opens something. */
+const stRow = (id, icon, title, sub, onclick, cls) => h("button", { class: "st-row" + (cls ? " " + cls : ""), type: "button", id, onclick },
+  stIcon(icon), h("span", { class: "st-txt" }, h("b", { text: title }), sub ? h("small", { text: sub }) : null), cls === "out" ? null : h("span", { class: "st-go", "aria-hidden": "true", text: "›" }));
+/** Employees, Pay rates and Job history need the leaderboard's people: loaded first if this window hasn't yet. */
+async function stWithLb(b, open) {
+  if (lbData) { open(); dlg.scrollTop = 0; return; }
+  const was = b.querySelector("small"), keep = was ? was.textContent : "";
+  if (was) was.textContent = "Loading…";
+  b.disabled = true;
+  await lbLoad();
+  b.disabled = false;
+  if (was) was.textContent = keep;
+  if (lbData && b.isConnected) { open(); dlg.scrollTop = 0; }
+  else if (b.isConnected && was) was.textContent = lbErr || "Couldn't load the leaderboard. Try again.";
+}
 function openSettings() {
   const err = h("p", { class: "dlg-err", role: "alert" });
   const pass = (id, label) => h("div", { class: "field" }, h("label", { for: id, text: label }),
     h("input", { id, type: "password", maxlength: "6", autocomplete: id === "st-old" ? "current-password" : "new-password", autocapitalize: "none", autocorrect: "off", spellcheck: "false" }));
-  openDialog(
-    h("h3", { id: "dlgTitle", text: "Settings" }),
-    h("p", null, "Signed in as ", h("strong", { text: session ? session.name : "" }), ` (${session ? session.username : ""}) · `, h("strong", { text: isAdmin() ? "Admin" : "Technician" })),
-    isAdmin() ? h("div", null, h("button", { class: "btn", type: "button", id: "st-users", text: "Users and invites", onclick: openUsers })) : null,
-    h("fieldset", null, h("legend", { text: "Change your passcode" }),
+  // the passcode boxes open under their line when it's tapped
+  const passBox = h("div", { class: "st-pass", id: "st-passbox" });
+  const openPass = ev => {
+    const b = ev.currentTarget, open = b.getAttribute("aria-expanded") === "true";
+    b.setAttribute("aria-expanded", String(!open));
+    if (open) { passBox.replaceChildren(); return; }
+    passBox.replaceChildren(
       h("div", { class: "grid2" }, pass("st-old", "Current passcode"), pass("st-new", "New passcode (4 to 6)"), pass("st-new2", "New passcode again")),
       err,
-      h("div", null, h("button", { class: "btn", type: "button", id: "st-pass", text: "Change passcode", onclick: async () => {
+      h("div", null, h("button", { class: "btn primary", type: "button", id: "st-pass", text: "Change passcode", onclick: async () => {
         const old = $("st-old").value, nw = $("st-new").value;
         if (nw.length < 4 || nw.length > 6) { err.textContent = "New passcode: 4 to 6 characters."; return; }
         if (nw !== $("st-new2").value) { err.textContent = "The new passcodes don't match."; return; }
-        const b = $("st-pass"); b.disabled = true; err.textContent = "";
+        const b2 = $("st-pass"); b2.disabled = true; err.textContent = "";
         try {
           const out = await api("changePasscode", { old, passcode: nw });
           session.token = out.token; store.set(K_SESSION, session);
           closeDialog(); toast("Passcode changed. Your other phones will ask you to sign in again.");
         } catch (e) {
           err.textContent = e && e.error === "bad_login" ? "Current passcode is wrong." : e && e.error === "locked" ? "Too many wrong tries. Wait 15 minutes." : e && e.error === "bad_passcode" ? "New passcode: 4 to 6 characters, no space at the start or end." : errText(e, "Nothing");
-          b.disabled = false;
+          b2.disabled = false;
         }
-      } }))),
-    h("div", { class: "dlg-foot" },
-      h("button", { class: "btn ghost danger", type: "button", id: "st-out", text: "Sign out", onclick: ev => {
-        const n = queue.length, b = ev.currentTarget;
-        if (n && !b.dataset.armed) { b.dataset.armed = "1"; b.textContent = `${n} change${n === 1 ? " isn't" : "s aren't"} sent yet · tap again to sign out`; return; }
+      } })));
+    const first = $("st-old");
+    if (first && !isTouch()) first.focus();
+  };
+  const lbOk = !apiLevel || apiLevel >= LB_API;
+  const team = [
+    isAdmin() ? stRow("st-users", "users", "Users and invites", "Who can sign in and what each one sees", openUsers) : null,
+    canEditLb() && lbOk ? stRow("st-emp", "emp", "Employees", "Who's on the leaderboard, their unit and role", ev => stWithLb(ev.currentTarget, () => openLbTeams())) : null,
+    canSeePayroll() && lbOk ? stRow("st-rates", "pay", "Pay rates", "Everyone's day rate and commissions", ev => stWithLb(ev.currentTarget, () => openPayRates())) : null,
+    canSeePayroll() && lbOk ? stRow("st-jobs", "hist", "Job history", "Every job and every change, to download", ev => stWithLb(ev.currentTarget, () => openJobHistory(lbPayView().r))) : null].filter(Boolean);
+  const name = session ? session.name || session.username || "" : "";
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Settings" }),
+    h("div", { class: "st-me" }, h("span", { class: "st-av", "aria-hidden": "true", text: (name[0] || "?").toUpperCase() }),
+      h("span", null, h("b", { text: name }), h("small", { text: `${session && session.username ? "@" + session.username + " · " : ""}${isAdmin() ? "Admin" : "Technician"}` }))),
+    team.length ? h("p", { class: "st-grp", text: "Team and pay" }) : null,
+    team.length ? h("div", { class: "st-list", id: "st-team" }, team) : null,
+    h("p", { class: "st-grp", text: "Your account" }),
+    h("div", { class: "st-list" },
+      stRow("st-passrow", "key", "Change passcode", "", openPass),
+      passBox,
+      stRow("st-out", "out", "Sign out", "", ev => {
+        const n = queue.length, b = ev.currentTarget, t = b.querySelector("b");
+        if (n && !b.dataset.armed) { b.dataset.armed = "1"; t.textContent = `${n} change${n === 1 ? " isn't" : "s aren't"} sent yet · tap again to sign out`; return; }
         closeDialog(); signOut(n ? "Your changes will be sent when you sign back in." : "");
-      } }),
-      h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
+      }, "out")),
+    h("p", { class: "st-ver", text: "VODA Hub" }));
+  $("st-passrow").setAttribute("aria-expanded", "false");
 }
 
 /** Admin: everyone's account, invites, roles, turning accounts off, and passcode resets. */
@@ -5379,7 +5449,7 @@ async function openUsers() {
   const codeBox = h("div");
   const appUrl = location.origin + location.pathname;
   const showCode = (name, code, isReset) => {
-    const msg = `${name}, here is your VODA Prime code: ${code}\nOpen ${appUrl} , tap "I have a code", enter it, then pick your username and passcode. The code works once, for 14 days.`;
+    const msg = `${name}, here is your VODA Hub code: ${code}\nOpen ${appUrl} , tap "I have a code", enter it, then pick your username and passcode. The code works once, for 14 days.`;
     codeBox.replaceChildren(h("div", { class: "code-box", id: "u-codebox" },
       h("span", { text: `${isReset ? "Passcode reset code" : "Invite code"} for ${name}` }),
       h("span", { class: "code", id: "u-code", text: code }),
@@ -5608,7 +5678,7 @@ function buildPrintReport() {
   });
   const td = (v, cls) => h("td", { class: cls || null, text: v == null ? "" : String(v) });
   $("printReport").replaceChildren(...[
-    h("h1", { text: "VODA Prime · Fleet maintenance" }),
+    h("h1", { text: "VODA Hub · Fleet maintenance" }),
     h("p", { class: "pr-sub", text: `Report · ${st.text} · ${view.division ? view.division + " · " : ""}${rows.length} trucks` }),
     h("div", { class: "pr-sum" }, h("span", { text: `${nDue} overdue` }), h("span", { text: `${nSoon} due soon` }), h("span", { text: `${nOk} OK` })),
     h("table", null,
@@ -6656,7 +6726,7 @@ function renderLeaderboard() {
   if (lbOld || (apiLevel && apiLevel < LB_API && !lbData)) {
     box.replaceChildren(h("div", { class: "panel" },
       h("h2", { text: "One more step: update the Google script" }),
-      h("p", { class: "meta", text: "The Leaderboard needs the newest Google script. In the VODA Prime Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+      h("p", { class: "meta", text: "The Leaderboard needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
     return;
   }
   if (!lbData || lbData.year !== lbYear()) {
@@ -6673,10 +6743,8 @@ function renderLeaderboard() {
     h("h2", { class: "lb-title", text: "Leaderboard" }),
     h("div", { class: "lb-acts" },
       lbView.tab === "performance" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null,
-      edit ? h("button", { class: "btn", type: "button", id: "lbTeams", onclick: () => openLbTeams() }, "Employees") : null,
-      // Payroll's own tools, up here with Employees, away from its days (a phone: a row of their own on Payroll, so
-      // this line keeps its height and the tabs don't move)
-      lbView.tab === "payroll" && canSeePayroll() && cfg.teams.length && !lbNarrow() ? lbPayTools() : null));
+      // Employees, Pay rates and Job history are in Settings
+      ));
   const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
     Object.entries(LB_TABS).filter(([k]) => tabOk(k)).map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
       title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
@@ -6684,7 +6752,7 @@ function renderLeaderboard() {
   if (!cfg.teams.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" },
       h("h2", { text: "No teams yet" }),
-      h("p", { class: "meta", text: edit ? "Tap Teams and add each truck's team with its unit (Cleaning or Restoration). Then type each day's numbers under Production." : "An admin hasn't set up the teams yet." }),
+      h("p", { class: "meta", text: edit ? "Tap Add teams (or Settings › Employees) and add each truck's team with its unit (Cleaning or Restoration). Then type each day's numbers under Production." : "An admin hasn't set up the teams yet." }),
       edit ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbTeams() }, "Add teams")) : null),
       ...(lbErr ? [h("p", { class: "dlg-err", text: lbErr })] : []));
     return;
@@ -6960,7 +7028,7 @@ function lbEnterEl() {
       })));
     out.push(part === "trucks" ? lbTrucksEl(day) : part === "sales" ? lbSalesEl(day)
       : apiLevel && apiLevel < LB_RV_API ? h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
-        h("p", { class: "meta", text: "Typing reviews by day needs the newest Google script. In the VODA Prime Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." }))
+        h("p", { class: "meta", text: "Typing reviews by day needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." }))
       : lbReviewsEl(day));
   }
   out.push(h("p", { id: "lbSaveNote", class: "lb-save", role: "status" }));
@@ -7345,7 +7413,7 @@ function lbTrucksEl(day) {
   const card = t => lbTruckCard(t, day);
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
-    teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
+    teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Settings › Employees.` }),
     h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card; Sale jobs is how many of the day's jobs he sold on (left blank: all of them). + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
     jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
 }
@@ -7507,7 +7575,7 @@ function lbJobsCard(t, day) {
         lbSeg(Object.entries(LB_JOB_ROLES), kind, k => openPicker(k), "Technician or assistant"),
         choices.length ? h("select", { class: "lbj-who", "aria-label": `${LB_JOB_ROLES[kind]} who worked on job ${i + 1}` },
           choices.map(p => h("option", { value: p.name, text: `${p.name}${p.role ? ` (${LB_ROLES[p.role]})` : ""}` })))
-          : h("span", { class: "meta", text: `No one else to add as ${LB_JOB_ROLES[kind].toLowerCase()}. Roles are set under Employees.` }),
+          : h("span", { class: "meta", text: `No one else to add as ${LB_JOB_ROLES[kind].toLowerCase()}. Roles are set in Settings › Employees.` }),
         h("div", { class: "lbj-pick-btns" },
           h("button", { class: "btn small primary", type: "button", disabled: !choices.length, onclick: () => {
             const n = picker.querySelector(".lbj-who").value;
@@ -7660,7 +7728,7 @@ function lbSalesEl(day) {
     teams.length ? teams.map(t => apiLevel >= LB_JOBS_API && ((d.j || {})[t.name] || []).length ? lbSalesFromJobs(t, day)
       : lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name), lbHelpEl(day, t.name, true),
         i => i === 2 && !lbDayKinds(day, lbEntry((d.s || {})[t.name], LB_SALE.length)).includes(2)))
-      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Employees.` }),
+      : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Settings › Employees.` }),
     h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: how many of his jobs that day he sold on, for sale per job (the same number as Sale jobs on Revenue & sales). A truck typed by job on Revenue & sales gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }));
 }
 /** A team's 5-star reviews: that day, the month (with any total typed for the whole month the older way) and the year. */
@@ -7712,16 +7780,6 @@ function lbPayRange(per, day) {
   return { from: sun, to: lbAddDays(sun, per === "two" ? 13 : 6) };
 }
 const lbSpanText = (from, to) => { const a = lbDate(from), b = lbDate(to); return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}, ${b.getFullYear()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`; };
-/** A phone's width (the same line the page's phone layout starts at). */
-const lbNarrow = () => typeof matchMedia === "function" && matchMedia("(max-width: 430px)").matches;
-/** Pay rates and Job history (Job history opens on the days shown): beside Employees, or a phone's row on Payroll. */
-const lbPayTools = () => [
-  h("button", { class: "btn", type: "button", id: "payRatesBtn", onclick: () => openPayRates() }, "Pay rates"),
-  h("button", { class: "btn", type: "button", id: "jobHistBtn", onclick: () => openJobHistory(lbPayView().r) }, "Job history")];
-// a phone turned (or a window made narrow or wide) on Payroll: the two buttons go to their place for that width
-if (typeof matchMedia === "function") matchMedia("(max-width: 430px)").addEventListener("change", () => {
-  if (typeof view !== "undefined" && view.tab === "leaderboard" && lbView.tab === "payroll" && !document.querySelector("dialog[open]")) renderLeaderboard();
-});
 /** The days Payroll shows: { per, r: { from, to } }. From – To: any two days (up to LB_PAY_MAX days); the others:
  *  the pay week, two weeks or month of the anchor day. */
 function lbPayView() {
@@ -7809,7 +7867,6 @@ function lbPayrollEl() {
   const dateBox = (id, value, aria, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: aria }),
     h("input", { id, type: "date", value, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": aria, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
   return [
-    lbNarrow() ? h("div", { class: "pay-tools" }, lbPayTools()) : null,
     h("div", { class: "lb-bar" },
       // a period starts from the From day shown; any day typed in From or To makes it From – To (no button lit then)
       lbSeg(LB_PAY_BTNS.map(k => [k, LB_PAY[k]]), per, k => { lbView.pper = k; lbView.pday = r.from; lbSaveView(); renderLeaderboard(); }, "Pay period"),
@@ -7861,9 +7918,9 @@ async function openPayRates() {
   const wait = h("span", { class: "pay-wait", id: "payWait", role: "status", text: had ? "Checking the sheet for newer rates…" : "Loading the saved rates…" });
   openDialog(
     h("h3", { id: "dlgTitle", text: "Pay rates" }),
-    h("p", { class: "hint", text: "Each person's pay: the day rate, the commission on revenue and on each kind of sale, and his usual share of a shared job (what a % split starts with; blank = an equal share). Only admins switched on for Payroll see this. Roles are set under Employees." }),
+    h("p", { class: "hint", text: "Each person's pay: the day rate, the commission on revenue and on each kind of sale, and his usual share of a shared job (what a % split starts with; blank = an equal share). Only admins switched on for Payroll see this. Roles are set in Settings › Employees." }),
     h("div", { class: "pay-top" }, h("button", { class: "btn small", type: "button", id: "payPeople", onclick: () => { closeDialog(); openLbTeams(); } }, "Add or remove people…"), wait),
-    people.length ? list : h("p", { class: "meta", text: "No one yet. Add people under Employees." }),
+    people.length ? list : h("p", { class: "meta", text: "No one yet. Add people in Settings › Employees." }),
     err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
       h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
@@ -8158,7 +8215,7 @@ function lbPerformanceEl() {
       : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: [lbMonthLong(month), lbMonthLong(month).slice(0, 3)], def: true, v: rvOf, f: t => fmt(rvOf(t)) },
         { k: "ytd", label: [lbYtdText(month), "Year"], v: t => ytdRv(t.name), f: t => fmt(ytdRv(t.name)) }], rvBoard, () => true, ["Total", fmt(rvTotal), fmt(rvBoard.reduce((n, t) => n + ytdRv(t.name), 0))]));
   const offEl = off.length ? h("div", { class: "panel", id: "lbsOff" }, h("h2", { text: "Not ranked" }),
-    h("p", { class: "meta", text: `Typed in ${lbMonthLong(month)} for days someone wasn't on the leaderboard: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. That revenue and those sales aren't ranked; the reviews count toward his year once he's on the leaderboard. If a day should be ranked, change his Since day in Employees.` })) : null;
+    h("p", { class: "meta", text: `Typed in ${lbMonthLong(month)} for days someone wasn't on the leaderboard: ${off.map(r => `${r.team} (${lbMoney(r.revenue)} revenue, ${lbMoney(r.sales)} sales, ${fmt(r.reviews)} reviews)`).join("; ")}. That revenue and those sales aren't ranked; the reviews count toward his year once he's on the leaderboard. If a day should be ranked, change his Since day in Settings › Employees.` })) : null;
   // jobs to check, for those who type the numbers: sales that add up to more than the job's revenue
   const flagged = edit ? lbToCheck() : [];
   const openJob = f => { lbView.tab = "enter"; lbView.part = "trucks"; lbView.day = f.day; lbJobOpen[`${f.day}|${f.truck}`] = f.job - 1; lbSaveView(); renderLeaderboard(); };
@@ -8933,7 +8990,7 @@ function renderOffice() {
   if (!box || view.tab !== "office" || !session) return;
   if (ofOld || (apiLevel && apiLevel < OF_API && !ofData)) {
     box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
-      h("p", { class: "meta", text: "The Office scorecards need the newest Google script. In the VODA Prime Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+      h("p", { class: "meta", text: "The Office scorecards need the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
     return;
   }
   if (!ofData || ofData.year !== ofThisYear()) {
@@ -9314,7 +9371,7 @@ function lbPodium(rows, per, g, kicker, key) {
     h("div", { class: "lbs-block" }, String(x.place), h("small", { text: `Score ${x.score}` }))) : h("div");
   return h("section", { class: "lbs-slide" },
     h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: kicker }), h("h2", { text: g === "Company" ? "Whole company" : g })),
-      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
+      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Hub")),
     h("div", { class: "lbs-podium" }, step(top[1], "s2"), step(top[0], "s1"), step(top[2], "s3")),
     rest.length ? h("ol", { class: "lbs-rest" }, rest.map(x => h("li", { "data-team": x.team },
       h("span", { class: "pl", text: String(x.place) }), h("span", { class: "nm", text: x.team }),
@@ -9327,7 +9384,7 @@ const lbWeekSlide = start => lbRevSlide(lbWeek(lbB().weeks, start), `Week of ${l
 function lbRevSlide(rows, kicker, title) {
   return h("section", { class: "lbs-slide", "data-slide": title },
     h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: kicker }), h("h2", { text: title })),
-      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
+      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Hub")),
     h("div", { class: "lbs-week" }, LB_GROUPS.map(g => {
       const list = rows.filter(r => r.group === g).sort((a, b) => b.revenue - a.revenue);
       const max = Math.max(1, ...list.map(r => r.revenue));
@@ -9360,7 +9417,7 @@ function lbSalesSlide(month) {
   const tot = rows.reduce((a, r) => ({ sales: a.sales + r.mtd, jobs: a.jobs + r.jobs }), { sales: 0, jobs: 0 });
   return h("section", { class: "lbs-slide lbs-numbers" },
     h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: `${lbMonthLong(month)} ${y} · month to date · A to Z` }), h("h2", { text: "Technician sales" })),
-      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
+      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Hub")),
     h("div", { class: "lbs-tblwrap" }, h("table", { class: "lbs-tbl lbs-sales" },
       h("thead", null, h("tr", null, h("th", { text: "Tech" }), cols.map(([, l]) => h("th", { text: l })), h("th", { class: "goal", text: `Month to date · goal ${lbMoney(cfg.goal)}` }), h("th", { text: "Need per day" }))),
       h("tbody", null, rows.map(r => h("tr", { "data-team": r.team },
@@ -9381,7 +9438,7 @@ function lbNumbersSlide(g, st, month) {
   const yb = Object.fromEntries(LB_YTD_METRICS.map(m => [m.key, lbBest(rows, r => (ytd[r.team] || {})[m.key] || 0)]));
   return h("section", { class: "lbs-slide lbs-numbers" },
     h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: `${lbMonthLong(month)} ${y} · A to Z` }), h("h2", { text: `${g} numbers` })),
-      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Prime")),
+      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Hub")),
     h("div", { class: "lbs-tblwrap" }, h("table", { class: "lbs-tbl" },
       h("thead", null,
         h("tr", { class: "lbs-grp" }, h("th"), h("th", { colspan: String(LB_MONTH_METRICS.length), text: lbMonthLong(month) }), h("th", { class: "ytd", colspan: String(LB_YTD_METRICS.length), text: `Year to date · ${lbYtdText(month)}` })),
@@ -9694,7 +9751,7 @@ function renderInstall() {
   const bar = $("installbar");
   if (isStandalone() || store.get(K_INSTALL)) { bar.hidden = true; return; }
   if (installEvt) {
-    $("installText").textContent = "Install VODA Prime on this phone so it opens like an app.";
+    $("installText").textContent = "Install VODA Hub on this phone so it opens like an app.";
     $("installBtn").hidden = false; bar.hidden = false;
   } else if (isIOS) {
     $("installText").textContent = "To install on iPhone: tap the Share button (square with an arrow), then Add to Home Screen.";
@@ -9702,7 +9759,7 @@ function renderInstall() {
   } else bar.hidden = true;
 }
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; renderInstall(); });
-window.addEventListener("appinstalled", () => { installEvt = null; $("installbar").hidden = true; toast("VODA Prime installed. Open it from your home screen."); });
+window.addEventListener("appinstalled", () => { installEvt = null; $("installbar").hidden = true; toast("VODA Hub installed. Open it from your home screen."); });
 $("installBtn").addEventListener("click", async () => {
   if (!installEvt) return;
   installEvt.prompt();

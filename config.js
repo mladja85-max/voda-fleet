@@ -1,4 +1,4 @@
-// VODA Prime settings.
+// VODA Hub settings (the app was called VODA Prime; its Google Sheet keeps that name).
 // Backend: the "VODA Prime" sheet owned by info@dnaproclean.com (moved from dnafreshsale@gmail.com on Nov 7, 2026).
 // Paste your Google Apps Script web app URL between the quotes below.
 // It looks like https://script.google.com/macros/s/AKfy...long code.../exec
