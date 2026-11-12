@@ -3434,7 +3434,42 @@ function hcpTest_(req) {
   const pages = got.pages, more = got.more;
   const types = Object.keys(byType).map(function (k) { return byType[k]; }).sort(function (a, b) { return b.cents - a.cents; });
   return { ok: true, company: company, from: from, to: to, items: items, canceled: canceled, pages: pages, more: more, types: types,
-    statuses: statuses, keys: keys, fieldKeys: fieldKeys, tz: Session.getScriptTimeZone() };
+    statuses: statuses, keys: keys, fieldKeys: fieldKeys, tz: Session.getScriptTimeZone(), repairs: hcpRepairsLook_(got.jobs) };
+}
+/** For the Repairs split: the repair jobs (Job type starting with Repair) on those days, what they still say is owed,
+ *  and what one job's invoices and payments look like: their field names and how many, never the values. Read-only. */
+function hcpRepairsLook_(jobs) {
+  const out = { jobs: 0, cents: 0, owed: 0, owedSent: false, invoices: { tried: [], path: "", count: 0, keys: [], payKeys: [], payments: 0 } };
+  let sample = null;
+  jobs.forEach(function (job) {
+    if (!job || /cancel/i.test(String(job.work_status || "")) || revDept_(hcpJobType_(job)) !== "p") return;
+    out.jobs++;
+    out.cents += Number(job.total_amount) || 0;
+    if (job.outstanding_balance !== undefined && job.outstanding_balance !== null) { out.owedSent = true; out.owed += Number(job.outstanding_balance) || 0; }
+    if (!sample && (Number(job.total_amount) || 0) > 0 && job.id) sample = job;
+  });
+  if (!sample) return out;
+  const tries = [["/jobs/" + encodeURIComponent(sample.id) + "/invoices", null], ["/invoices", { job_id: sample.id }]];
+  for (let i = 0; i < tries.length; i++) {
+    const r = hcpGet_(tries[i][0], tries[i][1]);
+    const label = tries[i][1] ? tries[i][0] + "?job_id" : "/jobs/{id}/invoices";
+    out.invoices.tried.push(label + " " + (r.error ? (r.status || r.error) : "ok"));
+    if (r.error) continue;
+    const d = r.data || {};
+    const list = Array.isArray(d) ? d : Array.isArray(d.invoices) ? d.invoices : Array.isArray(d.data) ? d.data : [];
+    out.invoices.path = label;
+    out.invoices.count = list.length;
+    if (list.length) {
+      out.invoices.keys = Object.keys(list[0] || {}).slice(0, 60);
+      for (let j = 0; j < list.length; j++) {
+        const pays = Array.isArray(list[j] && list[j].payments) ? list[j].payments : [];
+        out.invoices.payments += pays.length;
+        if (pays.length && !out.invoices.payKeys.length) out.invoices.payKeys = Object.keys(pays[0] || {}).slice(0, 30);
+      }
+    }
+    break;
+  }
+  return out;
 }
 /** Run this once from the Apps Script editor (choose it, then Run): Google asks to let the script reach Housecall Pro,
  *  and the log says whether the key works. Nothing in Housecall Pro is changed. */

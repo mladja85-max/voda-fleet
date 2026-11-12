@@ -5870,11 +5870,16 @@ function openHcpTest() {
           h("tbody", null, r.types.map(x => h("tr", { "data-type": x.type }, h("th", { text: x.type }), h("td", { text: fmt(x.visits) }), h("td", { text: fmt(x.jobs) }), h("td", { text: lbCash(x.cents / 100) })))),
           h("tfoot", null, h("tr", null, h("th", { text: "Total" }), h("td", { text: fmt(visits) }), h("td", { text: fmt(jobs) }), h("td", { text: lbCash(total / 100) })))))
           : h("p", { class: "meta", text: "No jobs scheduled on those days." }),
+        r.repairs && r.repairs.jobs ? h("p", { class: "meta", id: "hcpRepairs", text: `Repairs: ${fmt(r.repairs.jobs)} job${r.repairs.jobs === 1 ? "" : "s"}, ${lbCash(r.repairs.cents / 100)}${r.repairs.owedSent ? ` · clients still owe ${lbCash(r.repairs.owed / 100)}` : ""}.` }) : null,
         h("p", { class: "hint", text: "Jobs: first visits only (a job's later visits, the ones ending in -2, -3 and so on, add their money but aren't new jobs). Compare these with the Daily Sales Report for the same days." }),
         h("details", { class: "hcp-tech" }, h("summary", { text: "For Claude: the fields Housecall Pro sends" }),
           h("p", { class: "meta", text: `Job: ${(r.keys || []).join(", ") || "–"}` }),
           h("p", { class: "meta", text: `Job fields: ${(r.fieldKeys || []).join(", ") || "–"}` }),
-          h("p", { class: "meta", text: `Statuses: ${Object.entries(r.statuses || {}).map(([k, v]) => `${k || "(none)"} ${v}`).join(", ") || "–"}` })));
+          h("p", { class: "meta", text: `Statuses: ${Object.entries(r.statuses || {}).map(([k, v]) => `${k || "(none)"} ${v}`).join(", ") || "–"}` }),
+          r.repairs ? [
+            h("p", { class: "meta", id: "hcpRepTech", text: `Repairs: ${fmt(r.repairs.jobs)} jobs · ${lbCash(r.repairs.cents / 100)} · still owed: ${r.repairs.owedSent ? lbCash(r.repairs.owed / 100) : "not sent"}` }),
+            h("p", { class: "meta", text: `Invoices (${r.repairs.invoices.tried.join(" · ") || "no repair job to try"}): ${r.repairs.invoices.count} · ${(r.repairs.invoices.keys || []).join(", ") || "–"}` }),
+            h("p", { class: "meta", text: `Payments: ${r.repairs.invoices.payments} · ${(r.repairs.invoices.payKeys || []).join(", ") || "–"}` })] : null));
     } catch (e) {
       out.replaceChildren(h("p", { class: "dlg-err", id: "hcpErr", text: (e && HCP_ERRORS[e.error]) || (e && e.error === "hcp_http" ? `Housecall Pro answered with an error (${e.status}). Try again in a minute.` : errText(e, "Nothing")) }));
     } finally { const b = $("hcpGo"); if (b) b.disabled = false; }
