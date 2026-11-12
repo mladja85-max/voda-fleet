@@ -1030,6 +1030,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .ask-in input:focus { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--surface); }
 .ask-lbl { margin: 2px 2px -4px; font-size: .7rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 .ask-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-groups { display: grid; gap: 10px; }
+.ask-group { display: grid; gap: 6px; }
+.ask-group .ask-lbl { margin: 0 2px; }
 .ask-chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 11px; font: 600 .84rem var(--font-body); color: var(--ink); cursor: pointer; }
 .ask-chip:hover, .ask-chip:focus-visible { border-color: var(--accent); color: var(--accent); }
 .ask-out { display: grid; gap: 10px; }
@@ -5395,15 +5398,31 @@ function openEdit(id) {
 /* ---------- Ask: a few set questions, answered on this phone from the app's own numbers (nothing is sent anywhere) ----------
    Each question has the words that pick it, who may ask it (what they can see), and its answer: a line on top, the
    list behind it, where the numbers come from, and a button to open that screen. */
+const askTrucks = () => allowedTabs().includes("trucks");
+const askLb = () => lbSeesBoard() && (!apiLevel || apiLevel >= LB_API);
+const askSup = () => allowedTabs().includes("supplies");
+const askOf = () => allowedTabs().includes("office") && (!apiLevel || apiLevel >= OF_API);
+// The order matters for typed questions: the first whose words match answers (so "add-on" isn't taken as "on order").
 const ASK_QS = [
-  { id: "oil", q: "Which truck is most urgent for an oil change?", chip: "Trucks due for oil", re: /\boil\b|tm service|service due|maintenance/,
-    ok: () => allowedTabs().includes("trucks"), answer: () => askOil() },
-  { id: "upsale", q: "Which technician needs to improve on up sales?", chip: "Who needs to improve on up sales?", re: /up ?-?sell|up ?-?sale|upsale/,
-    ok: () => lbSeesBoard() && (!apiLevel || apiLevel >= LB_API), lb: true, answer: () => askUpSale() },
-  { id: "products", q: "Which products are we using the most?", chip: "Products we use the most", re: /product|consum|suppl|use the most|using the most|used the most|most ordered|order(ed)? the most/,
-    ok: () => allowedTabs().includes("supplies"), answer: () => askProducts() },
-  { id: "rpj", q: "Who has the best revenue per job?", chip: "Best revenue per job", re: /per job|revenue per|ticket/,
-    ok: () => lbSeesBoard() && (!apiLevel || apiLevel >= LB_API), lb: true, answer: () => askRpj() }];
+  { id: "calls", topic: "Office", q: "Who's behind on the calls goal this week?", chip: "Who's behind on calls this week?", re: /\bcall/, ok: askOf, of: true, answer: () => askCalls() },
+  { id: "products", topic: "Checklists", q: "Which products are we using the most?", chip: "Products we use the most", re: /product|consum|use the most|using the most|used the most|most ordered|order(ed)? the most|supplies (do |are )?we/, ok: askSup, answer: () => askProducts() },
+  { id: "toorder", topic: "Checklists", q: "What needs to be ordered?", chip: "What needs to be ordered?", re: /needs? (to be )?order|to order|order list|missing|to buy/, ok: askSup, answer: () => askToOrder() },
+  { id: "onway", topic: "Checklists", q: "What's been on order the longest?", chip: "Ordered, still not here", re: /on (the )?way|on order|ordered|arriv|deliver|not here|received/, ok: askSup, answer: () => askOnWay() },
+  { id: "checks", topic: "Checklists", q: "Which checklist hasn't been done lately?", chip: "Checklists not done lately", re: /checklist|checked|check list/, ok: askSup, answer: () => askChecks() },
+  { id: "paper", topic: "Trucks", q: "Which inspection, registration or insurance is due?", chip: "Inspection, registration, insurance", re: /inspection|registration|insurance|paperwork|expir|renew/, ok: askTrucks, answer: () => askPaper() },
+  { id: "readings", topic: "Trucks", q: "Which trucks haven't had their miles updated lately?", chip: "Miles not updated lately", re: /mileage|odometer|reading|miles (not |haven|weren|aren)|update(d)? (the )?miles|old miles/, ok: askTrucks, answer: () => askReadings() },
+  { id: "oil", topic: "Trucks", q: "Which truck is most urgent for an oil change?", chip: "Trucks due for oil", re: /\boil\b/, ok: askTrucks, answer: () => askOil() },
+  { id: "tm", topic: "Trucks", q: "Which truckmount services are due?", chip: "Truckmount services due", re: /truck ?mount|\btm\b|service|maintenance/, ok: askTrucks, answer: () => askTm() },
+  { id: "rpj", topic: "Leaderboard", q: "Who has the best revenue per job?", chip: "Best revenue per job", re: /per job|revenue per|ticket/, ok: askLb, lb: true, answer: () => askRpj() },
+  { id: "upsale", topic: "Leaderboard", q: "Which technician needs to improve on up sales?", chip: "Who needs to improve on up sales?", re: /up ?-?sell|up ?-?sale|upsale/, ok: askLb, lb: true, answer: () => askSaleKind("up") },
+  { id: "addon", topic: "Leaderboard", q: "Which technician needs to improve on add-ons?", chip: "Who needs to improve on add-ons?", re: /add ?-?on/, ok: askLb, lb: true, answer: () => askSaleKind("addon") },
+  { id: "goal", topic: "Leaderboard", q: "Who's behind on the sales goal?", chip: "Who's behind on the sales goal?", re: /goal|behind|on pace|pace/, ok: askLb, lb: true, answer: () => askGoal() },
+  { id: "reviews", topic: "Leaderboard", q: "Who has the most 5-star reviews this month?", chip: "Most 5-star reviews", re: /review|star/, ok: askLb, lb: true, answer: () => askReviews() },
+  { id: "lead", topic: "Leaderboard", q: "Who's #1 this month?", chip: "Who's #1 this month?", re: /#1|number one|no\.? ?1\b|\bfirst\b|leading|\blead|\btop\b|winning|ranking|\brank|standing/, ok: askLb, lb: true, answer: () => askLead() }];
+/** How the questions are grouped in the window, and their order there (the most asked first). */
+const ASK_TOPICS = ["Trucks", "Leaderboard", "Checklists", "Office"];
+const ASK_ORDER = ["oil", "tm", "paper", "readings", "lead", "rpj", "upsale", "addon", "goal", "reviews", "products", "toorder", "onway", "checks", "calls"];
+const askShown = qs => qs.slice().sort((a, b) => ASK_ORDER.indexOf(a.id) - ASK_ORDER.indexOf(b.id));
 const askQuestions = () => (session ? ASK_QS.filter(q => q.ok()) : []);
 /** The leaderboard month to answer about: the one with the newest numbers typed (this month, once its first day is in). */
 function askLbMonth() {
@@ -5420,7 +5439,13 @@ function askOil() {
   for (const t of trucks || []) {
     const { r } = evalTruck(t);
     if (r.oil) rows.push({ t, kind: "Oil", left: r.oil.left, per: r.oil.left / (r.oil.interval || 1), unit: "mi", status: r.oil.status });
-    if (r.service && r.service.doNow.some(x => x.oil)) rows.push({ t, kind: `TM oil (${fmt(r.service.level)}-hr service)`, left: r.service.left, per: r.service.left / (r.service.level || 1), unit: "hrs", status: r.service.status });
+    // a self-powered truckmount's own engine oil: the soonest of its services that change it (Legend GT 100 hrs,
+    // Apex 570 200 hrs). A CDS runs on the truck's engine, so its hours are already in the truck's oil miles.
+    const prog = progOf(t), hrs = evalTruck(t).v.hrs;
+    if (prog && prog.selfPowered && isNum(hrs)) {
+      const due = prog.tiers.filter(tr => tr.tasks.some(x => /engine oil/i.test(x))).map(tr => ({ h: tr.h, at: lastDone(t, tr, hrs) + tr.h })).sort((x, y) => x.at - y.at)[0];
+      if (due) rows.push({ t, kind: "TM engine oil", left: due.at - hrs, per: (due.at - hrs) / due.h, unit: "hrs", status: stHrs(due.at - hrs) });
+    }
   }
   if (!rows.length) return { none: "No truck has the miles (or TM hours) of its last oil change entered yet." };
   const rank = { due: 0, soon: 1, ok: 2 };
@@ -5439,16 +5464,18 @@ function askTechs(key) {
   const cfg = lbCfg();
   return lbRecords().filter(r => r.month === key && r.group && r.jobs > 0 && !(lbTeamOf(cfg, r.team) || {}).noSale);
 }
-function askUpSale() {
-  const { key, text } = askLbMonth(), recs = askTechs(key);
+const ASK_KINDS = { up: ["up sale", "up sales"], addon: ["add-on", "add-ons"] };
+/** The lowest of one kind of sale per job in the newest month typed: who needs to improve on it. */
+function askSaleKind(f) {
+  const [one, many] = ASK_KINDS[f], { key, text } = askLbMonth(), recs = askTechs(key);
   if (!recs.length) return { none: `No jobs typed for ${text} yet.` };
-  const per = r => r.up / r.jobs, avg = recs.reduce((n, r) => n + r.up, 0) / recs.reduce((n, r) => n + r.jobs, 0);
-  if (!(avg > 0)) return { none: `No up sales typed for ${text} yet, for anyone.`, open: ["Open the Leaderboard", askOpenLb] };
-  // the lowest up sale per job first; at the same amount, the one with more jobs (more chances missed)
+  const per = r => r[f] / r.jobs, avg = recs.reduce((n, r) => n + r[f], 0) / recs.reduce((n, r) => n + r.jobs, 0);
+  if (!(avg > 0)) return { none: `No ${many} typed for ${text} yet, for anyone.`, open: ["Open the Leaderboard", askOpenLb] };
+  // the lowest per job first; at the same amount, the one with more jobs (more chances missed)
   const low = recs.slice().sort((a, b) => per(a) - per(b) || b.jobs - a.jobs), w = low[0];
-  return { lead: [`${w.team} needs the most help on up sales:`, ` ${lbMoney(per(w))} per job, against ${lbMoney(avg)} for everyone.`],
-    items: low.slice(0, 5).map(r => ({ name: r.team, detail: `${lbMoney(per(r))} per job · ${lbMoney(r.up)} up sale on ${askPlural(r.jobs, "job")}`, cls: per(r) < avg ? "soon" : "" })),
-    note: `${text}, from the Leaderboard. Lowest up sale per job first; below the average in amber.`, open: ["Open the Leaderboard", askOpenLb] };
+  return { lead: [`${w.team} needs the most help on ${many}:`, ` ${lbMoney(per(w))} per job, against ${lbMoney(avg)} for everyone.`],
+    items: low.slice(0, 5).map(r => ({ name: r.team, detail: `${lbMoney(per(r))} per job · ${lbMoney(r[f])} ${one} on ${askPlural(r.jobs, "job")}`, cls: per(r) < avg ? "soon" : "" })),
+    note: `${text}, from the Leaderboard. Lowest ${one} per job first; below the average in amber.`, open: ["Open the Leaderboard", askOpenLb] };
 }
 function askRpj() {
   const { key, text } = askLbMonth(), all = askTechs(key);
@@ -5478,6 +5505,122 @@ function askProducts() {
     note: `From the checklists: everything asked for in the last ${ASK_DAYS} days (removed items left out). Most asked for first.`,
     open: ["Open the order list", () => { closeDialog(); setTab("supplies", "orders"); }] };
 }
+const ASK_RANK = { due: 0, soon: 1, ok: 2 };
+const askOpenTruck = t => () => { closeDialog(); setTab("trucks"); openDetails(t.id); };
+function askTm() {
+  const rows = [];
+  for (const t of trucks || []) { const { r } = evalTruck(t); if (r.service) rows.push({ t, s: r.service }); }
+  if (!rows.length) return { none: "No truck has its truckmount hours entered yet." };
+  rows.sort((a, b) => (ASK_RANK[a.s.status] ?? 3) - (ASK_RANK[b.s.status] ?? 3) || a.s.left - b.s.left);
+  const amt = s => (s.left <= 0 ? `${fmt(Math.round(-s.left))} hrs over` : `due in ${fmt(Math.round(s.left))} hrs`);
+  const top = rows[0], name = label(top.t), svc = s => `${fmt(s.level)}-hr service`;
+  const lead = top.s.status === "due" ? [`${name} is the most urgent:`, ` its ${svc(top.s)} is ${amt(top.s)}.`]
+    : top.s.status === "soon" ? ["Nothing is overdue.", ` Next up: ${name}, ${svc(top.s)} ${amt(top.s)}.`]
+    : ["Nothing is due soon.", ` The closest is ${name}: ${svc(top.s)} ${amt(top.s)}.`];
+  return { lead, items: rows.slice(0, 5).map(x => ({ name: label(x.t), detail: `${svc(x.s)} · ${amt(x.s)}`, cls: x.s.status })),
+    note: "From the Trucks tab: the TM hours entered so far. Most urgent first.", open: [`Open ${name}`, askOpenTruck(top.t)] };
+}
+function askPaper() {
+  const rows = [];
+  for (const t of trucks || []) for (const p of evalTruck(t).pw) rows.push({ t, p });
+  if (!rows.length) return { none: "No truck has an inspection, registration or insurance date entered yet." };
+  rows.sort((a, b) => a.p.days - b.p.days);
+  const when = p => (p.days < 0 ? `expired ${askPlural(-p.days, "day")} ago (${p.shown})` : p.days === 0 ? `due today (${p.shown})` : `due in ${askPlural(p.days, "day")} (${p.shown})`);
+  const soon = rows.filter(x => x.p.status !== "ok"), top = rows[0], name = label(top.t);
+  const lead = soon.length ? [`${askPlural(soon.length, "date")} to take care of.`, ` First: ${name}, ${top.p.label.toLowerCase()} ${when(top.p)}.`]
+    : ["Nothing is due in the next 30 days.", ` The next one: ${name}, ${top.p.label.toLowerCase()} ${when(top.p)}.`];
+  return { lead, items: (soon.length ? soon : rows.slice(0, 3)).slice(0, 8).map(x => ({ name: label(x.t), detail: `${x.p.label} · ${when(x.p)}`, cls: x.p.status === "ok" ? "" : x.p.status })),
+    note: "From the Trucks tab: safety inspection, registration and insurance dates. Within 30 days in amber, past due in red.", open: [`Open ${name}`, askOpenTruck(top.t)] };
+}
+const ASK_STALE_DAYS = 7;
+function askReadings() {
+  if (!(trucks || []).length) return { none: "No trucks yet." };
+  const now = clockNow().getTime();
+  const rows = trucks.map(t => { const at = t.readingAt ? new Date(t.readingAt) : null; return { t, at: at && !isNaN(at) ? at : null, age: at && !isNaN(at) ? Math.floor((now - at.getTime()) / 864e5) : Infinity }; })
+    .sort((a, b) => b.age - a.age);
+  const stale = rows.filter(x => x.age >= ASK_STALE_DAYS);
+  const ago = x => (x.at ? `updated ${x.age === 0 ? "today" : x.age === 1 ? "yesterday" : `${x.age} days ago`} (${fmtWhen(x.at.toISOString())}${x.t.readingBy ? ` by ${x.t.readingBy}` : ""})` : "never entered");
+  if (!stale.length) return { lead: ["Every truck's miles were updated in the last week.", ""], items: rows.slice(0, 3).map(x => ({ name: label(x.t), detail: ago(x), cls: "" })),
+    note: "From the Trucks tab: when each truck's miles or TM hours were last saved. Oldest first.", open: ["Open Trucks", () => { closeDialog(); setTab("trucks"); }] };
+  const top = stale[0];
+  return { lead: [`${askPlural(stale.length, "truck")} not updated in a week or more.`, ` The oldest: ${label(top.t)}, ${ago(top)}.`],
+    items: stale.slice(0, 8).map(x => ({ name: label(x.t), detail: ago(x), cls: x.at ? "soon" : "due" })),
+    note: "From the Trucks tab: when each truck's miles or TM hours were last saved. Oldest first.", open: [`Open ${label(top.t)}`, askOpenTruck(top.t)] };
+}
+function askLead() {
+  const { key, text } = askLbMonth(), st = lbStandings(lbRecords(), Number(key.slice(0, 4)), Number(key.slice(5))).month;
+  const groups = LB_GROUPS.filter(g => st[g] && st[g].length);
+  if (!groups.length) return { none: `No one on the board for ${text} yet.` };
+  return { lead: [groups.map(g => `${g}: ${st[g][0].team} is #1.`).join(" "), ""],
+    items: groups.flatMap(g => st[g].slice(0, 3).map(x => ({ name: x.team, detail: `${g} #${x.place} · ${lbMoney(x.values.revenue)} revenue · ${lbMoney(x.values.perJob)} per job`, cls: "" }))),
+    note: `${text}: the same ranking as Performance (every number ranked, the best total wins).`, open: ["Open the Leaderboard", askOpenLb] };
+}
+function askGoal() {
+  const now = clockNow(), key = lbMonthKey(now.getFullYear(), now.getMonth() + 1), cfg = lbCfg(), goal = cfg.goal, today = lbToday();
+  const recs = lbRecords().filter(r => r.month === key && r.group && !(lbTeamOf(cfg, r.team) || {}).noSale);
+  if (!recs.length) return { none: `No one on the board for ${lbMonthLong(now.getMonth() + 1)} yet.` };
+  const rows = recs.map(r => { const left = lbDaysLeft(key, today, r.group); return { r, left, g: lbGoal(r, goal, left) }; })
+    .sort((a, b) => a.g.done - b.g.done || b.g.left - a.g.left);
+  const w = rows[0], gl = lbMoney(goal);
+  const lead = w.g.done ? [`Everyone has reached the ${gl} goal.`, ""]
+    : [`${w.r.team} is the furthest from the ${gl} goal:`, ` ${lbMoney(w.g.mtd)} so far, ${lbMoney(w.g.left)} to go${w.left ? ` (${lbMoney(w.g.perDay)} a day for ${askPlural(w.left, "working day")})` : ""}.`];
+  return { lead, items: rows.slice(0, 8).map(x => ({ name: x.r.team, detail: `${lbMoney(x.g.mtd)} of ${gl} · ${x.g.done ? "goal reached" : `${lbMoney(x.g.left)} to go${x.left ? `, ${lbMoney(x.g.perDay)} a day` : ""}`}`, cls: x.g.done ? "" : "soon" })),
+    note: `${lbMonthLong(now.getMonth() + 1)} so far: technician sales against the ${gl} goal, with each unit's working days left. Furthest first.`, open: ["Open the Leaderboard", askOpenLb] };
+}
+function askReviews() {
+  const { key, text } = askLbMonth(), recs = lbRecords().filter(r => r.month === key && r.reviews > 0).sort((a, b) => b.reviews - a.reviews);
+  if (!recs.length) return { none: `No 5-star reviews typed for ${text} yet.` };
+  const total = recs.reduce((n, r) => n + r.reviews, 0), w = recs[0];
+  return { lead: [`${w.team} has the most 5-star reviews:`, ` ${fmt(w.reviews)} of ${fmt(total)}.`],
+    items: recs.slice(0, 5).map(r => ({ name: r.team, detail: askPlural(r.reviews, "review"), cls: "" })), note: `${text}, from the Leaderboard. Most first.`, open: ["Open the Leaderboard", askOpenLb] };
+}
+const askOpenOrders = () => { closeDialog(); setTab("supplies", "orders"); };
+const askReqs = st => ((supplies && supplies.requests) || []).filter(r => r.status === st);
+function askToOrder() {
+  if (!supplies) return { none: "The checklists haven't loaded yet. Try again in a moment." };
+  const reqs = askReqs("To order").sort((a, b) => String(a.reportedAt).localeCompare(String(b.reportedAt)));
+  if (!reqs.length) return { none: "Nothing is waiting to be ordered.", open: ["Open the order list", askOpenOrders] };
+  const w = reqs[0];
+  return { lead: [`${askPlural(reqs.length, "item")} waiting to be ordered.`, ` Waiting the longest: ${w.product}, asked for ${supWhen(w.reportedAt)}.`],
+    items: reqs.slice(0, 8).map(r => ({ name: r.product, detail: `${supQty(r.qty, r.container)} · asked by ${r.reportedBy || "?"} ${supWhen(r.reportedAt)}`, cls: "" })),
+    note: "From the checklists' order list. Waiting the longest first.", open: ["Open the order list", askOpenOrders] };
+}
+function askOnWay() {
+  if (!supplies) return { none: "The checklists haven't loaded yet. Try again in a moment." };
+  const reqs = askReqs("Ordered").sort((a, b) => String(a.orderedAt).localeCompare(String(b.orderedAt)));
+  if (!reqs.length) return { none: "Nothing is on order right now.", open: ["Open the order list", askOpenOrders] };
+  const w = reqs[0];
+  return { lead: [`${askPlural(reqs.length, "item")} ordered and not received yet.`, ` On order the longest: ${w.product}, ordered ${supDayAgo(w.orderedAt)}.`],
+    items: reqs.slice(0, 8).map(r => ({ name: r.product, detail: `${supQty(r.qty, r.container)} · ordered ${supDayAgo(r.orderedAt)}${r.orderedBy ? ` by ${r.orderedBy}` : ""}`, cls: "" })),
+    note: "From the checklists' order list. On order the longest first.", open: ["Open the order list", askOpenOrders] };
+}
+function askChecks() {
+  if (!supplies) return { none: "The checklists haven't loaded yet. Try again in a moment." };
+  const lists = visLists(supplies);
+  if (!lists.length) return { none: "No checklists yet." };
+  const rows = lists.map(l => { const c = (supplies.checks || []).filter(x => x.list === l.id && x.at).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0] || null; return { l, c }; })
+    .sort((a, b) => (a.c ? String(a.c.at) : "").localeCompare(b.c ? String(b.c.at) : ""));
+  const done = x => (x.c ? `checked ${supWhen(x.c.at)}${x.c.by ? ` by ${x.c.by}` : ""}` : "never checked"), w = rows[0];
+  return { lead: [`${w.l.name} ${w.c ? "was checked the longest ago" : "hasn't been checked yet"}:`, ` ${done(w)}.`],
+    items: rows.map(x => ({ name: x.l.name, detail: done(x), cls: x.c ? "" : "due" })), note: "From the checklists: when each one was last sent. Longest ago first.",
+    open: ["Open Checklists", () => { closeDialog(); setTab("supplies", "check"); }] };
+}
+function askCalls() {
+  const cfg = ofCfg(), today = lbToday();
+  if (!cfg.people.length) return { none: "No one is set up on the Office scorecard yet." };
+  const week = from => { const to = lbAddDays(from, 4) < today ? lbAddDays(from, 4) : today;
+    return cfg.people.filter(p => ofInRange(p, from, to)).map(p => ({ p, s: ofSummary(cfg, (ofData || {}).months, p, from, to) })).filter(x => x.s.worked > 0); };
+  // this week so far; on a Monday with nothing typed yet, last week
+  const mon = lbMondayOf(today);
+  let from = mon, rows = week(mon), text = `This week so far (from ${lbDayText(mon).replace(/^\w+, /, "")})`;
+  if (!rows.length) { from = lbAddDays(mon, -7); rows = week(from); text = `Last week (${lbDayText(from).replace(/^\w+, /, "")} – ${lbDayText(lbAddDays(from, 4)).replace(/^\w+, /, "")})`; }
+  if (!rows.length) return { none: "No calls typed this week or last week yet." };
+  rows.sort((a, b) => a.s.pct - b.s.pct || a.s.out - b.s.out);
+  const pc = s => `${Math.round(s.pct * 100)}%`, w = rows[0];
+  return { lead: [`${w.p.name} is the furthest behind:`, ` ${fmt(w.s.out)} calls in ${askPlural(w.s.worked, "day")}, ${pc(w.s)} of the goal (${fmt(w.s.goal)} a day).`],
+    items: rows.map(x => ({ name: x.p.name, detail: `${fmt(x.s.out)} calls · ${pc(x.s)} of the goal · ${x.s.hit} of ${askPlural(x.s.worked, "day")} at the goal`, cls: x.s.pct < 1 ? "soon" : "" })),
+    note: `${text}, from the Office scorecard. Under the goal in amber.`, open: ["Open the Office scorecard", () => { closeDialog(); ofView.tab = "score"; ofView.per = "week"; ofSaveView(); setTab("office"); }] };
+}
 function askCard(a) {
   if (a.none) return h("div", { class: "ask-a", id: "askA" }, h("p", { text: a.none }),
     a.open ? h("button", { class: "btn small", type: "button", id: "askOpen", onclick: a.open[1] }, `${a.open[0]} ›`) : null);
@@ -5502,8 +5645,14 @@ function openAsk() {
       const other = ASK_QS.find(x => x.re.test(low));
       out.replaceChildren(asked, h("div", { class: "ask-a", id: "askA" },
         h("p", { text: other ? "That one needs access your account doesn't have." : "I can't answer that one yet. These are the questions I can answer for now:" }),
-        other ? null : h("div", { class: "ask-chips", style: "margin-top:8px" }, qs.map(chips))));
+        other ? null : h("div", { class: "ask-chips", style: "margin-top:8px" }, askShown(qs).map(chips))));
       return;
+    }
+    if (q.of && !ofData) {
+      out.replaceChildren(asked, h("div", { class: "ask-a", id: "askA" }, h("p", { class: "meta", text: "Loading the Office numbers…" })));
+      await ofLoad();
+      if (!out.isConnected) return;
+      if (!ofData) { out.replaceChildren(asked, h("div", { class: "ask-a", id: "askA" }, h("p", { text: ofErr || "The Office numbers didn't load. Try again." }))); return; }
     }
     if (q.lb && !lbData) {
       out.replaceChildren(asked, h("div", { class: "ask-a", id: "askA" }, h("p", { class: "meta", text: "Loading the leaderboard…" })));
@@ -5521,8 +5670,8 @@ function openAsk() {
     h("h3", { id: "dlgTitle", text: "Ask VODA Hub" }),
     h("p", { class: "hint", text: "Answers come from the app's own numbers, worked out right here. Nothing is sent anywhere." }),
     h("div", { class: "ask-in" }, input, h("button", { class: "btn primary", type: "button", id: "askGo", text: "Ask", onclick: () => run(input.value) })),
-    h("p", { class: "ask-lbl", text: "Try" }),
-    h("div", { class: "ask-chips", id: "askChips" }, qs.map(chips)),
+    h("div", { class: "ask-groups", id: "askChips" }, ASK_TOPICS.map(t => [t, askShown(qs).filter(q => q.topic === t)]).filter(([, l]) => l.length).map(([t, l]) =>
+      h("div", { class: "ask-group", "data-topic": t }, h("p", { class: "ask-lbl", text: t }), h("div", { class: "ask-chips" }, l.map(chips))))),
     out);
   if (!isTouch()) input.focus();
 }
