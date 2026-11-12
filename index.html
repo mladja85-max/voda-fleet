@@ -703,6 +703,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 #revTable tr.rev-mo:hover th, #revTable tr.rev-mo:hover td { background: var(--accent-soft); }
 #revTable td.tot { font-weight: 700; }
 .rev-status { min-height: 1.3em; }
+.rev-tools { display: flex; align-items: center; gap: 10px; }
+.lb-tabrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.lb-tabrow .lb-acts { margin-left: auto; }
 .rev-cmp { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .rev-cmp select { font: inherit; font-size: .95rem; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
 .rev-ch { font-style: normal; font-weight: 700; color: var(--muted); white-space: nowrap; }
@@ -729,7 +732,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .rev-strip b.rev-ytag { display: inline-block; font-family: var(--font-body); font-size: .56rem; font-weight: 800; margin-right: 3px; }
   .rev-strip span { display: block; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   #revTable .pj, #revTable .oth { display: none; }
-  .rev-bar-top .rev-cmp { width: 100%; justify-content: flex-end; }
+  .rev-bar-top .rev-tools { width: 100%; justify-content: space-between; }
   #revTable td .rev-was { padding: 3px 4px 4px; font-size: .7rem; }
   #revTable td .rev-was .rev-ch { display: block; }
   #revTable td .rev-was .rev-ytag { display: block; width: max-content; margin: 0 0 1px auto; padding: 0 3px; }
@@ -869,6 +872,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .lb-tabs .seg-btn, .lb-parts .seg-btn { justify-content: center; padding: 8px 4px; font-size: .9rem; }
   .t-long { display: none; }
   .t-short { display: inline; }
+  .lb-tabs.four .seg-btn { font-size: .8rem; padding: 8px 2px; letter-spacing: -.01em; }   /* Revenue · Performance · Production · Payroll */
   .lb-top { flex-wrap: nowrap; min-height: 38px; }
   .lb-title { font-size: 1.3rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lb-acts { flex: none; gap: 6px; }
@@ -1454,6 +1458,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .views.many .view-btn svg { display: block; width: 18px; height: 18px; }
   .views.five .view-btn { font-size: .58rem; letter-spacing: -.01em; padding: 6px 0; }
 }
+@media (max-width: 370px) { .views.many .view-btn { font-size: .6rem; letter-spacing: 0; } }
 @media (max-width: 370px) { .views.five .view-btn { font-size: .54rem; } #revTable { font-size: .76rem; } #revTable th, #revTable td { padding: 5px 2px; } #revTable td .rev-was { padding: 2px 3px 3px; font-size: .68rem; } }
 /* a tablet: five tabs share the width */
 @media (min-width: 601px) and (max-width: 940px) { .views.five { width: 100%; box-sizing: border-box; } .views.five .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 6px; gap: 6px; } }
@@ -4046,8 +4051,8 @@ function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "T
 
 /* ---------- view (filters, search, sort) ---------- */
 const K_VIEW = "voda.view";
-const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "", list: "" }, store.get(K_VIEW) || {});
-function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab, list: view.list }); }
+const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "", list: "", lbSide: "leaderboard" }, store.get(K_VIEW) || {});
+function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab, list: view.list, lbSide: view.lbSide }); }
 const DIVISIONS = ["Cleaning", "Restoration"];
 const divClass = d => d === "Cleaning" ? "cleaning" : d === "Restoration" ? "restoration" : "none";
 const inScope = t => !view.division || t.division === view.division;
@@ -6236,6 +6241,13 @@ function allowedTabs() {
   if (canSee("revenue")) out.push("revenue");
   return out;
 }
+/** Whoever sees the Leaderboard and Revenue gets Revenue in the Leaderboard's row (Revenue · Performance · Production ·
+ *  Payroll) instead of a tab of its own at the top. */
+const revInLb = () => { const t = allowedTabs(); return t.includes("revenue") && t.includes("leaderboard"); };
+/** The tabs on the bar at the top. */
+const navTabs = () => allowedTabs().filter(t => t !== "revenue" || !revInLb());
+/** The Leaderboard's or Revenue's name over it: only when there's no bar at the top already saying it. */
+const secTitle = text => (navTabs().length < 2 ? h("h2", { class: "lb-title", text }) : null);
 
 function supPlural(w) { return /(s|x|z|ch|sh)$/i.test(w) ? w + "es" : /[^aeiou]y$/i.test(w) ? w.slice(0, -1) + "ies" : w + "s"; }
 /** "2 gallons", "1 box", or just "3" for an item with no container. */
@@ -6340,6 +6352,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
   view.tab = tab === "supplies" || tab === "leaderboard" || tab === "office" || tab === "revenue" ? tab : "trucks";
+  if (view.tab === "leaderboard" || view.tab === "revenue") view.lbSide = view.tab;
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -6355,14 +6368,15 @@ function applyTab() {
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
-  $("views").hidden = tabs.length < 2;
-  $("views").classList.toggle("many", tabs.length > 3);   // phones: four tabs become icons with a small label
-  $("views").classList.toggle("five", tabs.length > 4);   // ... five: a smaller label
+  const nav = navTabs(), folded = revInLb();
+  $("views").hidden = nav.length < 2;
+  $("views").classList.toggle("many", nav.length > 3);   // phones: four tabs become icons with a small label
+  $("views").classList.toggle("five", nav.length > 4);   // ... five: a smaller label
   $("viewTrucks").hidden = !tabs.includes("trucks");
   $("viewSupplies").hidden = !tabs.includes("supplies");
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
-  $("viewRevenue").hidden = !tabs.includes("revenue");
+  $("viewRevenue").hidden = !nav.includes("revenue");
   if (!tabs.includes("revenue") && revData) revForget();
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
@@ -6372,7 +6386,7 @@ function applyTab() {
   $("noAccess").hidden = tabs.length > 0;
   $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
-  $("viewLeaderboard").setAttribute("aria-pressed", String(lb));
+  $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rv && folded)));
   $("viewOffice").setAttribute("aria-pressed", String(of));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
   $("reportBtn").hidden = !trk;
@@ -6386,7 +6400,7 @@ $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 $("viewOffice").addEventListener("click", () => setTab("office"));
 $("viewRevenue").addEventListener("click", () => setTab("revenue"));
-$("viewLeaderboard").addEventListener("click", () => setTab("leaderboard"));
+$("viewLeaderboard").addEventListener("click", () => setTab(revInLb() && view.lbSide === "revenue" ? "revenue" : "leaderboard"));
 
 function renderSupBadge() {
   const s = supOk() ? supNow() : null;
@@ -7203,21 +7217,16 @@ function renderLeaderboard() {
   }
   const edit = canEditLb() && lbData.canEdit !== false;
   // Performance for whoever sees the standings; Production for whoever types numbers or reviews; Payroll as switched on
-  const tabOk = k => (k === "performance" ? lbSeesBoard() : k === "enter" ? edit || lbRvTyper() : k === "payroll" && canSeePayroll());
-  if (!LB_TABS[lbView.tab] || !tabOk(lbView.tab)) lbView.tab = lbSeesBoard() ? "performance" : "enter";
+  if (!LB_TABS[lbView.tab] || !lbTabOk(lbView.tab)) lbView.tab = lbSeesBoard() ? "performance" : "enter";
   const cfg = lbCfg();
-  const top = h("div", { class: "lb-top" },
-    h("h2", { class: "lb-title", text: "Leaderboard" }),
-    h("div", { class: "lb-acts" },
-      lbView.tab === "performance" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null,
-      // Employees, Pay rates and Job history are in Settings
-      ));
-  const tabs = h("div", { class: "seg lb-tabs", role: "tablist", "aria-label": "Leaderboard" },
-    Object.entries(LB_TABS).filter(([k]) => tabOk(k)).map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(lbView.tab === k), "data-k": k,
-      title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
-      onclick: () => { if (lbView.tab === "enter") { lbFlush(); lbCardsLeft(); } lbView.tab = k; lbSaveView(); renderLeaderboard(); } }, lbTabText(t))));
+  const title = secTitle("Leaderboard");
+  // Employees, Pay rates and Job history are in Settings
+  const acts = h("div", { class: "lb-acts" },
+    lbView.tab === "performance" && cfg.teams.length ? h("button", { class: "btn gold", type: "button", id: "lbPresent", onclick: () => lbPresent() }, "Presentation") : null);
+  const top = title ? h("div", { class: "lb-top" }, title, acts) : null;
+  const tabs = h("div", { class: "lb-tabrow" }, lbTabsEl(lbView.tab), title ? null : acts);
   if (!cfg.teams.length) {
-    box.replaceChildren(top, h("div", { class: "panel lb-empty" },
+    box.replaceChildren(...[top, revInLb() ? tabs : null].filter(Boolean), h("div", { class: "panel lb-empty" },
       h("h2", { text: "No teams yet" }),
       h("p", { class: "meta", text: edit ? "Tap Add teams (or Settings › Employees) and add each truck's team with its unit (Cleaning or Restoration). Then type each day's numbers under Production." : "An admin hasn't set up the teams yet." }),
       edit ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbTeams() }, "Add teams")) : null),
@@ -7235,6 +7244,24 @@ function renderLeaderboard() {
 }
 const lbSeg = (items, cur, onpick, label) => h("div", { class: "seg", role: "tablist", "aria-label": label },
   items.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "aria-selected": String(cur === k), "data-k": k, onclick: () => onpick(k) }, t)));
+/** May this person open Performance, Production or Payroll? */
+function lbTabOk(k) {
+  const edit = canEditLb() && (!lbData || lbData.canEdit !== false);
+  return k === "performance" ? lbSeesBoard() : k === "enter" ? edit || lbRvTyper() : k === "payroll" && canSeePayroll();
+}
+/** The Leaderboard's row: Revenue (for whoever sees it), then Performance, Production and Payroll as allowed. On Revenue
+ *  (cur "revenue") none of the others is lit; tapping one opens the Leaderboard on it. */
+function lbTabsEl(cur) {
+  const edit = canEditLb() && (!lbData || lbData.canEdit !== false), rev = revInLb() && (!apiLevel || apiLevel >= REV_API);
+  const items = Object.entries(LB_TABS).filter(([k]) => lbTabOk(k));
+  const leave = () => { if (view.tab === "leaderboard" && lbView.tab === "enter") { lbFlush(); lbCardsLeft(); } };
+  return h("div", { class: "seg lb-tabs" + (rev && items.length >= 3 ? " four" : ""), role: "tablist", "aria-label": "Leaderboard" },
+    rev ? h("button", { class: "seg-btn", type: "button", role: "tab", id: "lbRevBtn", "aria-selected": String(cur === "revenue"), "data-k": "revenue",
+      onclick: () => { if (view.tab === "revenue") return; leave(); setTab("revenue"); } }, "Revenue") : null,
+    items.map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(cur === k), "data-k": k,
+      title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
+      onclick: () => { leave(); lbView.tab = k; lbSaveView(); if (view.tab !== "leaderboard") setTab("leaderboard"); else renderLeaderboard(); } }, lbTabText(t))));
+}
 /** Months of this year so far that have teams on the board. */
 function lbMonthsWith() {
   const y = lbYear();
@@ -9590,9 +9617,10 @@ function renderRevenue() {
     renderRevenue();
   };
   const ranges = () => [[r.from, to]].concat(cmp ? [[cf, ct]] : []);
-  const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Revenue" }),
-    h("div", { class: "lb-acts" }, h("button", { class: "btn", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
-      title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure([[r.from, to]], true); } }, "Read again")));
+  const title = secTitle("Revenue");
+  const top = revInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("revenue")) : title ? h("div", { class: "lb-top" }, title) : null;
+  const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
+    title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure([[r.from, to]], true); } }, "Read again");
   // the period: Week / Month / Year with ‹ ›, or Dates (From – To), and what to compare it with
   const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; revView.from = from; revView.to = to2; revSaveView(); renderRevenue(); };
   const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
@@ -9603,6 +9631,7 @@ function renderRevenue() {
       h("option", { value: "0", text: "Off" }),
       yearsBack.map(n => h("option", { value: String(n), text: r.from.slice(0, 4) === r.to.slice(0, 4) ? `with ${Number(r.from.slice(0, 4)) - n}` : `${n} year${n === 1 ? "" : "s"} before` }))));
   cmpSel.querySelector("select").value = String(cmp);
+  const tools = h("div", { class: "rev-tools" }, readBtn, cmpSel);
   const bar = h("div", { class: "lb-bar rev-bar-top" },
     lbSeg(Object.entries(REV_PER), per, k => {
       if (k === "dates" && per !== "dates") { revView.from = r.from; revView.to = to; }   // Dates starts from the period on screen
@@ -9618,10 +9647,10 @@ function renderRevenue() {
         h("button", { class: "btn small", type: "button", id: "revPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
         h("strong", { id: "revRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
         h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
-    cmpSel);
+    tools);
   const days = r.from > today ? {} : revDaysFor(r.from, to);
   const old = cmp && r.from <= today ? revDaysFor(cf, ct) : {};
-  if (!days || !old) { box.replaceChildren(top, bar, h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
+  if (!days || !old) { box.replaceChildren(...[top, bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
   const s = revSum(days, r.from, to), c = cmp ? revSum(old, cf, ct) : null;
   const cmpName = cmp ? (cf.slice(0, 4) === ct.slice(0, 4) ? cf.slice(0, 4) : `${cf.slice(0, 4)}–${ct.slice(0, 4)}`) : "";
   const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
