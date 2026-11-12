@@ -10091,6 +10091,7 @@ let repDocs = {};                                       // year → { year, jobs
 (() => { const d = store.get(K_REP); if (d && d.year) repDocs[d.year] = d; })();
 let repLoading = {}, repErr = "", repOld = false;
 let repSync = { busy: false, what: "", err: "", n: 0, done: 0 };
+const repFresh = {};                                    // years taken from the Repairs tab again this time the app is open
 const repAsked = {};                                    // month → when this window last read it
 const REP_MON_TAG = /monumental/i;
 const REP_AHEAD = 12;                                   // months ahead the month view can go (jobs already scheduled)
@@ -10105,8 +10106,10 @@ async function repLoad(y) {
   repLoading[y] = true;
   try {
     const out = await api("repairs", { year: y });
-    const had = repDoc(y);
-    repDocs[y] = { year: y, jobs: out.jobs || [], years: out.years || [], read: (had && had.read) || {} };
+    const had = repDoc(y), ver = Number(out.api) || 0;
+    // after the Google script is updated, every month is read from Housecall Pro once more when it's looked at, so the
+    // jobs get what the new script keeps (addresses, card fees, names)
+    repDocs[y] = { year: y, jobs: out.jobs || [], years: out.years || [], read: had && had.api === ver ? had.read || {} : {}, api: ver };
     repKeep(y);
     repErr = ""; repOld = false;
   } catch (e) {
@@ -10223,6 +10226,8 @@ function renderRepairs(box) {
     h("button", { class: "btn small", type: "button", id: "repReadBtn", disabled: repSync.busy, title: "Read these jobs and payments from Housecall Pro again",
       onclick: () => { repSync.err = ""; repEnsure(months, true); } }, "Read again"));
   const until = per === "year" && r.to > today ? `${today.slice(0, 7)}-${String(lbDaysIn(today.slice(0, 7))).padStart(2, "0")}` : r.to;
+  // a year kept on this device is shown at once, then taken from the Repairs tab again (once each time the app is open)
+  for (let y = Number(r.from.slice(0, 4)); y <= Number(until.slice(0, 4)); y++) if (!repFresh[y] && repDoc(y)) { repFresh[y] = true; repLoad(y); }
   const jobs = repJobs(r.from, until);
   if (!jobs) { box.replaceChildren(...[top, sub, bar].filter(Boolean), h("p", { class: "loading", text: repErr || `Loading the repairs of ${r.from.slice(0, 4)}…` })); return; }
   const live = jobs.filter(j => !j.gone), gone = jobs.filter(j => j.gone), s = repSum(jobs);
@@ -10291,7 +10296,8 @@ function renderRepairs(box) {
       h("p", { class: "hint", text: "Tap a month to see its jobs." })];
   }
   const invBtn = h("div", { class: "rp-actions" }, h("button", { class: "btn small primary", type: "button", id: "repInvBtn", onclick: () => openRepMonInv() }, "+ Monumental invoice (PDF)"));
-  const imp = isAdmin() ? h("p", null, h("button", { class: "btn small", type: "button", id: "repImportBtn", onclick: () => openRepImport() }, "Import the old Excel list…")) : null;
+  const imp = isAdmin() ? h("p", { class: "rp-actions" }, h("button", { class: "btn small", type: "button", id: "repImportBtn", onclick: () => openRepImport() }, "Import the old Excel list…"),
+    h("button", { class: "btn small", type: "button", id: "repClearPaidBtn", onclick: () => openRepClearPaid() }, "Mark all as not paid to Monumental…")) : null;
   const hint = h("p", { class: "hint", text: "Specialty contractors are paid by VODA and come off the top. Monumental gets its materials back plus 70% of what's left; VODA gets 30%, plus 30% on Monumental's materials (materials ÷ 0.7 × 0.3). Extra pay to Monumental comes out of VODA's share. Credit card fees aren't split (jobs already paid to Monumental keep the split they were paid on). The list holds the jobs tagged “repair - Monumental Flooring” in Housecall Pro, whatever their job type." });
   box.replaceChildren(h("div", { class: "rev-main" }, ...[top, sub, bar, status, err, tiles, invBtn, ...body, hint, imp].flat().filter(Boolean)));
   if (!repSync.busy && !repSync.err) setTimeout(() => repEnsure(months, false), 0);
@@ -10363,7 +10369,7 @@ function openRepJob(id) {
     h("div", { class: "rp-hcp", id: "repHcp" }, line("Charged", lbCash(j.c / 100)),
       inv.map(i => line(`Invoice #${i.n}${i.at ? ` · paid ${repShortDay(i.at)}` : i.due > 0 ? " · open" : ""}`, `${lbCash((i.a - i.due) / 100)} of ${lbCash(i.a / 100)}`, "sub")),
       line("Client paid", lbCash(j.paid / 100)), line("Client still owes", lbCash(j.owes / 100), j.owes > 0 ? "owe" : "")),
-    h("div", { class: "field" }, h("label", { for: "rp-cName", text: j.hcpClient ? `Client name (Housecall Pro: ${j.hcpClient})` : "Client name (none in Housecall Pro)" }),
+    h("div", { class: "field" }, h("label", { for: "rp-cName", text: j.hcpClient ? `Client name (Housecall Pro: ${j.hcpClient})` : j.hcpClient === "" ? "Client name (none in Housecall Pro)" : "Client name" }),
       h("input", { id: "rp-cName", type: "text", value: t.cName || j.hcpClient || "", maxlength: "120", placeholder: "Name", oninput: ev => { t.cName = ev.target.value; dlgDirty = true; } })),
     h("h4", { text: "Done by" }), h("div", { class: "field" }, splitSel),
     h("h4", { text: "Specialty contractor (VODA pays)" }),
@@ -10528,7 +10534,12 @@ function openRepMonInv() {
     try {
       // the projects to look in: this year and last, with the last three months fresh from Housecall Pro
       const y = revThisYear();
-      for (const yy of [y, y - 1]) if (!repDoc(yy)) { status.textContent = "Loading the projects…"; const o = await api("repairs", { year: yy }); repDocs[yy] = { year: yy, jobs: o.jobs || [], years: o.years || [], read: {} }; }
+      for (const yy of [y, y - 1]) {   // fresh from the Repairs tab (what's kept on this device may be from before an update)
+        status.textContent = "Loading the projects…";
+        repFresh[yy] = true; repLoading[yy] = false;
+        await repLoad(yy);
+        if (!repDoc(yy)) throw { error: "load", message: repErr };
+      }
       for (let k = 2; k >= 0; k--) {
         const r = ofRange("month", -k), m = r.from.slice(0, 7), doc = repDoc(Number(m.slice(0, 4)));
         if (doc.read[m] && Date.now() - doc.read[m] < 20 * 3600e3) continue;
@@ -10569,6 +10580,28 @@ function openRepMonInv() {
     h("p", { class: "hint", text: "Pick one or more of Monumental's invoice PDFs. They're read on this device (not uploaded anywhere); each is matched to its project by the address, then the amount and name. Check the project and the amount, then Save: the invoice is recorded on the job as “to pay”." }),
     file, status, list, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }), save))));
+}
+/** Nobody has been paid yet (admins): clears "Date VODA paid them" on every job in the Repairs tab, after asking. */
+function openRepClearPaid() {
+  const n = Object.values(repDocs).flatMap(d => d.jobs || []).filter(j => j.t && j.t.mPaidAt).length;
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  openDialog(h("div", { class: "rp-dlg" },
+    h("h3", { id: "dlgTitle", text: "Mark all as not paid to Monumental" }),
+    h("p", { text: `This clears “Date VODA paid them” on every job in the Repairs tab${n ? ` (${fmt(n)} marked paid in the years open here)` : ""}. Monumental's still-owed amounts come back, their invoices go back to “to pay”, and card fees come out of those jobs' split. Nothing else changes.` }),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "repClearPaidGo", text: "Yes, mark all as not paid", onclick: async ev => {
+        const b = ev.currentTarget; b.disabled = true; err.textContent = "";
+        try {
+          const o = await api("repClearPaid", {});
+          for (const y of Object.keys(repDocs).map(Number)) { repLoading[y] = false; await repLoad(y); }
+          closeDialog(); toast(`${fmt(o.cleared)} job${o.cleared === 1 ? "" : "s"} marked as not paid to Monumental`); renderRevenue();
+        } catch (e) {
+          b.disabled = false;
+          err.textContent = e && e.error === "bad_request" && (Number(e.api) || 0) < 43 ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, "The jobs");
+        }
+      } })))));
 }
 /** The street part of an address, for a project's line ("275 S Pickett St Unit 302, Alexandria"). */
 const repStreetText = a => { const p = String(a || "").split(",").map(x => x.trim()).filter(Boolean); return p.length >= 3 ? `${p[0]}, ${p[p.length - 2]}` : p.join(", "); };
@@ -10725,7 +10758,7 @@ function openRepImport() {
       for (; done < months.length; done++) {
         const m = months[done], y = Number(m.slice(0, 4));
         status.textContent = `Reading Housecall Pro: ${revMonthText(`${m}-01`)} (${done + 1} of ${months.length})…`;
-        if (!repDoc(y)) { const o = await api("repairs", { year: y }); repDocs[y] = { year: y, jobs: o.jobs || [], years: o.years || [], read: {} }; }
+        if (!repDoc(y)) { const o = await api("repairs", { year: y }); repDocs[y] = { year: y, jobs: o.jobs || [], years: o.years || [], read: {}, api: Number(o.api) || 0 }; }
         const doc = repDoc(y);
         if (doc.read[m] && Date.now() - doc.read[m] < 20 * 3600e3) continue;
         const o = await api("repSync", { from: `${m}-01`, to: `${m}-${String(lbDaysIn(m)).padStart(2, "0")}` }, 170000);
