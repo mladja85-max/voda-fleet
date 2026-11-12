@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 42;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 43;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -337,6 +337,9 @@ function doPost(e) {
       case "repMonInv":
         if (!canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return repMonInv_(req, user); }));
+      case "repClearPaid":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return repClearPaid_(user); }));
       case "repImport":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return repImport_(req, user); }));
@@ -3871,6 +3874,24 @@ function repMonInv_(req, user) {
   r[27] = who; r[28] = at;
   repWrite_(s, rows);
   return { ok: true, job: repOut_(rows[id]) };
+}
+/** Nobody has been paid yet (admins): "Date VODA paid Monumental" cleared on every job, and its invoices back to "to pay".
+ *  A card fee kept in a job's split because the job looked paid comes out of the split again. */
+function repClearPaid_(user) {
+  const s = repSheet_(false);
+  if (!s) return { ok: true, cleared: 0 };
+  const rows = repRows_(s), at = new Date().toISOString(), who = user.name || user.id;
+  let n = 0;
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id], inv = repMonList_(r);
+    let changed = false;
+    if (r[25]) { r[25] = ""; changed = true; }
+    if (String(r[37]) === "yes") { r[37] = "no"; changed = true; }
+    if (inv.some(function (i) { return i.paid; })) { r[32] = JSON.stringify(inv.map(function (i) { const c = JSON.parse(JSON.stringify(i)); c.paid = ""; return c; })); changed = true; }
+    if (changed) { n++; r[27] = who; r[28] = at; }
+  });
+  if (n) repWrite_(s, rows);
+  return { ok: true, cleared: n };
 }
 /** The old Excel list matched to the jobs in the app (admins only): { jobs: [{ id, t }] }. All of it is checked first and
  *  then written at once; jobs that aren't on the tab are counted and skipped. */
