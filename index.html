@@ -1023,6 +1023,26 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pay-f { display: grid; gap: 2px; font-size: .74rem; font-weight: 600; color: var(--muted); }
 .pay-f input { font: inherit; font-size: .95rem; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
 .lb-payrange { flex-wrap: wrap; align-items: end; }
+/* Ask: set questions answered from the app's own numbers */
+#askBtn svg { width: 18px; height: 18px; }
+.ask-in { display: flex; gap: 8px; }
+.ask-in input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; background: var(--surface-2); color: var(--ink); }
+.ask-in input:focus { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--surface); }
+.ask-lbl { margin: 2px 2px -4px; font-size: .7rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 11px; font: 600 .84rem var(--font-body); color: var(--ink); cursor: pointer; }
+.ask-chip:hover, .ask-chip:focus-visible { border-color: var(--accent); color: var(--accent); }
+.ask-out { display: grid; gap: 10px; }
+.ask-out:empty { display: none; }
+.ask-q { justify-self: end; max-width: 88%; background: var(--accent); color: #fff; border-radius: 14px 14px 4px 14px; padding: 9px 13px; font-weight: 600; }
+.ask-a { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; padding: 12px 14px; }
+.ask-a p { margin: 0; }
+.ask-a ol { margin: 8px 0 4px; padding-left: 22px; }
+.ask-a li { margin: 3px 0; }
+.ask-a small { display: block; color: var(--muted); font-size: .78rem; margin-top: 6px; }
+.ask-a .btn { margin-top: 10px; }
+.ask-due { color: var(--due); font-weight: 700; }
+.ask-soon { color: var(--soon); font-weight: 700; }
 /* Settings: a card for who's signed in, then lists of lines that open things */
 .st-me { display: flex; align-items: center; gap: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
 .st-av { width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font: 700 1.15rem var(--font-display); flex: none; }
@@ -1354,6 +1374,14 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .views.many .view-btn svg { display: block; width: 18px; height: 18px; }
 }
 @media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
+/* a phone: the top bar's buttons (Ask, Report, Add truck, Settings) stay on one line with the name */
+@media (max-width: 430px) {
+  .topbar, .top-actions { gap: 6px; }
+  .top-actions .btn { width: 34px; height: 34px; }
+  .brand { gap: 8px; }
+  .brand svg { width: 28px; height: 28px; }
+  .brand h1 { font-size: 1.2rem; }
+}
 @media (max-width: 380px) { .topbar, .top-actions, .sync { gap: 6px; } .topbar { padding: 8px 10px; } .brand { gap: 8px; } .brand h1 { font-size: 1.15rem; } }
 @media (max-width: 480px) { .sup-bar .sum.quiet { display: none; } .sup-bar #supNone { flex: 1; } }
 @media (prefers-reduced-motion: reduce) { .spin svg { animation: none; } }
@@ -1405,6 +1433,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
     </button>
   </div>
   <div class="top-actions" id="topActions" hidden>
+    <button class="btn" type="button" id="askBtn" title="Ask" aria-label="Ask">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7.5l.9 1.8 1.9.3-1.4 1.3.3 1.9-1.7-.9-1.7.9.3-1.9-1.4-1.3 1.9-.3z"/></svg><span class="txt">Ask</span>
+    </button>
     <button class="btn" type="button" id="reportBtn" title="Report">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg><span class="txt">Report</span>
     </button>
@@ -5361,6 +5392,141 @@ function openEdit(id) {
   }
 }
 
+/* ---------- Ask: a few set questions, answered on this phone from the app's own numbers (nothing is sent anywhere) ----------
+   Each question has the words that pick it, who may ask it (what they can see), and its answer: a line on top, the
+   list behind it, where the numbers come from, and a button to open that screen. */
+const ASK_QS = [
+  { id: "oil", q: "Which truck is most urgent for an oil change?", chip: "Trucks due for oil", re: /\boil\b|tm service|service due|maintenance/,
+    ok: () => allowedTabs().includes("trucks"), answer: () => askOil() },
+  { id: "upsale", q: "Which technician needs to improve on up sales?", chip: "Who needs to improve on up sales?", re: /up ?-?sell|up ?-?sale|upsale/,
+    ok: () => lbSeesBoard() && (!apiLevel || apiLevel >= LB_API), lb: true, answer: () => askUpSale() },
+  { id: "products", q: "Which products are we using the most?", chip: "Products we use the most", re: /product|consum|suppl|use the most|using the most|used the most|most ordered|order(ed)? the most/,
+    ok: () => allowedTabs().includes("supplies"), answer: () => askProducts() },
+  { id: "rpj", q: "Who has the best revenue per job?", chip: "Best revenue per job", re: /per job|revenue per|ticket/,
+    ok: () => lbSeesBoard() && (!apiLevel || apiLevel >= LB_API), lb: true, answer: () => askRpj() }];
+const askQuestions = () => (session ? ASK_QS.filter(q => q.ok()) : []);
+/** The leaderboard month to answer about: the one with the newest numbers typed (this month, once its first day is in). */
+function askLbMonth() {
+  const b = lbB(), now = clockNow();
+  const key = b && b.newest ? b.newest.slice(0, 7) : lbMonthKey(now.getFullYear(), now.getMonth() + 1);
+  const m = Number(key.slice(5)), current = key === lbMonthKey(now.getFullYear(), now.getMonth() + 1);
+  const text = current && b && b.newest ? `${lbMonthLong(m)} so far (through ${lbDayText(b.newest).replace(/^\w+, /, "")})` : `${lbMonthLong(m)} ${key.slice(0, 4)}`;
+  return { key, text };
+}
+const askOpenLb = () => { closeDialog(); lbView.tab = "performance"; lbSaveView(); setTab("leaderboard"); };
+const askPlural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : "s"}`;
+function askOil() {
+  const rows = [];
+  for (const t of trucks || []) {
+    const { r } = evalTruck(t);
+    if (r.oil) rows.push({ t, kind: "Oil", left: r.oil.left, per: r.oil.left / (r.oil.interval || 1), unit: "mi", status: r.oil.status });
+    if (r.service && r.service.doNow.some(x => x.oil)) rows.push({ t, kind: `TM oil (${fmt(r.service.level)}-hr service)`, left: r.service.left, per: r.service.left / (r.service.level || 1), unit: "hrs", status: r.service.status });
+  }
+  if (!rows.length) return { none: "No truck has the miles (or TM hours) of its last oil change entered yet." };
+  const rank = { due: 0, soon: 1, ok: 2 };
+  rows.sort((a, b) => (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || a.per - b.per);
+  const amt = x => (x.left <= 0 ? `${fmt(Math.round(-x.left))} ${x.unit} over` : `due in ${fmt(Math.round(x.left))} ${x.unit}`);
+  const top = rows[0], name = label(top.t);
+  const lead = top.status === "due" ? [`${name} is the most urgent.`, ` ${top.kind}: ${amt(top)}.`]
+    : top.status === "soon" ? ["Nothing is overdue.", ` Next up: ${name}, ${top.kind} ${amt(top)}.`]
+    : ["Nothing is due soon.", ` The closest is ${name}: ${top.kind} ${amt(top)}.`];
+  return { lead, items: rows.slice(0, 5).map(x => ({ name: label(x.t), detail: `${x.kind} · ${amt(x)}`, cls: x.status })),
+    note: "From the Trucks tab: the miles and TM hours entered so far. Most urgent first.",
+    open: [`Open ${name}`, () => { closeDialog(); setTab("trucks"); openDetails(top.t.id); }] };
+}
+/** The month's technicians with jobs (estimators left out: they have no sales goal). */
+function askTechs(key) {
+  const cfg = lbCfg();
+  return lbRecords().filter(r => r.month === key && r.group && r.jobs > 0 && !(lbTeamOf(cfg, r.team) || {}).noSale);
+}
+function askUpSale() {
+  const { key, text } = askLbMonth(), recs = askTechs(key);
+  if (!recs.length) return { none: `No jobs typed for ${text} yet.` };
+  const per = r => r.up / r.jobs, avg = recs.reduce((n, r) => n + r.up, 0) / recs.reduce((n, r) => n + r.jobs, 0);
+  if (!(avg > 0)) return { none: `No up sales typed for ${text} yet, for anyone.`, open: ["Open the Leaderboard", askOpenLb] };
+  // the lowest up sale per job first; at the same amount, the one with more jobs (more chances missed)
+  const low = recs.slice().sort((a, b) => per(a) - per(b) || b.jobs - a.jobs), w = low[0];
+  return { lead: [`${w.team} needs the most help on up sales:`, ` ${lbMoney(per(w))} per job, against ${lbMoney(avg)} for everyone.`],
+    items: low.slice(0, 5).map(r => ({ name: r.team, detail: `${lbMoney(per(r))} per job · ${lbMoney(r.up)} up sale on ${askPlural(r.jobs, "job")}`, cls: per(r) < avg ? "soon" : "" })),
+    note: `${text}, from the Leaderboard. Lowest up sale per job first; below the average in amber.`, open: ["Open the Leaderboard", askOpenLb] };
+}
+function askRpj() {
+  const { key, text } = askLbMonth(), all = askTechs(key);
+  if (!all.length) return { none: `No jobs typed for ${text} yet.` };
+  // a tech with only a job or two isn't compared (one big job would top the list)
+  const enough = all.filter(r => r.jobs >= 3), recs = enough.length >= 2 ? enough : all;
+  const per = r => r.revenue / r.jobs, avg = all.reduce((n, r) => n + r.revenue, 0) / all.reduce((n, r) => n + r.jobs, 0);
+  const best = recs.slice().sort((a, b) => per(b) - per(a) || b.jobs - a.jobs), w = best[0];
+  return { lead: [`${w.team} has the best revenue per job:`, ` ${lbMoney(per(w))} on ${askPlural(w.jobs, "job")}, against ${lbMoney(avg)} for everyone.`],
+    items: best.slice(0, 5).map(r => ({ name: r.team, detail: `${lbMoney(per(r))} per job · ${lbMoney(r.revenue)} on ${askPlural(r.jobs, "job")}`, cls: "" })),
+    note: `${text}, from the Leaderboard.${recs === enough && enough.length < all.length ? " Techs with at least 3 jobs." : ""} Best first.`, open: ["Open the Leaderboard", askOpenLb] };
+}
+const ASK_DAYS = 45;   // the order list keeps what was received or removed this long
+function askProducts() {
+  const cut = new Date(clockNow().getTime() - ASK_DAYS * 864e5).toISOString(), by = new Map();
+  const lists = new Map(((supplies && supplies.lists) || []).map(l => [l.id, l.name]));
+  for (const r of (supplies && supplies.requests) || []) {
+    if (r.status === "Removed" || !r.reportedAt || r.reportedAt < cut) continue;
+    const k = r.productId || r.product, x = by.get(k) || { name: r.product, list: lists.get(r.list) || "", container: r.container, times: 0, qty: 0 };
+    x.times++; x.qty += Number(r.qty) || 0; by.set(k, x);
+  }
+  if (!supplies) return { none: "The checklists haven't loaded yet. Try again in a moment." };
+  if (!by.size) return { none: `Nothing was asked for on the checklists in the last ${ASK_DAYS} days.` };
+  const top = [...by.values()].sort((a, b) => b.times - a.times || b.qty - a.qty), w = top[0], many = lists.size > 1;
+  return { lead: [`${w.name} is used the most:`, ` asked for ${askPlural(w.times, "time")} (${supQty(w.qty, w.container)}) in the last ${ASK_DAYS} days.`],
+    items: top.slice(0, 5).map(x => ({ name: x.name, detail: `${askPlural(x.times, "time")} · ${supQty(x.qty, x.container)}${many && x.list ? ` · ${x.list}` : ""}`, cls: "" })),
+    note: `From the checklists: everything asked for in the last ${ASK_DAYS} days (removed items left out). Most asked for first.`,
+    open: ["Open the order list", () => { closeDialog(); setTab("supplies", "orders"); }] };
+}
+function askCard(a) {
+  if (a.none) return h("div", { class: "ask-a", id: "askA" }, h("p", { text: a.none }),
+    a.open ? h("button", { class: "btn small", type: "button", id: "askOpen", onclick: a.open[1] }, `${a.open[0]} ›`) : null);
+  return h("div", { class: "ask-a", id: "askA" },
+    h("p", null, h("b", { text: a.lead[0] }), a.lead[1]),
+    h("ol", null, a.items.map(i => h("li", null, h("b", { text: i.name }), " · ", h("span", { class: i.cls ? "ask-" + i.cls : null, text: i.detail })))),
+    h("small", { text: a.note }),
+    a.open ? h("button", { class: "btn small", type: "button", id: "askOpen", onclick: a.open[1] }, `${a.open[0]} ›`) : null);
+}
+function openAsk() {
+  const qs = askQuestions();
+  const out = h("div", { class: "ask-out", id: "askOut", "aria-live": "polite" });
+  const input = h("input", { id: "askIn", type: "text", autocomplete: "off", enterkeyhint: "go", "aria-label": "Your question", placeholder: "Ask about trucks, products, sales…",
+    onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); run(input.value); } } });
+  const chips = q => h("button", { class: "ask-chip", type: "button", "data-q": q.id, onclick: () => { input.value = q.q; run(q.q, q); } }, q.chip);
+  const run = async (text, pick) => {
+    const t = String(text || "").trim();
+    if (!t) { input.focus(); return; }
+    const low = t.toLowerCase(), q = pick || qs.find(x => x.re.test(low));
+    const asked = h("div", { class: "ask-q", text: t });
+    if (!q) {
+      const other = ASK_QS.find(x => x.re.test(low));
+      out.replaceChildren(asked, h("div", { class: "ask-a", id: "askA" },
+        h("p", { text: other ? "That one needs access your account doesn't have." : "I can't answer that one yet. These are the questions I can answer for now:" }),
+        other ? null : h("div", { class: "ask-chips", style: "margin-top:8px" }, qs.map(chips))));
+      return;
+    }
+    if (q.lb && !lbData) {
+      out.replaceChildren(asked, h("div", { class: "ask-a", id: "askA" }, h("p", { class: "meta", text: "Loading the leaderboard…" })));
+      await lbLoad();
+      if (!out.isConnected) return;
+      if (!lbData) { out.replaceChildren(asked, h("div", { class: "ask-a", id: "askA" }, h("p", { text: lbErr || "The leaderboard didn't load. Try again." }))); return; }
+    }
+    let a;
+    try { a = q.answer(); } catch (e) { a = { none: "Something went wrong working that out. Try again in a moment." }; }
+    out.replaceChildren(asked, askCard(a));
+    const box = $("askA");
+    if (box && dlg.open) box.scrollIntoView({ block: "nearest" });
+  };
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Ask VODA Hub" }),
+    h("p", { class: "hint", text: "Answers come from the app's own numbers, worked out right here. Nothing is sent anywhere." }),
+    h("div", { class: "ask-in" }, input, h("button", { class: "btn primary", type: "button", id: "askGo", text: "Ask", onclick: () => run(input.value) })),
+    h("p", { class: "ask-lbl", text: "Try" }),
+    h("div", { class: "ask-chips", id: "askChips" }, qs.map(chips)),
+    out);
+  if (!isTouch()) input.focus();
+}
+
 /* Settings: who's signed in; the team and pay windows this person may open (Users and invites, Employees, Pay rates,
    Job history); their own passcode; signing out. */
 const ST_ICONS = {
@@ -5592,6 +5758,7 @@ $("gpsWarn").addEventListener("click", () => {
 });
 $("refreshBtn").addEventListener("click", () => refresh(false));
 $("meBtn").addEventListener("click", openSettings);
+$("askBtn").addEventListener("click", () => openAsk());
 
 
 
@@ -5889,6 +6056,7 @@ function setTab(tab, sub) {
 }
 function applyTab() {
   const tabs = allowedTabs();
+  $("askBtn").hidden = !askQuestions().length;
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
   const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
