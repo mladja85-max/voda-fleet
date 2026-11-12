@@ -674,6 +674,42 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pay-kpi b { display: block; font-family: var(--font-display); font-size: clamp(1.15rem, 2.2vw, 1.75rem); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pay-kpi.span b { font-size: clamp(1rem, 1.7vw, 1.35rem); white-space: normal; }
 .pay-kpi.span span { display: block; color: var(--muted); font-size: .8rem; }
+/* Revenue: the period's totals as tiles (a PC) or one thin row (a phone), then the days */
+.rev-kpis { display: grid; grid-template-columns: 1.3fr repeat(var(--n, 3), 1fr); gap: 10px; }
+.rev-kpis .pay-kpi span { display: block; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rev-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--muted); }
+.rev-dot.r { background: var(--accent); } .rev-dot.c { background: var(--clean); } .rev-dot.p { background: var(--soon); }
+.rev-bar { display: flex; height: 8px; border-radius: 6px; overflow: hidden; background: var(--line); margin-top: 8px; }
+.rev-bar i { display: block; height: 100%; }
+.rev-bar .r { background: var(--accent); } .rev-bar .c { background: var(--clean); } .rev-bar .p { background: var(--soon); } .rev-bar .o { background: var(--muted); }
+.rev-strip { display: none; }
+#revTable td small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; }
+#revTable td.zero { color: var(--muted); }
+#revTable tbody th { font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); }
+#revTable tbody th small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; }
+#revTable tr.future th, #revTable tr.future td { color: var(--muted); opacity: .6; }
+#revTable tr.rev-wk th, #revTable tr.rev-wk td { background: var(--surface-2, var(--bg)); font-weight: 700; }
+#revTable tr.rev-mo { cursor: pointer; }
+#revTable tr.rev-mo:hover th, #revTable tr.rev-mo:hover td { background: var(--accent-soft); }
+#revTable td.tot { font-weight: 700; }
+.rev-status { min-height: 1.3em; }
+.rev-status.busy::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 7px; border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: revspin .8s linear infinite; vertical-align: -1px; }
+@keyframes revspin { to { transform: rotate(360deg); } }
+@media (max-width: 760px) {
+  .rev-kpis { display: none; }
+  .rev-strip { display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .rev-strip div { padding: 6px 7px; min-width: 0; }
+  .rev-strip div + div { border-left: 1px solid var(--line); }
+  .rev-strip small { display: block; font-size: .6rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rev-strip b { display: block; font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .rev-strip span { display: block; font-size: .68rem; color: var(--muted); white-space: nowrap; }
+  #revTable .pj, #revTable .oth { display: none; }
+  #revTable tbody th, #revTable tfoot th { white-space: normal; min-width: 4.2em; max-width: 6.2em; }
+  #revTable thead th .rev-dot { display: none; }
+  #revTable { font-size: .8rem; }
+  #revTable th, #revTable td { padding: 5px 4px; }
+  #revTable tbody th { font-size: .8rem; }
+}
 /* a phone: the dates on the line, and the four numbers in one thin row under it */
 .pay-strip { display: none; }
 @media (max-width: 760px) {
@@ -1387,7 +1423,12 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 @media (max-width: 600px) {
   .views.many .view-btn { flex: 1 1 0; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: .68rem; letter-spacing: .02em; min-width: 0; }
   .views.many .view-btn svg { display: block; width: 18px; height: 18px; }
+  .views.five .view-btn { font-size: .58rem; letter-spacing: -.01em; padding: 6px 0; }
 }
+@media (max-width: 370px) { .views.five .view-btn { font-size: .54rem; } }
+/* a tablet: five tabs share the width */
+@media (min-width: 601px) and (max-width: 940px) { .views.five { width: 100%; box-sizing: border-box; } .views.five .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 6px; gap: 6px; } }
+@media (min-width: 601px) and (max-width: 760px) { .views.five .view-btn svg { display: none; } }
 @media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
 /* a phone: the top bar's buttons (Ask, Report, Add truck, Settings) stay on one line with the name */
 @media (max-width: 430px) {
@@ -1487,6 +1528,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
       <button type="button" class="view-btn" id="viewOffice" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Office
       </button>
+      <button type="button" class="view-btn" id="viewRevenue" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 17v-5M11 17V7M16 17v-8M21 17V4"/></svg>Revenue
+      </button>
     </nav>
     <div id="fleetView">
     <section class="kpis" id="kpis" aria-label="Fleet summary"></section>
@@ -1521,6 +1565,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
     <section class="sup" id="suppliesView" aria-label="Checklists" hidden></section>
     <section class="lb" id="lbView" aria-label="Leaderboard" hidden></section>
     <section class="lb of" id="ofView" aria-label="Office" hidden></section>
+    <section class="lb rev" id="revView" aria-label="Revenue" hidden></section>
     <section class="panel" id="noAccess" hidden>
       <h2>Nothing here yet</h2>
       <p class="meta">An admin hasn't given you Trucks, a checklist or the Leaderboard yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
@@ -3664,7 +3709,7 @@ const isBusy = e => !!(e && e.error === "server" && /lock timeout|holding the lo
    What one window saves, the others show by themselves, without Update. Typed Leaderboard numbers arrive as the sheet
    saved them; any other change just tells the other windows to load again, quietly. Nothing is sent to another
    login: a window signed in as someone else ignores it. */
-const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup"]);
+const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync"]);
 let peers = null;
 try { peers = typeof BroadcastChannel === "function" ? new BroadcastChannel("voda-prime") : null; } catch (e) { peers = null; }
 function tellPeers(msg) { try { if (peers && session) peers.postMessage(Object.assign({ user: session.id }, msg)); } catch (e) { /* this window still has it */ } }
@@ -4156,7 +4201,7 @@ function showSignIn(message, mode) {
 
 function signOut(message) {
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
-  lbForget();
+  lbForget(); revForget();
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
@@ -5742,7 +5787,7 @@ function openHcpTest() {
       const total = r.types.reduce((n, x) => n + x.cents, 0), jobs = r.types.reduce((n, x) => n + x.jobs, 0), visits = r.types.reduce((n, x) => n + x.visits, 0);
       out.replaceChildren(
         h("p", { class: "hcp-ok", id: "hcpOk" }, "✓ Connected", r.company ? h("span", { text: ` to ${r.company}` }) : null),
-        h("p", { class: "meta", text: `${lbSpanText(r.from, r.to)}, by scheduled day: ${fmt(visits)} visit${visits === 1 ? "" : "s"}, ${fmt(jobs)} job${jobs === 1 ? "" : "s"}${r.canceled ? ` · ${fmt(r.canceled)} canceled left out` : ""}${r.more ? " · more than Housecall Pro sent at once: only the first 3,000" : ""}.` }),
+        h("p", { class: "meta", id: "hcpSum", text: `${lbSpanText(r.from, r.to)}, by scheduled day${r.tz ? ` (${String(r.tz).replace(/^.*\//, "").replace(/_/g, " ")} time)` : ""}: ${fmt(visits)} visit${visits === 1 ? "" : "s"}, ${fmt(jobs)} job${jobs === 1 ? "" : "s"}${r.canceled ? ` · ${fmt(r.canceled)} canceled left out` : ""}${r.more ? " · more than Housecall Pro sent at once: only the first 3,000" : ""}.` }),
         r.types.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "hcpTypes" },
           h("thead", null, h("tr", null, ["Job type", "Visits", "Jobs", "Total"].map(c => h("th", { text: c })))),
           h("tbody", null, r.types.map(x => h("tr", { "data-type": x.type }, h("th", { text: x.type }), h("td", { text: fmt(x.visits) }), h("td", { text: fmt(x.jobs) }), h("td", { text: lbCash(x.cents / 100) })))),
@@ -6156,9 +6201,10 @@ const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
-  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
+  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
   if (canSeeLb()) out.push("leaderboard");
   if (canSee("office")) out.push("office");
+  if (canSee("revenue")) out.push("revenue");
   return out;
 }
 
@@ -6264,7 +6310,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = tab === "supplies" || tab === "leaderboard" || tab === "office" ? tab : "trucks";
+  view.tab = tab === "supplies" || tab === "leaderboard" || tab === "office" || tab === "revenue" ? tab : "trucks";
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -6274,36 +6320,43 @@ function applyTab() {
   const tabs = allowedTabs();
   $("askBtn").hidden = !askQuestions().length;
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
-  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office";
+  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : "";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
   $("views").hidden = tabs.length < 2;
   $("views").classList.toggle("many", tabs.length > 3);   // phones: four tabs become icons with a small label
+  $("views").classList.toggle("five", tabs.length > 4);   // ... five: a smaller label
   $("viewTrucks").hidden = !tabs.includes("trucks");
   $("viewSupplies").hidden = !tabs.includes("supplies");
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
+  $("viewRevenue").hidden = !tabs.includes("revenue");
+  if (!tabs.includes("revenue") && revData) revForget();
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
   $("ofView").hidden = !of;
+  $("revView").hidden = !rv;
   $("noAccess").hidden = tabs.length > 0;
   $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
   $("viewLeaderboard").setAttribute("aria-pressed", String(lb));
   $("viewOffice").setAttribute("aria-pressed", String(of));
+  $("viewRevenue").setAttribute("aria-pressed", String(rv));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
   renderSupplies();
   if (lb) { renderLeaderboard(); if (loaded && !lbLoading) lbLoad(); }
   if (of) { renderOffice(); if (loaded && !ofLoading) ofLoad(); }
+  if (rv) { renderRevenue(); if (loaded) revLoad(); }
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 $("viewOffice").addEventListener("click", () => setTab("office"));
+$("viewRevenue").addEventListener("click", () => setTab("revenue"));
 $("viewLeaderboard").addEventListener("click", () => setTab("leaderboard"));
 
 function renderSupBadge() {
@@ -6771,7 +6824,8 @@ function accessChips(selected, onchange, idPrefix) {
   const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]),
     apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
     apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
-    apiLevel >= OF_API ? [["office", "Office"]] : []);
+    apiLevel >= OF_API ? [["office", "Office"]] : [],
+    apiLevel >= REV_API ? [["revenue", "Revenue"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -9279,6 +9333,227 @@ function openLbHistory() {
       } }))));
 }
 
+/* ======================= Revenue: each day's money and jobs, from Housecall Pro ======================= */
+// Nothing is typed here: the Google script reads Housecall Pro (with the read-only key in Script Properties) and keeps one
+// row a day on the Revenue tab. The app shows that tab, and asks for days to be read again when they're missing or may
+// have changed: the last two weeks every 10 minutes, the last two months once a day, older days once.
+const REV_API = 39;                                     // the Google script version with the Revenue tab
+const K_REV = "voda.rev1", K_REV_VIEW = "voda.revView1";
+let revData = store.get(K_REV);                         // this year's: { year, days: { "2026-11-02": [...] }, years, connected }
+let revOther = {};                                      // other years', loaded when a period reaches into them
+let revLoading = {}, revErr = "", revOld = false;
+let revSync = { busy: false, what: "", err: "", n: 0, done: 0 };
+const revAsked = {};                                    // day → when this window last read it (not again by itself for 10 minutes)
+const revView = Object.assign({ per: "week", off: 0 }, store.get(K_REV_VIEW) || {});
+const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per });
+const REV_PER = { week: "Week", month: "Month", year: "Year" };
+// a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
+const REV_DEPTS = [["r", "Restoration", "Rest."], ["c", "Cleaning", "Clean."], ["p", "Repairs", "Repairs"], ["o", "Other", "Other"]];
+const revThisYear = () => clockNow().getFullYear();
+function revForget() { revData = null; revOther = {}; store.del(K_REV); }
+const revDoc = y => (y === revThisYear() ? revData : revOther[y]) || null;
+async function revLoad(y) {
+  y = y || revThisYear();
+  if (!session || !canSee("revenue") || revLoading[y]) return;
+  revLoading[y] = true;
+  try {
+    const out = await api("revenue", { year: y });
+    const doc = { year: y, days: out.days || {}, years: out.years || [], connected: out.connected !== false };
+    // a day this window read from Housecall Pro after the sheet was loaded stays
+    const had = revDoc(y);
+    if (had && had.year === y) for (const [d, v] of Object.entries(had.days || {})) if (!doc.days[d] || (Number(v[9]) || 0) > (Number(doc.days[d][9]) || 0)) doc.days[d] = v;
+    if (y === revThisYear()) { revData = doc; store.set(K_REV, revData); } else revOther[y] = doc;
+    revErr = ""; revOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { revLoading[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    revOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < REV_API);
+    revErr = revOld ? "" : errText(e, "Nothing");
+  } finally {
+    revLoading[y] = false;
+    if (view.tab === "revenue") renderRevenue();
+  }
+}
+/** Every day from..to touches (null while a year is still loading). */
+function revDaysFor(from, to) {
+  const out = {};
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
+    const doc = revDoc(y);
+    if (!doc) { revLoad(y); return null; }
+    Object.assign(out, doc.days);
+  }
+  return out;
+}
+function revMerge(days) {
+  for (const [d, v] of Object.entries(days || {})) { const doc = revDoc(Number(d.slice(0, 4))); if (doc) doc.days[d] = v; }
+  if (revData) { revData.connected = true; store.set(K_REV, revData); }
+}
+/** Should this day be read from Housecall Pro again? Never read; the last 2 weeks after 10 minutes; up to 2 months old
+ *  (invoices still change) after 20 hours; older days are settled once read 2 months after the day. */
+function revStale(day, v, now, today) {
+  if (!v || !v[9]) return true;
+  const age = Math.round((lbDate(today) - lbDate(day)) / 864e5);
+  if (age <= 13) return now - v[9] > 10 * 60e3;
+  if (v[9] < lbDate(lbAddDays(day, 62)).getTime()) return now - v[9] > 20 * 3600e3;
+  return false;
+}
+function revErrText(e) {
+  const code = e && e.error;
+  if (!isAdmin() && ["no_key", "needs_permission", "hcp_key", "hcp_forbidden"].includes(code)) return "Housecall Pro isn't connected right now. An admin can check it in Settings › Housecall Pro.";
+  if (code === "too_many") return "Housecall Pro has more jobs in that month than the app can read at once.";
+  if (code === "hcp_http") return `Housecall Pro answered with an error (${e.status}). Try again in a minute.`;
+  return HCP_ERRORS[code] || errText(e, "Nothing");
+}
+const revMonthText = day => `${lbMonthLong(Number(day.slice(5, 7)))} ${day.slice(0, 4)}`;
+/** Reads again what's missing or may have changed between from and to (or all of it: force), a month at a time,
+ *  the newest month first, showing each as it comes in. A failure stops it until Read again is pressed. */
+async function revEnsure(from, to, force) {
+  const today = lbToday();
+  if (revSync.busy || (!force && revSync.err) || !session || !canSee("revenue") || from > today) return;
+  if (!navigator.onLine) return;
+  if (to > today) to = today;
+  const now = Date.now(), months = {};
+  for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+    const doc = revDoc(Number(d.slice(0, 4)));
+    if (!doc) return;
+    const m = d.slice(0, 7);
+    if (!force && revAsked[d] && performance.now() - revAsked[d] < 10 * 60e3) continue;
+    if (force || revStale(d, doc.days[d], now, today)) { if (!months[m]) months[m] = { from: d, to: d }; months[m].to = d; }
+  }
+  const chunks = Object.keys(months).sort().reverse().map(k => months[k]);
+  if (!chunks.length) return;
+  revSync = { busy: true, what: "", err: "", n: chunks.length, done: 0 };
+  for (const c of chunks) {
+    revSync.what = revMonthText(c.from);
+    for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) revAsked[d] = performance.now();
+    if (view.tab === "revenue") renderRevenue();
+    try {
+      const out = await api("revSync", { from: c.from, to: c.to, force: !!force }, 170000);
+      revMerge(out.days);
+      revSync.done++;
+    } catch (e) {
+      if (e && (e.error === "bad_code" || e.error === "signed_out")) { revSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
+      revSync.err = revErrText(e);
+      for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) delete revAsked[d];   // not read: Try again asks for them
+      break;
+    }
+  }
+  revSync.busy = false;
+  if (view.tab === "revenue") renderRevenue();
+}
+/** The days from..to added up, in cents: each department's [cents, jobs], and what's in them. */
+function revSum(days, from, to) {
+  const s = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], cents: 0, jobs: 0, n: 0, read: 0, at: 0, other: new Set() };
+  for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+    s.n++;
+    const v = days[d];
+    if (!v) continue;
+    s.read++;
+    REV_DEPTS.forEach(([k], i) => { s[k][0] += Math.round((Number(v[i * 2]) || 0) * 100); s[k][1] += Number(v[i * 2 + 1]) || 0; });
+    s.at = Math.max(s.at, Number(v[9]) || 0);
+    if (v[10]) String(v[10]).split("; ").forEach(t => t && s.other.add(t));
+  }
+  s.cents = s.r[0] + s.c[0] + s.p[0] + s.o[0];
+  s.jobs = s.r[1] + s.c[1] + s.p[1] + s.o[1];
+  return s;
+}
+const revPct = (a, b) => (b ? `${Math.round(a / b * 100)}%` : "–");
+const revJobs = n => `${fmt(n)} job${n === 1 ? "" : "s"}`;
+/** A phone's short money: $98,169; $1.25M from a million. */
+const revShort = cents => { const v = cents / 100; return Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : lbMoney(v); };
+function revReadText(at) {
+  if (!at) return "";
+  const d = new Date(at), t = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return lbDayKey(d) === lbToday() ? `today ${t}` : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${t}`;
+}
+
+/* ---- the screen ---- */
+function renderRevenue() {
+  const box = $("revView");
+  if (!box || view.tab !== "revenue" || !session) return;
+  if (revOld || (apiLevel && apiLevel < REV_API && !revData)) {
+    box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Revenue needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  if (!revData || revData.year !== revThisYear()) {
+    box.replaceChildren(h("p", { class: "loading", text: revErr || (offline ? "Revenue needs a connection the first time. Try again when you're back online." : "Loading revenue…") }));
+    if (!revErr) revLoad();
+    return;
+  }
+  const per = REV_PER[revView.per] ? revView.per : "week";
+  const off = Math.min(0, Number(revView.off) || 0);
+  const r = ofRange(per, off), today = lbToday(), to = r.to > today ? today : r.to;
+  const step = n => { revView.off = Math.min(0, off + n); renderRevenue(); };
+  const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Revenue" }),
+    h("div", { class: "lb-acts" }, h("button", { class: "btn", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
+      title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure(r.from, to, true); } }, "Read again")));
+  const bar = h("div", { class: "lb-bar" },
+    lbSeg(Object.entries(REV_PER), per, k => { revView.per = k; revView.off = 0; revSaveView(); renderRevenue(); }, "Period"),
+    h("div", { class: "of-step" },
+      h("button", { class: "btn small", type: "button", id: "revPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+      h("strong", { id: "revRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
+      h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")));
+  const days = r.from > today ? {} : revDaysFor(r.from, to);
+  if (!days) { box.replaceChildren(top, bar, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` })); return; }
+  const s = revSum(days, r.from, to);
+  const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
+    revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…`
+      : s.read ? `From Housecall Pro · read ${revReadText(s.at)}` : r.from > today ? "" : "Not read from Housecall Pro yet.");
+  const err = revSync.err ? h("p", { class: "dlg-err", id: "revErr" }, revSync.err, " ",
+    h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; renderRevenue(); } }, "Try again")) : null;
+  const shown = REV_DEPTS.filter(([k]) => k !== "o" || s.o[0] || s.o[1]);
+  // the totals: tiles on a PC, one thin row on a phone
+  const tiles = h("div", { class: "pay-kpis rev-kpis", id: "revTiles", style: `--n:${shown.length}` },
+    h("div", { class: "pay-kpi", "data-k": "total" }, h("small", { text: "Total revenue" }), h("b", { text: lbMoney(s.cents / 100) }),
+      h("span", { text: `${revJobs(s.jobs)}${s.jobs ? ` · ${lbMoney(s.cents / 100 / s.jobs)} a job` : ""}` }),
+      h("div", { class: "rev-bar", "aria-hidden": "true" }, shown.map(([k]) => h("i", { class: k, style: `width:${s.cents > 0 ? Math.max(0, s[k][0]) / s.cents * 100 : 0}%` })))),
+    shown.map(([k, name]) => h("div", { class: "pay-kpi", "data-k": k }, h("small", null, h("i", { class: "rev-dot " + k }), name), h("b", { text: lbMoney(s[k][0] / 100) }),
+      h("span", { text: `${revJobs(s[k][1])} · ${revPct(s[k][0], s.cents)}` }))));
+  const strip = h("div", { class: "rev-strip", id: "revStrip" },
+    [["total", "Total", s.cents, s.jobs]].concat(REV_DEPTS.slice(0, 3).map(([k, , short]) => [k, short, s[k][0], s[k][1]])).map(([k, t, c, j]) =>
+      h("div", { "data-k": k }, h("small", null, k !== "total" ? h("i", { class: "rev-dot " + k }) : null, t), h("b", { text: revShort(c) }), h("span", { text: revJobs(j) }))));
+  // the days (a week, a month with each week's total) or the months (a year)
+  const cell = (c, j, cls) => h("td", { class: (cls || "") + (c || j ? "" : " zero"), title: lbCash(c / 100) }, lbMoney(c / 100), j ? h("small", { text: revJobs(j) }) : null);
+  const line = (label, sub, x, cls, attrs) => h("tr", Object.assign({ class: cls || "" }, attrs || {}),
+    h("th", null, label, sub ? h("small", { text: sub }) : null),
+    x ? shown.map(([k]) => cell(x[k][0], x[k][1], k === "o" ? "oth" : "")) : shown.map(([k]) => h("td", { class: k === "o" ? "oth" : null, text: "–" })),
+    x ? cell(x.cents, x.jobs, "tot") : h("td", { class: "tot", text: "–" }),
+    h("td", { class: "pj", text: x && x.jobs ? lbMoney(x.cents / 100 / x.jobs) : "–" }));
+  const rows = [];
+  if (per === "year") {
+    for (let m = 1; m <= 12; m++) {
+      const k = lbMonthKey(r.from.slice(0, 4), m), a = `${k}-01`, b = `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`;
+      if (a > today) break;
+      const x = revSum(days, a, b > today ? today : b);
+      rows.push(line(lbMonthLong(m), b > today ? "so far" : "", x.read ? x : null, "rev-mo",
+        { "data-month": k, tabindex: "0", title: "Show this month", onclick: () => { const t = clockNow(); revView.per = "month"; revView.off = (Number(k.slice(0, 4)) * 12 + m - 1) - (t.getFullYear() * 12 + t.getMonth()); revSaveView(); renderRevenue(); } }));
+    }
+  } else {
+    let wk = r.from;
+    for (let d = r.from; d <= (per === "month" ? to : r.to); d = lbAddDays(d, 1)) {
+      const dt = lbDate(d), v = days[d], future = d > today;
+      const x = future || !v ? null : revSum(days, d, d), hol = lbHoliday(d);
+      rows.push(line(`${LB_WD[dt.getDay()]} ${MONTHS[dt.getMonth()]} ${dt.getDate()}`, hol ? `${hol}: closed` : future ? "" : !v ? "not read yet" : "", x, future ? "future" : "", { "data-day": d }));
+      if (per === "month" && (dt.getDay() === 0 || d === to) && wk <= today) {
+        const e = d > today ? today : d, xw = revSum(days, wk, e);
+        rows.push(line(`Week of ${lbWeekText(lbMondayOf(wk))}`, lbAddDays(lbMondayOf(wk), 6) > today ? "so far" : "", xw.read ? xw : null, "rev-wk"));
+        wk = lbAddDays(d, 1);
+      }
+    }
+  }
+  const table = h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "revTable" },
+    h("thead", null, h("tr", null, h("th", { text: per === "year" ? "Month" : "Day" }), shown.map(([k, name, short]) => h("th", { class: k === "o" ? "oth" : null },
+      h("i", { class: "rev-dot " + k }), h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }))),
+      h("th", { text: "Total" }), h("th", { class: "pj", text: "Per job" }))),
+    h("tbody", null, rows),
+    h("tfoot", null, line("Total", "", s.read ? s : null, "rev-sum")))));
+  const notes = [];
+  if (s.o[0] || s.o[1]) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
+  notes.push(h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." }));
+  box.replaceChildren(...[top, bar, status, err, r.from > today ? null : [tiles, strip, table], ...notes].flat().filter(Boolean));
+  if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(r.from, to, false), 0);
+}
+
 /* ======================= Office scorecards ======================= */
 const OF_API = 24;                                      // the Google script version with the Office section
 const OF_HIDE_API = 25;                                 // ... and with past-only numbers
@@ -10167,6 +10442,7 @@ if (/^#order-list(\/|$)/.test(location.hash)) {   // the link in the checklist e
 else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
 else if (location.hash === "#leaderboard") { view.tab = "leaderboard"; saveView(); }
 else if (location.hash === "#office") { view.tab = "office"; saveView(); }
+else if (location.hash === "#revenue") { view.tab = "revenue"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {
