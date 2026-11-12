@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 37;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 38;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -317,6 +317,8 @@ function doPost(e) {
       case "ofPut":
         if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return ofPut_(req); }));
+      case "hcpTest":
+        return json_(hcpTest_(req));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -449,7 +451,7 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech"];
-const ADMIN_ACTIONS = ["deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setShop",
+const ADMIN_ACTIONS = ["hcpTest", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setShop",
   "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
@@ -3326,6 +3328,98 @@ function lbPut_(req, rvSave, rvRead) {
     Object.keys(m.days || {}).forEach(function (day) { const d = m.days[day]; m.days[day] = d && d.r ? { r: d.r } : null; });
   });
   return out;
+}
+
+/* ---------------- Housecall Pro (read-only) ---------------- */
+// An Admin saves the Housecall Pro API key in Apps Script > Project Settings > Script Properties as HCP_API_KEY. It is
+// never in this file, on GitHub or in the app: the script reads Housecall Pro with it and the app only gets totals
+// (no customer names, addresses or phone numbers). Housecall Pro's public API: https://api.housecallpro.com, with the
+// header "Authorization: Token <key>". A read-only key can't change anything there.
+const HCP_BASE = "https://api.housecallpro.com";
+const HCP_MAX_DAYS = 31, HCP_PAGE = 100, HCP_MAX_PAGES = 30;
+/** The key as saved (a key pasted with "Token " or "Bearer " in front still works). */
+function hcpKey_() {
+  return String(PropertiesService.getScriptProperties().getProperty("HCP_API_KEY") || "").replace(/^\s*(token|bearer)\s+/i, "").trim();
+}
+/** One read from Housecall Pro: { data } or { error } (no_key, needs_permission, hcp_key, hcp_forbidden, hcp_busy,
+ *  hcp_http, hcp_unreachable, hcp_bad_answer). The key is never part of an answer. */
+function hcpGet_(path, query) {
+  const key = hcpKey_();
+  if (!key) return { error: "no_key" };
+  const qs = Object.keys(query || {}).filter(function (k) { return query[k] !== null && query[k] !== undefined && query[k] !== ""; })
+    .map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(query[k]); }).join("&");
+  let res;
+  try {
+    res = UrlFetchApp.fetch(HCP_BASE + path + (qs ? "?" + qs : ""), { method: "get", muteHttpExceptions: true,
+      headers: { Authorization: "Token " + key, Accept: "application/json" } });
+  } catch (e) {
+    // the first time, Google has to be told the script may reach Housecall Pro (run connectHousecallPro once)
+    return { error: /permission|authori[sz]/i.test(String(e && e.message ? e.message : e)) ? "needs_permission" : "hcp_unreachable" };
+  }
+  const code = res.getResponseCode();
+  if (code === 401) return { error: "hcp_key" };          // a wrong or deleted key (or no MAX plan)
+  if (code === 403) return { error: "hcp_forbidden" };
+  if (code === 429) return { error: "hcp_busy" };
+  if (code < 200 || code >= 300) return { error: "hcp_http", status: code };
+  try { return { data: JSON.parse(res.getContentText()) }; } catch (e) { return { error: "hcp_bad_answer" }; }
+}
+/** Midnight at the start of a day ("2026-11-02") in the script's time zone, as Housecall Pro takes it. */
+function hcpDayStart_(day) {
+  const off = Utilities.formatDate(new Date(day + "T12:00:00Z"), Session.getScriptTimeZone(), "XXX");
+  return day + "T00:00:00" + off;
+}
+/** A job's department-sorting name: its Job type ("Restoration Residential"), or "" when it has none. */
+function hcpJobType_(job) {
+  const jf = job && job.job_fields && typeof job.job_fields === "object" ? job.job_fields : {};
+  const t = jf.job_type || job.job_type || null;
+  return String((t && typeof t === "object" ? (t.name || t.value || "") : t) || "").trim();
+}
+/** Admin: is Housecall Pro connected, and what each job type adds up to on the days asked (their scheduled start,
+ *  up to 31 days): visits, first visits (a job's later visits, "1234-2", aren't new jobs), the total of each, and
+ *  what was canceled. Plus the names of the fields Housecall Pro sends (not their values), to build the rest on. */
+function hcpTest_(req) {
+  const day = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : ""; };
+  const from = day(req.from), to = day(req.to);
+  if (!from || !to || to < from) return { ok: false, error: "bad_request" };
+  const days = Math.round((new Date(to + "T12:00:00Z") - new Date(from + "T12:00:00Z")) / 864e5) + 1;
+  if (days > HCP_MAX_DAYS) return { ok: false, error: "too_long" };
+  const co = hcpGet_("/company");
+  if (co.error) return { ok: false, error: co.error, status: co.status || 0 };
+  const company = String((co.data && (co.data.name || (co.data.company && co.data.company.name))) || "").slice(0, 120);
+  const end = new Date(new Date(to + "T12:00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
+  const byType = {}, statuses = {};
+  let items = 0, pages = 0, canceled = 0, keys = [], fieldKeys = [], more = false;
+  for (let page = 1; page <= HCP_MAX_PAGES; page++) {
+    const r = hcpGet_("/jobs", { scheduled_start_min: hcpDayStart_(from), scheduled_start_max: hcpDayStart_(end), page: page, page_size: HCP_PAGE });
+    if (r.error) return { ok: false, error: r.error, status: r.status || 0, company: company };
+    const jobs = Array.isArray(r.data && r.data.jobs) ? r.data.jobs : [];
+    pages = page;
+    jobs.forEach(function (job) {
+      if (!keys.length) { keys = Object.keys(job || {}).slice(0, 60); fieldKeys = Object.keys((job && job.job_fields) || {}).slice(0, 20); }
+      const st = String(job.work_status || "");
+      statuses[st] = (statuses[st] || 0) + 1;
+      if (/cancel/i.test(st)) { canceled++; return; }
+      items++;
+      const type = hcpJobType_(job) || "(no job type)";
+      const t = byType[type] || (byType[type] = { type: type, visits: 0, jobs: 0, cents: 0 });
+      const num = String(job.invoice_number || ""), visit = /-(\d+)$/.exec(num);
+      t.visits++;
+      if (!visit || visit[1] === "1") t.jobs++;
+      t.cents += Number(job.total_amount) || 0;
+    });
+    const total = Number(r.data && r.data.total_pages) || 0;
+    if (!jobs.length || page >= total) break;
+    if (page === HCP_MAX_PAGES) more = true;
+  }
+  const types = Object.keys(byType).map(function (k) { return byType[k]; }).sort(function (a, b) { return b.cents - a.cents; });
+  return { ok: true, company: company, from: from, to: to, items: items, canceled: canceled, pages: pages, more: more, types: types,
+    statuses: statuses, keys: keys, fieldKeys: fieldKeys };
+}
+/** Run this once from the Apps Script editor (choose it, then Run): Google asks to let the script reach Housecall Pro,
+ *  and the log says whether the key works. Nothing in Housecall Pro is changed. */
+function connectHousecallPro() {
+  const r = hcpGet_("/company");
+  Logger.log(r.error ? "Not connected: " + r.error + (r.status ? " (" + r.status + ")" : "") : "Connected to Housecall Pro: " + ((r.data && r.data.name) || "your company"));
 }
 
 /* ---------------- office scorecards ---------------- */
