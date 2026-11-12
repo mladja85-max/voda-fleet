@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 38;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 39;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -319,6 +319,12 @@ function doPost(e) {
         return json_(withLock_(function () { return ofPut_(req); }));
       case "hcpTest":
         return json_(hcpTest_(req));
+      case "revenue":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(revRead_(req.year));
+      case "revSync":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(revSync_(req));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -2741,7 +2747,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -3374,6 +3380,29 @@ function hcpJobType_(job) {
   const t = jf.job_type || job.job_type || null;
   return String((t && typeof t === "object" ? (t.name || t.value || "") : t) || "").trim();
 }
+/** A job's first visit ("1234" or "1234-1"); its later visits ("1234-2") add money but aren't a new job. */
+function hcpFirstVisit_(job) {
+  const visit = /-(\d+)$/.exec(String((job && job.invoice_number) || ""));
+  return !visit || visit[1] === "1";
+}
+/** Every job scheduled from..to (days in the script's time zone, up to 31 days), page by page: { jobs, pages, more }
+ *  or { error, status }. */
+function hcpJobsIn_(from, to) {
+  const end = new Date(new Date(to + "T12:00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
+  const jobs = [];
+  let pages = 0, more = false;
+  for (let page = 1; page <= HCP_MAX_PAGES; page++) {
+    const r = hcpGet_("/jobs", { scheduled_start_min: hcpDayStart_(from), scheduled_start_max: hcpDayStart_(end), page: page, page_size: HCP_PAGE });
+    if (r.error) return { error: r.error, status: r.status || 0 };
+    const got = Array.isArray(r.data && r.data.jobs) ? r.data.jobs : [];
+    pages = page;
+    for (let i = 0; i < got.length; i++) jobs.push(got[i]);
+    const total = Number(r.data && r.data.total_pages) || 0;
+    if (!got.length || page >= total) break;
+    if (page === HCP_MAX_PAGES) more = true;
+  }
+  return { jobs: jobs, pages: pages, more: more };
+}
 /** Admin: is Housecall Pro connected, and what each job type adds up to on the days asked (their scheduled start,
  *  up to 31 days): visits, first visits (a job's later visits, "1234-2", aren't new jobs), the total of each, and
  *  what was canceled. Plus the names of the fields Housecall Pro sends (not their values), to build the rest on. */
@@ -3386,40 +3415,130 @@ function hcpTest_(req) {
   const co = hcpGet_("/company");
   if (co.error) return { ok: false, error: co.error, status: co.status || 0 };
   const company = String((co.data && (co.data.name || (co.data.company && co.data.company.name))) || "").slice(0, 120);
-  const end = new Date(new Date(to + "T12:00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
+  const got = hcpJobsIn_(from, to);
+  if (got.error) return { ok: false, error: got.error, status: got.status || 0, company: company };
   const byType = {}, statuses = {};
-  let items = 0, pages = 0, canceled = 0, keys = [], fieldKeys = [], more = false;
-  for (let page = 1; page <= HCP_MAX_PAGES; page++) {
-    const r = hcpGet_("/jobs", { scheduled_start_min: hcpDayStart_(from), scheduled_start_max: hcpDayStart_(end), page: page, page_size: HCP_PAGE });
-    if (r.error) return { ok: false, error: r.error, status: r.status || 0, company: company };
-    const jobs = Array.isArray(r.data && r.data.jobs) ? r.data.jobs : [];
-    pages = page;
-    jobs.forEach(function (job) {
-      if (!keys.length) { keys = Object.keys(job || {}).slice(0, 60); fieldKeys = Object.keys((job && job.job_fields) || {}).slice(0, 20); }
-      const st = String(job.work_status || "");
-      statuses[st] = (statuses[st] || 0) + 1;
-      if (/cancel/i.test(st)) { canceled++; return; }
-      items++;
-      const type = hcpJobType_(job) || "(no job type)";
-      const t = byType[type] || (byType[type] = { type: type, visits: 0, jobs: 0, cents: 0 });
-      const num = String(job.invoice_number || ""), visit = /-(\d+)$/.exec(num);
-      t.visits++;
-      if (!visit || visit[1] === "1") t.jobs++;
-      t.cents += Number(job.total_amount) || 0;
-    });
-    const total = Number(r.data && r.data.total_pages) || 0;
-    if (!jobs.length || page >= total) break;
-    if (page === HCP_MAX_PAGES) more = true;
-  }
+  let items = 0, canceled = 0, keys = [], fieldKeys = [];
+  got.jobs.forEach(function (job) {
+    if (!keys.length) { keys = Object.keys(job || {}).slice(0, 60); fieldKeys = Object.keys((job && job.job_fields) || {}).slice(0, 20); }
+    const st = String(job.work_status || "");
+    statuses[st] = (statuses[st] || 0) + 1;
+    if (/cancel/i.test(st)) { canceled++; return; }
+    items++;
+    const type = hcpJobType_(job) || "(no job type)";
+    const t = byType[type] || (byType[type] = { type: type, visits: 0, jobs: 0, cents: 0 });
+    t.visits++;
+    if (hcpFirstVisit_(job)) t.jobs++;
+    t.cents += Number(job.total_amount) || 0;
+  });
+  const pages = got.pages, more = got.more;
   const types = Object.keys(byType).map(function (k) { return byType[k]; }).sort(function (a, b) { return b.cents - a.cents; });
   return { ok: true, company: company, from: from, to: to, items: items, canceled: canceled, pages: pages, more: more, types: types,
-    statuses: statuses, keys: keys, fieldKeys: fieldKeys };
+    statuses: statuses, keys: keys, fieldKeys: fieldKeys, tz: Session.getScriptTimeZone() };
 }
 /** Run this once from the Apps Script editor (choose it, then Run): Google asks to let the script reach Housecall Pro,
  *  and the log says whether the key works. Nothing in Housecall Pro is changed. */
 function connectHousecallPro() {
   const r = hcpGet_("/company");
   Logger.log(r.error ? "Not connected: " + r.error + (r.status ? " (" + r.status + ")" : "") : "Connected to Housecall Pro: " + ((r.data && r.data.name) || "your company"));
+}
+
+/* ---------------- Revenue: each day's money and jobs, from Housecall Pro ---------------- */
+// The Revenue tab: one row per day, read from Housecall Pro (nothing is typed). A job's department is the first word of
+// its Job type (Restoration…, Cleaning…, Repair…); any other type counts as Other, and its name is kept so it can be fixed
+// in Housecall Pro. Money counts on each visit's scheduled day (in the script's time zone); a job counts once, on its
+// first visit; canceled jobs are left out. The app reads the tab, and asks for days to be read again from Housecall Pro
+// when they're missing or may have changed (an invoice changed after the day).
+const REV_SHEET = "Revenue";
+const REV_COLS = ["Day", "Restoration $", "Restoration jobs", "Cleaning $", "Cleaning jobs", "Repairs $", "Repairs jobs", "Other $", "Other jobs", "Visits", "Read from Housecall Pro", "Other job types"];
+const REV_DEPTS = ["r", "c", "p", "o"];   // Restoration, Cleaning, Repairs, Other: their $ and jobs columns in that order
+const REV_FRESH_MS = 60 * 1000;           // days read this recently aren't read again (two phones opening the tab at once)
+/** "Restoration Residential - REFERRAL" → "r"; "Cleaning…" → "c"; "Repair…" → "p"; anything else → "o". */
+function revDept_(type) {
+  const t = String(type || "").trim();
+  return /^restor/i.test(t) ? "r" : /^clean/i.test(t) ? "c" : /^repair/i.test(t) ? "p" : "o";
+}
+function revSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(REV_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(REV_SHEET);
+    s.getRange(1, 1, 1, REV_COLS.length).setValues([REV_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:A").setNumberFormat("@");   // plain text: a day like 2026-11-02 must not turn into a date
+    ["B:B", "D:D", "F:F", "H:H"].forEach(function (c) { s.getRange(c).setNumberFormat("$#,##0.00"); });
+  }
+  return s;
+}
+/** Every day on the tab: { "2026-11-02": [day, r$, r jobs, c$, c jobs, p$, p jobs, o$, o jobs, visits, read at, other types] }. */
+function revRows_(s) {
+  const out = {};
+  if (!s || s.getLastRow() < 2) return out;
+  const tz = Session.getScriptTimeZone();
+  s.getRange(2, 1, s.getLastRow() - 1, REV_COLS.length).getValues().forEach(function (r) {
+    const day = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM-dd") : String(r[0] || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+    const at = r[10] instanceof Date ? r[10].toISOString() : String(r[10] || "");
+    out[day] = [day].concat(r.slice(1, 10).map(function (v) { return Number(v) || 0; }), [at, String(r[11] || "")]);
+  });
+  return out;
+}
+/** A day as the app gets it: [r$, r jobs, c$, c jobs, p$, p jobs, o$, o jobs, visits, read at (ms), other types]. */
+function revOut_(row) {
+  return row.slice(1, 10).concat([Date.parse(row[10]) || 0, row[11]]);
+}
+/** Everyone with Revenue: a year's days from the tab, and which years have any. */
+function revRead_(year) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const rows = revRows_(revSheet_(false)), days = {}, years = {};
+  Object.keys(rows).forEach(function (d) {
+    years[d.slice(0, 4)] = true;
+    if (d.indexOf(y + "-") === 0) days[d] = revOut_(rows[d]);
+  });
+  return { ok: true, year: Number(y), days: days, years: Object.keys(years).map(Number).sort(), connected: !!hcpKey_() };
+}
+/** Everyone with Revenue: reads from..to (up to 31 days) from Housecall Pro again and saves each day's totals. Days
+ *  read in the last minute aren't asked for again (unless Read again was pressed: force). { ok, days } like revRead_, or { error } like the connection check. */
+function revSync_(req) {
+  const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : ""; };
+  const from = isDay(req.from), to = isDay(req.to);
+  if (!from || !to || to < from) return { ok: false, error: "bad_request" };
+  const list = [];
+  for (let d = from; d <= to && list.length <= HCP_MAX_DAYS; d = new Date(new Date(d + "T12:00:00Z").getTime() + 864e5).toISOString().slice(0, 10)) list.push(d);
+  if (list.length > HCP_MAX_DAYS) return { ok: false, error: "too_long" };
+  const have = revRows_(revSheet_(false)), now = Date.now();
+  const pick = function (rows) { const out = {}; list.forEach(function (d) { if (rows[d]) out[d] = revOut_(rows[d]); }); return out; };
+  if (!req.force && list.every(function (d) { return have[d] && now - (Date.parse(have[d][10]) || 0) < REV_FRESH_MS; })) return { ok: true, days: pick(have), fresh: true };
+  const got = hcpJobsIn_(from, to);
+  if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
+  if (got.more) return { ok: false, error: "too_many" };
+  const tz = Session.getScriptTimeZone(), at = new Date().toISOString(), acc = {};
+  list.forEach(function (d) { acc[d] = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], visits: 0, other: {} }; });
+  got.jobs.forEach(function (job) {
+    if (!job || /cancel/i.test(String(job.work_status || ""))) return;
+    const start = new Date((job.schedule && job.schedule.scheduled_start) || "");
+    if (isNaN(start.getTime())) return;
+    const a = acc[Utilities.formatDate(start, tz, "yyyy-MM-dd")];
+    if (!a) return;
+    const type = hcpJobType_(job), k = revDept_(type);
+    a[k][0] += Number(job.total_amount) || 0;
+    if (hcpFirstVisit_(job)) a[k][1]++;
+    a.visits++;
+    if (k === "o") a.other[type || "(no job type)"] = true;
+  });
+  return withLock_(function () {
+    const s = revSheet_(true), rows = revRows_(s);
+    list.forEach(function (d) {
+      const a = acc[d], row = [d];
+      REV_DEPTS.forEach(function (k) { row.push(Math.round(a[k][0]) / 100, a[k][1]); });
+      row.push(a.visits, at, Object.keys(a.other).sort().join("; "));
+      rows[d] = row;
+    });
+    const all = Object.keys(rows).sort().map(function (d) { return rows[d]; });
+    s.getRange(2, 1, all.length, 1).setNumberFormat("@");   // before the days go in, so none turns into a date
+    s.getRange(2, 1, all.length, REV_COLS.length).setValues(all);
+    return { ok: true, days: pick(rows) };
+  });
 }
 
 /* ---------------- office scorecards ---------------- */
