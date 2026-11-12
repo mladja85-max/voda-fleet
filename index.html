@@ -784,7 +784,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 @media (max-width: 1399px) { .rev-aside { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); } .rev-aside-head { grid-column: 1 / -1; } }
 @media (min-width: 1400px) {
   body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
-  .rev-aside { position: sticky; top: 12px; }
+  .rev-aside { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
 }
 .lb-tabrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .lb-tabrow .lb-acts { margin-left: auto; }
@@ -1301,6 +1301,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .lbs-place { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 7px; font-family: var(--font-display); font-size: .9rem; font-weight: 700;
   background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); box-sizing: border-box; }
 .lbs-place.p1 { background: #f2b705; color: #3b2a00; border-color: #dba500; }
+.lbs-production tbody th .lbs-place { min-width: 1.35em; height: 1.35em; font-size: .9em; margin-right: .35em; vertical-align: .12em; border-radius: .3em; }
 .lbs-place.p2 { background: #1f4fbf; color: #fff; border-color: #1a43a6; }
 .lbs-place.p3 { background: #1f8fc7; color: #fff; border-color: #1a7fb3; }
 .lb-table tbody th, .lb-table tfoot th { font-weight: 700; text-align: left; color: var(--ink); text-transform: none; letter-spacing: 0; font-size: .86rem; }
@@ -6753,6 +6754,9 @@ $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 $("viewOffice").addEventListener("click", () => setTab("office"));
 $("viewRevenue").addEventListener("click", () => setTab("revenue"));
+// the bar at the top's height, so panels that stay in view while scrolling sit just under it
+(() => { const bar = document.querySelector(".topbar"), set = () => document.documentElement.style.setProperty("--top-h", `${bar ? bar.offsetHeight : 74}px`);
+  set(); if (bar && window.ResizeObserver) new ResizeObserver(set).observe(bar); else addEventListener("resize", set); })();
 $("viewRepairs").addEventListener("click", () => setTab("repairs"));
 $("viewLeaderboard").addEventListener("click", () => setTab(repInLb() && view.lbSide === "repairs" ? "repairs" : "leaderboard"));
 
@@ -11316,7 +11320,7 @@ function lbSlides() {
     lbSvg(LB_LOGO), h("h1", null, "VODA", h("br"), "Leaderboard"),
     h("p", { text: wk ? `Week of ${lbWeekText(wk)}, ${y}` : mname }),
     h("p", { text: lbPast() ? `${lbMonthLong(month)} · Year to date ${lbYtdText(month)}, ${y}` : `${lbMonthLong(month)} so far · Year to date since January 1` })));
-  // everyone's numbers first (A to Z, no places), then the podiums
+  // everyone's numbers first (sales A to Z; production by place), then the podiums
   if (lbBoardShown(lbCfg(), key).length) slides.push(() => lbSalesSlide(month));
   if (LB_GROUPS.some(g => st.month[g].length)) slides.push(() => lbProductionSlide(st, month));
   for (const per of ["month", "ytd"]) {
@@ -11423,19 +11427,19 @@ function lbProductionSlide(st, month) {
   const cols = 1 + LB_MONTH_METRICS.length + LB_YTD_METRICS.length;
   const many = units.reduce((n, g) => n + st.month[g].length, 0) > 10;
   return h("section", { class: "lbs-slide lbs-numbers lbs-production" + (many ? " dense" : "") },
-    lbSlideHead(`${lbMonthLong(month)} ${y} · A to Z`, "Production"),
+    lbSlideHead(`${lbMonthLong(month)} ${y} · by place`, "Production"),
     h("div", { class: "lbs-tblwrap" }, h("table", { class: "lbs-tbl" },
       h("thead", null,
         h("tr", { class: "lbs-grp" }, h("th"), h("th", { colspan: String(LB_MONTH_METRICS.length), text: lbMonthLong(month) }), h("th", { class: "ytd", colspan: String(LB_YTD_METRICS.length), text: `Year to date · ${lbYtdText(month)}` })),
         h("tr", null, h("th", { text: "Team" }), LB_MONTH_METRICS.map(m => h("th", { text: m.short })), LB_YTD_METRICS.map((m, i) => h("th", { class: i ? "" : "ytd", text: m.short })))),
       units.map(g => {
-        const rows = st.month[g].slice().sort(lbAz), yv = r => ytd[g + "|" + r.team] || {};
+        const rows = st.month[g].slice(), yv = r => ytd[g + "|" + r.team] || {};   // the month's places, 1st first
         const mb = Object.fromEntries(LB_MONTH_METRICS.map(m => [m.key, lbBest(rows, r => r.values[m.key])]));
         const yb = Object.fromEntries(LB_YTD_METRICS.map(m => [m.key, lbBest(rows, r => yv(r)[m.key] || 0)]));
         return h("tbody", { "data-unit": g },
           h("tr", { class: `lbs-sec ${g}` }, h("th", { colspan: String(cols) }, h("h3", { text: `${g} production` }))),
-          rows.map(r => h("tr", { "data-team": r.team },
-            h("th", { text: r.team }),
+          rows.map(r => h("tr", { "data-team": r.team, "data-place": String(r.place) },
+            h("th", null, h("span", { class: `lbs-place p${r.place}`, "aria-label": `Place ${r.place}`, text: String(r.place) }), " ", r.team),
             LB_MONTH_METRICS.map(m => lbCell(m.short, lbFmt(m, r.values[m.key]), mb[m.key] != null && lbRound(r.values[m.key]) === mb[m.key])),
             LB_YTD_METRICS.map((m, i) => { const c = lbCell(`YTD ${m.short.toLowerCase()}`, lbFmt(m, yv(r)[m.key] || 0), yb[m.key] != null && lbRound(yv(r)[m.key] || 0) === yb[m.key]); if (!i) c.classList.add("ytd"); return c; }))));
       }))),
