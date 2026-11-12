@@ -704,6 +704,26 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 #revTable td.tot { font-weight: 700; }
 .rev-status { min-height: 1.3em; }
 .rev-tools { display: flex; align-items: center; gap: 10px; }
+.rev-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.rev-aside { display: grid; gap: 10px; align-content: start; }
+.rev-aside-head h3 { margin: 0; font-family: var(--font-display); font-size: 1.3rem; text-transform: uppercase; letter-spacing: .04em; }
+.rev-aside-head p { margin: 2px 0 0; color: var(--muted); font-size: .84rem; }
+.rev-aside-head p.vs .rev-ytag { margin: 0 2px; }
+.rev-avg { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 15px; display: grid; gap: 1px; }
+.rev-avg small { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rev-avg > b { font-family: var(--font-display); font-size: 1.75rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rev-avg-n { color: var(--muted); font-size: .8rem; }
+.rev-avg .rev-was { margin-top: 5px; padding: 4px 8px 5px; border-radius: 7px; width: fit-content; max-width: 100%; box-sizing: border-box; font-size: .86rem; font-weight: 600; color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent); }
+.rev-avg .rev-was small { display: block; font-size: .74rem; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.rev-avg .rev-ytag { margin-right: 6px; }
+.rev-avg.r { --tint: var(--accent); } .rev-avg.c { --tint: var(--clean); } .rev-avg.p { --tint: var(--soon); }
+.rev-avg.r, .rev-avg.c, .rev-avg.p { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
+@media (max-width: 1399px) { .rev-aside { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); } .rev-aside-head { grid-column: 1 / -1; } }
+@media (min-width: 1400px) {
+  body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
+  .rev-aside { position: sticky; top: 12px; }
+}
 .lb-tabrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .lb-tabrow .lb-acts { margin-left: auto; }
 .rev-cmp { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
@@ -9639,7 +9659,8 @@ function renderRevenue() {
     else revView.off = Math.min(0, off + n);
     renderRevenue();
   };
-  const ranges = () => [[r.from, to]].concat(cmp ? [[cf, ct]] : []);
+  const ty = revThisYear(), yFrom = `${ty}-01-01`, ay = cmp ? ty - cmp : 0, ayFrom = `${ay}-01-01`, ayTo = cmp ? revShift(today, cmp, "year") : "";
+  const ranges = () => [[r.from, to]].concat(cmp ? [[cf, ct]] : [], [[yFrom, today]], cmp ? [[ayFrom, ayTo]] : []);
   const title = secTitle("Revenue");
   const top = revInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("revenue")) : title ? h("div", { class: "lb-top" }, title) : null;
   const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
@@ -9731,7 +9752,29 @@ function renderRevenue() {
   const notes = [];
   if (s.o[0] || s.o[1]) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
   notes.push(h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }));
-  box.replaceChildren(...[top, bar, status, err, r.from > today ? null : [tiles, strip, table], ...notes].flat().filter(Boolean));
+  // beside the table (under it on a smaller screen): each department's average job, this year so far and the year
+  // picked in Compare (the same days)
+  const yDays = revDaysFor(yFrom, today), aDays = cmp ? revDaysFor(ayFrom, ayTo) : {};
+  let aside = null;
+  if (yDays && aDays) {
+    const ys = revSum(yDays, yFrom, today), as = cmp ? revSum(aDays, ayFrom, ayTo) : null;
+    const avg = (x, k) => { const v = k === "t" ? [x.cents, x.jobs] : x[k]; return { cents: v[0], jobs: v[1], avg: v[1] ? v[0] / v[1] : 0 }; };
+    const ayName = String(ay), ayShort = `’${String(ay).slice(2)}`;
+    aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Average job" },
+      h("div", { class: "rev-aside-head" }, h("h3", { text: "Average job" }),
+        h("p", { text: `${ty} so far · ${revSpanText(yFrom, today)}` }),
+        cmp ? h("p", { class: "vs" }, "vs ", h("b", { class: "rev-ytag", text: ayName }), ` ${revSpanText(ayFrom, ayTo)}`) : h("p", { class: "vs", text: "Pick a year in Compare to see it here too." })),
+      [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["t", "All jobs"]].map(([k, name]) => {
+        const a = avg(ys, k), b = as ? avg(as, k) : null;
+        return h("div", { class: "rev-avg " + k, "data-k": k },
+          h("small", null, k !== "t" ? h("i", { class: "rev-dot " + k }) : null, name),
+          h("b", { text: a.jobs ? lbMoney(a.avg / 100) : "–" }),
+          h("span", { class: "rev-avg-n", text: `${revJobs(a.jobs)} · ${lbMoney(a.cents / 100)}` }),
+          b ? h("span", { class: "rev-was" }, h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: ayName }), h("span", { class: "t-short", text: ayShort })),
+            b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
+      }));
+  }
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, r.from > today ? null : [tiles, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
   if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false), 0);
 }
 
