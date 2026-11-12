@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 40;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 41;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -334,6 +334,9 @@ function doPost(e) {
       case "repPut":
         if (!canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return repPut_(req, user); }));
+      case "repImport":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return repImport_(req, user); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -3749,29 +3752,55 @@ function repSync_(req) {
 }
 /** What's typed for one job: { id, t: { split, sName, sAmt, sDep, sDepAt, mat, mDep, mDepAt, extra, extraWhy, mInv, mPaidAt, note } }.
  *  Amounts in dollars (0 to 10,000,000, or "" for none), days as 2026-11-05, words up to 200 letters. */
-function repPut_(req, user) {
-  const id = String(req.id || ""), t = req.t && typeof req.t === "object" ? req.t : null;
-  if (!id || !t) return { ok: false, error: "bad_request" };
-  const s = repSheet_(true), rows = repRows_(s), r = rows[id];
-  if (!r) return { ok: false, error: "gone" };
+/** Puts what's typed (t) into a row: the name of the first wrong field, or "" when all is well. */
+function repTyped_(r, t) {
   for (let i = 0; i < REP_TYPED.length; i++) {
     const d = REP_TYPED[i], k = d[0];
     if (!(k in t)) continue;
     let v = t[k];
     if (d[2] === "money") {
       if (v === "" || v === null) v = "";
-      else { v = Math.round(Number(v) * 100) / 100; if (!isFinite(v) || v < 0 || v > 1e7) return { ok: false, error: "bad_value", field: k }; }
+      else { v = Math.round(Number(v) * 100) / 100; if (!isFinite(v) || v < 0 || v > 1e7) return k; }
     } else if (d[2] === "day") {
       v = String(v || "");
-      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return { ok: false, error: "bad_value", field: k };
+      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return k;
     } else if (d[2] === "split") {
       v = ["auto", "mon", "none"].indexOf(String(v)) === -1 ? "auto" : String(v);
     } else v = String(v || "").slice(0, 200);
     r[d[1]] = v;
   }
+  return "";
+}
+function repPut_(req, user) {
+  const id = String(req.id || ""), t = req.t && typeof req.t === "object" ? req.t : null;
+  if (!id || !t) return { ok: false, error: "bad_request" };
+  const s = repSheet_(true), rows = repRows_(s), r = rows[id];
+  if (!r) return { ok: false, error: "gone" };
+  const bad = repTyped_(r, t);
+  if (bad) return { ok: false, error: "bad_value", field: bad };
   r[27] = user.name || user.id; r[28] = new Date().toISOString();
   repWrite_(s, rows);
   return { ok: true, job: repOut_(rows[id]) };
+}
+/** The old Excel list matched to the jobs in the app (admins only): { jobs: [{ id, t }] }. All of it is checked first and
+ *  then written at once; jobs that aren't on the tab are counted and skipped. */
+function repImport_(req, user) {
+  const list = Array.isArray(req.jobs) ? req.jobs : null;
+  if (!list || !list.length || list.length > 3000) return { ok: false, error: "bad_request" };
+  const s = repSheet_(true), rows = repRows_(s), at = new Date().toISOString(), who = user.name || user.id, done = {};
+  let missing = 0;
+  for (let i = 0; i < list.length; i++) {
+    const x = list[i] || {}, id = String(x.id || ""), t = x.t && typeof x.t === "object" ? x.t : null;
+    if (!t) return { ok: false, error: "bad_request" };
+    if (!rows[id]) { missing++; continue; }
+    const r = (done[id] || rows[id]).slice(), bad = repTyped_(r, t);
+    if (bad) return { ok: false, error: "bad_value", field: bad, id: id };
+    r[27] = who; r[28] = at;
+    done[id] = r;
+  }
+  Object.keys(done).forEach(function (id) { rows[id] = done[id]; });
+  if (Object.keys(done).length) repWrite_(s, rows);
+  return { ok: true, saved: Object.keys(done).length, missing: missing };
 }
 
 /* ---------------- office scorecards ---------------- */
