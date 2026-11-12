@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 43;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 44;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -320,11 +320,20 @@ function doPost(e) {
       case "hcpTest":
         return json_(hcpTest_(req));
       case "revenue":
-        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revRead_(req.year));
       case "revSync":
-        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revSync_(req));
+      case "marketing":
+        if (!canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
+        return json_(mktRead_());
+      case "mktPut":
+        if (!canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return mktPut_(req, user); }));
+      case "mktImport":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return mktImport_(req, user); }));
       case "repairs":
         if (!canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
         return json_(repRead_(req.year));
@@ -2765,7 +2774,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || x === "marketing" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -3398,6 +3407,16 @@ function hcpJobType_(job) {
   const t = jf.job_type || job.job_type || null;
   return String((t && typeof t === "object" ? (t.name || t.value || "") : t) || "").trim();
 }
+/** Where the client came from, as set on the job in Housecall Pro (its Lead source; the customer's when the job has none). */
+function hcpLead_(job) {
+  const pick = function (v) { return v && typeof v === "object" ? (v.name || v.value || "") : v; };
+  return String(pick(job && job.lead_source) || pick(job && job.customer && job.customer.lead_source) || "").replace(/\s+/g, " ").trim().slice(0, 60);
+}
+/** "Cleaning Residential - REPEAT" → "repeat"; "… - REFERRAL" (or REFERAL) → "referral"; anything else → "". */
+function mktKind_(type) {
+  const t = String(type || "");
+  return /\brepeat\b/i.test(t) ? "repeat" : /\bref+e?r+al\b/i.test(t) ? "referral" : "";
+}
 /** A job's first visit ("1234" or "1234-1"); its later visits ("1234-2") add money but aren't a new job. */
 function hcpFirstVisit_(job) {
   const visit = /-(\d+)$/.exec(String((job && job.invoice_number) || ""));
@@ -3512,7 +3531,10 @@ function connectHousecallPro() {
 // first visit; canceled jobs are left out. The app reads the tab, and asks for days to be read again from Housecall Pro
 // when they're missing or may have changed (an invoice changed after the day).
 const REV_SHEET = "Revenue";
-const REV_COLS = ["Day", "Restoration $", "Restoration jobs", "Cleaning $", "Cleaning jobs", "Repairs $", "Repairs jobs", "Other $", "Other jobs", "Visits", "Read from Housecall Pro", "Other job types"];
+const REV_COLS = ["Day", "Restoration $", "Restoration jobs", "Cleaning $", "Cleaning jobs", "Repairs $", "Repairs jobs", "Other $", "Other jobs", "Visits", "Read from Housecall Pro", "Other job types", "Sources"];
+// Sources (for Marketing): each kind of job and lead source that day, "repeat|Google": [Restoration ¢, jobs, Cleaning ¢,
+// jobs, Repairs ¢, jobs, Other ¢, jobs]. The kind is REPEAT or REFERRAL from the Job type, else "" and the Lead source
+// decides. Empty on days read before Marketing (they're read again when Marketing needs them).
 const REV_DEPTS = ["r", "c", "p", "o"];   // Restoration, Cleaning, Repairs, Other: their $ and jobs columns in that order
 const REV_FRESH_MS = 60 * 1000;           // days read this recently aren't read again (two phones opening the tab at once)
 /** "Restoration Residential - REFERRAL" → "r"; "Cleaning…" → "c"; "Repair…" → "p"; anything else → "o". */
@@ -3541,13 +3563,16 @@ function revRows_(s) {
     const day = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM-dd") : String(r[0] || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
     const at = r[10] instanceof Date ? r[10].toISOString() : String(r[10] || "");
-    out[day] = [day].concat(r.slice(1, 10).map(function (v) { return Number(v) || 0; }), [at, String(r[11] || "")]);
+    out[day] = [day].concat(r.slice(1, 10).map(function (v) { return Number(v) || 0; }), [at, String(r[11] || ""), String(r[12] || "")]);
   });
   return out;
 }
-/** A day as the app gets it: [r$, r jobs, c$, c jobs, p$, p jobs, o$, o jobs, visits, read at (ms), other types]. */
+/** A day as the app gets it: [r$, r jobs, c$, c jobs, p$, p jobs, o$, o jobs, visits, read at (ms), other types, sources
+ *  (null when read before sources were kept)]. */
 function revOut_(row) {
-  return row.slice(1, 10).concat([Date.parse(row[10]) || 0, row[11]]);
+  let src = null;
+  if (row[12]) { try { src = JSON.parse(row[12]); } catch (e) { src = null; } }
+  return row.slice(1, 10).concat([Date.parse(row[10]) || 0, row[11], src && typeof src === "object" ? src : null]);
 }
 /** Everyone with Revenue: a year's days from the tab, and which years have any. */
 function revRead_(year) {
@@ -3575,17 +3600,21 @@ function revSync_(req) {
   if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
   if (got.more) return { ok: false, error: "too_many" };
   const tz = Session.getScriptTimeZone(), at = new Date().toISOString(), acc = {};
-  list.forEach(function (d) { acc[d] = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], visits: 0, other: {} }; });
+  list.forEach(function (d) { acc[d] = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], visits: 0, other: {}, src: {} }; });
   got.jobs.forEach(function (job) {
     if (!job || /cancel/i.test(String(job.work_status || ""))) return;
     const start = new Date((job.schedule && job.schedule.scheduled_start) || "");
     if (isNaN(start.getTime())) return;
     const a = acc[Utilities.formatDate(start, tz, "yyyy-MM-dd")];
     if (!a) return;
-    const type = hcpJobType_(job), k = revDept_(type);
-    a[k][0] += Number(job.total_amount) || 0;
-    if (hcpFirstVisit_(job)) a[k][1]++;
+    const type = hcpJobType_(job), k = revDept_(type), cents = Number(job.total_amount) || 0, first = hcpFirstVisit_(job);
+    a[k][0] += cents;
+    if (first) a[k][1]++;
     a.visits++;
+    const key = mktKind_(type) + "|" + hcpLead_(job), i = REV_DEPTS.indexOf(k) * 2;
+    const v = a.src[key] || (a.src[key] = [0, 0, 0, 0, 0, 0, 0, 0]);
+    v[i] += Math.round(cents);
+    if (first) v[i + 1]++;
     if (k === "o") a.other[type || "(no job type)"] = true;
   });
   return withLock_(function () {
@@ -3593,14 +3622,134 @@ function revSync_(req) {
     list.forEach(function (d) {
       const a = acc[d], row = [d];
       REV_DEPTS.forEach(function (k) { row.push(Math.round(a[k][0]) / 100, a[k][1]); });
-      row.push(a.visits, at, Object.keys(a.other).sort().join("; "));
+      row.push(a.visits, at, Object.keys(a.other).sort().join("; "), JSON.stringify(a.src));
       rows[d] = row;
     });
     const all = Object.keys(rows).sort().map(function (d) { return rows[d]; });
+    if (String(s.getRange(1, REV_COLS.length).getValue()) !== REV_COLS[REV_COLS.length - 1]) s.getRange(1, REV_COLS.length).setValues([[REV_COLS[REV_COLS.length - 1]]]).setFontWeight("bold");   // a tab made before Marketing
     s.getRange(2, 1, all.length, 1).setNumberFormat("@");   // before the days go in, so none turns into a date
     s.getRange(2, 1, all.length, REV_COLS.length).setValues(all);
     return { ok: true, days: pick(rows) };
   });
+}
+
+/* ---------------- Marketing: where clients come from, what they bring in, and what the ads cost ---------------- */
+// What each source brought in comes from Housecall Pro (the Sources column of the Revenue tab, above). Three tabs keep
+// the rest, all typed or matched in the app:
+//   Marketing spend    a month's ad spend for a source (typed in the app, or imported from Summary Advertising)
+//   Marketing sources  which row each Lead source in Housecall Pro goes to (Google, Thumbtack, ...)
+//   Marketing history  months before Housecall Pro, imported once from Clients Per Month and Summary Advertising
+const MKT_SPEND = "Marketing spend", MKT_MAP = "Marketing sources", MKT_HIST = "Marketing history";
+const MKT_SPEND_COLS = ["Month", "Source", "Spent $", "From", "Changed by", "Changed at"];
+const MKT_MAP_COLS = ["Lead source in Housecall Pro", "Row in Marketing", "Changed by", "Changed at"];
+const MKT_HIST_COLS = ["Month", "Source", "Department", "Revenue $", "Jobs", "From"];
+const MKT_MAX_SPEND = 10000000, MKT_MAX_HIST = 6000;
+function mktSheet_(name, cols, create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(name);
+  if (!s && create) {
+    s = ss.insertSheet(name);
+    s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:A").setNumberFormat("@");   // a month like 2026-11 must stay text
+  }
+  return s;
+}
+function mktRows_(s, n) {
+  return s && s.getLastRow() >= 2 ? s.getRange(2, 1, s.getLastRow() - 1, n).getValues() : [];
+}
+function mktWrite_(s, cols, rows) {
+  if (s.getLastRow() >= 2) s.getRange(2, 1, s.getLastRow() - 1, cols.length).clearContent();
+  if (!rows.length) return;
+  s.getRange(2, 1, rows.length, 1).setNumberFormat("@");
+  s.getRange(2, 1, rows.length, cols.length).setValues(rows);
+}
+const mktMonth_ = function (v, tz) { return v instanceof Date ? Utilities.formatDate(v, tz, "yyyy-MM") : /^\d{4}-\d{2}$/.test(String(v || "").trim()) ? String(v).trim() : ""; };
+const mktName_ = function (v) { return String(v === null || v === undefined ? "" : v).replace(/\s+/g, " ").trim().slice(0, 60); };
+const mktMoney_ = function (v) { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= MKT_MAX_SPEND ? Math.round(n * 100) / 100 : null; };
+/** Everyone with Marketing: the spend, the Lead source matches and the imported months. */
+function mktRead_() {
+  const tz = Session.getScriptTimeZone(), spend = {}, from = {}, map = {}, hist = [];
+  mktRows_(mktSheet_(MKT_SPEND, MKT_SPEND_COLS, false), MKT_SPEND_COLS.length).forEach(function (r) {
+    const m = mktMonth_(r[0], tz), src = mktName_(r[1]), v = mktMoney_(r[2]);
+    if (!m || !src || v === null || r[2] === "") return;
+    (spend[m] || (spend[m] = {}))[src] = v;
+    (from[m] || (from[m] = {}))[src] = String(r[3] || "");
+  });
+  mktRows_(mktSheet_(MKT_MAP, MKT_MAP_COLS, false), MKT_MAP_COLS.length).forEach(function (r) {
+    const row = mktName_(r[1]);
+    if (row) map[mktName_(r[0])] = row;
+  });
+  mktRows_(mktSheet_(MKT_HIST, MKT_HIST_COLS, false), MKT_HIST_COLS.length).forEach(function (r) {
+    const m = mktMonth_(r[0], tz), src = mktName_(r[1]);
+    if (m && src) hist.push([m, src, /^[rcpo]$/.test(String(r[2] || "")) ? String(r[2]) : "", Number(r[3]) || 0, Number(r[4]) || 0]);
+  });
+  return { ok: true, spend: spend, spendFrom: from, map: map, hist: hist };
+}
+/** Everyone with Marketing: a month's ad spend for sources ({ month, source, amount }; amount "" or null takes it off),
+ *  and Lead sources matched to rows ({ "Google LSA": "Google Guaranteed" }; "" back to the app's guess). */
+function mktPut_(req, user) {
+  const spend = Array.isArray(req.spend) ? req.spend : [], map = req.map && typeof req.map === "object" ? req.map : {};
+  if (spend.length > 200 || Object.keys(map).length > 200) return { ok: false, error: "bad_request" };
+  const at = new Date().toISOString(), tz = Session.getScriptTimeZone();
+  if (spend.length) {
+    const s = mktSheet_(MKT_SPEND, MKT_SPEND_COLS, true), rows = mktRows_(s, MKT_SPEND_COLS.length);
+    const idx = {};
+    rows.forEach(function (r, i) { idx[mktMonth_(r[0], tz) + "\t" + mktName_(r[1])] = i; });
+    for (let i = 0; i < spend.length; i++) {
+      const x = spend[i] || {}, m = mktMonth_(x.month, tz), src = mktName_(x.source);
+      const off = x.amount === "" || x.amount === null || x.amount === undefined, v = off ? null : mktMoney_(x.amount);
+      if (!m || !src || (!off && v === null)) return { ok: false, error: "bad_request" };
+      const k = m + "\t" + src, row = [m, src, off ? "" : v, "typed", user.name, at];
+      if (idx[k] !== undefined) rows[idx[k]] = row;
+      else if (!off) { idx[k] = rows.length; rows.push(row); }
+    }
+    mktWrite_(s, MKT_SPEND_COLS, rows.filter(function (r) { return r[2] !== "" && r[2] !== null; }));
+  }
+  if (Object.keys(map).length) {
+    const s = mktSheet_(MKT_MAP, MKT_MAP_COLS, true), rows = mktRows_(s, MKT_MAP_COLS.length);
+    const idx = {};
+    rows.forEach(function (r, i) { idx[mktName_(r[0])] = i; });
+    Object.keys(map).forEach(function (lead) {
+      const l = mktName_(lead), row = mktName_(map[lead]);
+      if (idx[l] !== undefined) rows[idx[l]] = [l, row, user.name, at];
+      else if (row) { idx[l] = rows.length; rows.push([l, row, user.name, at]); }
+    });
+    mktWrite_(s, MKT_MAP_COLS, rows.filter(function (r) { return mktName_(r[1]); }));
+  }
+  return mktRead_();
+}
+/** Admin: the months from Clients Per Month and Summary Advertising, read in the app. hist: [month, source, department
+ *  ("r", "c", "p" or ""), revenue $, jobs] replaces everything imported before; spend: [month, source, $] replaces the
+ *  imported spend (spend typed in the app stays). */
+function mktImport_(req, user) {
+  const hist = Array.isArray(req.hist) ? req.hist : null, spend = Array.isArray(req.spend) ? req.spend : [];
+  if (!hist || hist.length > MKT_MAX_HIST || spend.length > MKT_MAX_HIST) return { ok: false, error: "bad_request" };
+  const tz = Session.getScriptTimeZone(), label = mktName_(req.from) || "imported", at = new Date().toISOString();
+  const H = [];
+  for (let i = 0; i < hist.length; i++) {
+    const x = Array.isArray(hist[i]) ? hist[i] : [], m = mktMonth_(x[0], tz), src = mktName_(x[1]), d = /^[rcpo]$/.test(String(x[2] || "")) ? String(x[2]) : "";
+    const v = Number(x[3]), n = Number(x[4]);
+    if (!m || !src || !Number.isFinite(v) || Math.abs(v) > 1e8 || !Number.isFinite(n) || n < 0 || n > 1e5) return { ok: false, error: "bad_request" };
+    H.push([m, src, d, Math.round(v * 100) / 100, Math.round(n)]);
+  }
+  const S = [];
+  for (let i = 0; i < spend.length; i++) {
+    const x = Array.isArray(spend[i]) ? spend[i] : [], m = mktMonth_(x[0], tz), src = mktName_(x[1]), v = mktMoney_(x[2]);
+    if (!m || !src || v === null) return { ok: false, error: "bad_request" };
+    S.push([m, src, v]);
+  }
+  mktWrite_(mktSheet_(MKT_HIST, MKT_HIST_COLS, true), MKT_HIST_COLS, H.map(function (r) { return r.concat([label]); }));
+  const s = mktSheet_(MKT_SPEND, MKT_SPEND_COLS, true), rows = mktRows_(s, MKT_SPEND_COLS.length);
+  const typed = rows.filter(function (r) { return String(r[3]) === "typed"; }), have = {};
+  typed.forEach(function (r) { have[mktMonth_(r[0], tz) + "\t" + mktName_(r[1])] = true; });
+  const keep = typed.map(function (r) { return [mktMonth_(r[0], tz), mktName_(r[1]), r[2], r[3], r[4], r[5]]; });
+  S.forEach(function (r) { if (!have[r[0] + "\t" + r[1]]) keep.push([r[0], r[1], r[2], "imported", user.name, at]); });
+  keep.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0; });
+  mktWrite_(s, MKT_SPEND_COLS, keep);
+  const out = mktRead_();
+  out.saved = { hist: H.length, spend: S.length };
+  return out;
 }
 
 /* ---------------- Repairs split: each repair job, what the client paid, and Monumental's and VODA's share ---------------- */
