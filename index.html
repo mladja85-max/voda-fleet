@@ -754,7 +754,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   .rp-kpis .pay-kpi { padding: 8px 10px; } .rp-kpis .pay-kpi b { font-size: 1.1rem; }
   .rp-tablewrap { display: none; } .rp-cards { display: grid; gap: 8px; }
   .rp-card { all: unset; box-sizing: border-box; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
-  .rp-card.gone { opacity: .55; }
+  .rp-card.gone { opacity: .55; } .rp-card.future { opacity: .7; border-style: dashed; }
   .rp-card .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; } .rp-card .top b { font-size: 1rem; } .rp-card .top span { font-weight: 700; }
   .rp-card .meta2 { color: var(--muted); font-size: .76rem; }
   .rp-card .split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; font-size: .8rem; }
@@ -9737,8 +9737,8 @@ let revOther = {};                                      // other years', loaded 
 let revLoading = {}, revErr = "", revOld = false;
 let revSync = { busy: false, what: "", err: "", n: 0, done: 0 };
 const revAsked = {};                                    // day → when this window last read it (not again by itself for 10 minutes)
-const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0, sub: "dep", rper: "month", roff: 0 }, store.get(K_REV_VIEW) || {});
-const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp, sub: revView.sub, rper: revView.rper, roff: revView.roff });
+const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0, sub: "dep", rper: "month", roff: 0, rfrom: "", rto: "" }, store.get(K_REV_VIEW) || {});
+const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp, sub: revView.sub, rper: revView.rper, roff: revView.roff, rfrom: revView.rfrom, rto: revView.rto });
 const REV_PER = { week: "Week", month: "Month", year: "Year", dates: "Dates" };
 const REV_CMP_YEARS = 5;                                // compare with up to 5 years before
 // a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
@@ -10095,6 +10095,8 @@ const repFresh = {};                                    // years taken from the 
 const repAsked = {};                                    // month → when this window last read it
 const REP_MON_TAG = /monumental/i;
 const REP_AHEAD = 12;                                   // months ahead the month view can go (jobs already scheduled)
+const REP_PER = { day: "Today", week: "Week", month: "Month", year: "Year", dates: "Dates" };
+const REP_PER_AHEAD = { day: 366, week: 53, month: REP_AHEAD };   // how far ahead each period can go
 /** The town of an address ("12 Oak St, Fairfax, VA 22030" → "Fairfax"; older rows hold the town alone). */
 const repTown = a => { const p = String(a || "").split(",").map(x => x.trim()).filter(Boolean); return p.length >= 3 ? p[p.length - 2] : p[p.length - 1] || ""; };
 function repForget() { repDocs = {}; store.del(K_REP); }
@@ -10211,27 +10213,54 @@ function renderRepairs(box) {
       h("p", { class: "meta", text: "The Repairs split needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
     return;
   }
-  const per = revView.rper === "year" ? "year" : "month", off = Math.min(per === "month" ? REP_AHEAD : 0, Number(revView.roff) || 0);
-  const r = ofRange(per, off), today = lbToday();
+  const today = lbToday(), per = REP_PER[revView.rper] ? revView.rper : "month";
+  const ahead = REP_PER_AHEAD[per] || 0;   // how far ahead ‹ › may go (jobs already scheduled); a year stops at this one
+  const off = Math.max(-5000, Math.min(ahead, Number(revView.roff) || 0));
+  let r;
+  if (per === "dates") {
+    let a = lbIsDay(revView.rfrom) ? revView.rfrom : `${today.slice(0, 7)}-01`, b = lbIsDay(revView.rto) ? revView.rto : today;
+    if (b < a) [a, b] = [b, a];
+    r = { from: a, to: b, label: revSpanText(a, b) };
+  } else r = ofRange(per, off);
+  const len = revLen(r.from, r.to), list = per !== "year" && !(per === "dates" && len > 62);
+  // the jobs looked at; the totals go up to today when the period has today in it ("to date"), the rest is scheduled
+  const until = per === "year" && r.to > today ? `${today.slice(0, 7)}-${String(lbDaysIn(today.slice(0, 7))).padStart(2, "0")}` : r.to;
+  const upTo = r.from <= today && r.to > today ? today : r.to;
   const months = [];
-  for (let k = r.from.slice(0, 7); `${k}-01` <= r.to && (per === "month" || `${k}-01` <= today); k = lbAddDays(`${k}-${String(lbDaysIn(k)).padStart(2, "0")}`, 1).slice(0, 7)) months.push(k);
-  const maxOff = per === "month" ? REP_AHEAD : 0;   // a month can look ahead at what's scheduled; a year stops at this one
-  const step = n => { revView.roff = Math.max(-600, Math.min(maxOff, off + n)); revSaveView(); renderRevenue(); };
-  const bar = h("div", { class: "lb-bar" },
-    lbSeg([["month", "Month"], ["year", "Year"]], per, k => { revView.rper = k; revView.roff = 0; revSaveView(); renderRevenue(); }, "Period"),
-    h("div", { class: "of-step" },
-      h("button", { class: "btn small", type: "button", id: "repPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
-      h("strong", { id: "repRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : r.from > today ? " (scheduled)" : "") }),
-      h("button", { class: "btn small", type: "button", id: "repNext", "aria-label": "Later", disabled: off >= maxOff, onclick: () => step(1) }, "›")),
+  for (let k = r.from.slice(0, 7); `${k}-01` <= until; k = lbAddDays(`${k}-${String(lbDaysIn(k)).padStart(2, "0")}`, 1).slice(0, 7)) months.push(k);
+  const step = n => {
+    if (per === "dates") { revView.rfrom = lbAddDays(r.from, n * len); revView.rto = lbAddDays(r.to, n * len); }
+    else revView.roff = Math.max(-5000, Math.min(ahead, off + n));
+    revSaveView(); renderRevenue();
+  };
+  const pick = (a, b) => { if (a > b) [a, b] = [b, a]; revView.rfrom = a; revView.rto = b; revSaveView(); renderRevenue(); };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+    h("input", { id, type: "date", value, "aria-label": label, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
+  const label = per === "day" ? (off === 0 ? "Today" : lbDayText(r.from) + (r.from > today ? " (scheduled)" : ""))
+    : r.label + (r.to >= today && r.from <= today ? " (to date)" : r.from > today ? " (scheduled)" : "");
+  const bar = h("div", { class: "lb-bar rp-bar" },
+    lbSeg(Object.entries(REP_PER), per, k => {
+      if (k === "dates" && per !== "dates") { revView.rfrom = r.from; revView.rto = upTo; }   // Dates starts from the period on screen
+      revView.rper = k; revView.roff = 0; revSaveView(); renderRevenue();
+    }, "Period"),
+    per === "dates"
+      ? h("div", { class: "lb-daybar lb-payrange", id: "repDates" },
+        h("button", { class: "btn small", type: "button", id: "repPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        dateBox("repFrom", r.from, "From", v => pick(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
+        dateBox("repTo", r.to, "To", v => pick(v < r.from ? v : r.from, v)),
+        h("button", { class: "btn small", type: "button", id: "repNext", "aria-label": "Later", onclick: () => step(1) }, "›"))
+      : h("div", { class: "of-step" },
+        h("button", { class: "btn small", type: "button", id: "repPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        h("strong", { id: "repRangeLabel", text: label }),
+        h("button", { class: "btn small", type: "button", id: "repNext", "aria-label": "Later", disabled: off >= ahead, onclick: () => step(1) }, "›")),
     h("button", { class: "btn small", type: "button", id: "repReadBtn", disabled: repSync.busy, title: "Read these jobs and payments from Housecall Pro again",
       onclick: () => { repSync.err = ""; repEnsure(months, true); } }, "Read again"));
-  const until = per === "year" && r.to > today ? `${today.slice(0, 7)}-${String(lbDaysIn(today.slice(0, 7))).padStart(2, "0")}` : r.to;
   // a year kept on this device is shown at once, then taken from the Repairs tab again (once each time the app is open)
   for (let y = Number(r.from.slice(0, 4)); y <= Number(until.slice(0, 4)); y++) if (!repFresh[y] && repDoc(y)) { repFresh[y] = true; repLoad(y); }
   const jobs = repJobs(r.from, until);
   if (!jobs) { box.replaceChildren(...[top, sub, bar].filter(Boolean), h("p", { class: "loading", text: repErr || `Loading the repairs of ${r.from.slice(0, 4)}…` })); return; }
-  const live = jobs.filter(j => !j.gone), gone = jobs.filter(j => j.gone), s = repSum(jobs);
-  const doc = repDoc(Number(r.from.slice(0, 4))), readAt = Math.max(0, ...months.map(m => (doc && doc.read[m]) || 0));
+  const live = jobs.filter(j => !j.gone), gone = jobs.filter(j => j.gone), counted = jobs.filter(j => j.day <= upTo), later = live.filter(j => j.day > upTo), s = repSum(counted);
+  const readAt = Math.max(0, ...months.map(m => ((repDoc(Number(m.slice(0, 4))) || { read: {} }).read[m]) || 0));
   const status = h("p", { class: "lb-sub rev-status" + (repSync.busy ? " busy" : ""), id: "repStatus", role: "status" },
     repSync.busy ? `Reading Housecall Pro: ${repSync.what}${repSync.n > 1 ? ` (${repSync.done + 1} of ${repSync.n})` : ""}…`
       : readAt ? `Repair jobs and client payments from Housecall Pro · read ${revReadText(readAt)} · vendor costs typed here` : "Not read from Housecall Pro yet.");
@@ -10245,8 +10274,10 @@ function renderRepairs(box) {
     kp("mon", "k-vn", "Monumental", lbMoney(s.mon / 100), (s.owed ? `${lbMoney(s.owed / 100)} still to pay` : "nothing left to pay") + (s.inv ? ` · ${lbMoney(s.inv / 100)} invoiced` : "")),
     kp("f", "k-vn", "Specialty contractors", lbMoney(s.f / 100), [...s.fNames].join(", ") || "none"),
     kp("voda", "k-vd", "VODA", lbMoney(s.voda / 100), s.c ? `${Math.round(s.voda / s.c * 100)}% of charged` : "–"));
+  const ls = later.length ? repSum(later) : null;
+  const laterNote = ls ? h("p", { class: "meta rp-later", id: "repLater", text: `Not in the totals: ${revJobs(ls.n)} scheduled after today, ${lbMoney(ls.c / 100)} charged (Monumental ${lbMoney(ls.mon / 100)}, VODA ${lbMoney(ls.voda / 100)}).` }) : null;
   let body;
-  if (per === "month") {
+  if (list) {
     const dt = d => { const x = lbDate(d); return `${LB_WD[x.getDay()]} ${MONTHS[x.getMonth()]} ${x.getDate()}`; };
     const row = j => {
       const x = repSplit(j);
@@ -10266,12 +10297,12 @@ function renderRepairs(box) {
         h("th", { class: "vn" }, "Specialty", h("small", { text: "VODA pays" })), h("th", { class: "vn" }, "Monumental", h("small", { text: "their share" })),
         h("th", { class: "vn" }, "Mon. still owed", h("small", { text: "after deposits" })), h("th", { class: "vd" }, "VODA", h("small", { text: "our share" })))),
       h("tbody", null, live.map(row), gone.map(row)),
-      h("tfoot", null, h("tr", null, h("th", { text: `${lbMonthLong(Number(r.from.slice(5, 7)))} total` }), h("td", { text: lbCash(s.c / 100) }),
+      h("tfoot", null, h("tr", null, h("th", { text: per === "month" ? `${lbMonthLong(Number(r.from.slice(5, 7)))} ${upTo < r.to ? "to date" : "total"}` : upTo < r.to ? "Total to date" : "Total" }), h("td", { text: lbCash(s.c / 100) }),
         h("td", null, lbCash(s.paid / 100), h("small", { text: `${lbCash(s.owes / 100)} owed` })),
         h("td", { class: "vn", text: lbCash(s.f / 100) }), h("td", { class: "vn", text: lbCash(s.mon / 100) }), h("td", { class: "vn", text: lbCash(s.owed / 100) }), h("td", { class: "vd", text: lbCash(s.voda / 100) }))))));
     const cards = h("div", { class: "rp-cards", id: "repCards" }, live.concat(gone).map(j => {
       const x = repSplit(j);
-      return h("button", { class: "rp-card" + (j.gone ? " gone" : ""), type: "button", "data-job": j.id, onclick: () => openRepJob(j.id) },
+      return h("button", { class: "rp-card" + (j.gone ? " gone" : "") + (j.day > upTo ? " future" : ""), type: "button", "data-job": j.id, onclick: () => openRepJob(j.id) },
         h("span", { class: "top" }, h("b", { text: j.client || repStreetText(j.addr).split(",")[0] || "(no name)" }), h("span", { text: lbCash(j.c / 100) })),
         h("span", { class: "meta2" }, `${dt(j.day)}${j.inv ? ` · #${j.inv}` : ""} `, repPayTag(j, today)),
         h("span", { class: "split" },
@@ -10279,21 +10310,22 @@ function renderRepairs(box) {
           h("span", { class: "vn" }, h("small", { text: j.t.mPaidAt ? "Paid" : repMonToPay(j) ? "Invoiced, to pay" : "Still owed" }), !x.mon ? "–" : j.t.mPaidAt ? repShortDay(j.t.mPaidAt) : lbCash((repMonToPay(j) || x.owed) / 100)),
           h("span", { class: "vd" }, h("small", { text: "VODA" }), lbCash(x.voda / 100))));
     }));
-    body = live.length || gone.length ? [table, cards] : [h("p", { class: "meta", text: "No Monumental jobs scheduled this month." })];
+    body = live.length || gone.length ? [table, cards, laterNote] : [h("p", { class: "meta", text: `No Monumental jobs ${per === "day" ? "on this day" : per === "week" ? "this week" : per === "month" ? "this month" : "in these days"}.` })];
   } else {
+    const yrs = r.from.slice(0, 4) !== until.slice(0, 4);
     const rows = months.map(m => {
-      const ms = repSum(jobs.filter(j => j.day.startsWith(m)));
+      const ms = repSum(counted.filter(j => j.day.startsWith(m)));
       return h("tr", { class: "rev-mo", "data-month": m, tabindex: "0", onclick: () => { const t = clockNow(); revView.rper = "month"; revView.roff = (Number(m.slice(0, 4)) * 12 + Number(m.slice(5)) - 1) - (t.getFullYear() * 12 + t.getMonth()); revSaveView(); renderRevenue(); } },
-        h("th", { text: lbMonthLong(Number(m.slice(5))) }), [ms.c, ms.paid, ms.owes, ms.mon, ms.f, ms.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(ms.n) }));
+        h("th", { text: lbMonthLong(Number(m.slice(5))) + (yrs ? ` ${m.slice(0, 4)}` : "") }), [ms.c, ms.paid, ms.owes, ms.mon, ms.f, ms.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(ms.n) }));
     });
-    const nMonths = months.filter(m => jobs.some(j => !j.gone && j.day.startsWith(m))).length || 1;
+    const nMonths = months.filter(m => counted.some(j => !j.gone && j.day.startsWith(m))).length || 1;
     body = [h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "repYear" },
       h("thead", null, h("tr", null, ["Month", "Charged", "Clients paid", "Clients owe", "Monumental", "Specialty", "VODA"].map(t => h("th", { text: t })), h("th", { class: "pj", text: "Jobs" }))),
       h("tbody", null, rows),
       h("tfoot", null,
-        h("tr", null, h("th", { text: r.to >= today ? "Year so far" : "Year" }), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(s.n) })),
+        h("tr", null, h("th", { text: per === "year" ? (r.to >= today ? "Year to date" : "Year") : upTo < r.to ? "Total to date" : "Total" }), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(s.n) })),
         h("tr", { id: "repAvg" }, h("th", null, "Monthly average", h("small", { text: `÷ ${nMonths} month${nMonths === 1 ? "" : "s"} with jobs` })), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / nMonths / 100) })), h("td", { class: "pj", text: fmt(Math.round(s.n / nMonths)) })))))),
-      h("p", { class: "hint", text: "Tap a month to see its jobs." })];
+      laterNote, h("p", { class: "hint", text: "Tap a month to see its jobs." })];
   }
   const invBtn = h("div", { class: "rp-actions" }, h("button", { class: "btn small primary", type: "button", id: "repInvBtn", onclick: () => openRepMonInv() }, "+ Monumental invoice (PDF)"));
   const imp = isAdmin() ? h("p", { class: "rp-actions" }, h("button", { class: "btn small", type: "button", id: "repImportBtn", onclick: () => openRepImport() }, "Import the old Excel list…"),
