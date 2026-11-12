@@ -790,6 +790,11 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ch { font-style: normal; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .rev-ch.up { color: var(--ok); } .rev-ch.down { color: var(--due); }
 .rev-kpis .pay-kpi span.rev-was { color: var(--muted); }
+.rev-kpis .pay-kpi small b.rev-tyear { margin: 0 0 0 6px; vertical-align: 1px; }
+.rev-kpis .pay-kpi span.rev-chg { color: var(--muted); font-weight: 600; margin-top: 3px; }
+.rev-kpis-was { margin-top: -2px; }
+.rev-kpis-was .pay-kpi { background: color-mix(in srgb, var(--bg) 70%, var(--surface)); border-style: dashed; box-shadow: none; }
+.rev-kpis-was .pay-kpi > b { color: color-mix(in srgb, var(--ink) 75%, var(--muted)); }
 /* comparing: the year picked, its money, its jobs and the change, in a grey box under this year's number */
 #revTable td .rev-was { display: block; margin: 4px 0 0 auto; padding: 3px 7px 4px; border-radius: 7px; background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent); color: var(--muted); font-size: .74rem; font-weight: 600; line-height: 1.35; text-align: right; }
 #revTable td .rev-was small { display: block; font-size: .7rem; }
@@ -10009,15 +10014,18 @@ function renderRevenue() {
   const vs = (now, then) => { const ch = revChange(now, then); return h("em", { class: "rev-ch " + ch.cls, text: ch.text }); };
   const cmpShort = /^\d{4}$/.test(cmpName) ? `’${cmpName.slice(2)}` : cmpName;
   const revYearTag = () => h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: cmpName }), h("span", { class: "t-short", text: cmpShort }));
-  // the totals: tiles on a PC, one thin row on a phone (each with how it compares)
-  const tiles = h("div", { class: "pay-kpis rev-kpis", id: "revTiles", style: `--n:${shown.length}` },
-    h("div", { class: "pay-kpi", "data-k": "total" }, h("small", { text: "Total revenue" }), h("b", { text: lbMoney(s.cents / 100) }),
-      h("span", { text: `${revJobs(s.jobs)}${s.jobs ? ` · ${lbMoney(s.cents / 100 / s.jobs)} a job` : ""}` }),
-      c ? h("span", { class: "rev-was" }, h("b", { class: "rev-ytag", text: cmpName }), `${lbMoney(c.cents / 100)} `, vs(s.cents, c.cents), h("small", { text: revJobs(c.jobs) })) : null,
-      h("div", { class: "rev-bar", "aria-hidden": "true" }, shown.map(([k]) => h("i", { class: k, style: `width:${s.cents > 0 ? Math.max(0, s[k][0]) / s.cents * 100 : 0}%` })))),
-    shown.map(([k, name]) => h("div", { class: "pay-kpi", "data-k": k }, h("small", null, h("i", { class: "rev-dot " + k }), name), h("b", { text: lbMoney(s[k][0] / 100) }),
-      h("span", { text: `${revJobs(s[k][1])} · ${revPct(s[k][0], s.cents)}` }),
-      c ? h("span", { class: "rev-was" }, h("b", { class: "rev-ytag", text: cmpName }), `${lbMoney(c[k][0] / 100)} `, vs(s[k][0], c[k][0]), h("small", { text: revJobs(c[k][1]) })) : null)));
+  // the totals: tiles on a PC (the year on each; comparing, the year picked in its own row of tiles under them, and the
+  // change on this year's tiles), one thin row on a phone
+  const nowName = r.from.slice(0, 4) === to.slice(0, 4) ? r.from.slice(0, 4) : `${r.from.slice(0, 4)}–${to.slice(0, 4)}`;
+  const tileRow = (x, yName, id, chg) => h("div", { class: "pay-kpis rev-kpis" + (chg ? "" : " rev-kpis-was"), id, style: `--n:${shown.length}` },
+    h("div", { class: "pay-kpi", "data-k": "total" }, h("small", null, "Total revenue", h("b", { class: "rev-ytag rev-tyear", text: yName })), h("b", { text: lbMoney(x.cents / 100) }),
+      h("span", { text: `${revJobs(x.jobs)}${x.jobs ? ` · ${lbMoney(x.cents / 100 / x.jobs)} a job` : ""}` }),
+      chg ? h("span", { class: "rev-chg" }, vs(x.cents, c.cents), ` vs ${cmpName}`) : null,
+      h("div", { class: "rev-bar", "aria-hidden": "true" }, shown.map(([k]) => h("i", { class: k, style: `width:${x.cents > 0 ? Math.max(0, x[k][0]) / x.cents * 100 : 0}%` })))),
+    shown.map(([k, name]) => h("div", { class: "pay-kpi", "data-k": k }, h("small", null, h("i", { class: "rev-dot " + k }), name, h("b", { class: "rev-ytag rev-tyear", text: yName })), h("b", { text: lbMoney(x[k][0] / 100) }),
+      h("span", { text: `${revJobs(x[k][1])} · ${revPct(x[k][0], x.cents)}` }),
+      chg ? h("span", { class: "rev-chg" }, vs(x[k][0], c[k][0]), ` vs ${cmpName}`) : null)));
+  const tiles = tileRow(s, nowName, "revTiles", !!c), tilesWas = c ? tileRow(c, cmpName, "revTilesWas", false) : null;
   const strip = h("div", { class: "rev-strip", id: "revStrip" },
     [["total", "Total", s.cents, s.jobs, c && c.cents]].concat(REV_DEPTS.slice(0, 3).map(([k, , short]) => [k, short, s[k][0], s[k][1], c && c[k][0]])).map(([k, t, cents, j, was]) =>
       h("div", { "data-k": k }, h("small", null, k !== "total" ? h("i", { class: "rev-dot " + k }) : null, t), h("b", { text: revShort(cents) }),
@@ -10076,7 +10084,7 @@ function renderRevenue() {
             b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
       }));
   }
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, revSubSw("dep"), bar, status, err, r.from > today ? null : [tiles, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, revSubSw("dep"), bar, status, err, r.from > today ? null : [tiles, tilesWas, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
   if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false), 0);
 }
 
