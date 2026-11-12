@@ -687,12 +687,27 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 #revTable td.zero { color: var(--muted); }
 #revTable tbody th { font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); }
 #revTable tbody th small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; }
+#revTable tbody th, #revTable tfoot th { white-space: normal; min-width: 5.5em; }
 #revTable tr.future th, #revTable tr.future td { color: var(--muted); opacity: .6; }
 #revTable tr.rev-wk th, #revTable tr.rev-wk td { background: var(--surface-2, var(--bg)); font-weight: 700; }
 #revTable tr.rev-mo { cursor: pointer; }
 #revTable tr.rev-mo:hover th, #revTable tr.rev-mo:hover td { background: var(--accent-soft); }
 #revTable td.tot { font-weight: 700; }
 .rev-status { min-height: 1.3em; }
+.rev-cmp { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.rev-cmp select { font: inherit; font-size: .95rem; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+.rev-ch { font-style: normal; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.rev-ch.up { color: var(--ok); } .rev-ch.down { color: var(--due); }
+.rev-kpis .pay-kpi span.rev-was { color: var(--muted); }
+/* comparing: the year picked, its money, its jobs and the change, in a grey box under this year's number */
+#revTable td .rev-was { display: block; margin: 4px 0 0 auto; padding: 3px 7px 4px; border-radius: 7px; background: var(--bg); color: var(--muted); font-size: .74rem; font-weight: 600; line-height: 1.35; text-align: right; }
+#revTable td .rev-was small { display: block; font-size: .7rem; }
+.rev-ytag { display: inline-block; font-size: .62rem; font-weight: 800; letter-spacing: .03em; line-height: 1.3; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; margin-right: 4px; vertical-align: 1px; }
+.rev-kpis .pay-kpi b.rev-ytag { display: inline-block; font-family: var(--font-body); font-size: .62rem; line-height: 1.3; overflow: visible; margin-right: 6px; }
+.rev-kpis .pay-kpi span.rev-was { margin-top: 5px; padding: 4px 8px 5px; border-radius: 7px; background: var(--bg); width: fit-content; max-width: 100%; box-sizing: border-box; font-weight: 600; }
+.rev-kpis .pay-kpi span.rev-was { white-space: normal; overflow: visible; }
+.rev-kpis .pay-kpi span.rev-was small { display: block; font-size: .74rem; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--muted); }
+#revTable tr.rev-yr th, #revTable tr.rev-yr td { font-weight: 600; }
 .rev-status.busy::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 7px; border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: revspin .8s linear infinite; vertical-align: -1px; }
 @keyframes revspin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) {
@@ -702,8 +717,13 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .rev-strip div + div { border-left: 1px solid var(--line); }
   .rev-strip small { display: block; font-size: .6rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rev-strip b { display: block; font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .rev-strip b.rev-ytag { display: inline-block; font-family: var(--font-body); font-size: .56rem; font-weight: 800; margin-right: 3px; }
   .rev-strip span { display: block; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   #revTable .pj, #revTable .oth { display: none; }
+  .rev-bar-top .rev-cmp { width: 100%; justify-content: flex-end; }
+  #revTable td .rev-was { padding: 3px 4px 4px; font-size: .7rem; }
+  #revTable td .rev-was .rev-ch { display: block; }
+  #revTable td .rev-was .rev-ytag { display: block; width: max-content; margin: 0 0 1px auto; padding: 0 3px; }
   #revTable tbody th, #revTable tfoot th { white-space: normal; min-width: 4.2em; max-width: 6.2em; }
   #revTable thead th .rev-dot { display: none; }
   #revTable { font-size: .8rem; }
@@ -1425,7 +1445,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .views.many .view-btn svg { display: block; width: 18px; height: 18px; }
   .views.five .view-btn { font-size: .58rem; letter-spacing: -.01em; padding: 6px 0; }
 }
-@media (max-width: 370px) { .views.five .view-btn { font-size: .54rem; } }
+@media (max-width: 370px) { .views.five .view-btn { font-size: .54rem; } #revTable { font-size: .76rem; } #revTable th, #revTable td { padding: 5px 2px; } #revTable td .rev-was { padding: 2px 3px 3px; font-size: .68rem; } }
 /* a tablet: five tabs share the width */
 @media (min-width: 601px) and (max-width: 940px) { .views.five { width: 100%; box-sizing: border-box; } .views.five .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 6px; gap: 6px; } }
 @media (min-width: 601px) and (max-width: 760px) { .views.five .view-btn svg { display: none; } }
@@ -9344,9 +9364,10 @@ let revOther = {};                                      // other years', loaded 
 let revLoading = {}, revErr = "", revOld = false;
 let revSync = { busy: false, what: "", err: "", n: 0, done: 0 };
 const revAsked = {};                                    // day → when this window last read it (not again by itself for 10 minutes)
-const revView = Object.assign({ per: "week", off: 0 }, store.get(K_REV_VIEW) || {});
-const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per });
-const REV_PER = { week: "Week", month: "Month", year: "Year" };
+const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0 }, store.get(K_REV_VIEW) || {});
+const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp });
+const REV_PER = { week: "Week", month: "Month", year: "Year", dates: "Dates" };
+const REV_CMP_YEARS = 5;                                // compare with up to 5 years before
 // a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
 const REV_DEPTS = [["r", "Restoration", "Rest."], ["c", "Cleaning", "Clean."], ["p", "Repairs", "Repairs"], ["o", "Other", "Other"]];
 const revThisYear = () => clockNow().getFullYear();
@@ -9406,18 +9427,20 @@ function revErrText(e) {
 const revMonthText = day => `${lbMonthLong(Number(day.slice(5, 7)))} ${day.slice(0, 4)}`;
 /** Reads again what's missing or may have changed between from and to (or all of it: force), a month at a time,
  *  the newest month first, showing each as it comes in. A failure stops it until Read again is pressed. */
-async function revEnsure(from, to, force) {
+async function revEnsure(ranges, force) {
   const today = lbToday();
-  if (revSync.busy || (!force && revSync.err) || !session || !canSee("revenue") || from > today) return;
+  if (revSync.busy || (!force && revSync.err) || !session || !canSee("revenue")) return;
   if (!navigator.onLine) return;
-  if (to > today) to = today;
   const now = Date.now(), months = {};
-  for (let d = from; d <= to; d = lbAddDays(d, 1)) {
-    const doc = revDoc(Number(d.slice(0, 4)));
-    if (!doc) return;
-    const m = d.slice(0, 7);
-    if (!force && revAsked[d] && performance.now() - revAsked[d] < 10 * 60e3) continue;
-    if (force || revStale(d, doc.days[d], now, today)) { if (!months[m]) months[m] = { from: d, to: d }; months[m].to = d; }
+  for (let [from, to] of ranges) {
+    if (to > today) to = today;
+    for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+      const doc = revDoc(Number(d.slice(0, 4)));
+      if (!doc) return;
+      const m = d.slice(0, 7);
+      if (!force && revAsked[d] && performance.now() - revAsked[d] < 10 * 60e3) continue;
+      if (force || revStale(d, doc.days[d], now, today)) { if (!months[m]) months[m] = { from: d, to: d }; if (d < months[m].from) months[m].from = d; if (d > months[m].to) months[m].to = d; }
+    }
   }
   const chunks = Object.keys(months).sort().reverse().map(k => months[k]);
   if (!chunks.length) return;
@@ -9459,11 +9482,77 @@ function revSum(days, from, to) {
 const revPct = (a, b) => (b ? `${Math.round(a / b * 100)}%` : "–");
 const revJobs = n => `${fmt(n)} job${n === 1 ? "" : "s"}`;
 /** A phone's short money: $98,169; $1.25M from a million. */
-const revShort = cents => { const v = cents / 100; return Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : lbMoney(v); };
+const revShort = cents => {
+  const v = cents / 100, a = Math.abs(v), sign = v < 0 ? "-" : "";
+  return a >= 1e6 ? `${sign}$${(a / 1e6).toFixed(2)}M` : a >= 1e5 ? `${sign}$${Math.round(a / 1e3)}k` : a >= 1e4 ? `${sign}$${(a / 1e3).toFixed(1)}k` : lbMoney(v);
+};
+/** Money in the table: whole dollars, and on a phone the short form when it's long. */
+const revCash = cents => { const long = lbMoney(cents / 100), short = revShort(cents); return long === short ? long : [h("span", { class: "t-long", text: long }), h("span", { class: "t-short", text: short })]; };
 function revReadText(at) {
   if (!at) return "";
   const d = new Date(at), t = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return lbDayKey(d) === lbToday() ? `today ${t}` : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${t}`;
+}
+
+/** "Nov 2 – 8, 2026", "Dec 29, 2025 – Jan 4, 2026". */
+const revSpanText = (a, b) => (a === b ? `${MONTHS[lbDate(a).getMonth()]} ${lbDate(a).getDate()}, ${a.slice(0, 4)}` : a.slice(0, 4) === b.slice(0, 4) ? lbSpanText(a, b)
+  : `${MONTHS[lbDate(a).getMonth()]} ${lbDate(a).getDate()}, ${a.slice(0, 4)} – ${MONTHS[lbDate(b).getMonth()]} ${lbDate(b).getDate()}, ${b.slice(0, 4)}`);
+const revLen = (a, b) => Math.round((lbDate(b) - lbDate(a)) / 864e5) + 1;
+/** The same day n years before: a week goes back whole weeks (Monday to Monday, 52 weeks a year), anything else to
+ *  the same date (Feb 29 → Feb 28). */
+function revShift(day, n, per) {
+  if (!n) return day;
+  if (per === "week") return lbAddDays(day, -364 * n);
+  const y = Number(day.slice(0, 4)) - n, md = day.slice(5);
+  return md === "02-29" && lbDaysIn(`${y}-02`) < 29 ? `${y}-02-28` : `${y}-${md}`;
+}
+/** The period on screen: Week, Month, Year (‹ › go back), or the From – To days picked (Dates). */
+function revRange(per, off) {
+  if (per !== "dates") return ofRange(per, off);
+  const today = lbToday();
+  let from = lbIsDay(revView.from) ? revView.from : `${today.slice(0, 7)}-01`, to = lbIsDay(revView.to) ? revView.to : today;
+  if (to < from) [from, to] = [to, from];
+  return { from, to, label: revSpanText(from, to) };
+}
+/** The lines of the table: days (with each week's total in a month, or in picked dates longer than a week), months
+ *  (a year, or picked dates up to 2 years) or years (longer). */
+function revLines(per, r, to, today) {
+  const out = [], len = revLen(r.from, r.to);
+  const mode = per === "year" ? "months" : per === "dates" ? (len <= 62 ? "days" : len <= 731 ? "months" : "years") : "days";
+  if (mode === "days") {
+    const end = per === "week" ? r.to : to, weeks = per === "month" || (per === "dates" && len > 7);
+    let wk = r.from;
+    for (let d = r.from; d <= end; d = lbAddDays(d, 1)) {
+      const dt = lbDate(d);
+      out.push({ label: `${LB_WD[dt.getDay()]} ${MONTHS[dt.getMonth()]} ${dt.getDate()}${per === "dates" && r.from.slice(0, 4) !== r.to.slice(0, 4) ? `, ${d.slice(0, 4)}` : ""}`, a: d, b: d, day: d, future: d > today });
+      if (weeks && (dt.getDay() === 0 || d === end) && wk <= today) {
+        out.push({ label: `Week of ${lbWeekText(lbMondayOf(wk))}`, sub: lbAddDays(lbMondayOf(wk), 6) > today ? "so far" : "", a: wk, b: d > today ? today : d, cls: "rev-wk" });
+        wk = lbAddDays(d, 1);
+      }
+    }
+  } else if (mode === "months") {
+    for (let k = r.from.slice(0, 7); `${k}-01` <= to; k = lbAddDays(`${k}-${String(lbDaysIn(k)).padStart(2, "0")}`, 1).slice(0, 7)) {
+      const first = `${k}-01`, last = `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`;
+      const a = r.from > first ? r.from : first, b = r.to < last ? r.to : last;
+      const m = Number(k.slice(5));
+      out.push({ label: per === "year" ? lbMonthLong(m) : `${lbMonthLong(m)} ${k.slice(0, 4)}`, short: per === "year" ? MONTHS[m - 1] : `${MONTHS[m - 1]} ’${k.slice(2, 4)}`, sub: a !== first || b !== last ? `${lbDate(a).getDate()} – ${lbDate(b).getDate()}` : b > today ? "so far" : "",
+        a, b: b > today ? today : b, month: k, cls: "rev-mo" });
+      if (b > today) out[out.length - 1].sub = out[out.length - 1].sub || "so far";
+    }
+  } else {
+    for (let y = Number(r.from.slice(0, 4)); `${y}-01-01` <= to; y++) {
+      const a = r.from > `${y}-01-01` ? r.from : `${y}-01-01`, b = r.to < `${y}-12-31` ? r.to : `${y}-12-31`;
+      out.push({ label: String(y), sub: a !== `${y}-01-01` || b !== `${y}-12-31` ? revSpanText(a, b).replace(/, \d{4}$/, "") : "", a, b: b > today ? today : b, cls: "rev-yr" });
+    }
+  }
+  return out;
+}
+/** ▲ 12% / ▼ 4% / "new" against what it's compared with. */
+function revChange(now, then) {
+  if (!then && !now) return { text: "–", cls: "" };
+  if (!then) return { text: "new", cls: "up" };
+  const p = (now - then) / Math.abs(then) * 100, r = Math.round(p);
+  return { text: r === 0 ? "0%" : `${r > 0 ? "▲" : "▼"} ${Math.abs(r)}%`, cls: r > 0 ? "up" : r < 0 ? "down" : "" };
 }
 
 /* ---- the screen ---- */
@@ -9482,76 +9571,107 @@ function renderRevenue() {
   }
   const per = REV_PER[revView.per] ? revView.per : "week";
   const off = Math.min(0, Number(revView.off) || 0);
-  const r = ofRange(per, off), today = lbToday(), to = r.to > today ? today : r.to;
-  const step = n => { revView.off = Math.min(0, off + n); renderRevenue(); };
+  const r = revRange(per, off), today = lbToday(), to = r.to > today ? today : r.to;
+  const cmp = Math.max(0, Math.min(REV_CMP_YEARS, Number(revView.cmp) || 0));
+  const cf = revShift(r.from, cmp, per), ct = revShift(to, cmp, per);
+  const len = revLen(r.from, r.to);
+  const step = n => {
+    if (per === "dates") { revView.from = lbAddDays(r.from, n * len); revView.to = lbAddDays(r.to, n * len); revSaveView(); }
+    else revView.off = Math.min(0, off + n);
+    renderRevenue();
+  };
+  const ranges = () => [[r.from, to]].concat(cmp ? [[cf, ct]] : []);
   const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Revenue" }),
     h("div", { class: "lb-acts" }, h("button", { class: "btn", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
-      title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure(r.from, to, true); } }, "Read again")));
-  const bar = h("div", { class: "lb-bar" },
-    lbSeg(Object.entries(REV_PER), per, k => { revView.per = k; revView.off = 0; revSaveView(); renderRevenue(); }, "Period"),
-    h("div", { class: "of-step" },
-      h("button", { class: "btn small", type: "button", id: "revPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
-      h("strong", { id: "revRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
-      h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")));
+      title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure([[r.from, to]], true); } }, "Read again")));
+  // the period: Week / Month / Year with ‹ ›, or Dates (From – To), and what to compare it with
+  const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; revView.from = from; revView.to = to2; revSaveView(); renderRevenue(); };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+    h("input", { id, type: "date", value, max: today, "aria-label": label, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
+  const yearsBack = Array.from({ length: REV_CMP_YEARS }, (_, i) => i + 1);
+  const cmpSel = h("label", { class: "rev-cmp" }, h("span", { text: "Compare" }),
+    h("select", { id: "revCmp", "aria-label": "Compare with", onchange: e => { revView.cmp = Number(e.target.value) || 0; revSaveView(); renderRevenue(); } },
+      h("option", { value: "0", text: "Off" }),
+      yearsBack.map(n => h("option", { value: String(n), text: r.from.slice(0, 4) === r.to.slice(0, 4) ? `with ${Number(r.from.slice(0, 4)) - n}` : `${n} year${n === 1 ? "" : "s"} before` }))));
+  cmpSel.querySelector("select").value = String(cmp);
+  const bar = h("div", { class: "lb-bar rev-bar-top" },
+    lbSeg(Object.entries(REV_PER), per, k => {
+      if (k === "dates" && per !== "dates") { revView.from = r.from; revView.to = to; }   // Dates starts from the period on screen
+      revView.per = k; revView.off = 0; revSaveView(); renderRevenue();
+    }, "Period"),
+    per === "dates"
+      ? h("div", { class: "lb-daybar lb-payrange", id: "revDates" },
+        h("button", { class: "btn small", type: "button", id: "revPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        dateBox("revFrom", r.from, "From", v => pick(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
+        dateBox("revTo", r.to, "To", v => pick(v < r.from ? v : r.from, v)),
+        h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: r.to >= today, onclick: () => step(1) }, "›"))
+      : h("div", { class: "of-step" },
+        h("button", { class: "btn small", type: "button", id: "revPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        h("strong", { id: "revRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
+        h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    cmpSel);
   const days = r.from > today ? {} : revDaysFor(r.from, to);
-  if (!days) { box.replaceChildren(top, bar, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` })); return; }
-  const s = revSum(days, r.from, to);
+  const old = cmp && r.from <= today ? revDaysFor(cf, ct) : {};
+  if (!days || !old) { box.replaceChildren(top, bar, h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
+  const s = revSum(days, r.from, to), c = cmp ? revSum(old, cf, ct) : null;
+  const cmpName = cmp ? (cf.slice(0, 4) === ct.slice(0, 4) ? cf.slice(0, 4) : `${cf.slice(0, 4)}–${ct.slice(0, 4)}`) : "";
   const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
     revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…`
-      : s.read ? `From Housecall Pro · read ${revReadText(s.at)}` : r.from > today ? "" : "Not read from Housecall Pro yet.");
+      : s.read ? `From Housecall Pro · read ${revReadText(s.at)}` : r.from > today ? "" : "Not read from Housecall Pro yet.",
+    cmp && !revSync.busy ? h("span", { class: "rev-vs", id: "revVs", text: ` · compared with ${revSpanText(cf, ct)}${per === "week" ? " (the same weekdays)" : ""}` }) : null);
   const err = revSync.err ? h("p", { class: "dlg-err", id: "revErr" }, revSync.err, " ",
     h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; renderRevenue(); } }, "Try again")) : null;
-  const shown = REV_DEPTS.filter(([k]) => k !== "o" || s.o[0] || s.o[1]);
-  // the totals: tiles on a PC, one thin row on a phone
+  const shown = REV_DEPTS.filter(([k]) => k !== "o" || s.o[0] || s.o[1] || (c && (c.o[0] || c.o[1])));
+  const vs = (now, then) => { const ch = revChange(now, then); return h("em", { class: "rev-ch " + ch.cls, text: ch.text }); };
+  const cmpShort = /^\d{4}$/.test(cmpName) ? `’${cmpName.slice(2)}` : cmpName;
+  const revYearTag = () => h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: cmpName }), h("span", { class: "t-short", text: cmpShort }));
+  // the totals: tiles on a PC, one thin row on a phone (each with how it compares)
   const tiles = h("div", { class: "pay-kpis rev-kpis", id: "revTiles", style: `--n:${shown.length}` },
     h("div", { class: "pay-kpi", "data-k": "total" }, h("small", { text: "Total revenue" }), h("b", { text: lbMoney(s.cents / 100) }),
       h("span", { text: `${revJobs(s.jobs)}${s.jobs ? ` · ${lbMoney(s.cents / 100 / s.jobs)} a job` : ""}` }),
+      c ? h("span", { class: "rev-was" }, h("b", { class: "rev-ytag", text: cmpName }), `${lbMoney(c.cents / 100)} `, vs(s.cents, c.cents), h("small", { text: revJobs(c.jobs) })) : null,
       h("div", { class: "rev-bar", "aria-hidden": "true" }, shown.map(([k]) => h("i", { class: k, style: `width:${s.cents > 0 ? Math.max(0, s[k][0]) / s.cents * 100 : 0}%` })))),
     shown.map(([k, name]) => h("div", { class: "pay-kpi", "data-k": k }, h("small", null, h("i", { class: "rev-dot " + k }), name), h("b", { text: lbMoney(s[k][0] / 100) }),
-      h("span", { text: `${revJobs(s[k][1])} · ${revPct(s[k][0], s.cents)}` }))));
+      h("span", { text: `${revJobs(s[k][1])} · ${revPct(s[k][0], s.cents)}` }),
+      c ? h("span", { class: "rev-was" }, h("b", { class: "rev-ytag", text: cmpName }), `${lbMoney(c[k][0] / 100)} `, vs(s[k][0], c[k][0]), h("small", { text: revJobs(c[k][1]) })) : null)));
   const strip = h("div", { class: "rev-strip", id: "revStrip" },
-    [["total", "Total", s.cents, s.jobs]].concat(REV_DEPTS.slice(0, 3).map(([k, , short]) => [k, short, s[k][0], s[k][1]])).map(([k, t, c, j]) =>
-      h("div", { "data-k": k }, h("small", null, k !== "total" ? h("i", { class: "rev-dot " + k }) : null, t), h("b", { text: revShort(c) }), h("span", { text: revJobs(j) }))));
-  // the days (a week, a month with each week's total) or the months (a year)
-  const cell = (c, j, cls) => h("td", { class: (cls || "") + (c || j ? "" : " zero"), title: lbCash(c / 100) }, lbMoney(c / 100), j ? h("small", { text: revJobs(j) }) : null);
-  const line = (label, sub, x, cls, attrs) => h("tr", Object.assign({ class: cls || "" }, attrs || {}),
-    h("th", null, label, sub ? h("small", { text: sub }) : null),
-    x ? shown.map(([k]) => cell(x[k][0], x[k][1], k === "o" ? "oth" : "")) : shown.map(([k]) => h("td", { class: k === "o" ? "oth" : null, text: "–" })),
-    x ? cell(x.cents, x.jobs, "tot") : h("td", { class: "tot", text: "–" }),
+    [["total", "Total", s.cents, s.jobs, c && c.cents]].concat(REV_DEPTS.slice(0, 3).map(([k, , short]) => [k, short, s[k][0], s[k][1], c && c[k][0]])).map(([k, t, cents, j, was]) =>
+      h("div", { "data-k": k }, h("small", null, k !== "total" ? h("i", { class: "rev-dot " + k }) : null, t), h("b", { text: revShort(cents) }),
+        c ? h("span", null, h("b", { class: "rev-ytag", text: cmpShort }), vs(cents, was)) : h("span", { text: revJobs(j) }))));
+  // the table: each line's own days, and (comparing) the same days before
+  const lines = r.from > today ? [] : revLines(per, r, to, today);
+  const lineOld = L => (c && !L.future ? revSum(old, revShift(L.a, cmp, per), revShift(L.b, cmp, per)) : null);
+  const openMonth = k => { const t = clockNow(); revView.per = "month"; revView.off = (Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1) - (t.getFullYear() * 12 + t.getMonth()); revSaveView(); renderRevenue(); };
+  const attrs = L => Object.assign({ class: [L.cls, L.future ? "future" : ""].filter(Boolean).join(" ") },
+    L.day ? { "data-day": L.day } : {}, L.month ? { "data-month": L.month, tabindex: "0", title: "Show this month", onclick: () => openMonth(L.month) } : {});
+  const thOf = (L, x) => {
+    const sub = L.sub || (!L.day ? "" : lbHoliday(L.day) ? `${lbHoliday(L.day)}: closed` : !L.future && !x.read ? "not read yet" : "");
+    return h("th", null, L.short ? [h("span", { class: "t-long", text: L.label }), h("span", { class: "t-short", text: L.short })] : L.label, sub ? h("small", { text: sub }) : null);
+  };
+  const dash = cls => h("td", { class: cls || null, text: "–" });
+  // the departments side by side; comparing, each number has a grey box under it: the year picked, its money, the
+  // change and its jobs
+  const head = h("tr", null, h("th", { text: lines[0] && lines[0].month ? "Month" : lines[0] && lines[0].cls === "rev-yr" ? "Year" : "Day" }),
+    shown.map(([k, name, short]) => h("th", { class: k === "o" ? "oth" : null }, h("i", { class: "rev-dot " + k }), h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }))),
+    h("th", { text: "Total" }), h("th", { class: "pj", text: "Per job" }));
+  const cell = (x, o, k, cls) => {
+    const v = k === "t" ? [x.cents, x.jobs] : x[k], w = o && o.read ? (k === "t" ? [o.cents, o.jobs] : o[k]) : null;
+    return h("td", { class: (cls || "") + (v[0] || v[1] ? "" : " zero"), title: lbCash(v[0] / 100) }, revCash(v[0]), v[1] ? h("small", { text: revJobs(v[1]) }) : null,
+      w && (v[0] || w[0] || w[1]) ? h("div", { class: "rev-was" }, revYearTag(), revCash(w[0]), " ", vs(v[0], w[0]), h("small", { text: revJobs(w[1]) })) : null);
+  };
+  const row = (L, x, o, foot) => h("tr", foot ? { class: "rev-sum" } : attrs(L), foot ? h("th", { text: "Total" }) : thOf(L, x || {}),
+    x && (x.read || foot) ? shown.map(([k]) => cell(x, o, k, k === "o" ? "oth" : "")) : shown.map(([k]) => dash(k === "o" ? "oth" : null)),
+    x && (x.read || foot) ? cell(x, o, "t", "tot") : dash("tot"),
     h("td", { class: "pj", text: x && x.jobs ? lbMoney(x.cents / 100 / x.jobs) : "–" }));
-  const rows = [];
-  if (per === "year") {
-    for (let m = 1; m <= 12; m++) {
-      const k = lbMonthKey(r.from.slice(0, 4), m), a = `${k}-01`, b = `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`;
-      if (a > today) break;
-      const x = revSum(days, a, b > today ? today : b);
-      rows.push(line(lbMonthLong(m), b > today ? "so far" : "", x.read ? x : null, "rev-mo",
-        { "data-month": k, tabindex: "0", title: "Show this month", onclick: () => { const t = clockNow(); revView.per = "month"; revView.off = (Number(k.slice(0, 4)) * 12 + m - 1) - (t.getFullYear() * 12 + t.getMonth()); revSaveView(); renderRevenue(); } }));
-    }
-  } else {
-    let wk = r.from;
-    for (let d = r.from; d <= (per === "month" ? to : r.to); d = lbAddDays(d, 1)) {
-      const dt = lbDate(d), v = days[d], future = d > today;
-      const x = future || !v ? null : revSum(days, d, d), hol = lbHoliday(d);
-      rows.push(line(`${LB_WD[dt.getDay()]} ${MONTHS[dt.getMonth()]} ${dt.getDate()}`, hol ? `${hol}: closed` : future ? "" : !v ? "not read yet" : "", x, future ? "future" : "", { "data-day": d }));
-      if (per === "month" && (dt.getDay() === 0 || d === to) && wk <= today) {
-        const e = d > today ? today : d, xw = revSum(days, wk, e);
-        rows.push(line(`Week of ${lbWeekText(lbMondayOf(wk))}`, lbAddDays(lbMondayOf(wk), 6) > today ? "so far" : "", xw.read ? xw : null, "rev-wk"));
-        wk = lbAddDays(d, 1);
-      }
-    }
-  }
-  const table = h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "revTable" },
-    h("thead", null, h("tr", null, h("th", { text: per === "year" ? "Month" : "Day" }), shown.map(([k, name, short]) => h("th", { class: k === "o" ? "oth" : null },
-      h("i", { class: "rev-dot " + k }), h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }))),
-      h("th", { text: "Total" }), h("th", { class: "pj", text: "Per job" }))),
-    h("tbody", null, rows),
-    h("tfoot", null, line("Total", "", s.read ? s : null, "rev-sum")))));
+  const rows = lines.map(L => row(L, L.future ? null : revSum(days, L.a, L.b), lineOld(L)));
+  const table = h("div", { class: "panel" },
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "revTable" },
+      h("thead", null, head), h("tbody", null, rows), h("tfoot", null, row(null, s.read ? s : null, c, true)))));
   const notes = [];
   if (s.o[0] || s.o[1]) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
-  notes.push(h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." }));
+  notes.push(h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }));
   box.replaceChildren(...[top, bar, status, err, r.from > today ? null : [tiles, strip, table], ...notes].flat().filter(Boolean));
-  if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(r.from, to, false), 0);
+  if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false), 0);
 }
 
 /* ======================= Office scorecards ======================= */
