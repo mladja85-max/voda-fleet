@@ -683,6 +683,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rev-bar i { display: block; height: 100%; }
 .rev-bar .r { background: var(--accent); } .rev-bar .c { background: var(--clean); } .rev-bar .p { background: var(--soon); } .rev-bar .o { background: var(--muted); }
 .rev-strip { display: none; }
+#revTable .col-r, .rev-strip [data-k=r], .rev-kpis .pay-kpi[data-k=r] { --tint: var(--accent); }
+#revTable .col-c, .rev-strip [data-k=c], .rev-kpis .pay-kpi[data-k=c] { --tint: var(--clean); }
+#revTable .col-p, .rev-strip [data-k=p], .rev-kpis .pay-kpi[data-k=p] { --tint: var(--soon); }
+#revTable .col-r, #revTable .col-c, #revTable .col-p { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); }
+#revTable thead .col-r, #revTable thead .col-c, #revTable thead .col-p { background: color-mix(in srgb, var(--tint) 14%, var(--surface)); color: color-mix(in srgb, var(--tint) 80%, var(--ink)); }
+#revTable tr.rev-wk .col-r, #revTable tr.rev-wk .col-c, #revTable tr.rev-wk .col-p,
+#revTable tfoot .col-r, #revTable tfoot .col-c, #revTable tfoot .col-p { background: color-mix(in srgb, var(--tint) 15%, var(--surface)); }
+.rev-kpis .pay-kpi[data-k=r], .rev-kpis .pay-kpi[data-k=c], .rev-kpis .pay-kpi[data-k=p] { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
+.rev-strip [data-k=r], .rev-strip [data-k=c], .rev-strip [data-k=p] { background: color-mix(in srgb, var(--tint) 10%, var(--surface)); }
 #revTable td small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; }
 #revTable td.zero { color: var(--muted); }
 #revTable tbody th { font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); }
@@ -700,11 +709,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rev-ch.up { color: var(--ok); } .rev-ch.down { color: var(--due); }
 .rev-kpis .pay-kpi span.rev-was { color: var(--muted); }
 /* comparing: the year picked, its money, its jobs and the change, in a grey box under this year's number */
-#revTable td .rev-was { display: block; margin: 4px 0 0 auto; padding: 3px 7px 4px; border-radius: 7px; background: var(--bg); color: var(--muted); font-size: .74rem; font-weight: 600; line-height: 1.35; text-align: right; }
+#revTable td .rev-was { display: block; margin: 4px 0 0 auto; padding: 3px 7px 4px; border-radius: 7px; background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent); color: var(--muted); font-size: .74rem; font-weight: 600; line-height: 1.35; text-align: right; }
 #revTable td .rev-was small { display: block; font-size: .7rem; }
 .rev-ytag { display: inline-block; font-size: .62rem; font-weight: 800; letter-spacing: .03em; line-height: 1.3; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; margin-right: 4px; vertical-align: 1px; }
 .rev-kpis .pay-kpi b.rev-ytag { display: inline-block; font-family: var(--font-body); font-size: .62rem; line-height: 1.3; overflow: visible; margin-right: 6px; }
-.rev-kpis .pay-kpi span.rev-was { margin-top: 5px; padding: 4px 8px 5px; border-radius: 7px; background: var(--bg); width: fit-content; max-width: 100%; box-sizing: border-box; font-weight: 600; }
+.rev-kpis .pay-kpi span.rev-was { margin-top: 5px; padding: 4px 8px 5px; border-radius: 7px; background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent); width: fit-content; max-width: 100%; box-sizing: border-box; font-weight: 600; }
 .rev-kpis .pay-kpi span.rev-was { white-space: normal; overflow: visible; }
 .rev-kpis .pay-kpi span.rev-was small { display: block; font-size: .74rem; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--muted); }
 #revTable tr.rev-yr th, #revTable tr.rev-yr td { font-weight: 600; }
@@ -712,7 +721,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 @keyframes revspin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) {
   .rev-kpis { display: none; }
-  .rev-strip { display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .rev-strip { display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .rev-strip div { padding: 6px 7px; min-width: 0; }
   .rev-strip div + div { border-left: 1px solid var(--line); }
   .rev-strip small { display: block; font-size: .6rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -9652,7 +9661,7 @@ function renderRevenue() {
   // the departments side by side; comparing, each number has a grey box under it: the year picked, its money, the
   // change and its jobs
   const head = h("tr", null, h("th", { text: lines[0] && lines[0].month ? "Month" : lines[0] && lines[0].cls === "rev-yr" ? "Year" : "Day" }),
-    shown.map(([k, name, short]) => h("th", { class: k === "o" ? "oth" : null }, h("i", { class: "rev-dot " + k }), h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }))),
+    shown.map(([k, name, short]) => h("th", { class: k === "o" ? "oth" : `col-${k}` }, h("i", { class: "rev-dot " + k }), h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }))),
     h("th", { text: "Total" }), h("th", { class: "pj", text: "Per job" }));
   const cell = (x, o, k, cls) => {
     const v = k === "t" ? [x.cents, x.jobs] : x[k], w = o && o.read ? (k === "t" ? [o.cents, o.jobs] : o[k]) : null;
@@ -9660,7 +9669,7 @@ function renderRevenue() {
       w && (v[0] || w[0] || w[1]) ? h("div", { class: "rev-was" }, revYearTag(), revCash(w[0]), " ", vs(v[0], w[0]), h("small", { text: revJobs(w[1]) })) : null);
   };
   const row = (L, x, o, foot) => h("tr", foot ? { class: "rev-sum" } : attrs(L), foot ? h("th", { text: "Total" }) : thOf(L, x || {}),
-    x && (x.read || foot) ? shown.map(([k]) => cell(x, o, k, k === "o" ? "oth" : "")) : shown.map(([k]) => dash(k === "o" ? "oth" : null)),
+    x && (x.read || foot) ? shown.map(([k]) => cell(x, o, k, k === "o" ? "oth" : `col-${k}`)) : shown.map(([k]) => dash(k === "o" ? "oth" : `col-${k}`)),
     x && (x.read || foot) ? cell(x, o, "t", "tot") : dash("tot"),
     h("td", { class: "pj", text: x && x.jobs ? lbMoney(x.cents / 100 / x.jobs) : "–" }));
   const rows = lines.map(L => row(L, L.future ? null : revSum(days, L.a, L.b), lineOld(L)));
