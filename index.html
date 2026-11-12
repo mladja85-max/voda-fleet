@@ -1023,6 +1023,18 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pay-f { display: grid; gap: 2px; font-size: .74rem; font-weight: 600; color: var(--muted); }
 .pay-f input { font: inherit; font-size: .95rem; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
 .lb-payrange { flex-wrap: wrap; align-items: end; }
+/* Housecall Pro: the connection check */
+.hcp-days { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.hcp-days label { display: grid; gap: 4px; font-size: .78rem; font-weight: 700; color: var(--muted); }
+.hcp-days input { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; background: var(--surface-2); color: var(--ink); }
+.hcp-out { display: grid; gap: 8px; }
+.hcp-out:empty { display: none; }
+.hcp-ok { margin: 0; font-weight: 700; color: var(--ok); }
+.hcp-ok span { color: var(--ink); font-weight: 600; }
+.hcp-tech summary { cursor: pointer; color: var(--muted); font-size: .8rem; }
+#hcpTypes td { text-align: right; font-variant-numeric: tabular-nums; }
+#hcpTypes tbody th, #hcpTypes tfoot th { white-space: normal; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); }
+@media (max-width: 430px) { #hcpTypes { font-size: .8rem; } #hcpTypes th, #hcpTypes td { padding: 5px 4px; } #hcpTypes tbody th, #hcpTypes tfoot th { font-size: .8rem; } }
 /* Ask: set questions answered from the app's own numbers */
 #askBtn svg { width: 18px; height: 18px; }
 .ask-in { display: flex; gap: 8px; }
@@ -5684,7 +5696,8 @@ const ST_ICONS = {
   pay: '<path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   hist: '<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
-  out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>' };
+  out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>' };
 const stIcon = k => { const s = h("span", { class: "st-ic", "aria-hidden": "true" }); s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ST_ICONS[k]}</svg>`; return s; };
 /** One line of Settings: an icon, what it is, a few words on what's inside, and › when it opens something. */
 const stRow = (id, icon, title, sub, onclick, cls) => h("button", { class: "st-row" + (cls ? " " + cls : ""), type: "button", id, onclick },
@@ -5700,6 +5713,57 @@ async function stWithLb(b, open) {
   if (was) was.textContent = keep;
   if (lbData && b.isConnected) { open(); dlg.scrollTop = 0; }
   else if (b.isConnected && was) was.textContent = lbErr || "Couldn't load the leaderboard. Try again.";
+}
+/* ---------- Housecall Pro: check the connection (Admins) ----------
+   The Google script reads Housecall Pro with the read-only key saved in its Script Properties (HCP_API_KEY); this window
+   asks it for each job type's totals on the days picked (their scheduled day), to compare with the Daily Sales Report. */
+const HCP_API = 38;                                    // the Google script version that reads Housecall Pro
+const HCP_ERRORS = {
+  no_key: "No Housecall Pro key is saved yet. In the Google Sheet: Extensions > Apps Script > Project Settings (gear) > Script Properties > Add script property: HCP_API_KEY, the key as the value.",
+  needs_permission: "Google hasn't let the script reach Housecall Pro yet. In Apps Script, pick connectHousecallPro in the function list at the top, click Run and allow it. Then try again.",
+  hcp_key: "Housecall Pro didn't accept the key. Check it was copied whole (without the word Token) and wasn't deleted, then save it again in Script Properties.",
+  hcp_forbidden: "Housecall Pro said this key may not read that. Make a new Read-only key and save it again.",
+  hcp_busy: "Housecall Pro is busy right now. Try again in a minute.",
+  hcp_unreachable: "The script couldn't reach Housecall Pro. Try again in a minute.",
+  hcp_bad_answer: "Housecall Pro sent something unexpected. Try again in a minute.",
+  too_long: "Pick 31 days or fewer." };
+function openHcpTest() {
+  const today = lbToday(), mon = lbMondayOf(today);
+  const from = h("input", { id: "hcpFrom", type: "date", value: lbAddDays(mon, -7), "aria-label": "From" });
+  const to = h("input", { id: "hcpTo", type: "date", value: lbAddDays(mon, -1), "aria-label": "To" });
+  const out = h("div", { id: "hcpOut", class: "hcp-out", "aria-live": "polite" });
+  const go = async () => {
+    const f = from.value, t = to.value;
+    if (!lbIsDay(f) || !lbIsDay(t) || t < f) { out.replaceChildren(h("p", { class: "dlg-err", text: "Pick a From day and a To day after it." })); return; }
+    out.replaceChildren(h("p", { class: "meta", text: "Reading Housecall Pro…" }));
+    $("hcpGo").disabled = true;
+    try {
+      const r = await api("hcpTest", { from: f, to: t });
+      const total = r.types.reduce((n, x) => n + x.cents, 0), jobs = r.types.reduce((n, x) => n + x.jobs, 0), visits = r.types.reduce((n, x) => n + x.visits, 0);
+      out.replaceChildren(
+        h("p", { class: "hcp-ok", id: "hcpOk" }, "✓ Connected", r.company ? h("span", { text: ` to ${r.company}` }) : null),
+        h("p", { class: "meta", text: `${lbSpanText(r.from, r.to)}, by scheduled day: ${fmt(visits)} visit${visits === 1 ? "" : "s"}, ${fmt(jobs)} job${jobs === 1 ? "" : "s"}${r.canceled ? ` · ${fmt(r.canceled)} canceled left out` : ""}${r.more ? " · more than Housecall Pro sent at once: only the first 3,000" : ""}.` }),
+        r.types.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "hcpTypes" },
+          h("thead", null, h("tr", null, ["Job type", "Visits", "Jobs", "Total"].map(c => h("th", { text: c })))),
+          h("tbody", null, r.types.map(x => h("tr", { "data-type": x.type }, h("th", { text: x.type }), h("td", { text: fmt(x.visits) }), h("td", { text: fmt(x.jobs) }), h("td", { text: lbCash(x.cents / 100) })))),
+          h("tfoot", null, h("tr", null, h("th", { text: "Total" }), h("td", { text: fmt(visits) }), h("td", { text: fmt(jobs) }), h("td", { text: lbCash(total / 100) })))))
+          : h("p", { class: "meta", text: "No jobs scheduled on those days." }),
+        h("p", { class: "hint", text: "Jobs: first visits only (a job's later visits, the ones ending in -2, -3 and so on, add their money but aren't new jobs). Compare these with the Daily Sales Report for the same days." }),
+        h("details", { class: "hcp-tech" }, h("summary", { text: "For Claude: the fields Housecall Pro sends" }),
+          h("p", { class: "meta", text: `Job: ${(r.keys || []).join(", ") || "–"}` }),
+          h("p", { class: "meta", text: `Job fields: ${(r.fieldKeys || []).join(", ") || "–"}` }),
+          h("p", { class: "meta", text: `Statuses: ${Object.entries(r.statuses || {}).map(([k, v]) => `${k || "(none)"} ${v}`).join(", ") || "–"}` })));
+    } catch (e) {
+      out.replaceChildren(h("p", { class: "dlg-err", id: "hcpErr", text: (e && HCP_ERRORS[e.error]) || (e && e.error === "hcp_http" ? `Housecall Pro answered with an error (${e.status}). Try again in a minute.` : errText(e, "Nothing")) }));
+    } finally { const b = $("hcpGo"); if (b) b.disabled = false; }
+  };
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Housecall Pro" }),
+    h("p", { class: "hint", text: "Reads Housecall Pro with the read-only key saved in the Google script. Only totals come back to the app: no customer names, addresses or phone numbers." }),
+    h("div", { class: "hcp-days" }, h("label", null, h("span", { text: "From" }), from), h("label", null, h("span", { text: "To" }), to),
+      h("button", { class: "btn primary", type: "button", id: "hcpGo", text: "Check", onclick: go })),
+    out);
+  go();
 }
 function openSettings() {
   const err = h("p", { class: "dlg-err", role: "alert" });
@@ -5744,6 +5808,9 @@ function openSettings() {
       h("span", null, h("b", { text: name }), h("small", { text: `${session && session.username ? "@" + session.username + " · " : ""}${isAdmin() ? "Admin" : "Technician"}` }))),
     team.length ? h("p", { class: "st-grp", text: "Team and pay" }) : null,
     team.length ? h("div", { class: "st-list", id: "st-team" }, team) : null,
+    isAdmin() && apiLevel >= HCP_API ? h("p", { class: "st-grp", text: "Connections" }) : null,
+    isAdmin() && apiLevel >= HCP_API ? h("div", { class: "st-list", id: "st-conn" },
+      stRow("st-hcp", "plug", "Housecall Pro", "Check the connection and each job type's totals", () => openHcpTest())) : null,
     h("p", { class: "st-grp", text: "Your account" }),
     h("div", { class: "st-list" },
       stRow("st-passrow", "key", "Change passcode", "", openPass),
