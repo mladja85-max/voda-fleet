@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 39;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 40;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -325,6 +325,15 @@ function doPost(e) {
       case "revSync":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(revSync_(req));
+      case "repairs":
+        if (!canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
+        return json_(repRead_(req.year));
+      case "repSync":
+        if (!canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
+        return json_(repSync_(req));
+      case "repPut":
+        if (!canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return repPut_(req, user); }));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -2747,7 +2756,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -3574,6 +3583,195 @@ function revSync_(req) {
     s.getRange(2, 1, all.length, REV_COLS.length).setValues(all);
     return { ok: true, days: pick(rows) };
   });
+}
+
+/* ---------------- Repairs split: each repair job, what the client paid, and Monumental's and VODA's share ---------------- */
+// The Repairs tab: one row per repair job (a Job type starting with Repair), read from Housecall Pro by its scheduled day:
+// the client, what was charged, what the client paid and still owes (its invoices). Next to that, what's typed in the app
+// (never overwritten by Housecall Pro): a specialty contractor VODA pays, Monumental's materials, deposits paid to
+// Monumental, extra pay to Monumental, Monumental's invoice and the day VODA paid them. And the split, worked out:
+//   specialty (paid by VODA) comes off the top; Monumental's materials go back to Monumental and VODA adds 30% on them
+//   (materials / 0.7 x 0.3); what's left is 70% Monumental, 30% VODA; extra pay moves money from VODA to Monumental.
+// A job tagged "repair - Monumental Flooring" is Monumental's; any other repair job is VODA's own (no split) unless
+// it's switched in the app.
+const REP_SHEET = "Repairs";
+const REP_COLS = ["Job id", "Day", "Invoice #", "Client", "City", "Job type", "Tags", "Work status", "Charged $", "Client paid $", "Client owes $",
+  "Invoices", "Read from Housecall Pro", "Not in Housecall Pro since",
+  "Split", "Specialty contractor", "Specialty $", "Specialty deposit $", "Specialty deposit date", "Monumental materials $", "Monumental deposit $",
+  "Monumental deposit date", "Extra to Monumental $", "Extra reason", "Monumental invoice #", "Date VODA paid Monumental", "Note", "Typed by", "Typed at",
+  "Monumental $", "Monumental still owed $", "VODA $"];
+// what's typed in the app: [key, column, kind]
+const REP_TYPED = [["split", 14, "split"], ["sName", 15, "text"], ["sAmt", 16, "money"], ["sDep", 17, "money"], ["sDepAt", 18, "day"], ["mat", 19, "money"],
+  ["mDep", 20, "money"], ["mDepAt", 21, "day"], ["extra", 22, "money"], ["extraWhy", 23, "text"], ["mInv", 24, "text"], ["mPaidAt", 25, "day"], ["note", 26, "text"]];
+const REP_MON_TAG = /monumental/i;
+function repSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(REP_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(REP_SHEET);
+    s.getRange(1, 1, 1, REP_COLS.length).setValues([REP_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:C").setNumberFormat("@");   // the job id, the day and the invoice number stay text
+  }
+  return s;
+}
+const repCents_ = v => Math.round((Number(v) || 0) * 100);
+const repDay_ = (v, tz) => (v instanceof Date ? Utilities.formatDate(v, tz, "yyyy-MM-dd") : /^\d{4}-\d{2}-\d{2}/.test(String(v || "")) ? String(v).slice(0, 10) : "");
+/** Every row of the tab: { id: row as an array of REP_COLS.length }. */
+function repRows_(s) {
+  const out = {};
+  if (!s || s.getLastRow() < 2) return out;
+  const tz = Session.getScriptTimeZone();
+  s.getRange(2, 1, s.getLastRow() - 1, REP_COLS.length).getValues().forEach(function (r) {
+    const id = String(r[0] || "").trim();
+    if (!id) return;
+    r[1] = repDay_(r[1], tz);
+    [18, 21, 25].forEach(function (c) { r[c] = repDay_(r[c], tz); });
+    [12, 13, 28].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
+    out[id] = r;
+  });
+  return out;
+}
+/** Is this job Monumental's (70/30), from the switch typed in the app or else its tag? */
+function repIsMon_(row) {
+  const sp = String(row[14] || "auto");
+  return sp === "mon" || (sp !== "none" && REP_MON_TAG.test(String(row[6] || "")));
+}
+/** The split of a job, in cents: { mon, owed, voda }. */
+function repSplit_(row) {
+  const c = repCents_(row[8]), f = repCents_(row[16]);
+  if (!repIsMon_(row)) return { mon: 0, owed: 0, voda: c - f };
+  const j = repCents_(row[19]), x = repCents_(row[22]), k = repCents_(row[20]);
+  const n = Math.round(j * 0.3 / 0.7), o = c - f - j - n;
+  const mon = Math.round(o * 0.7) + j + x, voda = c - f - mon;
+  return { mon: mon, owed: row[25] ? 0 : Math.max(0, mon - k), voda: voda };
+}
+/** A row as the app gets it. */
+function repOut_(r) {
+  let inv = [];
+  try { inv = JSON.parse(String(r[11] || "[]")); } catch (e) { inv = []; }
+  const t = {};
+  REP_TYPED.forEach(function (d) { t[d[0]] = d[2] === "money" ? (r[d[1]] === "" || r[d[1]] === null ? "" : Number(r[d[1]]) || 0) : String(r[d[1]] || ""); });
+  return { id: String(r[0]), day: r[1], inv: String(r[2] || ""), client: String(r[3] || ""), addr: String(r[4] || ""), type: String(r[5] || ""), tags: String(r[6] || ""),
+    ws: String(r[7] || ""), c: repCents_(r[8]), paid: repCents_(r[9]), owes: repCents_(r[10]), invoices: inv, at: Date.parse(r[12]) || 0, gone: String(r[13] || ""),
+    t: t, by: String(r[27] || ""), tat: String(r[28] || "") };
+}
+/** Writes every row back, by day, with the split worked out. */
+function repWrite_(s, rows) {
+  const all = Object.keys(rows).map(function (id) { return rows[id]; }).sort(function (a, b) { return a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : String(a[2]) < String(b[2]) ? -1 : String(a[2]) > String(b[2]) ? 1 : 0; });
+  all.forEach(function (r) { const x = repSplit_(r); r[29] = x.mon / 100; r[30] = x.owed / 100; r[31] = x.voda / 100; });
+  if (!all.length) return;
+  s.getRange(2, 1, all.length, 3).setNumberFormat("@");
+  s.getRange(2, 1, all.length, REP_COLS.length).setValues(all);
+}
+/** Everyone with Repairs split: a year's jobs and which years have any. */
+function repRead_(year) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const rows = repRows_(repSheet_(false)), jobs = [], years = {};
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id];
+    if (r[1]) years[r[1].slice(0, 4)] = true;
+    if (String(r[1]).indexOf(y + "-") === 0) jobs.push(repOut_(r));
+  });
+  return { ok: true, year: Number(y), jobs: jobs, years: Object.keys(years).map(Number).sort() };
+}
+/** One job's invoices from Housecall Pro, kept short: number, amount, still due, paid day, status (cents). */
+function repInvoices_(jobId, tz) {
+  const r = hcpGet_("/jobs/" + encodeURIComponent(jobId) + "/invoices");
+  if (r.error) return { error: r.error, status: r.status || 0 };
+  const d = r.data || {};
+  const list = Array.isArray(d) ? d : Array.isArray(d.invoices) ? d.invoices : Array.isArray(d.data) ? d.data : [];
+  return { list: list.map(function (i) {
+    const paidAt = i && i.paid_at ? new Date(i.paid_at) : null;
+    return { n: String((i && i.invoice_number) || ""), a: Number(i && i.amount) || 0, due: Number(i && i.due_amount) || 0, st: String((i && i.status) || ""),
+      at: paidAt && !isNaN(paidAt.getTime()) ? Utilities.formatDate(paidAt, tz, "yyyy-MM-dd") : "", dc: String((i && i.due_concept) || "") };
+  }) };
+}
+/** Reads from..to (up to 31 days) from Housecall Pro again: the repair jobs scheduled on those days and their invoices.
+ *  What's typed in the app stays. A job that isn't there any more is dropped, or kept (and marked) when something was
+ *  typed for it. Days read in the last minute aren't asked again unless Read again was pressed. */
+function repSync_(req) {
+  const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : ""; };
+  const from = isDay(req.from), to = isDay(req.to);
+  if (!from || !to || to < from) return { ok: false, error: "bad_request" };
+  const days = Math.round((new Date(to + "T12:00:00Z") - new Date(from + "T12:00:00Z")) / 864e5) + 1;
+  if (days > HCP_MAX_DAYS) return { ok: false, error: "too_long" };
+  const pick = function (rows) { return Object.keys(rows).filter(function (id) { const d = rows[id][1]; return d >= from && d <= to; }).map(function (id) { return repOut_(rows[id]); }); };
+  const have = repRows_(repSheet_(false)), now = Date.now();
+  const inRange = Object.keys(have).filter(function (id) { return have[id][1] >= from && have[id][1] <= to && !have[id][13]; });
+  const props = PropertiesService.getScriptProperties(), seenKey = "REP_READ_" + from + "_" + to, seen = Number(props.getProperty(seenKey)) || 0;
+  if (!req.force && now - seen < REV_FRESH_MS && inRange.every(function (id) { return now - (Date.parse(have[id][12]) || 0) < REV_FRESH_MS; })) return { ok: true, jobs: pick(have), fresh: true };
+  const got = hcpJobsIn_(from, to);
+  if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
+  if (got.more) return { ok: false, error: "too_many" };
+  const tz = Session.getScriptTimeZone(), at = new Date().toISOString(), fresh = {};
+  for (let i = 0; i < got.jobs.length; i++) {
+    const job = got.jobs[i];
+    if (!job || !job.id || /cancel/i.test(String(job.work_status || "")) || revDept_(hcpJobType_(job)) !== "p") continue;
+    if (!hcpFirstVisit_(job) && !(Number(job.total_amount) > 0)) continue;   // a later visit with nothing charged is another day of the same job
+    const start = new Date((job.schedule && job.schedule.scheduled_start) || "");
+    if (isNaN(start.getTime())) continue;
+    const day = Utilities.formatDate(start, tz, "yyyy-MM-dd");
+    if (day < from || day > to) continue;
+    const inv = repInvoices_(job.id, tz);
+    if (inv.error && inv.error !== "hcp_http") return { ok: false, error: inv.error, status: inv.status || 0 };
+    const cu = job.customer || {}, ad = job.address || {};
+    const name = String(cu.company || [cu.first_name, cu.last_name].filter(Boolean).join(" ") || "").trim().slice(0, 120);
+    const total = Number(job.total_amount) || 0, owed = job.outstanding_balance === undefined || job.outstanding_balance === null ? null : Number(job.outstanding_balance) || 0;
+    const tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return typeof t === "object" && t ? (t.name || "") : String(t); }).filter(Boolean).join("; ").slice(0, 300);
+    fresh[String(job.id)] = { day: day, inv: String(job.invoice_number || ""), client: name, addr: String(ad.city || "").slice(0, 80),   // the town only, no street
+      type: hcpJobType_(job).slice(0, 80), tags: tags, ws: String(job.work_status || ""), c: total, owed: owed, invoices: inv.error ? null : inv.list };
+  }
+  return withLock_(function () {
+    const s = repSheet_(true), rows = repRows_(s);
+    Object.keys(fresh).forEach(function (id) {
+      const f = fresh[id], r = rows[id] || new Array(REP_COLS.length).fill("");
+      const paidByInvoices = f.invoices ? f.invoices.reduce(function (n, i) { return n + Math.max(0, i.a - i.due); }, 0) : 0;
+      const owes = f.owed !== null ? f.owed : f.invoices ? Math.max(0, f.c - paidByInvoices) : repCents_(r[10]);
+      r[0] = id; r[1] = f.day; r[2] = f.inv; r[3] = f.client; r[4] = f.addr; r[5] = f.type; r[6] = f.tags; r[7] = f.ws;
+      r[8] = f.c / 100; r[9] = Math.max(0, f.c - owes) / 100; r[10] = owes / 100;
+      if (f.invoices) r[11] = JSON.stringify(f.invoices).slice(0, 4000);
+      r[12] = at; r[13] = "";
+      rows[id] = r;
+    });
+    // jobs on those days that Housecall Pro didn't send this time (canceled, moved to other days)
+    Object.keys(rows).forEach(function (id) {
+      const r = rows[id];
+      if (fresh[id] || r[1] < from || r[1] > to) return;
+      const typed = REP_TYPED.some(function (d) { return d[0] !== "split" && r[d[1]] !== "" && r[d[1]] !== null && r[d[1]] !== 0; });
+      if (typed) { if (!r[13]) r[13] = at; } else delete rows[id];
+    });
+    if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, REP_COLS.length).clearContent();
+    repWrite_(s, rows);
+    props.setProperty(seenKey, String(Date.now()));
+    return { ok: true, jobs: pick(rows) };
+  });
+}
+/** What's typed for one job: { id, t: { split, sName, sAmt, sDep, sDepAt, mat, mDep, mDepAt, extra, extraWhy, mInv, mPaidAt, note } }.
+ *  Amounts in dollars (0 to 10,000,000, or "" for none), days as 2026-11-05, words up to 200 letters. */
+function repPut_(req, user) {
+  const id = String(req.id || ""), t = req.t && typeof req.t === "object" ? req.t : null;
+  if (!id || !t) return { ok: false, error: "bad_request" };
+  const s = repSheet_(true), rows = repRows_(s), r = rows[id];
+  if (!r) return { ok: false, error: "gone" };
+  for (let i = 0; i < REP_TYPED.length; i++) {
+    const d = REP_TYPED[i], k = d[0];
+    if (!(k in t)) continue;
+    let v = t[k];
+    if (d[2] === "money") {
+      if (v === "" || v === null) v = "";
+      else { v = Math.round(Number(v) * 100) / 100; if (!isFinite(v) || v < 0 || v > 1e7) return { ok: false, error: "bad_value", field: k }; }
+    } else if (d[2] === "day") {
+      v = String(v || "");
+      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return { ok: false, error: "bad_value", field: k };
+    } else if (d[2] === "split") {
+      v = ["auto", "mon", "none"].indexOf(String(v)) === -1 ? "auto" : String(v);
+    } else v = String(v || "").slice(0, 200);
+    r[d[1]] = v;
+  }
+  r[27] = user.name || user.id; r[28] = new Date().toISOString();
+  repWrite_(s, rows);
+  return { ok: true, job: repOut_(rows[id]) };
 }
 
 /* ---------------- office scorecards ---------------- */

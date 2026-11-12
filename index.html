@@ -704,6 +704,54 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 #revTable td.tot { font-weight: 700; }
 .rev-status { min-height: 1.3em; }
 .rev-tools { display: flex; align-items: center; gap: 10px; }
+/* Repairs split */
+.rev-sub { justify-self: start; }
+.rp-tag { display: inline-block; font-size: .7rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--bg); color: var(--muted); white-space: nowrap; }
+.rp-tag.ok { background: var(--ok-bg); color: var(--ok); } .rp-tag.due { background: var(--due-bg); color: var(--due); } .rp-tag.dep { background: var(--soon-bg); color: var(--soon); }
+.rp-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.rp-kpis .pay-kpi b { font-size: clamp(1.05rem, 1.7vw, 1.5rem); }
+.rp-kpis .pay-kpi span { display: block; color: var(--muted); font-size: .76rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-kpis .k-vn { background: color-mix(in srgb, var(--soon) 8%, var(--surface)); border-color: color-mix(in srgb, var(--soon) 30%, var(--line)); }
+.rp-kpis .k-vd { background: color-mix(in srgb, var(--ok) 8%, var(--surface)); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+.rp-kpis .k-due b { color: var(--due); }
+#repTable td small, #repTable th small, #repYear th small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; text-transform: none; letter-spacing: 0; }
+#repTable tbody th { white-space: normal; min-width: 11em; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); font-weight: 700; }
+#repTable thead th.cl { color: var(--accent); } #repTable thead th.vn { color: var(--soon); background: color-mix(in srgb, var(--soon) 10%, var(--surface)); }
+#repTable thead th.vd { color: var(--ok); background: color-mix(in srgb, var(--ok) 11%, var(--surface)); }
+#repTable td.vn { background: color-mix(in srgb, var(--soon) 6%, var(--surface)); }
+#repTable td.vd { background: color-mix(in srgb, var(--ok) 7%, var(--surface)); font-weight: 700; }
+#repTable tr.future th, #repTable tr.future td { opacity: .7; }
+#repTable tr.gone th, #repTable tr.gone td { opacity: .5; text-decoration: line-through; }
+#repTable tbody tr { cursor: pointer; } #repTable tbody tr:hover th, #repTable tbody tr:hover td { background: var(--accent-soft); }
+#repTable tfoot th, #repTable tfoot td, #repYear tfoot th, #repYear tfoot td { font-weight: 700; }
+#repYear tbody tr { cursor: pointer; } #repYear tbody tr:hover th, #repYear tbody tr:hover td { background: var(--accent-soft); }
+.rp-cards { display: none; }
+.rp-dlg h4 { margin: 12px 0 4px; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rp-dlg .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; align-items: end; }
+.rp-dlg .grid4 .span2 { grid-column: span 2; }
+.rp-dlg .grid4 .field { margin: 0; }
+.rp-dlg .field input.bad { border-color: var(--due); }
+.rp-split { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; display: grid; gap: 3px; }
+.rp-line { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; } .rp-line b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rp-line.sub { color: var(--muted); font-size: .82rem; } .rp-line.mon b { color: var(--soon); } .rp-line.vd b { color: var(--ok); } .rp-line.owe b { color: var(--due); }
+.rp-line.tot { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 2px; }
+.rp-hcp { background: var(--bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; font-size: .88rem; }
+.rp-dlg h3 { font-size: 1.25rem; }
+dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
+@media (max-width: 760px) {
+  .pay-kpis.rp-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .rp-kpis .pay-kpi { padding: 8px 10px; } .rp-kpis .pay-kpi b { font-size: 1.1rem; }
+  .rp-tablewrap { display: none; } .rp-cards { display: grid; gap: 8px; }
+  .rp-card { all: unset; box-sizing: border-box; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+  .rp-card.gone { opacity: .55; }
+  .rp-card .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; } .rp-card .top b { font-size: 1rem; } .rp-card .top span { font-weight: 700; }
+  .rp-card .meta2 { color: var(--muted); font-size: .76rem; }
+  .rp-card .split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; font-size: .8rem; }
+  .rp-card .split > span { background: var(--bg); border-radius: 8px; padding: 4px 6px; } .rp-card .split small { display: block; color: var(--muted); font-size: .64rem; font-weight: 700; text-transform: uppercase; }
+  .rp-card .split .vn { background: color-mix(in srgb, var(--soon) 10%, var(--surface)); } .rp-card .split .vd { background: color-mix(in srgb, var(--ok) 10%, var(--surface)); }
+  .rp-dlg .grid4 { grid-template-columns: 1fr 1fr; } .rp-dlg .grid4 .span2 { grid-column: span 1; }
+  #repYear .pj { display: none; }
+}
 .rev-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
 .rev-aside { display: grid; gap: 10px; align-content: start; }
 .rev-aside-head h3 { margin: 0; font-family: var(--font-display); font-size: 1.3rem; text-transform: uppercase; letter-spacing: .04em; }
@@ -3786,7 +3834,7 @@ const isBusy = e => !!(e && e.error === "server" && /lock timeout|holding the lo
    What one window saves, the others show by themselves, without Update. Typed Leaderboard numbers arrive as the sheet
    saved them; any other change just tells the other windows to load again, quietly. Nothing is sent to another
    login: a window signed in as someone else ignores it. */
-const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync"]);
+const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync", "repairs", "repSync"]);
 let peers = null;
 try { peers = typeof BroadcastChannel === "function" ? new BroadcastChannel("voda-prime") : null; } catch (e) { peers = null; }
 function tellPeers(msg) { try { if (peers && session) peers.postMessage(Object.assign({ user: session.id }, msg)); } catch (e) { /* this window still has it */ } }
@@ -4278,7 +4326,7 @@ function showSignIn(message, mode) {
 
 function signOut(message) {
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
-  lbForget(); revForget();
+  lbForget(); revForget(); repForget();
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
@@ -6283,10 +6331,10 @@ const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
-  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
+  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && a !== "repairs" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
   if (canSeeLb()) out.push("leaderboard");
   if (canSee("office")) out.push("office");
-  if (canSee("revenue")) out.push("revenue");
+  if (canSee("revenue") || canSee("repairs")) out.push("revenue");
   return out;
 }
 /** Whoever sees the Leaderboard and Revenue gets Revenue in the Leaderboard's row (Revenue · Performance · Production ·
@@ -6916,7 +6964,8 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
     apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
     apiLevel >= OF_API ? [["office", "Office"]] : [],
-    apiLevel >= REV_API ? [["revenue", "Revenue"]] : []);
+    apiLevel >= REV_API ? [["revenue", "Revenue"]] : [],
+    apiLevel >= REP_API ? [["repairs", "Repairs split"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -9448,8 +9497,8 @@ let revOther = {};                                      // other years', loaded 
 let revLoading = {}, revErr = "", revOld = false;
 let revSync = { busy: false, what: "", err: "", n: 0, done: 0 };
 const revAsked = {};                                    // day → when this window last read it (not again by itself for 10 minutes)
-const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0 }, store.get(K_REV_VIEW) || {});
-const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp });
+const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0, sub: "dep", rper: "month", roff: 0 }, store.get(K_REV_VIEW) || {});
+const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp, sub: revView.sub, rper: revView.rper, roff: revView.roff });
 const REV_PER = { week: "Week", month: "Month", year: "Year", dates: "Dates" };
 const REV_CMP_YEARS = 5;                                // compare with up to 5 years before
 // a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
@@ -9640,9 +9689,17 @@ function revChange(now, then) {
 }
 
 /* ---- the screen ---- */
+/** Departments | Repairs split, for whoever sees both. */
+function revSubSw(cur) {
+  if (!canSee("revenue") || !canSee("repairs") || (apiLevel && apiLevel < REP_API)) return null;
+  const el = lbSeg([["dep", "Departments"], ["rep", "Repairs split"]], cur, k => { revView.sub = k; revSaveView(); renderRevenue(); }, "Revenue view");
+  el.classList.add("rev-sub"); el.id = "revSub";
+  return el;
+}
 function renderRevenue() {
   const box = $("revView");
   if (!box || view.tab !== "revenue" || !session) return;
+  if (!canSee("revenue") || (revView.sub === "rep" && canSee("repairs") && !(apiLevel && apiLevel < REP_API))) { renderRepairs(box); return; }
   if (revOld || (apiLevel && apiLevel < REV_API && !revData)) {
     box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "Revenue needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
@@ -9699,7 +9756,7 @@ function renderRevenue() {
     tools);
   const days = r.from > today ? {} : revDaysFor(r.from, to);
   const old = cmp && r.from <= today ? revDaysFor(cf, ct) : {};
-  if (!days || !old) { box.replaceChildren(...[top, bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
+  if (!days || !old) { box.replaceChildren(...[top, revSubSw("dep"), bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
   const s = revSum(days, r.from, to), c = cmp ? revSum(old, cf, ct) : null;
   const cmpName = cmp ? (cf.slice(0, 4) === ct.slice(0, 4) ? cf.slice(0, 4) : `${cf.slice(0, 4)}–${ct.slice(0, 4)}`) : "";
   const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
@@ -9779,8 +9836,296 @@ function renderRevenue() {
             b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
       }));
   }
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, r.from > today ? null : [tiles, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, revSubSw("dep"), bar, status, err, r.from > today ? null : [tiles, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
   if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false), 0);
+}
+
+/* ======================= Repairs split: each repair job, its client payments, and Monumental's and VODA's share ======================= */
+// The Google script reads the repair jobs (and their invoices) from Housecall Pro into the Repairs tab, one row a job;
+// the vendor costs are typed here. The split (the same in the script, for the tab):
+//   specialty contractor (VODA pays it) off the top; Monumental's materials back to Monumental, plus VODA's 30% on them
+//   (materials / 0.7 x 0.3); what's left 70% Monumental / 30% VODA; extra pay moves money from VODA to Monumental.
+const REP_API = 40;                                     // the Google script version with the Repairs split
+const K_REP = "voda.rep1";
+let repDocs = {};                                       // year → { year, jobs: [...], read: { "2026-11": ms } }
+(() => { const d = store.get(K_REP); if (d && d.year) repDocs[d.year] = d; })();
+let repLoading = {}, repErr = "", repOld = false;
+let repSync = { busy: false, what: "", err: "", n: 0, done: 0 };
+const repAsked = {};                                    // month → when this window last read it
+const REP_MON_TAG = /monumental/i;
+function repForget() { repDocs = {}; store.del(K_REP); }
+const repDoc = y => repDocs[y] || null;
+function repKeep(y) { if (y === revThisYear() && repDocs[y]) store.set(K_REP, repDocs[y]); }
+async function repLoad(y) {
+  y = y || revThisYear();
+  if (!session || !canSee("repairs") || repLoading[y]) return;
+  repLoading[y] = true;
+  try {
+    const out = await api("repairs", { year: y });
+    const had = repDoc(y);
+    repDocs[y] = { year: y, jobs: out.jobs || [], years: out.years || [], read: (had && had.read) || {} };
+    repKeep(y);
+    repErr = ""; repOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { repLoading[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    repOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < REP_API);
+    repErr = repOld ? "" : errText(e, "Nothing");
+  } finally {
+    repLoading[y] = false;
+    if (view.tab === "revenue") renderRevenue();
+  }
+}
+/** Is this job Monumental's (70/30)? The switch typed here, or else its Housecall Pro tag. */
+const repIsMon = j => { const sp = (j.t && j.t.split) || "auto"; return sp === "mon" || (sp !== "none" && REP_MON_TAG.test(j.tags || "")); };
+const repC = v => (v === "" || v == null ? 0 : Math.round(Number(v) * 100));
+/** A job's split in cents (the same as the script's): { f, j, n, o, mon, owed, voda, mon70 }. */
+function repSplit(j, t) {
+  t = t || j.t || {};
+  const c = j.c, f = repC(t.sAmt), mon = repIsMon(Object.assign({}, j, { t }));
+  if (!mon) return { mon: false, f, j: 0, n: 0, o: c - f, monAmt: 0, owed: 0, voda: c - f, x: 0 };
+  const jm = repC(t.mat), x = repC(t.extra), k = repC(t.mDep);
+  const n = Math.round(jm * 0.3 / 0.7), o = c - f - jm - n, m = Math.round(o * 0.7) + jm + x;
+  return { mon: true, f, j: jm, n, o, x, k, monAmt: m, owed: t.mPaidAt ? 0 : Math.max(0, m - k), voda: c - f - m };
+}
+/** Read again what may have changed, a month at a time, the newest first: the last two weeks after 10 minutes, the last
+ *  two months after 20 hours (payments come in), older months once. */
+async function repEnsure(months, force) {
+  if (repSync.busy || (!force && repSync.err) || !session || !canSee("repairs") || !navigator.onLine) return;
+  const today = lbToday(), now = Date.now(), todo = [];
+  for (const m of months) {
+    const y = Number(m.slice(0, 4)), doc = repDoc(y);
+    if (!doc) return;
+    const end = `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`, from = `${m}-01`;
+    if (from > today) continue;
+    if (!force && repAsked[m] && performance.now() - repAsked[m] < 10 * 60e3) continue;
+    const at = doc.read[m] || 0, age = Math.round((lbDate(today) - lbDate(end)) / 864e5);
+    const stale = force || !at || (age <= 13 ? now - at > 10 * 60e3 : age <= 62 || at < lbDate(lbAddDays(end, 62)).getTime() ? now - at > 20 * 3600e3 : false);
+    if (stale) todo.push({ m, from, to: end });
+  }
+  if (!todo.length) return;
+  todo.sort((a, b) => (a.m < b.m ? 1 : -1));
+  repSync = { busy: true, what: "", err: "", n: todo.length, done: 0 };
+  for (const c of todo) {
+    repSync.what = revMonthText(c.from);
+    repAsked[c.m] = performance.now();
+    if (view.tab === "revenue") renderRevenue();
+    try {
+      const out = await api("repSync", { from: c.from, to: c.to, force: !!force }, 170000);
+      const doc = repDoc(Number(c.m.slice(0, 4)));
+      doc.jobs = doc.jobs.filter(j => j.day < c.from || j.day > c.to).concat(out.jobs || []);
+      doc.read[c.m] = Date.now();
+      repKeep(doc.year);
+      repSync.done++;
+    } catch (e) {
+      if (e && (e.error === "bad_code" || e.error === "signed_out")) { repSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
+      repSync.err = revErrText(e);
+      delete repAsked[c.m];
+      break;
+    }
+  }
+  repSync.busy = false;
+  if (view.tab === "revenue") renderRevenue();
+}
+/** The jobs of from..to (null while that year is loading), by day; the ones gone from Housecall Pro apart. */
+function repJobs(from, to) {
+  const out = [];
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
+    const doc = repDoc(y);
+    if (!doc) { repLoad(y); return null; }
+    out.push(...doc.jobs.filter(j => j.day >= from && j.day <= to));
+  }
+  return out.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.inv.localeCompare(b.inv)));
+}
+/** Added up, in cents. */
+function repSum(jobs) {
+  const s = { n: 0, c: 0, paid: 0, owes: 0, owesN: 0, full: 0, mon: 0, owed: 0, f: 0, voda: 0, fNames: new Set() };
+  for (const j of jobs) {
+    if (j.gone) continue;
+    const x = repSplit(j);
+    s.n++; s.c += j.c; s.paid += j.paid; s.owes += j.owes; s.owesN += j.owes > 0 ? 1 : 0; s.full += j.c > 0 && j.owes <= 0 ? 1 : 0;
+    s.mon += x.monAmt; s.owed += x.owed; s.f += x.f; s.voda += x.voda;
+    if (x.f && j.t.sName) s.fNames.add(j.t.sName);
+  }
+  return s;
+}
+const repShortDay = d => { const x = lbDate(d); return `${MONTHS[x.getMonth()]} ${x.getDate()}`; };
+/** The client side of a job: Paid / Deposit $X / Not paid / Scheduled. */
+function repPayTag(j, today) {
+  if (j.c > 0 && j.owes <= 0) return h("span", { class: "rp-tag ok", text: "Paid" });
+  if (j.paid > 0) return h("span", { class: "rp-tag dep", text: `Deposit ${lbMoney(j.paid / 100)}` });
+  return j.day > today ? h("span", { class: "rp-tag", text: "Scheduled" }) : h("span", { class: "rp-tag due", text: "Not paid" });
+}
+
+/* ---- the screen ---- */
+function renderRepairs(box) {
+  const title = secTitle("Revenue");
+  const top = revInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("revenue")) : title ? h("div", { class: "lb-top" }, title) : null;
+  const sub = revSubSw("rep");
+  if (repOld || (apiLevel && apiLevel < REP_API && !repDoc(revThisYear()))) {
+    box.replaceChildren(...[top, sub].filter(Boolean), h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "The Repairs split needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  const per = revView.rper === "year" ? "year" : "month", off = Math.min(0, Number(revView.roff) || 0);
+  const r = ofRange(per, off), today = lbToday();
+  const months = [];
+  for (let k = r.from.slice(0, 7); `${k}-01` <= r.to && `${k}-01` <= today; k = lbAddDays(`${k}-${String(lbDaysIn(k)).padStart(2, "0")}`, 1).slice(0, 7)) months.push(k);
+  const step = n => { revView.roff = Math.min(0, off + n); revSaveView(); renderRevenue(); };
+  const bar = h("div", { class: "lb-bar" },
+    lbSeg([["month", "Month"], ["year", "Year"]], per, k => { revView.rper = k; revView.roff = 0; revSaveView(); renderRevenue(); }, "Period"),
+    h("div", { class: "of-step" },
+      h("button", { class: "btn small", type: "button", id: "repPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+      h("strong", { id: "repRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
+      h("button", { class: "btn small", type: "button", id: "repNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    h("button", { class: "btn small", type: "button", id: "repReadBtn", disabled: repSync.busy || r.from > today, title: "Read these jobs and payments from Housecall Pro again",
+      onclick: () => { repSync.err = ""; repEnsure(months, true); } }, "Read again"));
+  const jobs = repJobs(r.from, r.to);
+  if (!jobs) { box.replaceChildren(...[top, sub, bar].filter(Boolean), h("p", { class: "loading", text: repErr || `Loading the repairs of ${r.from.slice(0, 4)}…` })); return; }
+  const live = jobs.filter(j => !j.gone), gone = jobs.filter(j => j.gone), s = repSum(jobs);
+  const doc = repDoc(Number(r.from.slice(0, 4))), readAt = Math.max(0, ...months.map(m => (doc && doc.read[m]) || 0));
+  const status = h("p", { class: "lb-sub rev-status" + (repSync.busy ? " busy" : ""), id: "repStatus", role: "status" },
+    repSync.busy ? `Reading Housecall Pro: ${repSync.what}${repSync.n > 1 ? ` (${repSync.done + 1} of ${repSync.n})` : ""}…`
+      : readAt ? `Repair jobs and client payments from Housecall Pro · read ${revReadText(readAt)} · vendor costs typed here` : "Not read from Housecall Pro yet.");
+  const err = repSync.err ? h("p", { class: "dlg-err", id: "repErr" }, repSync.err, " ",
+    h("button", { class: "btn small", type: "button", onclick: () => { repSync.err = ""; renderRevenue(); } }, "Try again")) : null;
+  const kp = (k, cls, label, v, subt) => h("div", { class: "pay-kpi " + cls, "data-k": k }, h("small", { text: label }), h("b", { text: v }), h("span", { text: subt }));
+  const tiles = h("div", { class: "pay-kpis rp-kpis", id: "repTiles" },
+    kp("c", "", "Charged", lbMoney(s.c / 100), revJobs(s.n)),
+    kp("paid", "", "Clients paid", lbMoney(s.paid / 100), `${fmt(s.full)} paid in full`),
+    kp("owes", s.owes ? "k-due" : "", "Clients still owe", lbMoney(s.owes / 100), revJobs(s.owesN)),
+    kp("mon", "k-vn", "Monumental", lbMoney(s.mon / 100), s.owed ? `${lbMoney(s.owed / 100)} still to pay` : "nothing left to pay"),
+    kp("f", "k-vn", "Specialty contractors", lbMoney(s.f / 100), [...s.fNames].join(", ") || "none"),
+    kp("voda", "k-vd", "VODA", lbMoney(s.voda / 100), s.c ? `${Math.round(s.voda / s.c * 100)}% of charged` : "–"));
+  let body;
+  if (per === "month") {
+    const dt = d => { const x = lbDate(d); return `${LB_WD[x.getDay()]} ${MONTHS[x.getMonth()]} ${x.getDate()}`; };
+    const row = j => {
+      const x = repSplit(j);
+      return h("tr", { class: (j.gone ? "gone " : "") + (j.day > today ? "future" : ""), "data-job": j.id, tabindex: "0", onclick: () => openRepJob(j.id) },
+        h("th", null, j.client || "(no name)", h("small", { text: `${dt(j.day)}${j.addr ? ` · ${j.addr.split(",").slice(-1)[0].trim()}` : ""}${j.inv ? ` · #${j.inv}` : ""}${j.gone ? " · not in Housecall Pro any more" : ""}` })),
+        h("td", null, lbCash(j.c / 100)),
+        h("td", null, repPayTag(j, today), j.owes > 0 && j.paid > 0 ? h("small", { text: `${lbCash(j.owes / 100)} left` }) : null),
+        h("td", { class: "vn" }, x.f ? lbCash(x.f / 100) : "–", x.f && j.t.sName ? h("small", { text: j.t.sName }) : null),
+        h("td", { class: "vn" }, x.mon ? lbCash(x.monAmt / 100) : "–", x.mon ? h("small", { text: `70%${x.j ? ` + ${lbMoney(x.j / 100)} materials` : ""}${x.x ? ` + ${lbMoney(x.x / 100)} extra` : ""}` }) : h("small", { text: "no Monumental" })),
+        h("td", { class: "vn" }, !x.mon ? "–" : j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(j.t.mPaidAt)}` }) : lbCash(x.owed / 100),
+          x.mon && j.t.mInv ? h("small", { text: j.t.mInv }) : x.mon && !j.t.mPaidAt && x.k ? h("small", { text: `after ${lbMoney(x.k / 100)} deposit` }) : null),
+        h("td", { class: "vd" }, lbCash(x.voda / 100), h("small", { text: x.mon ? (x.n ? "30% + 30% on materials" : "30%") + (x.x ? " − extra" : "") : "all of it" })));
+    };
+    const table = h("div", { class: "panel rp-tablewrap" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "repTable" },
+      h("thead", null, h("tr", null, h("th", { text: "Job" }), h("th", { class: "cl" }, "Charged", h("small", { text: "Housecall Pro" })), h("th", { class: "cl" }, "Client paid", h("small", { text: "Housecall Pro" })),
+        h("th", { class: "vn" }, "Specialty", h("small", { text: "VODA pays" })), h("th", { class: "vn" }, "Monumental", h("small", { text: "their share" })),
+        h("th", { class: "vn" }, "Mon. still owed", h("small", { text: "after deposits" })), h("th", { class: "vd" }, "VODA", h("small", { text: "our share" })))),
+      h("tbody", null, live.map(row), gone.map(row)),
+      h("tfoot", null, h("tr", null, h("th", { text: `${lbMonthLong(Number(r.from.slice(5, 7)))} total` }), h("td", { text: lbCash(s.c / 100) }),
+        h("td", null, lbCash(s.paid / 100), h("small", { text: `${lbCash(s.owes / 100)} owed` })),
+        h("td", { class: "vn", text: lbCash(s.f / 100) }), h("td", { class: "vn", text: lbCash(s.mon / 100) }), h("td", { class: "vn", text: lbCash(s.owed / 100) }), h("td", { class: "vd", text: lbCash(s.voda / 100) }))))));
+    const cards = h("div", { class: "rp-cards", id: "repCards" }, live.concat(gone).map(j => {
+      const x = repSplit(j);
+      return h("button", { class: "rp-card" + (j.gone ? " gone" : ""), type: "button", "data-job": j.id, onclick: () => openRepJob(j.id) },
+        h("span", { class: "top" }, h("b", { text: j.client || "(no name)" }), h("span", { text: lbCash(j.c / 100) })),
+        h("span", { class: "meta2" }, `${dt(j.day)}${j.inv ? ` · #${j.inv}` : ""} `, repPayTag(j, today)),
+        h("span", { class: "split" },
+          h("span", { class: "vn" }, h("small", { text: "Monumental" }), x.mon ? lbCash(x.monAmt / 100) : "–"),
+          h("span", { class: "vn" }, h("small", { text: j.t.mPaidAt ? "Paid" : "Still owed" }), !x.mon ? "–" : j.t.mPaidAt ? repShortDay(j.t.mPaidAt) : lbCash(x.owed / 100)),
+          h("span", { class: "vd" }, h("small", { text: "VODA" }), lbCash(x.voda / 100))));
+    }));
+    body = live.length || gone.length ? [table, cards] : [h("p", { class: "meta", text: r.from > today ? "" : "No repair jobs scheduled this month." })];
+  } else {
+    const rows = months.map(m => {
+      const ms = repSum(jobs.filter(j => j.day.startsWith(m)));
+      return h("tr", { class: "rev-mo", "data-month": m, tabindex: "0", onclick: () => { const t = clockNow(); revView.rper = "month"; revView.roff = (Number(m.slice(0, 4)) * 12 + Number(m.slice(5)) - 1) - (t.getFullYear() * 12 + t.getMonth()); revSaveView(); renderRevenue(); } },
+        h("th", { text: lbMonthLong(Number(m.slice(5))) }), [ms.c, ms.paid, ms.owes, ms.mon, ms.f, ms.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(ms.n) }));
+    });
+    const nMonths = months.filter(m => jobs.some(j => !j.gone && j.day.startsWith(m))).length || 1;
+    body = [h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "repYear" },
+      h("thead", null, h("tr", null, ["Month", "Charged", "Clients paid", "Clients owe", "Monumental", "Specialty", "VODA"].map(t => h("th", { text: t })), h("th", { class: "pj", text: "Jobs" }))),
+      h("tbody", null, rows),
+      h("tfoot", null,
+        h("tr", null, h("th", { text: r.to >= today ? "Year so far" : "Year" }), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(s.n) })),
+        h("tr", { id: "repAvg" }, h("th", null, "Monthly average", h("small", { text: `÷ ${nMonths} month${nMonths === 1 ? "" : "s"} with jobs` })), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / nMonths / 100) })), h("td", { class: "pj", text: fmt(Math.round(s.n / nMonths)) })))))),
+      h("p", { class: "hint", text: "Tap a month to see its jobs." })];
+  }
+  const hint = h("p", { class: "hint", text: "Specialty contractors are paid by VODA and come off the top. Monumental gets its materials back plus 70% of what's left; VODA gets 30%, plus 30% on Monumental's materials (materials ÷ 0.7 × 0.3). Extra pay to Monumental comes out of VODA's share. A job tagged “repair - Monumental Flooring” in Housecall Pro is Monumental's." });
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, sub, bar, status, err, r.from > today ? null : [tiles, ...body], hint].flat().filter(Boolean)));
+  if (!repSync.busy && !repSync.err) setTimeout(() => repEnsure(months, false), 0);
+}
+
+/* ---- one job: its client payments, what's typed for its vendors, and the split ---- */
+function openRepJob(id) {
+  const find = () => { for (const d of Object.values(repDocs)) { const j = d.jobs.find(x => x.id === id); if (j) return j; } return null; };
+  const j = find();
+  if (!j) return;
+  const t = Object.assign({ split: "auto" }, j.t || {});
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const money = v => (v === "" || v == null ? "" : String(v));
+  const inp = (k, label, kind, ph) => h("div", { class: "field" }, h("label", { for: `rp-${k}`, text: label }),
+    h("input", { id: `rp-${k}`, "data-k": k, type: kind === "day" ? "date" : "text", inputmode: kind === "money" ? "decimal" : null, value: kind === "money" ? money(t[k]) : (t[k] || ""), placeholder: ph || "", autocomplete: "off",
+      oninput: ev => { t[k] = ev.target.value; draw(); dlgDirty = true; } }));
+  const splitSel = h("select", { id: "rp-split", "aria-label": "Done by", onchange: ev => { t.split = ev.target.value; vendorBox.hidden = !repIsMon(Object.assign({}, j, { t })); draw(); dlgDirty = true; } },
+    h("option", { value: "auto", text: REP_MON_TAG.test(j.tags || "") ? "Monumental (tagged in Housecall Pro)" : "VODA (no Monumental tag)" }),
+    h("option", { value: "mon", text: "Monumental" }), h("option", { value: "none", text: "VODA alone (no split)" }));
+  splitSel.value = t.split || "auto";
+  const line = (a, b, cls) => h("div", { class: "rp-line " + (cls || "") }, h("span", { text: a }), h("b", { text: b }));
+  const splitBox = h("div", { class: "rp-split", id: "repSplit" });
+  const draw = () => {
+    const num = v => String(v || "").replace(/[$,\s]/g, "");
+    const tt = Object.assign({}, t, { sAmt: num(t.sAmt), mat: num(t.mat), mDep: num(t.mDep), extra: num(t.extra) });
+    const bad = ["sAmt", "sDep", "mat", "mDep", "extra"].filter(k => { const v = num(t[k]); return v !== "" && !(Number.isFinite(Number(v)) && Number(v) >= 0); });
+    for (const k of ["sAmt", "sDep", "mat", "mDep", "extra"]) { const el = $(`rp-${k}`); if (el) el.classList.toggle("bad", bad.includes(k)); }
+    const x = repSplit(j, tt), C = c => lbCash(c / 100);
+    splitBox.replaceChildren(
+      line("Charged", C(j.c)),
+      x.f ? line(`− Specialty contractor${t.sName ? ` (${t.sName})` : ""}, paid by VODA`, C(x.f), "sub") : null,
+      ...(x.mon ? [
+        x.j ? line("− Monumental materials", C(x.j), "sub") : null,
+        x.j ? line("− VODA 30% on materials (materials ÷ 0.7 × 0.3)", C(x.n), "sub") : null,
+        line("Left to split", C(x.o)),
+        line(`Monumental: 70%${x.j ? " + materials back" : ""}${x.x ? " + extra" : ""}`, C(x.monAmt), "mon tot"),
+        x.k ? line("  already paid (deposit)", C(x.k), "sub") : null,
+        line(t.mPaidAt ? `  paid ${repShortDay(t.mPaidAt)}` : "  Monumental still owed", t.mPaidAt ? "✓" : C(x.owed), "mon"),
+        line(`VODA: 30%${x.j ? " + 30% on materials" : ""}${x.x ? " − extra to Monumental" : ""}`, C(x.voda), "vd tot")] : [
+        line("VODA (no Monumental on this job)", C(x.voda), "vd tot")]),
+      line(`Check: ${x.mon ? "Monumental + " : ""}${x.f ? "specialty + " : ""}VODA = charged`, C((x.mon ? x.monAmt : 0) + x.f + x.voda), "sub"));
+    err.textContent = bad.length ? "Amounts as numbers, like 1250 or 1,250.50." : "";
+  };
+  const inv = (j.invoices || []).filter(i => i.a > 0);
+  const vendorBox = h("div", { id: "repMonBox" },
+    h("h4", { text: "Monumental" }),
+    h("div", { class: "grid4" }, inp("mat", "Materials $", "money"), inp("mDep", "Deposit $", "money"), inp("mDepAt", "Deposit date", "day"), inp("mInv", "Their invoice #", "text", "REB-…")),
+    h("div", { class: "grid4" }, inp("extra", "Extra pay $", "money", "0"), h("div", { class: "field span2" }, h("label", { for: "rp-extraWhy", text: "Why (unforeseen)" }),
+      h("input", { id: "rp-extraWhy", type: "text", value: t.extraWhy || "", maxlength: "200", oninput: ev => { t.extraWhy = ev.target.value; dlgDirty = true; } })),
+      inp("mPaidAt", "Date VODA paid them", "day")));
+  vendorBox.hidden = !repIsMon(Object.assign({}, j, { t }));
+  openDialog(h("div", { class: "rp-dlg" },
+    h("h3", { id: "dlgTitle", text: `${j.client || "Repair job"} · ${lbCash(j.c / 100)}` }),
+    h("p", { class: "meta", text: [lbDayText(j.day), j.addr, j.inv ? `Housecall Pro #${j.inv}` : "", j.type].filter(Boolean).join(" · ") }),
+    j.gone ? h("p", { class: "dlg-err", text: "This job isn't in Housecall Pro on that day any more (canceled or moved). It's kept because something was typed for it." }) : null,
+    h("h4", { text: "From Housecall Pro" }),
+    h("div", { class: "rp-hcp", id: "repHcp" }, line("Charged", lbCash(j.c / 100)),
+      inv.map(i => line(`Invoice #${i.n}${i.at ? ` · paid ${repShortDay(i.at)}` : i.due > 0 ? " · open" : ""}`, `${lbCash((i.a - i.due) / 100)} of ${lbCash(i.a / 100)}`, "sub")),
+      line("Client paid", lbCash(j.paid / 100)), line("Client still owes", lbCash(j.owes / 100), j.owes > 0 ? "owe" : "")),
+    h("h4", { text: "Done by" }), h("div", { class: "field" }, splitSel),
+    h("h4", { text: "Specialty contractor (VODA pays)" }),
+    h("div", { class: "grid4" }, inp("sName", "Who", "text", "Name"), inp("sAmt", "Their cost $", "money"), inp("sDep", "Deposit $", "money"), inp("sDepAt", "Deposit date", "day")),
+    vendorBox,
+    h("div", { class: "field" }, h("label", { for: "rp-note", text: "Note" }), h("input", { id: "rp-note", type: "text", value: t.note || "", maxlength: "200", oninput: ev => { t.note = ev.target.value; dlgDirty = true; } })),
+    h("h4", { text: "The split" }), splitBox, err,
+    j.by ? h("p", { class: "meta", text: `Last typed by ${j.by}${j.tat ? `, ${revReadText(Date.parse(j.tat))}` : ""}` }) : null,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "repSave", text: "Save", onclick: async ev => {
+        const num = v => { const x = String(v == null ? "" : v).replace(/[$,\s]/g, ""); return x === "" ? "" : Number(x); };
+        const out = {};
+        for (const k of ["split", "sName", "sDepAt", "mDepAt", "extraWhy", "mInv", "mPaidAt", "note"]) out[k] = t[k] || "";
+        for (const k of ["sAmt", "sDep", "mat", "mDep", "extra"]) { out[k] = num(t[k]); if (out[k] !== "" && !(Number.isFinite(out[k]) && out[k] >= 0)) { err.textContent = "Amounts as numbers, like 1250 or 1,250.50."; return; } }
+        const b = ev.currentTarget; b.disabled = true; err.textContent = "";
+        try {
+          const res = await api("repPut", { id: j.id, t: out });
+          for (const d of Object.values(repDocs)) { const i = d.jobs.findIndex(x => x.id === j.id); if (i !== -1) { d.jobs[i] = res.job; repKeep(d.year); } }
+          dlgDirty = false; closeDialog(); toast("Saved"); renderRevenue();
+        } catch (e) { err.textContent = e && e.error === "gone" ? "This job isn't on the Repairs tab any more. Read again first." : errText(e, "The job"); b.disabled = false; }
+      } })))));
+  draw();
 }
 
 /* ======================= Office scorecards ======================= */
