@@ -3610,10 +3610,13 @@ const REP_MON_TAG = /monumental/i;
 function repSheet_(create) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(REP_SHEET);
-  if (!s && create) {
-    s = ss.insertSheet(REP_SHEET);
+  if (!s && !create) return null;
+  if (!s) { s = ss.insertSheet(REP_SHEET); s.setFrozenRows(1); }
+  // a new tab is 26 columns wide and the Repairs tab needs more; the headings go in once (again if a column is added)
+  if (s.getMaxColumns() < REP_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), REP_COLS.length - s.getMaxColumns());
+  const head = s.getRange(1, 1, 1, REP_COLS.length).getValues()[0];
+  if (String(head[0]) !== REP_COLS[0] || String(head[REP_COLS.length - 1]) !== REP_COLS[REP_COLS.length - 1]) {
     s.getRange(1, 1, 1, REP_COLS.length).setValues([REP_COLS]).setFontWeight("bold");
-    s.setFrozenRows(1);
     s.getRange("A:C").setNumberFormat("@");   // the job id, the day and the invoice number stay text
   }
   return s;
@@ -3664,6 +3667,7 @@ function repWrite_(s, rows) {
   const all = Object.keys(rows).map(function (id) { return rows[id]; }).sort(function (a, b) { return a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : String(a[2]) < String(b[2]) ? -1 : String(a[2]) > String(b[2]) ? 1 : 0; });
   all.forEach(function (r) { const x = repSplit_(r); r[29] = x.mon / 100; r[30] = x.owed / 100; r[31] = x.voda / 100; });
   if (!all.length) return;
+  if (s.getMaxRows() < all.length + 1) s.insertRowsAfter(s.getMaxRows(), all.length + 101 - s.getMaxRows());
   s.getRange(2, 1, all.length, 3).setNumberFormat("@");
   s.getRange(2, 1, all.length, REP_COLS.length).setValues(all);
 }
