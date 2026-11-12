@@ -714,6 +714,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rp-kpis .k-vn { background: color-mix(in srgb, var(--soon) 8%, var(--surface)); border-color: color-mix(in srgb, var(--soon) 30%, var(--line)); }
 .rp-kpis .k-vd { background: color-mix(in srgb, var(--ok) 8%, var(--surface)); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
 .rp-kpis .k-due b { color: var(--due); }
+.rp-kpis .rp-kclick { cursor: pointer; } .rp-kpis .rp-kclick:hover { border-color: var(--due); }
+.rp-kpis .rp-kclick.on { box-shadow: inset 0 0 0 2px var(--due); }
+.rp-owebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
 #repTable td small, #repTable th small, #repYear th small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; text-transform: none; letter-spacing: 0; }
 #repTable tbody th { white-space: normal; min-width: 11em; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); font-weight: 700; }
 #repTable thead th.cl { color: var(--accent); } #repTable thead th.vn { color: var(--soon); background: color-mix(in srgb, var(--soon) 10%, var(--surface)); }
@@ -1666,11 +1669,14 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
       <button type="button" class="view-btn" id="viewLeaderboard" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>Leaderboard
       </button>
+      <button type="button" class="view-btn" id="viewRevenue" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 17v-5M11 17V7M16 17v-8M21 17V4"/></svg>Operations
+      </button>
       <button type="button" class="view-btn" id="viewOffice" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Office
       </button>
-      <button type="button" class="view-btn" id="viewRevenue" aria-pressed="false" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 17v-5M11 17V7M16 17v-8M21 17V4"/></svg>Revenue
+      <button type="button" class="view-btn" id="viewRepairs" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Repairs Payroll
       </button>
     </nav>
     <div id="fleetView">
@@ -1706,7 +1712,8 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
     <section class="sup" id="suppliesView" aria-label="Checklists" hidden></section>
     <section class="lb" id="lbView" aria-label="Leaderboard" hidden></section>
     <section class="lb of" id="ofView" aria-label="Office" hidden></section>
-    <section class="lb rev" id="revView" aria-label="Revenue" hidden></section>
+    <section class="lb rev" id="revView" aria-label="Operations" hidden></section>
+    <section class="lb rev" id="repView" aria-label="Repairs Payroll" hidden></section>
     <section class="panel" id="noAccess" hidden>
       <h2>Nothing here yet</h2>
       <p class="meta">An admin hasn't given you Trucks, a checklist or the Leaderboard yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
@@ -6281,9 +6288,9 @@ async function openUsers() {
     const canPay = apiLevel >= PAY_API && u.status !== "invited" && (payMe ? !me : !payAny);
     const pay = u.role !== "admin" || apiLevel < PAY_API ? null
       : canPay ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "payroll", id: "pay-" + (u.username || u.id), "aria-pressed": String(hasPay),
-          onclick: async () => { const out = await call("setPayroll", { id: u.id, on: !hasPay }, me ? "Payroll is on for you: Leaderboard > Payroll" : `${u.name} ${hasPay ? "no longer sees" : "now sees"} Payroll`); if (out && me) refresh(true); } }, me ? "Turn on Payroll for me" : "Payroll")
-      : h("span", { class: "user-meta", text: hasPay ? "Sees Payroll" : "No Payroll" });
-    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", Payroll only when on." : ".") }), pay)
+          onclick: async () => { const out = await call("setPayroll", { id: u.id, on: !hasPay }, me ? "VODA Payroll is on for you: Leaderboard > VODA Payroll" : `${u.name} ${hasPay ? "no longer sees" : "now sees"} VODA Payroll`); if (out && me) refresh(true); } }, me ? "Turn on VODA Payroll for me" : "VODA Payroll")
+      : h("span", { class: "user-meta", text: hasPay ? "Sees VODA Payroll" : "No VODA Payroll" });
+    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }), pay)
       : apiLevel >= SUP_API ? accessChips(access, async (next, name, on) => {
           const out = await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
           if (!out) load();
@@ -6578,15 +6585,16 @@ function allowedTabs() {
   if (canSee("trucks")) out.push("trucks");
   if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && a !== "repairs" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
   if (canSeeLb()) out.push("leaderboard");
+  if (canSee("revenue")) out.push("revenue");   // Operations
   if (canSee("office")) out.push("office");
-  if (canSee("revenue") || canSee("repairs")) out.push("revenue");
+  if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
   return out;
 }
-/** Whoever sees the Leaderboard and Revenue gets Revenue in the Leaderboard's row (Revenue · Performance · Production ·
- *  Payroll) instead of a tab of its own at the top. */
-const revInLb = () => { const t = allowedTabs(); return t.includes("revenue") && t.includes("leaderboard"); };
+/** Whoever sees the Leaderboard and Repairs Payroll gets Repairs Payroll in the Leaderboard's row (Performance ·
+ *  Production · VODA Payroll · Repairs Payroll) instead of a tab of its own at the top. */
+const repInLb = () => { const t = allowedTabs(); return t.includes("repairs") && t.includes("leaderboard"); };
 /** The tabs on the bar at the top. */
-const navTabs = () => allowedTabs().filter(t => t !== "revenue" || !revInLb());
+const navTabs = () => allowedTabs().filter(t => t !== "repairs" || !repInLb());
 /** The Leaderboard's or Revenue's name over it: only when there's no bar at the top already saying it. */
 const secTitle = text => (navTabs().length < 2 ? h("h2", { class: "lb-title", text }) : null);
 
@@ -6692,8 +6700,8 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = tab === "supplies" || tab === "leaderboard" || tab === "office" || tab === "revenue" ? tab : "trucks";
-  if (view.tab === "leaderboard" || view.tab === "revenue") view.lbSide = view.tab;
+  view.tab = ["supplies", "leaderboard", "office", "revenue", "repairs"].includes(tab) ? tab : "trucks";
+  if (view.tab === "leaderboard" || view.tab === "repairs") view.lbSide = view.tab;
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -6703,13 +6711,13 @@ function applyTab() {
   const tabs = allowedTabs();
   $("askBtn").hidden = !askQuestions().length;
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
-  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue";
+  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : "";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : rp ? "#repairs" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
-  const nav = navTabs(), folded = revInLb();
+  const nav = navTabs(), folded = repInLb();
   $("views").hidden = nav.length < 2;
   $("views").classList.toggle("many", nav.length > 3);   // phones: four tabs become icons with a small label
   $("views").classList.toggle("five", nav.length > 4);   // ... five: a smaller label
@@ -6718,30 +6726,35 @@ function applyTab() {
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
   $("viewRevenue").hidden = !nav.includes("revenue");
+  $("viewRepairs").hidden = !nav.includes("repairs");
   if (!tabs.includes("revenue") && revData) revForget();
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
   $("ofView").hidden = !of;
   $("revView").hidden = !rv;
+  $("repView").hidden = !rp;
   $("noAccess").hidden = tabs.length > 0;
   $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
-  $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rv && folded)));
+  $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rp && folded)));
   $("viewOffice").setAttribute("aria-pressed", String(of));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
+  $("viewRepairs").setAttribute("aria-pressed", String(rp));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
   renderSupplies();
   if (lb) { renderLeaderboard(); if (loaded && !lbLoading) lbLoad(); }
   if (of) { renderOffice(); if (loaded && !ofLoading) ofLoad(); }
   if (rv) { renderRevenue(); if (loaded) revLoad(); }
+  if (rp) renderRevenue();
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 $("viewOffice").addEventListener("click", () => setTab("office"));
 $("viewRevenue").addEventListener("click", () => setTab("revenue"));
-$("viewLeaderboard").addEventListener("click", () => setTab(revInLb() && view.lbSide === "revenue" ? "revenue" : "leaderboard"));
+$("viewRepairs").addEventListener("click", () => setTab("repairs"));
+$("viewLeaderboard").addEventListener("click", () => setTab(repInLb() && view.lbSide === "repairs" ? "repairs" : "leaderboard"));
 
 function renderSupBadge() {
   const s = supOk() ? supNow() : null;
@@ -7209,8 +7222,8 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
     apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
     apiLevel >= OF_API ? [["office", "Office"]] : [],
-    apiLevel >= REV_API ? [["revenue", "Revenue"]] : [],
-    apiLevel >= REP_API ? [["repairs", "Repairs split"]] : []);
+    apiLevel >= REV_API ? [["revenue", "Operations"]] : [],
+    apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -7266,8 +7279,8 @@ const lbDayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,
 const lbToday = () => lbDayKey(clockNow());
 const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0)).toLocaleString("en-US");
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
-const LB_TABS = { performance: "Performance", enter: "Production", payroll: "Payroll" };   // Production: where each day's numbers are typed
-const LB_SHORT = { "Technician sales": "Sales", "Whole company": "Company", "Week to date": "Week", "Year to date": "Year" };   // a phone's names, so every row of buttons fits on one line
+const LB_TABS = { performance: "Performance", enter: "Production", payroll: "VODA Payroll" };   // Production: where each day's numbers are typed
+const LB_SHORT = { "VODA Payroll": "Payroll", "Repairs Payroll": "Repairs", "Technician sales": "Sales", "Whole company": "Company", "Week to date": "Week", "Year to date": "Year" };   // a phone's names, so every row of buttons fits on one line
 /** A tab's name: the long one, and on a phone the short one. */
 /** This year's jobs to check (sales over the job's revenue, or sales with no revenue), newest first. */
 const lbToCheck = () => { const y = lbYear(); return lbData ? lbJobFlags(lbData.months, `${y}-01-01`, `${y}-12-31`) : []; };
@@ -7568,7 +7581,7 @@ function renderLeaderboard() {
   const top = title ? h("div", { class: "lb-top" }, title, acts) : null;
   const tabs = h("div", { class: "lb-tabrow" }, lbTabsEl(lbView.tab), title ? null : acts);
   if (!cfg.teams.length) {
-    box.replaceChildren(...[top, revInLb() ? tabs : null].filter(Boolean), h("div", { class: "panel lb-empty" },
+    box.replaceChildren(...[top, repInLb() ? tabs : null].filter(Boolean), h("div", { class: "panel lb-empty" },
       h("h2", { text: "No teams yet" }),
       h("p", { class: "meta", text: edit ? "Tap Add teams (or Settings › Employees) and add each truck's team with its unit (Cleaning or Restoration). Then type each day's numbers under Production." : "An admin hasn't set up the teams yet." }),
       edit ? h("div", null, h("button", { class: "btn primary", type: "button", onclick: () => openLbTeams() }, "Add teams")) : null),
@@ -7594,15 +7607,16 @@ function lbTabOk(k) {
 /** The Leaderboard's row: Revenue (for whoever sees it), then Performance, Production and Payroll as allowed. On Revenue
  *  (cur "revenue") none of the others is lit; tapping one opens the Leaderboard on it. */
 function lbTabsEl(cur) {
-  const edit = canEditLb() && (!lbData || lbData.canEdit !== false), rev = revInLb() && (!apiLevel || apiLevel >= REV_API);
+  const edit = canEditLb() && (!lbData || lbData.canEdit !== false), showRep = repInLb();
   const items = Object.entries(LB_TABS).filter(([k]) => lbTabOk(k));
+  const n = items.length + (showRep ? 1 : 0);
   const leave = () => { if (view.tab === "leaderboard" && lbView.tab === "enter") { lbFlush(); lbCardsLeft(); } };
-  return h("div", { class: "seg lb-tabs" + (rev && items.length >= 3 ? " four" : ""), role: "tablist", "aria-label": "Leaderboard" },
-    rev ? h("button", { class: "seg-btn", type: "button", role: "tab", id: "lbRevBtn", "aria-selected": String(cur === "revenue"), "data-k": "revenue",
-      onclick: () => { if (view.tab === "revenue") return; leave(); setTab("revenue"); } }, "Revenue") : null,
+  return h("div", { class: "seg lb-tabs" + (n === 4 ? " four" : ""), role: "tablist", "aria-label": "Leaderboard" },
     items.map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(cur === k), "data-k": k,
       title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
-      onclick: () => { leave(); lbView.tab = k; lbSaveView(); if (view.tab !== "leaderboard") setTab("leaderboard"); else renderLeaderboard(); } }, lbTabText(t))));
+      onclick: () => { leave(); lbView.tab = k; lbSaveView(); if (view.tab !== "leaderboard") setTab("leaderboard"); else renderLeaderboard(); } }, lbTabText(t))),
+    showRep ? h("button", { class: "seg-btn", type: "button", role: "tab", id: "lbRepBtn", "aria-selected": String(cur === "repairs"), "data-k": "repairs",
+      onclick: () => { if (view.tab === "repairs") return; leave(); setTab("repairs"); } }, lbTabText("Repairs Payroll")) : null);
 }
 /** Months of this year so far that have teams on the board. */
 function lbMonthsWith() {
@@ -9934,17 +9948,10 @@ function revChange(now, then) {
 }
 
 /* ---- the screen ---- */
-/** Departments | Repairs split, for whoever sees both. */
-function revSubSw(cur) {
-  if (!canSee("revenue") || !canSee("repairs") || (apiLevel && apiLevel < REP_API)) return null;
-  const el = lbSeg([["dep", "Departments"], ["rep", "Repairs split"]], cur, k => { revView.sub = k; revSaveView(); renderRevenue(); }, "Revenue view");
-  el.classList.add("rev-sub"); el.id = "revSub";
-  return el;
-}
 function renderRevenue() {
+  if (view.tab === "repairs") { if (session) renderRepairs($("repView")); return; }   // Repairs Payroll's screen
   const box = $("revView");
   if (!box || view.tab !== "revenue" || !session) return;
-  if (!canSee("revenue") || (revView.sub === "rep" && canSee("repairs") && !(apiLevel && apiLevel < REP_API))) { renderRepairs(box); return; }
   if (revOld || (apiLevel && apiLevel < REV_API && !revData)) {
     box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "Revenue needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
@@ -9968,8 +9975,8 @@ function renderRevenue() {
   };
   const ty = revThisYear(), yFrom = `${ty}-01-01`, ay = cmp ? ty - cmp : 0, ayFrom = `${ay}-01-01`, ayTo = cmp ? revShift(today, cmp, "year") : "";
   const ranges = () => [[r.from, to]].concat(cmp ? [[cf, ct]] : [], [[yFrom, today]], cmp ? [[ayFrom, ayTo]] : []);
-  const title = secTitle("Revenue");
-  const top = revInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("revenue")) : title ? h("div", { class: "lb-top" }, title) : null;
+  const title = secTitle("Operations");
+  const top = title ? h("div", { class: "lb-top" }, title) : null;
   const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
     title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure([[r.from, to]], true); } }, "Read again");
   // the period: Week / Month / Year with ‹ ›, or Dates (From – To), and what to compare it with
@@ -10001,7 +10008,7 @@ function renderRevenue() {
     tools);
   const days = r.from > today ? {} : revDaysFor(r.from, to);
   const old = cmp && r.from <= today ? revDaysFor(cf, ct) : {};
-  if (!days || !old) { box.replaceChildren(...[top, revSubSw("dep"), bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
+  if (!days || !old) { box.replaceChildren(...[top, bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
   const s = revSum(days, r.from, to), c = cmp ? revSum(old, cf, ct) : null;
   const cmpName = cmp ? (cf.slice(0, 4) === ct.slice(0, 4) ? cf.slice(0, 4) : `${cf.slice(0, 4)}–${ct.slice(0, 4)}`) : "";
   const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
@@ -10084,7 +10091,7 @@ function renderRevenue() {
             b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
       }));
   }
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, revSubSw("dep"), bar, status, err, r.from > today ? null : [tiles, tilesWas, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, r.from > today ? null : [tiles, tilesWas, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
   if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false), 0);
 }
 
@@ -10099,7 +10106,8 @@ let repDocs = {};                                       // year → { year, jobs
 (() => { const d = store.get(K_REP); if (d && d.year) repDocs[d.year] = d; })();
 let repLoading = {}, repErr = "", repOld = false;
 let repSync = { busy: false, what: "", err: "", n: 0, done: 0 };
-const repFresh = {};                                    // years taken from the Repairs tab again this time the app is open
+const repFresh = {};
+let repOweOnly = false;                                 // Clients still owe tapped: only the jobs whose client owes                                    // years taken from the Repairs tab again this time the app is open
 const repAsked = {};                                    // month → when this window last read it
 const REP_MON_TAG = /monumental/i;
 const REP_AHEAD = 12;                                   // months ahead the month view can go (jobs already scheduled)
@@ -10128,7 +10136,7 @@ async function repLoad(y) {
     repErr = repOld ? "" : errText(e, "Nothing");
   } finally {
     repLoading[y] = false;
-    if (view.tab === "revenue") renderRevenue();
+    if (view.tab === "repairs") renderRevenue();
   }
 }
 /** Is this job Monumental's (70/30)? The switch typed here, or else its Housecall Pro tag. */
@@ -10163,7 +10171,7 @@ async function repEnsure(months, force) {
   for (const c of todo) {
     repSync.what = revMonthText(c.from);
     repAsked[c.m] = performance.now();
-    if (view.tab === "revenue") renderRevenue();
+    if (view.tab === "repairs") renderRevenue();
     try {
       const out = await api("repSync", { from: c.from, to: c.to, force: !!force }, 170000);
       const doc = repDoc(Number(c.m.slice(0, 4)));
@@ -10179,7 +10187,7 @@ async function repEnsure(months, force) {
     }
   }
   repSync.busy = false;
-  if (view.tab === "revenue") renderRevenue();
+  if (view.tab === "repairs") renderRevenue();
 }
 /** The jobs of from..to (null while that year is loading), by day; the ones gone from Housecall Pro apart. */
 function repJobs(from, to) {
@@ -10213,9 +10221,9 @@ function repPayTag(j, today) {
 
 /* ---- the screen ---- */
 function renderRepairs(box) {
-  const title = secTitle("Revenue");
-  const top = revInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("revenue")) : title ? h("div", { class: "lb-top" }, title) : null;
-  const sub = revSubSw("rep");
+  const title = secTitle("Repairs Payroll");
+  const top = repInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("repairs")) : title ? h("div", { class: "lb-top" }, title) : null;
+  const sub = null;
   if (repOld || (apiLevel && apiLevel < REP_API && !repDoc(revThisYear()))) {
     box.replaceChildren(...[top, sub].filter(Boolean), h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "The Repairs split needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
@@ -10278,21 +10286,27 @@ function renderRepairs(box) {
   const tiles = h("div", { class: "pay-kpis rp-kpis", id: "repTiles" },
     kp("c", "", "Charged", lbMoney(s.c / 100), revJobs(s.n) + (s.fee ? ` · ${lbMoney(s.fee / 100)} card fees not split` : "")),
     kp("paid", "", "Clients paid", lbMoney(s.paid / 100), `${fmt(s.full)} paid in full`),
-    kp("owes", s.owes ? "k-due" : "", "Clients still owe", lbMoney(s.owes / 100), revJobs(s.owesN)),
+    Object.assign(kp("owes", (s.owes ? "k-due " : "") + "rp-kclick" + (repOweOnly ? " on" : ""), "Clients still owe", lbMoney(s.owes / 100), revJobs(s.owesN) + (repOweOnly ? " · showing them" : " · tap to list them")),
+      { tabIndex: 0, role: "button", title: "List the jobs whose client still owes", onclick: () => { repOweOnly = !repOweOnly; renderRevenue(); },
+        onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); repOweOnly = !repOweOnly; renderRevenue(); } } }),
     kp("mon", "k-vn", "Monumental", lbMoney(s.mon / 100), (s.owed ? `${lbMoney(s.owed / 100)} still to pay` : "nothing left to pay") + (s.inv ? ` · ${lbMoney(s.inv / 100)} invoiced` : "")),
     kp("f", "k-vn", "Specialty contractors", lbMoney(s.f / 100), [...s.fNames].join(", ") || "none"),
     kp("voda", "k-vd", "VODA", lbMoney(s.voda / 100), s.c ? `${Math.round(s.voda / s.c * 100)}% of charged` : "–"));
   const ls = later.length ? repSum(later) : null;
   const laterNote = ls ? h("p", { class: "meta rp-later", id: "repLater", text: `Not in the totals: ${revJobs(ls.n)} scheduled after today, ${lbMoney(ls.c / 100)} charged (Monumental ${lbMoney(ls.mon / 100)}, VODA ${lbMoney(ls.voda / 100)}).` }) : null;
+  // tapping Clients still owe: the jobs of the period (to date) whose client still owes, in the list, oldest first
+  const oweJobs = repOweOnly ? counted.filter(j => !j.gone && j.owes > 0) : null, L = oweJobs || live, G = oweJobs ? [] : gone, ts = oweJobs ? repSum(oweJobs) : s;
+  const oweBar = oweJobs ? h("p", { class: "rp-owebar", id: "repOweBar" }, h("b", { text: `Clients who still owe: ${revJobs(oweJobs.length)}, ${lbCash(ts.owes / 100)}` }), " ",
+    h("button", { class: "btn small", type: "button", id: "repOweAll", onclick: () => { repOweOnly = false; renderRevenue(); } }, "Show all jobs")) : null;
   let body;
-  if (list) {
+  if (list || oweJobs) {
     const dt = d => { const x = lbDate(d); return `${LB_WD[x.getDay()]} ${MONTHS[x.getMonth()]} ${x.getDate()}`; };
     const row = j => {
       const x = repSplit(j);
       return h("tr", { class: (j.gone ? "gone " : "") + (j.day > today ? "future" : ""), "data-job": j.id, tabindex: "0", onclick: () => openRepJob(j.id) },
         h("th", null, j.client || repStreetText(j.addr).split(",")[0] || "(no name)", h("small", { text: `${dt(j.day)}${j.addr ? ` · ${repTown(j.addr)}` : ""}${j.inv ? ` · #${j.inv}` : ""}${j.gone ? " · not in Housecall Pro any more" : ""}` })),
         h("td", null, lbCash(j.c / 100), x.fee && !x.feeIn ? h("small", { text: `${lbCash(x.fee / 100)} card fee not split` }) : null),
-        h("td", null, repPayTag(j, today), j.owes > 0 && j.paid > 0 ? h("small", { text: `${lbCash(j.owes / 100)} left` }) : null),
+        h("td", null, repPayTag(j, today), j.owes > 0 ? h("small", { text: `${lbCash(j.owes / 100)} ${j.paid > 0 ? "left" : "owed"}` }) : null),
         h("td", { class: "vn" }, x.f ? lbCash(x.f / 100) : "–", x.f && j.t.sName ? h("small", { text: j.t.sName }) : null),
         h("td", { class: "vn" }, x.mon ? lbCash(x.monAmt / 100) : "–", x.mon ? h("small", { text: `70%${x.j ? ` + ${lbMoney(x.j / 100)} materials` : ""}${x.x ? ` + ${lbMoney(x.x / 100)} extra` : ""}` }) : h("small", { text: "no Monumental" })),
         h("td", { class: "vn" }, !x.mon ? "–" : j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(j.t.mPaidAt)}` }) : lbCash(x.owed / 100),
@@ -10304,11 +10318,11 @@ function renderRepairs(box) {
       h("thead", null, h("tr", null, h("th", { text: "Job" }), h("th", { class: "cl" }, "Charged", h("small", { text: "Housecall Pro" })), h("th", { class: "cl" }, "Client paid", h("small", { text: "Housecall Pro" })),
         h("th", { class: "vn" }, "Specialty", h("small", { text: "VODA pays" })), h("th", { class: "vn" }, "Monumental", h("small", { text: "their share" })),
         h("th", { class: "vn" }, "Mon. still owed", h("small", { text: "after deposits" })), h("th", { class: "vd" }, "VODA", h("small", { text: "our share" })))),
-      h("tbody", null, live.map(row), gone.map(row)),
-      h("tfoot", null, h("tr", null, h("th", { text: per === "month" ? `${lbMonthLong(Number(r.from.slice(5, 7)))} ${upTo < r.to ? "to date" : "total"}` : upTo < r.to ? "Total to date" : "Total" }), h("td", { text: lbCash(s.c / 100) }),
-        h("td", null, lbCash(s.paid / 100), h("small", { text: `${lbCash(s.owes / 100)} owed` })),
-        h("td", { class: "vn", text: lbCash(s.f / 100) }), h("td", { class: "vn", text: lbCash(s.mon / 100) }), h("td", { class: "vn", text: lbCash(s.owed / 100) }), h("td", { class: "vd", text: lbCash(s.voda / 100) }))))));
-    const cards = h("div", { class: "rp-cards", id: "repCards" }, live.concat(gone).map(j => {
+      h("tbody", null, L.map(row), G.map(row)),
+      h("tfoot", null, h("tr", null, h("th", { text: oweJobs ? "Total, clients who owe" : per === "month" ? `${lbMonthLong(Number(r.from.slice(5, 7)))} ${upTo < r.to ? "to date" : "total"}` : upTo < r.to ? "Total to date" : "Total" }), h("td", { text: lbCash(ts.c / 100) }),
+        h("td", null, lbCash(ts.paid / 100), h("small", { text: `${lbCash(ts.owes / 100)} owed` })),
+        h("td", { class: "vn", text: lbCash(ts.f / 100) }), h("td", { class: "vn", text: lbCash(ts.mon / 100) }), h("td", { class: "vn", text: lbCash(ts.owed / 100) }), h("td", { class: "vd", text: lbCash(ts.voda / 100) }))))));
+    const cards = h("div", { class: "rp-cards", id: "repCards" }, L.concat(G).map(j => {
       const x = repSplit(j);
       return h("button", { class: "rp-card" + (j.gone ? " gone" : "") + (j.day > upTo ? " future" : ""), type: "button", "data-job": j.id, onclick: () => openRepJob(j.id) },
         h("span", { class: "top" }, h("b", { text: j.client || repStreetText(j.addr).split(",")[0] || "(no name)" }), h("span", { text: lbCash(j.c / 100) })),
@@ -10318,7 +10332,8 @@ function renderRepairs(box) {
           h("span", { class: "vn" }, h("small", { text: j.t.mPaidAt ? "Paid" : repMonToPay(j) ? "Invoiced, to pay" : "Still owed" }), !x.mon ? "–" : j.t.mPaidAt ? repShortDay(j.t.mPaidAt) : lbCash((repMonToPay(j) || x.owed) / 100)),
           h("span", { class: "vd" }, h("small", { text: "VODA" }), lbCash(x.voda / 100))));
     }));
-    body = live.length || gone.length ? [table, cards, laterNote] : [h("p", { class: "meta", text: `No Monumental jobs ${per === "day" ? "on this day" : per === "week" ? "this week" : per === "month" ? "this month" : "in these days"}.` })];
+    body = oweJobs ? [oweBar, ...(L.length ? [table, cards] : [h("p", { class: "meta", text: "No client owes money for these days." })])]
+      : live.length || gone.length ? [table, cards, laterNote] : [h("p", { class: "meta", text: `No Monumental jobs ${per === "day" ? "on this day" : per === "week" ? "this week" : per === "month" ? "this month" : "in these days"}.` })];
   } else {
     const yrs = r.from.slice(0, 4) !== until.slice(0, 4);
     const rows = months.map(m => {
@@ -10332,7 +10347,8 @@ function renderRepairs(box) {
       h("tbody", null, rows),
       h("tfoot", null,
         h("tr", null, h("th", { text: per === "year" ? (r.to >= today ? "Year to date" : "Year") : upTo < r.to ? "Total to date" : "Total" }), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(s.n) })),
-        h("tr", { id: "repAvg" }, h("th", null, "Monthly average", h("small", { text: `÷ ${nMonths} month${nMonths === 1 ? "" : "s"} with jobs` })), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / nMonths / 100) })), h("td", { class: "pj", text: fmt(Math.round(s.n / nMonths)) })))))),
+        h("tr", { id: "repAvg" }, h("th", null, "Monthly average", h("small", { text: `÷ ${nMonths} month${nMonths === 1 ? "" : "s"} with jobs` })), h("td", { text: lbMoney(s.c / nMonths / 100) }),
+          [1, 2, 3, 4, 5].map(() => h("td", { class: "na" })), h("td", { class: "pj", text: fmt(Math.round(s.n / nMonths)) })))))),
       laterNote, h("p", { class: "hint", text: "Tap a month to see its jobs." })];
   }
   const invBtn = h("div", { class: "rp-actions" }, h("button", { class: "btn small primary", type: "button", id: "repInvBtn", onclick: () => openRepMonInv() }, "+ Monumental invoice (PDF)"));
@@ -10366,20 +10382,20 @@ function openRepJob(id) {
     const bad = ["sAmt", "sDep", "mat", "mDep", "extra"].filter(k => { const v = num(t[k]); return v !== "" && !(Number.isFinite(Number(v)) && Number(v) >= 0); });
     for (const k of ["sAmt", "sDep", "mat", "mDep", "extra"]) { const el = $(`rp-${k}`); if (el) el.classList.toggle("bad", bad.includes(k)); }
     const x = repSplit(j, tt), C = c => lbCash(c / 100);
+    const cut = (x.fee && !x.feeIn) || x.f || x.j;
     splitBox.replaceChildren(...[
       line("Charged", C(j.c)),
       x.fee ? line(x.feeIn ? "Credit card fee (in the split: Monumental was paid on it)" : "− Credit card fee (not shared with Monumental)", C(x.fee), "sub") : null,
       x.f ? line(`− Specialty contractor${t.sName ? ` (${t.sName})` : ""}, paid by VODA`, C(x.f), "sub") : null,
+      x.mon && x.j ? line("− Monumental materials", C(x.j), "sub") : null,
+      x.mon && x.j ? line("− VODA 30% on materials (materials ÷ 0.7 × 0.3)", C(x.n), "sub") : null,
+      x.mon && cut ? line("Left to split", C(x.o), "sub") : null,
       ...(x.mon ? [
-        x.j ? line("− Monumental materials", C(x.j), "sub") : null,
-        x.j ? line("− VODA 30% on materials (materials ÷ 0.7 × 0.3)", C(x.n), "sub") : null,
-        line("Left to split", C(x.o)),
         line(`Monumental: 70%${x.j ? " + materials back" : ""}${x.x ? " + extra" : ""}`, C(x.monAmt), "mon tot"),
-        x.k ? line("  already paid (deposit)", C(x.k), "sub") : null,
-        line(t.mPaidAt ? `  paid ${repShortDay(t.mPaidAt)}` : "  Monumental still owed", t.mPaidAt ? "✓" : C(x.owed), "mon"),
-        line(`VODA: 30%${x.j ? " + 30% on materials" : ""}${x.x ? " − extra to Monumental" : ""}`, C(x.voda), "vd tot")] : [
-        line("VODA (no Monumental on this job)", C(x.voda), "vd tot")]),
-      line(`Check: ${x.mon ? "Monumental + " : ""}${x.f ? "specialty + " : ""}VODA = charged${x.fee && !x.feeIn ? " − card fee" : ""}`, C((x.mon ? x.monAmt : 0) + x.f + x.voda), "sub")].flat().filter(Boolean));
+        line(`VODA: 30%${x.j ? " + 30% on materials" : ""}${x.x ? " − extra to Monumental" : ""}`, C(x.voda), "vd tot"),
+        x.k && !t.mPaidAt ? line("Monumental deposit already paid", C(x.k), "sub") : null,
+        line("Paid to Monumental:", t.mPaidAt ? `✓ ${repShortDay(t.mPaidAt)}` : `not yet · ${C(x.owed)} owed`, "tot " + (t.mPaidAt ? "vd" : "mon"))] : [
+        line("VODA (no Monumental on this job)", C(x.voda), "vd tot")])].flat().filter(Boolean));
     err.textContent = bad.length ? "Amounts as numbers, like 1250 or 1,250.50." : "";
   };
   const inv = (j.invoices || []).filter(i => i.a > 0);
@@ -11757,6 +11773,7 @@ else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
 else if (location.hash === "#leaderboard") { view.tab = "leaderboard"; saveView(); }
 else if (location.hash === "#office") { view.tab = "office"; saveView(); }
 else if (location.hash === "#revenue") { view.tab = "revenue"; saveView(); }
+else if (location.hash === "#repairs") { view.tab = "repairs"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {
