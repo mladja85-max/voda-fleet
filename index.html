@@ -1351,6 +1351,26 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lbs-tbl td.best { color: #ffd96a; font-weight: 700; }
 .lbs-tbl td.done { color: #5fd38d; font-weight: 700; }
 .lbs-star { color: #ffd96a; font-size: .8em; }
+/* Production: each unit's heading inside the one table */
+.lbs-tbl tr.lbs-sec th { background: none; padding: 1.4vh .65vw .2vh; border-radius: 0; }
+.lbs-tbl tr.lbs-sec h3 { margin: 0; font-family: var(--font-display); font-size: .95em; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #7ea6ff; }
+.lbs-tbl tr.lbs-sec.Cleaning h3 { color: #4fd1c0; }
+.lbs-tbl tbody:first-of-type tr.lbs-sec th { padding-top: .4vh; }
+.lbs-production.dense .lbs-tbl tbody th, .lbs-production.dense .lbs-tbl td { padding-top: .55vh; padding-bottom: .55vh; }
+/* Cleaning & Restoration on one page: two podiums side by side */
+.lbs-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(14px, 3vw, 60px); min-height: 0; }
+.lbs-half { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 1vh; min-height: 0; min-width: 0; }
+.lbs-half h3 { margin: 0; padding-bottom: .5vh; font-family: var(--font-display); font-size: clamp(1rem, 2.3vw, 2rem); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #7ea6ff; border-bottom: 2px solid rgba(126, 166, 255, .35); }
+.lbs-half.Cleaning h3 { color: #4fd1c0; border-bottom-color: rgba(79, 209, 192, .35); }
+.lbs-pair .lbs-podium { gap: clamp(6px, 1vw, 16px); }
+.lbs-pair .lbs-step .who { font-size: clamp(.9rem, 2.1vw, 2rem); white-space: normal; overflow-wrap: anywhere; }
+.lbs-pair .lbs-step .stat { font-size: clamp(.65rem, 1.05vw, 1rem); }
+.lbs-pair .lbs-step .move { font-size: clamp(.65rem, 1vw, .95rem); }
+.lbs-pair .lbs-crown { width: clamp(22px, 3vw, 44px); }
+.lbs-pair .lbs-block { font-size: clamp(1.6rem, min(5vw, 8vh), 4.6rem); }
+.lbs-pair .lbs-block small { font-size: clamp(.6rem, .95vw, .85rem); }
+.lbs-pair .lbs-rest { grid-template-columns: 1fr; gap: .8vh; }
+.lbs-pair .lbs-rest li { font-size: clamp(.8rem, 1.3vw, 1.15rem); }
 .lbs-sales td.goal { min-width: 14em; }
 .lbs-sales td.goal b { display: inline-block; min-width: 4.6em; }
 .lbs-goalbar { display: inline-block; vertical-align: middle; width: 8em; height: .7em; border-radius: 99px; background: rgba(255, 255, 255, .12); overflow: hidden; margin-right: .8em; }
@@ -1365,6 +1385,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .lbs-tbl tbody th { grid-column: 1 / -1; font-size: 1.15rem; }
   .lbs-tbl td::before { content: attr(data-l); display: block; font-size: .62rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #8fa3b8; }
   .lbs-tbl .ytd { border-left: 0; }
+  .lbs-tbl tbody tr.lbs-sec { display: block; background: none; padding: 6px 0 2px; margin: 0; }
+  .lbs-tbl tbody tr.lbs-sec th { padding: 0; font-size: 1rem; }
+  .lbs-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .lbs-sales td.goal { grid-column: span 2; min-width: 0; }
   .lbs-goalbar { width: 45%; }
 }
@@ -10160,11 +10183,13 @@ function lbSlides() {
     h("p", { text: lbPast() ? `${lbMonthLong(month)} · Year to date ${lbYtdText(month)}, ${y}` : `${lbMonthLong(month)} so far · Year to date since January 1` })));
   // everyone's numbers first (A to Z, no places), then the podiums
   if (lbBoardShown(lbCfg(), key).length) slides.push(() => lbSalesSlide(month));
-  for (const g of LB_GROUPS) if (st.month[g].length) slides.push(() => lbNumbersSlide(g, st, month));
-  for (const per of ["month", "ytd"]) for (const g of ["Cleaning", "Restoration", "Company"]) {
-    const rows = st[per][g];
-    if (!rows.length) continue;
-    slides.push(() => lbPodium(rows, per, g, per === "month" ? `${mname} · month to date` : `Year to date · ${lbYtdText(month)}, ${y}`, key));
+  if (LB_GROUPS.some(g => st.month[g].length)) slides.push(() => lbProductionSlide(st, month));
+  for (const per of ["month", "ytd"]) {
+    const kicker = per === "month" ? `${mname} · month to date` : `Year to date · ${lbYtdText(month)}, ${y}`;
+    const units = LB_GROUPS.filter(g => st[per][g].length);
+    if (units.length === 2) slides.push(() => lbPodiumPair(st[per], per, kicker, key));
+    else for (const g of units) slides.push(() => lbPodium(st[per][g], per, g, kicker, key));
+    if (st[per].Company.length) slides.push(() => lbPodium(st[per].Company, per, "Company", kicker, key));
   }
   if (wk) slides.push(() => lbWeekSlide(wk));
   // revenue this month and this year, the same bars
@@ -10178,7 +10203,8 @@ function lbStat(x, per) {
   const v = x.values;
   return per === "month" || per === "ytd" ? `${lbMoney(v.revenue)} · ${lbMoney(v.perJob)}/job` : "";
 }
-function lbPodium(rows, per, g, kicker, key) {
+/** A unit's podium (its top three) and the list of the rest under it. */
+function lbPodiumParts(rows, per, g, key) {
   const top = rows.slice(0, 3), rest = rows.slice(3);
   const step = (x, pos) => x ? h("div", { class: `lbs-step ${pos} g${Math.min(3, x.place)}`, "data-team": x.team },
     x.place === 1 ? lbSvg(LB_CROWN) : null,
@@ -10186,14 +10212,23 @@ function lbPodium(rows, per, g, kicker, key) {
     h("div", { class: "stat", text: lbStat(x, per) }),
     lbMoveEl(lbMove(per, g, x.team, x.place, key), "move"),
     h("div", { class: "lbs-block" }, String(x.place), h("small", { text: `Score ${x.score}` }))) : h("div");
-  return h("section", { class: "lbs-slide" },
-    h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: kicker }), h("h2", { text: g === "Company" ? "Whole company" : g })),
-      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Hub")),
-    h("div", { class: "lbs-podium" }, step(top[1], "s2"), step(top[0], "s1"), step(top[2], "s3")),
+  return [h("div", { class: "lbs-podium" }, step(top[1], "s2"), step(top[0], "s1"), step(top[2], "s3")),
     rest.length ? h("ol", { class: "lbs-rest" }, rest.map(x => h("li", { "data-team": x.team },
       h("span", { class: "pl", text: String(x.place) }), h("span", { class: "nm", text: x.team }),
       lbMoveEl(lbMove(per, g, x.team, x.place, key), "move"),
-      h("span", { class: "st" }, lbStat(x, per), h("small", { text: `Score ${x.score}` }))))) : h("div"));
+      h("span", { class: "st" }, lbStat(x, per), h("small", { text: `Score ${x.score}` }))))) : h("div")];
+}
+const lbSlideHead = (kicker, title) => h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: kicker }), h("h2", { text: title })),
+  h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Hub"));
+function lbPodium(rows, per, g, kicker, key) {
+  return h("section", { class: "lbs-slide" }, lbSlideHead(kicker, g === "Company" ? "Whole company" : g), ...lbPodiumParts(rows, per, g, key));
+}
+/** Cleaning and Restoration side by side on one page, each with its own podium and the rest under it. */
+function lbPodiumPair(byUnit, per, kicker, key) {
+  return h("section", { class: "lbs-slide lbs-pair" }, lbSlideHead(kicker, "Cleaning & Restoration"),
+    h("div", { class: "lbs-split" }, LB_GROUPS.map(g => h("div", { class: `lbs-half ${g}`, "data-unit": g },
+      h("h3", { text: g }), ...lbPodiumParts(byUnit[g], per, g, key)))),
+    h("div"));
 }
 const lbWeekSlide = start => lbRevSlide(lbWeek(lbB().weeks, start), `Week of ${lbWeekText(start)}`, "Revenue this week");
 /** Each unit's people with a bar for their revenue (highest first), their jobs and revenue per job. The bars are
@@ -10247,27 +10282,29 @@ function lbSalesSlide(month) {
     h("p", { class: "lbs-foot" }, `Company: ${lbMoney(tot.sales)} in sales on ${fmt(tot.jobs)} jobs · ${lbMoney(lbDiv(tot.sales, tot.jobs))} per job`,
       left ? ` · working days left: ${units.map(u => `${u} ${leftOf(u)}`).join(", ")}` : "", h("span", { class: "lbs-star", text: " ★" }), " best in the column"));
 }
-function lbNumbersSlide(g, st, month) {
-  const y = lbYear();
-  const rows = st.month[g].slice().sort(lbAz);
-  const ytd = Object.fromEntries(st.ytd[g].map(x => [x.team, x.values]));
-  const mb = Object.fromEntries(LB_MONTH_METRICS.map(m => [m.key, lbBest(rows, r => r.values[m.key])]));
-  const yb = Object.fromEntries(LB_YTD_METRICS.map(m => [m.key, lbBest(rows, r => (ytd[r.team] || {})[m.key] || 0)]));
-  return h("section", { class: "lbs-slide lbs-numbers" },
-    h("div", { class: "lbs-head" }, h("div", null, h("p", { class: "lbs-kicker", text: `${lbMonthLong(month)} ${y} · A to Z` }), h("h2", { text: `${g} numbers` })),
-      h("div", { class: "lbs-logo" }, lbSvg(LB_LOGO), "VODA Hub")),
+function lbProductionSlide(st, month) {
+  const y = lbYear(), units = LB_GROUPS.filter(g => st.month[g].length);
+  const ytd = Object.fromEntries(units.flatMap(g => st.ytd[g].map(x => [g + "|" + x.team, x.values])));
+  const cols = 1 + LB_MONTH_METRICS.length + LB_YTD_METRICS.length;
+  const many = units.reduce((n, g) => n + st.month[g].length, 0) > 10;
+  return h("section", { class: "lbs-slide lbs-numbers lbs-production" + (many ? " dense" : "") },
+    lbSlideHead(`${lbMonthLong(month)} ${y} · A to Z`, "Production"),
     h("div", { class: "lbs-tblwrap" }, h("table", { class: "lbs-tbl" },
       h("thead", null,
         h("tr", { class: "lbs-grp" }, h("th"), h("th", { colspan: String(LB_MONTH_METRICS.length), text: lbMonthLong(month) }), h("th", { class: "ytd", colspan: String(LB_YTD_METRICS.length), text: `Year to date · ${lbYtdText(month)}` })),
         h("tr", null, h("th", { text: "Team" }), LB_MONTH_METRICS.map(m => h("th", { text: m.short })), LB_YTD_METRICS.map((m, i) => h("th", { class: i ? "" : "ytd", text: m.short })))),
-      h("tbody", null, rows.map(r => {
-        const yv = ytd[r.team] || {};
-        return h("tr", { "data-team": r.team },
-          h("th", { text: r.team }),
-          LB_MONTH_METRICS.map(m => lbCell(m.short, lbFmt(m, r.values[m.key]), mb[m.key] != null && lbRound(r.values[m.key]) === mb[m.key])),
-          LB_YTD_METRICS.map((m, i) => { const c = lbCell(`YTD ${m.short.toLowerCase()}`, lbFmt(m, yv[m.key] || 0), yb[m.key] != null && lbRound(yv[m.key] || 0) === yb[m.key]); if (!i) c.classList.add("ytd"); return c; }));
-      })))),
-    h("p", { class: "lbs-foot" }, "Per day = daily per truck · Sale/job = technician sales per job · reviews are 5-star", h("span", { class: "lbs-star", text: " ★" }), " best in the column"));
+      units.map(g => {
+        const rows = st.month[g].slice().sort(lbAz), yv = r => ytd[g + "|" + r.team] || {};
+        const mb = Object.fromEntries(LB_MONTH_METRICS.map(m => [m.key, lbBest(rows, r => r.values[m.key])]));
+        const yb = Object.fromEntries(LB_YTD_METRICS.map(m => [m.key, lbBest(rows, r => yv(r)[m.key] || 0)]));
+        return h("tbody", { "data-unit": g },
+          h("tr", { class: `lbs-sec ${g}` }, h("th", { colspan: String(cols) }, h("h3", { text: `${g} production` }))),
+          rows.map(r => h("tr", { "data-team": r.team },
+            h("th", { text: r.team }),
+            LB_MONTH_METRICS.map(m => lbCell(m.short, lbFmt(m, r.values[m.key]), mb[m.key] != null && lbRound(r.values[m.key]) === mb[m.key])),
+            LB_YTD_METRICS.map((m, i) => { const c = lbCell(`YTD ${m.short.toLowerCase()}`, lbFmt(m, yv(r)[m.key] || 0), yb[m.key] != null && lbRound(yv(r)[m.key] || 0) === yb[m.key]); if (!i) c.classList.add("ytd"); return c; }))));
+      }))),
+    h("p", { class: "lbs-foot" }, "Per day = daily per truck · Sale/job = technician sales per job · reviews are 5-star", h("span", { class: "lbs-star", text: " ★" }), " best in the column, within Cleaning and within Restoration"));
 }
 function lbPresent() {
   const slides = lbSlides();
