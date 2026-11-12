@@ -786,6 +786,52 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
   .rev-aside { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
 }
+/* Marketing: the period's totals, then where clients came from (new clients, Repeat, Referrals) */
+.mkt-deps { margin-top: -4px; }
+.mkt-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+#mktTable td small, #mktMonthTable td small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; }
+#mktTable td.zero, #mktMonthTable td.zero { color: var(--muted); }
+#mktTable tbody th, #mktMonthTable tbody th { font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); white-space: normal; min-width: 7em; }
+#mktTable tbody th small, #mktMonthTable tbody th small { display: block; color: var(--muted); font-size: .7rem; font-weight: 600; }
+#mktTable tr.mkt-grp th, #mktTable tr.mkt-grp td { font-weight: 700; background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+#mktTable tr.mkt-grp.repeat th, #mktTable tr.mkt-grp.repeat td { background: color-mix(in srgb, var(--clean) 9%, var(--surface)); }
+#mktTable tr.mkt-grp.referral th, #mktTable tr.mkt-grp.referral td { background: color-mix(in srgb, var(--soon) 9%, var(--surface)); }
+#mktTable tr.mkt-sub th { padding-left: 18px; }
+#mktTable td .rev-was, #mktMonthTable td .rev-was { display: block; margin: 4px 0 0 auto; padding: 3px 7px 4px; border-radius: 7px; width: fit-content; background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent); color: var(--muted); font-size: .74rem; font-weight: 600; line-height: 1.35; text-align: right; }
+#mktTable td small.mkt-was, #mktMonthTable td small.mkt-was { font-size: .7rem; }
+#mktTable td.ret, #mktMonthTable td.ret { font-weight: 700; }
+#mktMonthTable tr.rev-mo { cursor: pointer; }
+#mktMonthTable tr.rev-mo:hover th, #mktMonthTable tr.rev-mo:hover td { background: var(--accent-soft); }
+#mktMonthTable tr.future th, #mktMonthTable tr.future td { color: var(--muted); opacity: .6; }
+.mkt-spend { all: unset; cursor: pointer; display: inline-block; padding: 2px 6px; margin: -2px -6px; border-radius: 7px; border: 1px dashed transparent; font-variant-numeric: tabular-nums; }
+.mkt-spend:hover, .mkt-spend:focus-visible { border-color: var(--accent); color: var(--accent); }
+td.zero .mkt-spend { color: var(--accent); font-weight: 600; }
+.mkt-h3 { margin: 0 0 8px; font-size: 1rem; }
+#mktTable td small.mkt-cpj, #mktMonthTable td small.mkt-cpj { display: none; }
+.mkt-splist, .mkt-leads { display: grid; gap: 8px; margin: 6px 0 4px; }
+.mkt-sp, .mkt-lead { display: grid; grid-template-columns: minmax(0, 1fr) 9em; gap: 10px; align-items: center; }
+.mkt-lead { grid-template-columns: minmax(0, 1fr) minmax(9em, 14em); }
+.mkt-sp span, .mkt-lead span { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.mkt-sp small, .mkt-lead small { display: block; font-weight: 500; font-size: .76rem; color: var(--muted); }
+.mkt-sp input, .mkt-lead select { font: inherit; width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); }
+.mkt-sp input { text-align: right; }
+.mkt-sp #mktSpNewName { text-align: left; }
+.mkt-impsum { margin-top: 8px; }
+dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
+@media (max-width: 760px) {
+  .mkt-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #mktTable .pj, #mktMonthTable .pj, #mktTable .cpj, #mktMonthTable .cpj { display: none; }
+  #mktTable td small.mkt-cpj, #mktMonthTable td small.mkt-cpj { display: block; }
+  #mktTable, #mktMonthTable { font-size: .8rem; }
+  #mktTable th, #mktTable td, #mktMonthTable th, #mktMonthTable td { padding: 5px 4px; }
+  #mktTable tbody th, #mktMonthTable tbody th { min-width: 5.2em; max-width: 7.5em; font-size: .8rem; }
+  #mktTable tr.mkt-sub th { padding-left: 10px; }
+  #mktTable td .rev-was, #mktMonthTable td .rev-was { padding: 3px 4px 4px; font-size: .7rem; }
+  #mktTable td .rev-was .rev-ch, #mktMonthTable td .rev-was .rev-ch { display: block; }
+  #mktTable td .rev-was .rev-ytag, #mktMonthTable td .rev-was .rev-ytag { display: block; width: max-content; margin: 0 0 1px auto; padding: 0 3px; }
+  .mkt-sp { grid-template-columns: minmax(0, 1fr) 7.5em; }
+  .mkt-lead { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
 .lb-tabrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .lb-tabrow .lb-acts { margin-left: auto; }
 .rev-cmp { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
@@ -1571,6 +1617,8 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 }
 @media (max-width: 370px) { .views.many .view-btn { font-size: .6rem; letter-spacing: 0; } }
 @media (max-width: 370px) { .views.five .view-btn { font-size: .54rem; } #revTable { font-size: .76rem; } #revTable th, #revTable td { padding: 5px 2px; } #revTable td .rev-was { padding: 2px 3px 3px; font-size: .68rem; } }
+@media (max-width: 600px) { .views.six .view-btn { font-size: .5rem; letter-spacing: -.03em; } .views.six .view-btn svg { width: 16px; height: 16px; } }   /* six tabs: Marketing too */
+@media (max-width: 370px) { .views.six .view-btn { font-size: .46rem; letter-spacing: -.04em; } }
 /* a tablet: five tabs share the width */
 @media (min-width: 601px) and (max-width: 940px) { .views.five { width: 100%; box-sizing: border-box; } .views.five .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 6px; gap: 6px; } }
 @media (min-width: 601px) and (max-width: 760px) { .views.five .view-btn svg { display: none; } }
@@ -1676,6 +1724,9 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
       <button type="button" class="view-btn" id="viewOffice" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Office
       </button>
+      <button type="button" class="view-btn" id="viewMarketing" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10v4h3l6 4V6L6 10z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>Marketing
+      </button>
       <button type="button" class="view-btn" id="viewRepairs" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Repairs Payroll
       </button>
@@ -1715,6 +1766,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
     <section class="lb of" id="ofView" aria-label="Office" hidden></section>
     <section class="lb rev" id="revView" aria-label="Operations" hidden></section>
     <section class="lb rev" id="repView" aria-label="Repairs Payroll" hidden></section>
+    <section class="lb rev mkt" id="mktView" aria-label="Marketing" hidden></section>
     <section class="panel" id="noAccess" hidden>
       <h2>Nothing here yet</h2>
       <p class="meta">An admin hasn't given you Trucks, a checklist or the Leaderboard yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
@@ -4085,7 +4137,7 @@ const isBusy = e => !!(e && e.error === "server" && /lock timeout|holding the lo
    What one window saves, the others show by themselves, without Update. Typed Leaderboard numbers arrive as the sheet
    saved them; any other change just tells the other windows to load again, quietly. Nothing is sent to another
    login: a window signed in as someone else ignores it. */
-const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync", "repairs", "repSync"]);
+const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync", "repairs", "repSync", "marketing"]);
 let peers = null;
 try { peers = typeof BroadcastChannel === "function" ? new BroadcastChannel("voda-prime") : null; } catch (e) { peers = null; }
 function tellPeers(msg) { try { if (peers && session) peers.postMessage(Object.assign({ user: session.id }, msg)); } catch (e) { /* this window still has it */ } }
@@ -4110,7 +4162,8 @@ function peerChanged(action) {
     if (acts.includes("payPut")) { lbRates = null; lbRatesAsked = false; }
     if (acts.some(a => /^of/.test(a)) && view.tab === "office" && !dlg.open && !ofTypingNow()) ofLoad();
     if (acts.some(a => /^lb/.test(a))) { lbYearCache = {}; if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping()) lbLoad(); }
-    if (acts.some(a => !/^(of|lb|pay)/.test(a))) refresh(true);
+    if (acts.some(a => /^mkt/.test(a)) && view.tab === "marketing" && !dlg.open) mktLoad();
+    if (acts.some(a => !/^(of|lb|pay|mkt)/.test(a))) refresh(true);
   }, 400);
 }
 if (peers) peers.onmessage = e => {
@@ -4577,7 +4630,7 @@ function showSignIn(message, mode) {
 
 function signOut(message) {
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
-  lbForget(); revForget(); repForget();
+  lbForget(); revForget(); repForget(); mktForget(); mktAsked = false;
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
@@ -6584,10 +6637,11 @@ const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
-  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && a !== "repairs" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
+  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && a !== "repairs" && a !== "marketing" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
   if (canSeeLb()) out.push("leaderboard");
   if (canSee("revenue")) out.push("revenue");   // Operations
   if (canSee("office")) out.push("office");
+  if (canSee("marketing")) out.push("marketing");
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
   return out;
 }
@@ -6701,7 +6755,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = ["supplies", "leaderboard", "office", "revenue", "repairs"].includes(tab) ? tab : "trucks";
+  view.tab = ["supplies", "leaderboard", "office", "revenue", "repairs", "marketing"].includes(tab) ? tab : "trucks";
   if (view.tab === "leaderboard" || view.tab === "repairs") view.lbSide = view.tab;
   if (sub) view.supTab = sub;
   saveView();
@@ -6712,9 +6766,9 @@ function applyTab() {
   const tabs = allowedTabs();
   $("askBtn").hidden = !askQuestions().length;
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
-  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs";
+  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs", mk = view.tab === "marketing";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : rp ? "#repairs" : "";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : rp ? "#repairs" : mk ? "#marketing" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
@@ -6722,19 +6776,23 @@ function applyTab() {
   $("views").hidden = nav.length < 2;
   $("views").classList.toggle("many", nav.length > 3);   // phones: four tabs become icons with a small label
   $("views").classList.toggle("five", nav.length > 4);   // ... five: a smaller label
+  $("views").classList.toggle("six", nav.length > 5);    // ... six: smaller still
   $("viewTrucks").hidden = !tabs.includes("trucks");
   $("viewSupplies").hidden = !tabs.includes("supplies");
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
   $("viewRevenue").hidden = !nav.includes("revenue");
   $("viewRepairs").hidden = !nav.includes("repairs");
-  if (!tabs.includes("revenue") && revData) revForget();
+  $("viewMarketing").hidden = !nav.includes("marketing");
+  if (!tabs.includes("revenue") && !tabs.includes("marketing") && revData) revForget();
+  if (!tabs.includes("marketing") && mktData) mktForget();
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
   $("ofView").hidden = !of;
   $("revView").hidden = !rv;
   $("repView").hidden = !rp;
+  $("mktView").hidden = !mk;
   $("noAccess").hidden = tabs.length > 0;
   $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
@@ -6742,6 +6800,7 @@ function applyTab() {
   $("viewOffice").setAttribute("aria-pressed", String(of));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
   $("viewRepairs").setAttribute("aria-pressed", String(rp));
+  $("viewMarketing").setAttribute("aria-pressed", String(mk));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
   renderSupplies();
@@ -6749,6 +6808,7 @@ function applyTab() {
   if (of) { renderOffice(); if (loaded && !ofLoading) ofLoad(); }
   if (rv) { renderRevenue(); if (loaded) revLoad(); }
   if (rp) renderRevenue();
+  if (mk) renderMarketing();
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
@@ -6758,6 +6818,7 @@ $("viewRevenue").addEventListener("click", () => setTab("revenue"));
 (() => { const bar = document.querySelector(".topbar"), set = () => document.documentElement.style.setProperty("--top-h", `${bar ? bar.offsetHeight : 74}px`);
   set(); if (bar && window.ResizeObserver) new ResizeObserver(set).observe(bar); else addEventListener("resize", set); })();
 $("viewRepairs").addEventListener("click", () => setTab("repairs"));
+$("viewMarketing").addEventListener("click", () => setTab("marketing"));
 $("viewLeaderboard").addEventListener("click", () => setTab(repInLb() && view.lbSide === "repairs" ? "repairs" : "leaderboard"));
 
 function renderSupBadge() {
@@ -7227,7 +7288,8 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
     apiLevel >= OF_API ? [["office", "Office"]] : [],
     apiLevel >= REV_API ? [["revenue", "Operations"]] : [],
-    apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : []);
+    apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : [],
+    apiLevel >= MKT_API ? [["marketing", "Marketing"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -9771,7 +9833,7 @@ function revForget() { revData = null; revOther = {}; store.del(K_REV); }
 const revDoc = y => (y === revThisYear() ? revData : revOther[y]) || null;
 async function revLoad(y) {
   y = y || revThisYear();
-  if (!session || !canSee("revenue") || revLoading[y]) return;
+  if (!session || !(canSee("revenue") || canSee("marketing")) || revLoading[y]) return;
   revLoading[y] = true;
   try {
     const out = await api("revenue", { year: y });
@@ -9787,9 +9849,11 @@ async function revLoad(y) {
     revErr = revOld ? "" : errText(e, "Nothing");
   } finally {
     revLoading[y] = false;
-    if (view.tab === "revenue") renderRevenue();
+    revRedraw();
   }
 }
+/** Whichever screen shows Housecall Pro's days. */
+function revRedraw() { if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing(); }
 /** Every day from..to touches (null while a year is still loading). */
 function revDaysFor(from, to) {
   const out = {};
@@ -9822,10 +9886,11 @@ function revErrText(e) {
 }
 const revMonthText = day => `${lbMonthLong(Number(day.slice(5, 7)))} ${day.slice(0, 4)}`;
 /** Reads again what's missing or may have changed between from and to (or all of it: force), a month at a time,
- *  the newest month first, showing each as it comes in. A failure stops it until Read again is pressed. */
-async function revEnsure(ranges, force) {
+ *  the newest month first, showing each as it comes in. A failure stops it until Read again is pressed. src
+ *  (Marketing): days read before their sources were kept are read again too. */
+async function revEnsure(ranges, force, src) {
   const today = lbToday();
-  if (revSync.busy || (!force && revSync.err) || !session || !canSee("revenue")) return;
+  if (revSync.busy || (!force && revSync.err) || !session || !(canSee("revenue") || canSee("marketing"))) return;
   if (!navigator.onLine) return;
   const now = Date.now(), months = {};
   for (let [from, to] of ranges) {
@@ -9835,7 +9900,7 @@ async function revEnsure(ranges, force) {
       if (!doc) return;
       const m = d.slice(0, 7);
       if (!force && revAsked[d] && performance.now() - revAsked[d] < 10 * 60e3) continue;
-      if (force || revStale(d, doc.days[d], now, today)) { if (!months[m]) months[m] = { from: d, to: d }; if (d < months[m].from) months[m].from = d; if (d > months[m].to) months[m].to = d; }
+      if (force || revStale(d, doc.days[d], now, today) || (src && !doc.days[d][11])) { if (!months[m]) months[m] = { from: d, to: d }; if (d < months[m].from) months[m].from = d; if (d > months[m].to) months[m].to = d; }
     }
   }
   const chunks = Object.keys(months).sort().reverse().map(k => months[k]);
@@ -9844,7 +9909,7 @@ async function revEnsure(ranges, force) {
   for (const c of chunks) {
     revSync.what = revMonthText(c.from);
     for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) revAsked[d] = performance.now();
-    if (view.tab === "revenue") renderRevenue();
+    revRedraw();
     try {
       const out = await api("revSync", { from: c.from, to: c.to, force: !!force }, 170000);
       revMerge(out.days);
@@ -9857,7 +9922,7 @@ async function revEnsure(ranges, force) {
     }
   }
   revSync.busy = false;
-  if (view.tab === "revenue") renderRevenue();
+  revRedraw();
 }
 /** The days from..to added up, in cents: each department's [cents, jobs], and what's in them. */
 function revSum(days, from, to) {
@@ -10874,6 +10939,542 @@ function openRepImport() {
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
 }
 
+/* ======================= Marketing: where clients come from, what they bring in, and what the ads cost ======================= */
+// What each source brought in is read from Housecall Pro, in the same reading as Operations (the Revenue tab keeps each
+// day's sources too): Repeat clients and Referrals by the Job type (… - REPEAT, … - REFERRAL), every other job by its
+// Lead source (matched to a row in Lead sources, or guessed from its name). The ad spend is typed here. Months before
+// Housecall Pro come from the two spreadsheets, imported once (Clients Per Month and Summary Advertising).
+const MKT_API = 44;                                     // the Google script version with Marketing
+const K_MKT = "voda.mkt1", K_MKT_VIEW = "voda.mktView1";
+let mktData = store.get(K_MKT);                         // { spend: { "2026-10": { Google: 8066 } }, spendFrom, map: { lead: row }, hist: [[month, source, dept, $, jobs]] }
+let mktLoading = false, mktErr = "", mktOld = false, mktAsked = false;
+const mktView = Object.assign({ per: "month", off: 0, cmp: 1, dep: "all" }, store.get(K_MKT_VIEW) || {});
+const mktSaveView = () => store.set(K_MKT_VIEW, { per: mktView.per, cmp: mktView.cmp, dep: mktView.dep });
+const MKT_PER = { month: "Month", year: "Year" };
+const MKT_DEPS = [["all", "All"], ["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"]];
+const MKT_REPEAT = "Repeat clients", MKT_REFERRAL = "Referrals", MKT_OTHER = "Other / no source";
+const MKT_ROWS = ["Google", "Google Guaranteed", "Thumbtack", "AI", "Facebook", "Angie's", "BNI", "Yelp", MKT_OTHER, MKT_REPEAT, MKT_REFERRAL];
+const MKT_MON = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const mktGroup = name => (name === MKT_REPEAT ? "repeat" : name === MKT_REFERRAL ? "referral" : "new");
+/** A Lead source's row when nobody matched it: by its name ("Google LSA" → Google Guaranteed), else a row of its own. */
+function mktGuess(lead) {
+  const l = String(lead || "").toLowerCase().trim();
+  if (!l) return MKT_OTHER;
+  if (/guarant|\blsa\b|local serv/.test(l)) return "Google Guaranteed";
+  if (/google|\bgmb\b|\bgbp\b/.test(l)) return "Google";
+  if (/thumb ?tack/.test(l)) return "Thumbtack";
+  if (/^ai$|\bai\b|chat ?gpt|openai|gemini|perplexity|copilot/.test(l)) return "AI";
+  if (/facebook|\bfb\b|\bmeta\b|instagram/.test(l)) return "Facebook";
+  if (/angi/.test(l)) return "Angie's";
+  if (/\bbni\b/.test(l)) return "BNI";
+  if (/yelp/.test(l)) return "Yelp";
+  if (/refer/.test(l)) return MKT_REFERRAL;
+  if (/repeat|returning|existing|past client|previous client/.test(l)) return MKT_REPEAT;
+  return String(lead).trim();
+}
+/** A day's source ("repeat|Google", "|Thumbtack") → its row. */
+function mktRowOf(key, map) {
+  const i = key.indexOf("|"), kind = key.slice(0, i), lead = key.slice(i + 1);
+  if (kind === "repeat") return MKT_REPEAT;
+  if (kind === "referral") return MKT_REFERRAL;
+  return (map && map[lead]) || mktGuess(lead);
+}
+/** A column of the spreadsheets ("NEW Google Guaranteed", "Repeat Residential" + "Cleaning", "Repairs" + "REPEAT")
+ *  → [row, department ("r", "c", "p" or "" when it doesn't say)]. */
+function mktSheetName(top, sub) {
+  const t = String(top || "").replace(/\s+/g, " ").trim(), s = String(sub || "").replace(/\s+/g, " ").trim();
+  if (/^repairs?$/i.test(t)) { const [n] = mktSheetName(s, ""); return [n === MKT_OTHER ? "Repairs" : n, "p"]; }
+  const all = `${t} ${s}`.toLowerCase(), dep = /clean/.test(s.toLowerCase()) ? "c" : /restor/.test(s.toLowerCase()) ? "r" : "";
+  if (/repeat/.test(all)) return [MKT_REPEAT, dep];
+  if (/referr?al/.test(all)) return [MKT_REFERRAL, dep];
+  if (/guarant/.test(all)) return ["Google Guaranteed", ""];
+  if (/google ads/.test(all)) return ["Google Ads", ""];
+  if (/google/.test(all)) return ["Google", ""];
+  if (/thumb ?tack/.test(all)) return ["Thumbtack", ""];
+  if (/\bangi/.test(all)) return ["Angie's", ""];
+  if (/yelp/.test(all)) return ["Yelp", ""];
+  if (/facebook/.test(all)) return ["Facebook", ""];
+  if (/\bbni\b/.test(all)) return ["BNI", ""];
+  if (/^ai$/.test(all.trim())) return ["AI", ""];
+  let name = t.replace(/^new\s+/i, "").replace(/\s*-?\s*(clients?|jobs)$/i, "").trim();
+  if (name && name === name.toUpperCase()) name = name.toLowerCase().replace(/\b[a-z]/g, x => x.toUpperCase());   // ACME LEADS → Acme Leads
+  return [name ? name.charAt(0).toUpperCase() + name.slice(1) : MKT_OTHER, ""];
+}
+const mktNum = v => { const n = typeof v === "number" ? v : Number(String(v == null ? "" : v).replace(/[$,\s]/g, "")); return Number.isFinite(n) ? n : 0; };
+/** Clients Per Month (its month tabs, read by lbReadXlsx): each month's TOTAL row, a pair of columns ($$$, # of clients)
+ *  a source, up to DAILY TOTAL (or DATE): [[month, row, department, $, jobs]]. Every layout since 2018 reads the same way. */
+function mktReadCpm(tabs) {
+  const out = {};
+  for (const t of tabs) {
+    const nm = /^\s*([A-Za-z]+)\s+(\d{4})\s*$/.exec(t.name || ""), mi = nm ? MKT_MON.indexOf(nm[1].toLowerCase()) : -1;
+    if (mi < 0) continue;
+    const m = `${nm[2]}-${String(mi + 1).padStart(2, "0")}`, rows = t.rows || [], cell = (r, c) => (rows[r] || [])[c];
+    let hr = -1, tr = -1;
+    for (let r = 0; r < 4 && hr < 0; r++) if ((rows[r] || []).some(v => /\$\$\$/.test(String(v == null ? "" : v)))) hr = r;
+    for (let r = 10; r < Math.min(rows.length, 60) && tr < 0; r++) if (String(cell(r, 0) == null ? "" : cell(r, 0)).trim().toUpperCase() === "TOTAL") tr = r;
+    if (hr < 1 || tr < 0) continue;
+    for (let c = 1; c < 40; c += 2) {
+      const top = String(cell(0, c) == null ? "" : cell(0, c)).trim(), sub = hr >= 2 ? String(cell(1, c) == null ? "" : cell(1, c)).trim() : "";
+      if (/daily total|^date$|grand total|monthly total/i.test(top)) break;
+      const cents = Math.round(mktNum(cell(tr, c)) * 100), jobs = Math.round(mktNum(cell(tr, c + 1)));
+      if (!cents && !jobs) continue;
+      const [name, dep] = mktSheetName(top, sub), k = `${m}\t${name}\t${dep}`;
+      const x = out[k] || (out[k] = [m, name, dep, 0, 0]);
+      x[3] += cents; x[4] += jobs;
+    }
+  }
+  return Object.values(out).map(x => [x[0], x[1], x[2], Math.round(x[3]) / 100, x[4]]);
+}
+/** Summary Advertising (a tab a year, a block a month: SPENT, RETURNED, JOBS by row, then "TOTAL <month>"): each
+ *  month's spend by row, and what it says came back (used only for months Clients Per Month doesn't have). */
+function mktReadSa(tabs) {
+  const spend = {}, back = {};
+  for (const t of tabs) {
+    const y = Number(String(t.name || "").trim());
+    if (!(y >= 2000 && y < 2100)) continue;
+    let block = [];
+    for (const row of t.rows || []) {
+      const a = String(row[0] == null ? "" : row[0]).replace(/\s+/g, " ").trim();
+      if (/^total this year/i.test(a)) { block = []; continue; }
+      const tm = /^total\s+([a-z]+)/i.exec(a);
+      if (tm) {
+        const mi = MKT_MON.indexOf(tm[1].toLowerCase());
+        if (mi >= 0) {
+          const m = `${y}-${String(mi + 1).padStart(2, "0")}`;
+          for (const [name, sp, ret, jobs] of block) {
+            if (sp > 0) { const k = `${m}\t${name}`; spend[k] = (spend[k] || 0) + sp; }
+            if (ret || jobs) { const k = `${m}\t${name}`, b = back[k] || (back[k] = [m, name, "", 0, 0]); b[3] += ret; b[4] += jobs; }
+          }
+        }
+        block = [];
+        continue;
+      }
+      if (String(row[1] == null ? "" : row[1]).trim().toUpperCase() === "SPENT") { block = []; continue; }   // a month's headings
+      if (!a || typeof row[0] === "number") continue;                                                       // the row with no name
+      block.push([mktSheetName(a, "")[0], Math.round(mktNum(row[1]) * 100) / 100, Math.round(mktNum(row[2]) * 100) / 100, Math.round(mktNum(row[3]))]);
+    }
+  }
+  return { spend: Object.entries(spend).map(([k, v]) => { const [m, n] = k.split("\t"); return [m, n, Math.round(v * 100) / 100]; }), back: Object.values(back) };
+}
+/** The two read together: history from Clients Per Month, and from Summary Advertising only for months the first
+ *  doesn't have (jobs there can't be more than 5,000 a row: a typed slip); spend from Summary Advertising. */
+function mktMerge(cpm, sa) {
+  const months = new Set((cpm || []).map(x => x[0]));
+  const hist = (cpm || []).concat(((sa && sa.back) || []).filter(x => !months.has(x[0]) && x[4] <= 5000 && Math.abs(x[3]) < 1e7));
+  hist.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] < b[2] ? -1 : 1));
+  return { hist, spend: ((sa && sa.spend) || []).slice().sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1)) };
+}
+
+function mktForget() { mktData = null; store.del(K_MKT); }
+async function mktLoad() {
+  if (!session || !canSee("marketing") || mktLoading) return;
+  mktLoading = true; mktAsked = true;
+  try {
+    const out = await api("marketing", {});
+    mktSet(out);
+    mktErr = ""; mktOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { mktLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    mktOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < MKT_API);
+    mktErr = mktOld ? "" : errText(e, "Marketing");
+  } finally {
+    mktLoading = false;
+    if (view.tab === "marketing") renderMarketing();
+  }
+}
+let mktHistCache = null;
+function mktSet(out) {
+  mktData = { spend: out.spend || {}, spendFrom: out.spendFrom || {}, map: out.map || {}, hist: out.hist || [], at: Date.now() };
+  mktHistCache = null;
+  store.set(K_MKT, mktData);
+}
+/** The imported months: { "2019-04": [[row, department, cents, jobs]] }. */
+function mktHist() {
+  if (mktHistCache && mktHistCache.of === mktData) return mktHistCache.by;
+  const by = {};
+  for (const [m, name, dep, v, n] of (mktData && mktData.hist) || []) (by[m] || (by[m] = [])).push([name, dep || "u", Math.round(Number(v) * 100) || 0, Number(n) || 0]);
+  mktHistCache = { of: mktData, by };
+  return by;
+}
+const mktZero = () => ({ r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], u: [0, 0] });
+/** A month's numbers by row ({ r, c, p, o, u(nknown department): [cents, jobs] }) up to a day (a month so far), and
+ *  where they're from: Housecall Pro once every day of it is read with its sources and it has jobs; else the imported
+ *  spreadsheets (a whole month: they have no days); else whatever Housecall Pro has. null while its year loads. */
+function mktMonth(m, upTo) {
+  const y = Number(m.slice(0, 4)), doc = revDoc(y);
+  if (!doc) { revLoad(y); return null; }
+  const today = lbToday(), last = `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`;
+  let end = upTo && upTo < last ? upTo : last;
+  if (end > today) end = today;
+  const out = { rows: {}, from: "", missing: 0, at: 0, cut: false };
+  const add = (name, k, cents, jobs) => { const r = out.rows[name] || (out.rows[name] = mktZero()); r[k][0] += cents; r[k][1] += jobs; };
+  let has = 0;
+  for (let d = `${m}-01`; d <= end; d = lbAddDays(d, 1)) {
+    const v = doc.days[d];
+    if (!v || !v[11] || typeof v[11] !== "object") { out.missing++; continue; }
+    out.at = Math.max(out.at, Number(v[9]) || 0);
+    for (const [key, a] of Object.entries(v[11])) {
+      const name = mktRowOf(key, mktData && mktData.map);
+      ["r", "c", "p", "o"].forEach((k, i) => { const c = Number(a[i * 2]) || 0, j = Number(a[i * 2 + 1]) || 0; if (c || j) { add(name, k, c, j); has += Math.abs(c) + j; } });
+    }
+  }
+  const hist = mktHist()[m];
+  if (has && !out.missing) out.from = "hcp";
+  else if (hist && hist.length) {
+    out.rows = {}; out.from = "hist"; out.cut = end < last;
+    for (const [name, dep, cents, jobs] of hist) add(name, dep, cents, jobs);
+  } else if (has) out.from = "hcp";
+  return out;
+}
+/** The months of a period added up: rows, spend (cents) by row, where they're from, days still to read. */
+function mktPeriod(months, upTo) {
+  const s = { rows: {}, spend: {}, from: new Set(), missing: 0, at: 0, cut: false, months: [] };
+  for (const m of months) {
+    const x = mktMonth(m, m === months[months.length - 1] ? upTo : "");
+    if (!x) return null;
+    s.months.push([m, x]);
+    if (x.from) s.from.add(x.from);
+    s.missing += x.missing; s.at = Math.max(s.at, x.at); s.cut = s.cut || x.cut;
+    for (const [name, r] of Object.entries(x.rows)) { const t = s.rows[name] || (s.rows[name] = mktZero()); for (const k of Object.keys(t)) { t[k][0] += r[k][0]; t[k][1] += r[k][1]; } }
+    for (const [name, v] of Object.entries((mktData && mktData.spend && mktData.spend[m]) || {})) s.spend[name] = (s.spend[name] || 0) + Math.round(Number(v) * 100);
+  }
+  return s;
+}
+/** A row's [cents, jobs] for the department picked (All: every department, and the spreadsheets' unknown one). */
+const mktVal = (r, dep) => (!r ? [0, 0] : dep === "all" ? ["r", "c", "p", "o", "u"].reduce((a, k) => [a[0] + r[k][0], a[1] + r[k][1]], [0, 0]) : r[dep].slice());
+/** Return on the spend: "1 to 16.3" (every $1 spent brought $16.30 back). */
+const mktRet = (cents, spend) => (spend > 0 ? `1 to ${(cents / spend).toFixed(1)}` : "–");
+/** Month m of the year on screen, or of the period: "2026-10". */
+const mktKey = (y, mi) => `${y}-${String(mi).padStart(2, "0")}`;
+
+/* ---- the screen ---- */
+function renderMarketing() {
+  const box = $("mktView");
+  if (!box || view.tab !== "marketing" || !session) return;
+  if (mktOld || (apiLevel && apiLevel < MKT_API)) {
+    box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Marketing needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  if (!mktData) {
+    box.replaceChildren(h("p", { class: "loading", text: mktErr || (offline ? "Marketing needs a connection the first time. Try again when you're back online." : "Loading marketing…") }));
+    if (!mktErr) mktLoad();
+    return;
+  }
+  if (!mktAsked) mktLoad();   // once each time the app opens: spend typed on another phone
+  const today = lbToday(), now = clockNow(), ty = now.getFullYear();
+  const per = MKT_PER[mktView.per] ? mktView.per : "month";
+  const off = Math.min(0, Number(mktView.off) || 0);
+  const cmp = Math.max(0, Math.min(REV_CMP_YEARS, Number(mktView.cmp) || 0));
+  const dep = MKT_DEPS.some(([k]) => k === mktView.dep) ? mktView.dep : "all";
+  // the period: a month, or a year (January up to today in this one)
+  let months, label, y;
+  if (per === "month") {
+    const t = ty * 12 + now.getMonth() + off; y = Math.floor(t / 12);
+    months = [mktKey(y, (t % 12) + 1)];
+    label = `${lbMonthLong((t % 12) + 1)} ${y}`;
+  } else {
+    y = ty + off;
+    const lastM = y === ty ? now.getMonth() + 1 : 12;
+    months = Array.from({ length: lastM }, (_, i) => mktKey(y, i + 1));
+    label = String(y);
+  }
+  const soFar = months[months.length - 1] === today.slice(0, 7);
+  const upTo = soFar ? today : "";
+  const back = m => `${Number(m.slice(0, 4)) - cmp}${m.slice(4)}`;
+  const cmpUpTo = soFar ? revShift(today, cmp, "year") : "";
+  const step = n => { mktView.off = Math.min(0, off + n); renderMarketing(); };
+  const title = secTitle("Marketing");
+  const top = title ? h("div", { class: "lb-top" }, title) : null;
+  const yearsBack = Array.from({ length: REV_CMP_YEARS }, (_, i) => i + 1);
+  const cmpSel = h("label", { class: "rev-cmp" }, h("span", { text: "Compare" }),
+    h("select", { id: "mktCmp", "aria-label": "Compare with", onchange: e => { mktView.cmp = Number(e.target.value) || 0; mktSaveView(); renderMarketing(); } },
+      h("option", { value: "0", text: "Off" }), yearsBack.map(n => h("option", { value: String(n), text: `with ${y - n}` }))));
+  cmpSel.querySelector("select").value = String(cmp);
+  const ranges = () => [[`${months[0]}-01`, upTo || `${months[months.length - 1]}-${String(lbDaysIn(months[months.length - 1])).padStart(2, "0")}`]]
+    .concat(cmp ? [[`${back(months[0])}-01`, cmpUpTo || `${back(months[months.length - 1])}-${String(lbDaysIn(back(months[months.length - 1]))).padStart(2, "0")}`]] : []);
+  const readBtn = h("button", { class: "btn small", type: "button", id: "mktReadBtn", disabled: revSync.busy, title: "Read these days from Housecall Pro again",
+    onclick: () => { revSync.err = ""; revEnsure(ranges().slice(0, 1), true, true); } }, "Read again");
+  const bar = h("div", { class: "lb-bar rev-bar-top" },
+    lbSeg(Object.entries(MKT_PER), per, k => { mktView.per = k; mktView.off = 0; mktSaveView(); renderMarketing(); }, "Period"),
+    h("div", { class: "of-step" },
+      h("button", { class: "btn small", type: "button", id: "mktPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+      h("strong", { id: "mktRangeLabel", text: label + (soFar ? " (so far)" : "") }),
+      h("button", { class: "btn small", type: "button", id: "mktNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    h("div", { class: "rev-tools" }, readBtn, cmpSel));
+  const deps = h("div", { class: "lb-bar mkt-deps" }, lbSeg(MKT_DEPS, dep, k => { mktView.dep = k; mktSaveView(); renderMarketing(); }, "Department"));
+  const s = mktPeriod(months, upTo), c = cmp ? mktPeriod(months.map(back), cmpUpTo) : null;
+  if (!s || (cmp && !c)) { box.replaceChildren(...[top, bar, deps].filter(Boolean), h("p", { class: "loading", text: "Loading…" })); return; }
+  const cmpName = cmp ? String(y - cmp) : "", cmpShort = cmp ? `’${String(y - cmp).slice(2)}` : "";
+  const ytag = () => h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: cmpName }), h("span", { class: "t-short", text: cmpShort }));
+  const vs = (a, b) => { const ch = revChange(a, b); return h("em", { class: "rev-ch " + ch.cls, text: ch.text }); };
+  const withSpend = dep === "all";
+  const fromText = x => (x.from.has("hcp") && x.from.has("hist") ? "Housecall Pro and your spreadsheets" : x.from.has("hist") ? "your spreadsheets (Clients Per Month, Summary Advertising)" : "Housecall Pro");
+  const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "mktStatus", role: "status" },
+    revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…`
+      : !s.from.size ? (s.missing ? "Not read from Housecall Pro yet." : "Nothing in this period.")
+        : `From ${fromText(s)}${s.from.has("hcp") && s.at ? ` · read ${revReadText(s.at)}` : ""}${s.missing && s.from.has("hcp") ? " · some days not read yet" : ""}`,
+    c && !revSync.busy ? h("span", { class: "rev-vs", text: ` · compared with ${per === "month" ? `${lbMonthLong(Number(months[0].slice(5)))} ${y - cmp}` : y - cmp}${soFar ? " (the same days)" : ""}` }) : null);
+  const err = revSync.err ? h("p", { class: "dlg-err", id: "mktErr" }, revSync.err, " ",
+    h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; renderMarketing(); } }, "Try again")) : null;
+  // the rows: new clients (the biggest first), then Repeat clients and Referrals
+  const names = new Set([...Object.keys(s.rows), ...Object.keys(withSpend ? s.spend : {}), ...(c ? Object.keys(c.rows) : []), ...(c && withSpend ? Object.keys(c.spend) : [])]);
+  const line = (x, name) => { const v = mktVal(x.rows[name], dep); return { cents: v[0], jobs: v[1], spend: withSpend ? x.spend[name] || 0 : 0 }; };
+  const sumOf = (x, list) => list.reduce((a, n) => { const l = line(x, n); return { cents: a.cents + l.cents, jobs: a.jobs + l.jobs, spend: a.spend + l.spend }; }, { cents: 0, jobs: 0, spend: 0 });
+  const keep = n => { const a = line(s, n), b = c ? line(c, n) : null; return a.cents || a.jobs || a.spend || (b && (b.cents || b.jobs || b.spend)); };
+  const newRows = [...names].filter(n => mktGroup(n) === "new" && keep(n)).sort((a, b) => line(s, b).cents - line(s, a).cents || (MKT_ROWS.indexOf(a) + 1 || 99) - (MKT_ROWS.indexOf(b) + 1 || 99) || a.localeCompare(b));
+  const all = newRows.concat([MKT_REPEAT, MKT_REFERRAL]);
+  const T = sumOf(s, all), TC = c ? sumOf(c, all) : null;
+  const ranked = all.filter(n => line(s, n).cents > 0).sort((a, b) => line(s, b).cents - line(s, a).cents);
+  const rankOf = n => { const v = line(s, n).cents; return v > 0 ? ranked.findIndex(m => line(s, m).cents === v) + 1 : 0; };
+  // the totals: tiles on a PC, one thin row on a phone
+  const tile = (k, name, big, sub, was) => h("div", { class: "pay-kpi", "data-k": k }, h("small", { text: name }), h("b", { text: big }), sub ? h("span", { text: sub }) : null, was || null);
+  const ytagT = () => h("b", { class: "rev-ytag", text: cmpName });   // on a tile: the year only (a tile's spans are all shown)
+  const wasMoney = (a, b) => (TC ? h("span", { class: "rev-was" }, ytagT(), lbMoney(b / 100), " ", vs(a, b)) : null);
+  const tiles = h("div", { class: "pay-kpis rev-kpis mkt-kpis", id: "mktTiles", style: `--n:${withSpend ? 4 : 2}` },
+    tile("rev", "Revenue", lbMoney(T.cents / 100), `${revJobs(T.jobs)}${T.jobs ? ` · ${lbMoney(T.cents / 100 / T.jobs)} a job` : ""}`, wasMoney(T.cents, TC && TC.cents)),
+    tile("new", "New clients", lbMoney(sumOf(s, newRows).cents / 100), `${revJobs(sumOf(s, newRows).jobs)} · ${revPct(sumOf(s, newRows).cents, T.cents)} of all`, TC ? wasMoney(sumOf(s, newRows).cents, sumOf(c, newRows).cents) : null),
+    withSpend ? [
+      tile("spend", "Ad spend", lbMoney(T.spend / 100), T.spend ? `${lbMoney(T.jobs ? T.spend / 100 / T.jobs : 0)} a job` : "Not typed yet", wasMoney(T.spend, TC && TC.spend)),
+      tile("ret", "Return", mktRet(T.cents, T.spend), T.spend ? `every $1 brought ${lbMoney(T.cents / T.spend)}` : "", TC && TC.spend ? h("span", { class: "rev-was" }, ytagT(), mktRet(TC.cents, TC.spend)) : null),
+      tile("cpj", "Cost per new client", sumOf(s, newRows).jobs && sumOf(s, newRows).spend ? lbMoney(sumOf(s, newRows).spend / 100 / sumOf(s, newRows).jobs) : "–", "new clients' spend ÷ jobs",
+        TC && sumOf(c, newRows).jobs && sumOf(c, newRows).spend ? h("span", { class: "rev-was" }, ytagT(), lbMoney(sumOf(c, newRows).spend / 100 / sumOf(c, newRows).jobs)) : null)] : []);
+  const strip = h("div", { class: "rev-strip mkt-strip", id: "mktStrip" },
+    [["rev", "Revenue", revShort(T.cents), TC ? vs(T.cents, TC.cents) : revJobs(T.jobs)]].concat(withSpend ? [
+      ["spend", "Ad spend", revShort(T.spend), TC ? vs(T.spend, TC.spend) : T.jobs && T.spend ? `${lbMoney(T.spend / 100 / T.jobs)}/job` : ""],
+      ["ret", "Return", T.spend ? `1:${(T.cents / T.spend).toFixed(1)}` : "–", TC && TC.spend ? `${cmpShort} 1:${(TC.cents / TC.spend).toFixed(1)}` : ""]] : [
+      ["new", "New clients", revShort(sumOf(s, newRows).cents), revPct(sumOf(s, newRows).cents, T.cents)]]).map(([k, t, b, sub]) =>
+      h("div", { "data-k": k }, h("small", { text: t }), h("b", { text: b }), h("span", null, sub || ""))));
+  // the table
+  const canSpend = per === "month";
+  const head = h("tr", null, h("th", { text: "Source" }), h("th", { text: "Revenue" }), h("th", { text: "Jobs" }), h("th", { class: "pj", text: "Per job" }),
+    withSpend ? [h("th", { class: "sp", text: "Spent" }), h("th", { text: "Return" }), h("th", { class: "cpj", text: "Cost per job" })] : []);
+  const cells = (a, b, opts) => {
+    const o = opts || {};
+    return [
+      h("td", { class: "rv" + (a.cents || a.jobs ? "" : " zero"), title: lbCash(a.cents / 100) }, revCash(a.cents),
+        o.share !== false ? h("small", { text: `${revPct(a.cents, T.cents)}${o.rank ? ` · #${o.rank}` : ""}` }) : null,
+        b && (a.cents || b.cents) ? h("div", { class: "rev-was" }, ytag(), revCash(b.cents), " ", vs(a.cents, b.cents)) : null),
+      h("td", { class: a.jobs ? "" : "zero" }, fmt(a.jobs), b && (a.jobs || b.jobs) ? h("small", { class: "mkt-was" }, `${cmpShort} ${fmt(b.jobs)}`) : null),
+      h("td", { class: "pj", text: a.jobs ? lbMoney(a.cents / 100 / a.jobs) : "–" }),
+      withSpend ? [
+        h("td", { class: "sp" + (a.spend ? "" : " zero") + (o.edit ? " mkt-edit" : "") },
+          o.edit ? h("button", { class: "mkt-spend", type: "button", "data-src": o.edit, title: `Type ${o.edit}'s ad spend`, onclick: () => mktSpendDlg(months[0], o.edit) }, a.spend ? revCash(a.spend) : "add") : a.spend ? revCash(a.spend) : "–",
+          a.spend && a.jobs ? h("small", { class: "mkt-cpj", text: `${lbMoney(a.spend / 100 / a.jobs)}/job` }) : null,   // a phone: Cost per job here
+          b && (a.spend || b.spend) ? h("div", { class: "rev-was" }, ytag(), revCash(b.spend)) : null),
+        h("td", { class: "ret" + (a.spend ? "" : " zero") }, a.spend ? [h("span", { class: "t-long", text: mktRet(a.cents, a.spend) }), h("span", { class: "t-short", text: `1:${(a.cents / a.spend).toFixed(1)}` })] : "–"),
+        h("td", { class: "cpj" + (a.spend && a.jobs ? "" : " zero"), text: a.spend && a.jobs ? lbMoney(a.spend / 100 / a.jobs) : "–" })] : []];
+  };
+  const row = (name, cls) => h("tr", { class: cls || null, "data-src": name },
+    h("th", null, name, name === MKT_OTHER && line(s, name).jobs ? h("small", { text: "no Lead source" }) : null),
+    cells(line(s, name), c ? line(c, name) : null, { rank: rankOf(name), edit: canSpend && withSpend ? name : "" }));
+  const grp = (name, list, cls) => h("tr", { class: "mkt-grp " + cls }, h("th", { text: name }), cells(sumOf(s, list), c ? sumOf(c, list) : null, {}));
+  const body = [grp("New clients", newRows, "new"), newRows.map(n => row(n, "mkt-sub")), row(MKT_REPEAT, "mkt-grp repeat"), row(MKT_REFERRAL, "mkt-grp referral")];
+  const table = h("div", { class: "panel" },
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "mktTable" },
+      h("thead", null, head), h("tbody", null, body),
+      h("tfoot", null, h("tr", { class: "rev-sum" }, h("th", { text: "Total" }), cells(T, TC, { share: false }))))));
+  // a year: month by month
+  let byMonth = null;
+  if (per === "year") {
+    const lines = Array.from({ length: 12 }, (_, i) => mktKey(y, i + 1));
+    const mRow = m => {
+      const fut = m > today.slice(0, 7), x = fut ? null : mktPeriod([m], m === today.slice(0, 7) ? today : ""), cx = cmp && !fut ? mktPeriod([back(m)], m === today.slice(0, 7) ? cmpUpTo : "") : null;
+      const tot = x ? { cents: 0, jobs: 0, spend: 0 } : null;
+      if (x) { for (const n of new Set([...Object.keys(x.rows), ...Object.keys(x.spend)])) { const l = line(x, n); tot.cents += l.cents; tot.jobs += l.jobs; tot.spend += l.spend; } }
+      let b = null;
+      if (cx) { b = { cents: 0, jobs: 0, spend: 0 }; for (const n of new Set([...Object.keys(cx.rows), ...Object.keys(cx.spend)])) { const l = line(cx, n); b.cents += l.cents; b.jobs += l.jobs; b.spend += l.spend; } }
+      const mi = Number(m.slice(5));
+      return h("tr", { class: "rev-mo" + (fut ? " future" : ""), "data-month": m, tabindex: fut ? null : "0", title: fut ? null : "Show this month",
+        onclick: fut ? null : () => { mktView.per = "month"; mktView.off = (Number(m.slice(0, 4)) * 12 + mi - 1) - (ty * 12 + now.getMonth()); renderMarketing(); } },
+        h("th", null, h("span", { class: "t-long", text: lbMonthLong(mi) }), h("span", { class: "t-short", text: MONTHS[mi - 1] }),
+          x && x.from.has("hist") ? h("small", { text: "spreadsheet" }) : m === today.slice(0, 7) ? h("small", { text: "so far" }) : null),
+        tot && (tot.cents || tot.jobs || tot.spend) ? cells(tot, b, { share: false }) : h("td", { colspan: withSpend ? "6" : "3", class: "zero mkt-none", text: fut ? "" : "–" }));
+    };
+    byMonth = h("div", { class: "panel", id: "mktMonths" }, h("h3", { class: "mkt-h3", text: `${y} month by month` }),
+      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "mktMonthTable" },
+        h("thead", null, h("tr", null, h("th", { text: "Month" }), h("th", { text: "Revenue" }), h("th", { text: "Jobs" }), h("th", { class: "pj", text: "Per job" }),
+          withSpend ? [h("th", { class: "sp", text: "Spent" }), h("th", { text: "Return" }), h("th", { class: "cpj", text: "Cost per job" })] : [])),
+        h("tbody", null, lines.map(mRow)))));
+  }
+  // what to do next, and how it's worked out
+  const tools = h("div", { class: "mkt-acts" },
+    canSpend ? h("button", { class: "btn small", type: "button", id: "mktSpendBtn", onclick: () => mktSpendDlg(months[0]) }, `Ad spend for ${lbMonthLong(Number(months[0].slice(5)))}`) : null,
+    h("button", { class: "btn small", type: "button", id: "mktLeadsBtn", onclick: () => mktLeadsDlg() }, "Lead sources"),
+    isAdmin() ? h("button", { class: "btn small", type: "button", id: "mktImportBtn", onclick: () => mktImportDlg() }, (mktData.hist || []).length ? "Import the spreadsheets again" : "Import your spreadsheets") : null);
+  const notes = [];
+  const own = newRows.filter(n => !MKT_ROWS.includes(n) && line(s, n).jobs && !Object.values(mktData.map || {}).includes(n) && s.from.has("hcp"));
+  if (own.length) notes.push(h("p", { class: "hint", id: "mktOwn" }, `Shown under their own name, from Housecall Pro's Lead source: ${own.join(", ")}. `,
+    h("button", { class: "btn small", type: "button", onclick: () => mktLeadsDlg() }, "Match them")));
+  if (!withSpend) notes.push(h("p", { class: "hint", text: "Ad spend isn't split by department, so Spent and Return show under All." }));
+  if (dep !== "all" && (s.from.has("hist") || (c && c.from.has("hist")))) notes.push(h("p", { class: "hint", text: "Months from your spreadsheets split only Repeat and Referral jobs (and Repairs) by department; the rest show under All." }));
+  if ((s.cut || (c && c.cut)) && c) notes.push(h("p", { class: "hint", text: "A month from your spreadsheets counts whole (they have no days)." }));
+  if (!(mktData.hist || []).length && isAdmin()) notes.push(h("p", { class: "hint", id: "mktNoHist" }, "Years before Housecall Pro: import Clients Per Month and Summary Advertising once. ",
+    h("button", { class: "btn small", type: "button", onclick: () => mktImportDlg() }, "Import")));
+  notes.push(h("p", { class: "hint", text: "From Housecall Pro: Repeat clients and Referrals by the Job type (… - REPEAT, … - REFERRAL); every other job by its Lead source. Revenue is what was charged, on each visit's scheduled day; a job counts once. Return: revenue ÷ ad spend. Ad spend is typed here, a month at a time." }));
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, deps, status, err, tiles, strip, tools, table, byMonth, ...notes].filter(Boolean)));
+  if (!revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false, true), 0);
+}
+
+/** A month's ad spend, a source a line (the one tapped first). Empty takes it off. */
+function mktSpendDlg(m, focus) {
+  const sp = (mktData && mktData.spend && mktData.spend[m]) || {}, from = (mktData && mktData.spendFrom && mktData.spendFrom[m]) || {};
+  const x = mktMonth(m, "") || { rows: {} };
+  const names = [...new Set([...MKT_ROWS.filter(n => n !== MKT_OTHER), ...Object.keys(sp), ...Object.keys(x.rows).filter(n => n !== MKT_OTHER)])];
+  const inputs = {};
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const extraName = h("input", { type: "text", id: "mktSpNewName", placeholder: "Another source", maxlength: "60", autocomplete: "off" });
+  const extraAmt = h("input", { type: "text", id: "mktSpNewAmt", inputmode: "decimal", placeholder: "$", autocomplete: "off" });
+  const list = h("div", { class: "mkt-splist" }, names.map(n => {
+    const inp = h("input", { type: "text", inputmode: "decimal", id: `mktSp-${n.replace(/[^A-Za-z0-9]/g, "")}`, "data-src": n, value: sp[n] != null ? String(sp[n]) : "", placeholder: "$0", autocomplete: "off", oninput: () => { dlgDirty = true; } });
+    inputs[n] = inp;
+    return h("label", { class: "mkt-sp" }, h("span", null, n, from[n] === "imported" ? h("small", { text: "from Summary Advertising" }) : null), inp);
+  }), h("div", { class: "mkt-sp" }, extraName, extraAmt));
+  const save = h("button", { class: "btn primary", type: "button", id: "mktSpSave", onclick: async () => {
+    err.textContent = "";
+    const out = [];
+    for (const [n, inp] of Object.entries(inputs)) {
+      const v = lbMoneyIn(inp.value);
+      if (Number.isNaN(v)) { err.textContent = `${n}: type an amount like 1250 or 1,250.50.`; inp.focus(); return; }
+      const was = sp[n] != null ? Number(sp[n]) : null;
+      if (v !== was) out.push({ month: m, source: n, amount: v === null ? "" : v });
+    }
+    const nn = extraName.value.replace(/\s+/g, " ").trim(), nv = lbMoneyIn(extraAmt.value);
+    if (nn || extraAmt.value.trim()) {
+      if (!nn) { err.textContent = "Name the other source."; extraName.focus(); return; }
+      if (nv === null || Number.isNaN(nv)) { err.textContent = `${nn}: type an amount.`; extraAmt.focus(); return; }
+      out.push({ month: m, source: nn.slice(0, 60), amount: nv });
+    }
+    if (!out.length) { closeDialog(); return; }
+    save.disabled = true; save.textContent = "Saving…";
+    try {
+      mktSet(await api("mktPut", { spend: out }));
+      dlgDirty = false; closeDialog(); toast(`Ad spend saved for ${revMonthText(`${m}-01`)}`); renderMarketing();
+    } catch (e) { err.textContent = errText(e, "The spend"); save.disabled = false; save.textContent = "Save"; }
+  } }, "Save");
+  openDialog(h("div", { class: "mkt-dlg" },
+    h("h3", { id: "dlgTitle", text: `Ad spend · ${revMonthText(`${m}-01`)}` }),
+    h("p", { class: "hint", text: "What each source cost this month. Leave it empty for none." }),
+    list, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
+  const f = focus && inputs[focus];
+  if (f) setTimeout(() => { f.focus(); f.select(); }, 30);
+}
+
+/** Every Lead source in Housecall Pro (in the days read so far) and the row it goes to. */
+function mktLeadsDlg() {
+  const leads = {};
+  for (const doc of [revData, ...Object.values(revOther)]) {
+    if (!doc || !doc.days) continue;
+    for (const v of Object.values(doc.days)) {
+      if (!v || !v[11]) continue;
+      for (const [key, a] of Object.entries(v[11])) {
+        if (!key.startsWith("|")) continue;   // Repeat and Referral go by the Job type
+        const lead = key.slice(1), L = leads[lead] || (leads[lead] = [0, 0]);
+        for (let i = 0; i < 4; i++) { L[0] += Number(a[i * 2]) || 0; L[1] += Number(a[i * 2 + 1]) || 0; }
+      }
+    }
+  }
+  for (const lead of Object.keys((mktData && mktData.map) || {})) if (!leads[lead]) leads[lead] = [0, 0];
+  const map = (mktData && mktData.map) || {};
+  const rowsList = [...new Set([...MKT_ROWS, ...Object.values(map), ...((mktData && mktData.hist) || []).map(x => x[1])])];
+  const sels = {};
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const order = Object.keys(leads).sort((a, b) => leads[b][1] - leads[a][1] || a.localeCompare(b));
+  const list = order.length ? h("div", { class: "mkt-leads" }, order.map(lead => {
+    const guess = mktGuess(lead), cur = map[lead] || guess;
+    const opts = [...new Set([...rowsList, ...(lead ? [lead] : []), cur])];
+    const sel = h("select", { "data-lead": lead, "aria-label": `${lead || "No Lead source"} goes to`, onchange: () => { dlgDirty = true; } },
+      opts.map(o => h("option", { value: o, text: o === lead && !MKT_ROWS.includes(o) ? `${o} (its own row)` : o === guess && !map[lead] ? `${o} (guessed)` : o })));
+    sel.value = cur;
+    sels[lead] = sel;
+    return h("label", { class: "mkt-lead" }, h("span", null, lead || "(no Lead source)", h("small", { text: `${revJobs(leads[lead][1])} · ${lbMoney(leads[lead][0] / 100)} in the days read` })), sel);
+  })) : h("p", { class: "meta", text: "No Lead sources yet. Open a month in Marketing first, so its days are read from Housecall Pro." });
+  const save = h("button", { class: "btn primary", type: "button", id: "mktLeadSave", disabled: !order.length, onclick: async () => {
+    const out = {};
+    for (const [lead, sel] of Object.entries(sels)) {
+      const want = sel.value, guess = mktGuess(lead), had = map[lead] || "";
+      const store2 = want === guess ? "" : want;
+      if (store2 !== had) out[lead] = store2;
+    }
+    if (!Object.keys(out).length) { closeDialog(); return; }
+    save.disabled = true; save.textContent = "Saving…";
+    try { mktSet(await api("mktPut", { map: out })); dlgDirty = false; closeDialog(); toast("Lead sources saved"); renderMarketing(); }
+    catch (e) { err.textContent = errText(e, "The matches"); save.disabled = false; save.textContent = "Save"; }
+  } }, "Save");
+  openDialog(h("div", { class: "mkt-dlg" },
+    h("h3", { id: "dlgTitle", text: "Lead sources" }),
+    h("p", { class: "hint", text: "Each Lead source set on jobs in Housecall Pro, and the row it counts in. Repeat clients and Referrals go by the Job type (… - REPEAT, … - REFERRAL), whatever the Lead source." }),
+    list, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
+}
+
+/** Admin: read Clients Per Month and Summary Advertising (the Excel copies) and save their months. */
+function mktImportDlg() {
+  let cpm = null, sa = null, reading = 0;
+  const err = h("p", { class: "dlg-err", role: "alert" }), out = h("div", { class: "mkt-impsum", id: "mktImpSum" });
+  const status = h("p", { class: "meta", role: "status" });
+  const save = h("button", { class: "btn primary", type: "button", id: "mktImpSave", disabled: true }, "Save");
+  const draw = () => {
+    const mg = mktMerge(cpm || [], sa || { spend: [], back: [] });
+    save.disabled = reading > 0 || !(mg.hist.length || mg.spend.length);   // not while a file is still being read
+    if (save.disabled) { out.replaceChildren(); return mg; }
+    const years = {};
+    for (const [m, , , v, n] of mg.hist) { const yy = years[m.slice(0, 4)] || (years[m.slice(0, 4)] = { months: new Set(), v: 0, n: 0, sp: 0 }); yy.months.add(m); yy.v += Math.round(v * 100); yy.n += n; }
+    for (const [m, , v] of mg.spend) { const yy = years[m.slice(0, 4)] || (years[m.slice(0, 4)] = { months: new Set(), v: 0, n: 0, sp: 0 }); yy.sp += Math.round(v * 100); }
+    out.replaceChildren(h("table", { class: "lb-table", id: "mktImpTable" },
+      h("thead", null, h("tr", null, ["Year", "Months", "Revenue", "Jobs", "Ad spend"].map(t => h("th", { text: t })))),
+      h("tbody", null, Object.keys(years).sort().reverse().map(yy => h("tr", { "data-year": yy }, h("th", { text: yy }), h("td", { text: String(years[yy].months.size) }),
+        h("td", { text: lbMoney(years[yy].v / 100) }), h("td", { text: fmt(years[yy].n) }), h("td", { text: lbMoney(years[yy].sp / 100) }))))),
+    h("p", { class: "hint", text: "Housecall Pro's numbers are used for any month it has; these fill the months before it. Spend typed in the app stays." }));
+    return mg;
+  };
+  const pick = (id, label, want, read) => h("div", { class: "field" }, h("label", { for: id, text: label }),
+    h("input", { type: "file", id, accept: ".xlsx", onchange: async e => {
+      const f = e.target.files[0];
+      err.textContent = "";
+      if (!f) { read(null); draw(); return; }
+      reading++; save.disabled = true;
+      try {
+        status.textContent = "Opening the file…";
+        const tabs = await lbReadXlsx(await f.arrayBuffer(), want);
+        read(tabs);
+        dlgDirty = true;
+      } catch (x) { read(null); err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
+      reading--;
+      if (!reading) status.textContent = "";
+      draw();
+    } }));
+  const cpmIn = pick("mktImpCpm", "Clients Per Month", n => /^\s*[A-Za-z]+\s+\d{4}\s*$/.test(n), tabs => {
+    cpm = tabs ? mktReadCpm(tabs) : null;
+    if (tabs && !cpm.length) { cpm = null; err.textContent = "No month tabs (like “October 2026”) with a TOTAL row in that file."; }
+  });
+  const saIn = pick("mktImpSa", "Summary Advertising", n => /^\s*\d{4}\s*$/.test(n), tabs => {
+    sa = tabs ? mktReadSa(tabs) : null;
+    if (tabs && !sa.spend.length && !sa.back.length) { sa = null; err.textContent = "No year tabs (like “2026”) with SPENT in that file."; }
+  });
+  save.onclick = async () => {
+    if (reading) return;
+    const mg = draw();
+    save.disabled = true; save.textContent = "Saving…"; err.textContent = "";
+    try {
+      const o = await api("mktImport", { from: [cpm ? "Clients Per Month" : "", sa ? "Summary Advertising" : ""].filter(Boolean).join(" + "), hist: mg.hist, spend: mg.spend }, 170000);
+      mktSet(o);
+      dlgDirty = false; closeDialog();
+      toast(`Saved ${fmt(o.saved ? o.saved.hist : mg.hist.length)} rows of history and ${fmt(o.saved ? o.saved.spend : mg.spend.length)} months of spend`);
+      renderMarketing();
+    } catch (e) {
+      err.textContent = e && e.error === "bad_request" && (Number(e.api) || 0) < MKT_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, "The history");
+      save.disabled = false; save.textContent = "Save";
+    }
+  };
+  openDialog(h("div", { class: "mkt-dlg rp-dlg" },
+    h("h3", { id: "dlgTitle", text: "Import your spreadsheets" }),
+    h("p", { class: "hint", text: "Choose the Excel copies (File > Download > Microsoft Excel) of Clients Per Month and Summary Advertising. The app reads each month's totals by source, and the ad spend; nothing is saved until you press Save. Importing again replaces what was imported before." }),
+    h("div", { class: "grid2" }, cpmIn, saIn), status, out, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
+}
+
 /* ======================= Office scorecards ======================= */
 const OF_API = 24;                                      // the Google script version with the Office section
 const OF_HIDE_API = 25;                                 // ... and with past-only numbers
@@ -11778,6 +12379,7 @@ else if (location.hash === "#leaderboard") { view.tab = "leaderboard"; saveView(
 else if (location.hash === "#office") { view.tab = "office"; saveView(); }
 else if (location.hash === "#revenue") { view.tab = "revenue"; saveView(); }
 else if (location.hash === "#repairs") { view.tab = "repairs"; saveView(); }
+else if (location.hash === "#marketing") { view.tab = "marketing"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {
