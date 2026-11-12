@@ -735,8 +735,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rp-line { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; } .rp-line b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rp-line.sub { color: var(--muted); font-size: .82rem; } .rp-line.mon b { color: var(--soon); } .rp-line.vd b { color: var(--ok); } .rp-line.owe b { color: var(--due); }
 .rp-line.tot { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 2px; }
+.rp-implist { margin: 6px 0 0 18px; padding: 0; font-size: .82rem; color: var(--muted); max-height: 220px; overflow: auto; }
+.rp-dlg details { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin-top: 6px; } .rp-dlg summary { cursor: pointer; font-weight: 600; font-size: .88rem; }
+.rp-impsum { margin: 8px 0 4px; } .rp-check { display: flex; align-items: center; gap: 8px; font-size: .9rem; padding-bottom: 10px; }
 .rp-hcp { background: var(--bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; font-size: .88rem; }
-.rp-dlg h3 { font-size: 1.25rem; }
+.rp-dlg h3 { font-size: 1.25rem; } .rp-dlg > h3:first-child { padding-right: 40px; }
 dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 @media (max-width: 760px) {
   .pay-kpis.rp-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -10045,8 +10048,9 @@ function renderRepairs(box) {
         h("tr", { id: "repAvg" }, h("th", null, "Monthly average", h("small", { text: `÷ ${nMonths} month${nMonths === 1 ? "" : "s"} with jobs` })), [s.c, s.paid, s.owes, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / nMonths / 100) })), h("td", { class: "pj", text: fmt(Math.round(s.n / nMonths)) })))))),
       h("p", { class: "hint", text: "Tap a month to see its jobs." })];
   }
+  const imp = isAdmin() ? h("p", null, h("button", { class: "btn small", type: "button", id: "repImportBtn", onclick: () => openRepImport() }, "Import the old Excel list…")) : null;
   const hint = h("p", { class: "hint", text: "Specialty contractors are paid by VODA and come off the top. Monumental gets its materials back plus 70% of what's left; VODA gets 30%, plus 30% on Monumental's materials (materials ÷ 0.7 × 0.3). Extra pay to Monumental comes out of VODA's share. A job tagged “repair - Monumental Flooring” in Housecall Pro is Monumental's." });
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, sub, bar, status, err, r.from > today ? null : [tiles, ...body], hint].flat().filter(Boolean)));
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, sub, bar, status, err, r.from > today ? null : [tiles, ...body], hint, imp].flat().filter(Boolean)));
   if (!repSync.busy && !repSync.err) setTimeout(() => repEnsure(months, false), 0);
 }
 
@@ -10126,6 +10130,214 @@ function openRepJob(id) {
         } catch (e) { err.textContent = e && e.error === "gone" ? "This job isn't on the Repairs tab any more. Read again first." : errText(e, "The job"); b.disabled = false; }
       } })))));
   draw();
+}
+
+/* ---- the old Excel list ("REPAIRS ONLY": a tab a month, a row a day): its vendor costs onto the jobs from Housecall Pro ---- */
+const REP_IMPORT_API = 41;                              // the Google script that saves many jobs at once
+const repNorm = v => String(v == null ? "" : v).toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+const repXlCents = v => { const n = typeof v === "number" ? v : Number(String(v == null ? "" : v).replace(/[$,\s]/g, "")); return Number.isFinite(n) ? Math.round(n * 100) : 0; };
+/** A day from a cell: Excel's own date number, or 9/5/2026; "" otherwise. */
+function repXlDay(v) {
+  if (typeof v === "number" && v > 20000 && v < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5).toISOString().slice(0, 10);
+  const m = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/.exec(String(v == null ? "" : v));
+  return m ? `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}` : "";
+}
+/** The pieces of a cell that holds one job or several ("Name address - $1,234.56;;;;Name address - $99"). */
+function repXlParts(v, re) {
+  return String(v == null ? "" : v).split(re).map(x => x.replace(/^[\s:;']+|[\s:;']+$/g, "")).filter(Boolean).map(x => {
+    const m = /\s*-\s*\$\s*([\d,]+(?:\.\d+)?)\s*$/.exec(x);
+    return { text: m ? x.slice(0, m.index).trim() : x, amt: m ? repXlCents(m[1]) : 0 };
+  });
+}
+/** One month's tab ("October 2026"): a row a day that has jobs. The columns are found by their headings, which moved
+ *  over the years. */
+function repXlTab(tab) {
+  const m = /^\s*([A-Za-z]+)\s+(\d{4})\s*$/.exec(tab.name);
+  if (!m) return null;
+  const mo = Array.from({ length: 12 }, (_, i) => lbMonthLong(i + 1).toLowerCase()).indexOf(m[1].toLowerCase()) + 1;
+  if (!mo) return null;
+  const key = lbMonthKey(Number(m[2]), mo), head = (tab.rows[0] || []).map(x => String(x == null ? "" : x).trim().toUpperCase());
+  const at = (test, from) => { for (let i = Math.max(0, from || 0); i < head.length; i++) if (test(head[i])) return i; return -1; };
+  const c = { client: at(x => x === "CLIENT NAME"), total: at(x => x === "TOTAL CHARGED") };
+  if (c.client < 0 || c.total < 0) return null;
+  c.f = at(x => x.startsWith("SPECIALTY CONTRACTOR") && !x.includes("DEPOSIT"));
+  c.g = at(x => x.startsWith("SPECIALTY CONTRACTOR DEPOSIT"));
+  c.h = c.g < 0 ? -1 : at(x => x === "DEPOSIT DATE", c.g);
+  c.j = at(x => x === "MONUMENTAL FLOORING");
+  c.k = at(x => x === "MONUMENTAL DEPOSIT");
+  c.l = c.k < 0 ? -1 : at(x => x === "DEPOSIT DATE", c.k);
+  c.q = at(x => x.startsWith("TOTAL MONUMENTAL"));
+  c.t = at(x => x === "INVOICE NUMBER");
+  c.u = at(x => x === "DATE VODA PAID");
+  const fName = c.f < 0 ? "" : ((/^SPECIALTY CONTRACTOR\s*-\s*(.+)$/i.exec(String(tab.rows[0][c.f]).trim()) || [])[1] || "");
+  const out = [];
+  for (let i = 2; i < tab.rows.length; i++) {
+    const row = tab.rows[i] || [], get = k => (c[k] >= 0 ? row[c[k]] : undefined);
+    if (/^\s*MONTHLY/i.test(String(row[0] == null ? "" : row[0]))) break;
+    const d = Math.round(Number(row[0])), names = get("client"), C = repXlCents(get("total"));
+    if ((!names && !C) || !(d >= 1 && d <= lbDaysIn(key))) continue;
+    const g = get("g"), h0 = get("h"), q = get("q");
+    out.push({ day: `${key}-${String(d).padStart(2, "0")}`, at: `${tab.name.trim()}, row ${i + 1}`, parts: repXlParts(names, /;{2,}|'{3,}|:;+|\n+/), c: C,
+      f: repXlCents(get("f")), sName: typeof g === "string" ? g.trim().slice(0, 120) : fName, sDep: typeof g === "number" ? repXlCents(g) : 0,
+      sDepAt: repXlDay(h0), sDepTxt: h0 != null && h0 !== "" && !repXlDay(h0) ? String(h0).slice(0, 80) : "",
+      j: repXlCents(get("j")), k: repXlCents(get("k")), kAt: repXlDay(get("l")), q: q == null || q === "" ? null : repXlCents(q),
+      inv: repXlParts(get("t"), /;{2,}|'{2,}|:{2,}|\n+|:\s+/), paid: repXlDay(get("u")) });
+  }
+  return out;
+}
+/** The Excel's rows matched to the jobs read from Housecall Pro (by name, amount and day, up to a week apart), and what
+ *  to save on each: { save: [{ id, t }], found, notFound, differs, extras, via, under, skipped, jobs }. */
+function repXlMatch(rows, jobs, paidThrough) {
+  const used = new Set(), byDay = {}, out = { save: [], found: [], notFound: [], differs: [], extras: [], via: [], under: [], skipped: [], jobs: 0 };
+  for (const j of jobs) if (!j.gone) (byDay[j.day] || (byDay[j.day] = [])).push(j);
+  const near = day => { const a = []; for (let k = -7; k <= 7; k++) for (const j of byDay[lbAddDays(day, k)] || []) if (!used.has(j.id)) a.push({ j, dist: Math.abs(k) }); return a; };
+  const nameOk = (j, text) => {
+    const w = repNorm(j.client).split(" ").filter(x => x.length > 1);
+    if (!w.length) return false;
+    const t = ` ${repNorm(text).split(" ").slice(0, w.length + 6).join(" ")} `;
+    return w.every(x => t.includes(` ${x} `));
+  };
+  const streetNo = text => (/\b(\d{3,6})\b/.exec(text || "") || [])[1] || "";
+  const C = c => lbCash(c / 100);
+  for (const r of rows) {
+    const parts = r.parts.length ? r.parts.map(p => Object.assign({}, p)) : [{ text: "", amt: 0 }];
+    if (parts.length === 1 && !parts[0].amt) parts[0].amt = r.c;
+    out.jobs += parts.length;
+    const hits = parts.map(p => {
+      let best = null;
+      for (const { j, dist } of near(r.day)) {
+        const nm = nameOk(j, p.text), am = p.amt > 0 && Math.abs(j.c - p.amt) <= 100;
+        const sc = (nm ? 4 : 0) + (am ? 4 : 0) + (dist === 0 ? 2 : dist === 1 ? 1 : 0);
+        if (sc >= 6 && (!best || sc > best.sc || (sc === best.sc && dist < best.dist))) best = { j, sc, dist, am };
+      }
+      if (best) used.add(best.j.id);
+      return best;
+    });
+    parts.forEach((p, i) => { if (!hits[i]) out.notFound.push(`${lbDayText(r.day)} · ${p.text.slice(0, 48) || "(no name)"} · ${C(p.amt)}`); });
+    const got = hits.map((x, i) => x && { x, p: parts[i] }).filter(Boolean);
+    if (!got.length) continue;
+    // the day's costs go on its biggest job; the extra is what the Excel paid Monumental over 70%
+    const main = got.reduce((a, b) => (b.x.j.c > a.x.j.c ? b : a));
+    const n = Math.round(r.j * 0.3 / 0.7), formula = Math.round((r.c - r.f - r.j - n) * 0.7) + r.j;
+    let extra = r.q == null ? 0 : r.q - formula, via = false;
+    if (r.f && Math.abs(extra - r.f) <= 2) { via = true; extra = 0; }
+    if (extra < 100) { if (extra < -100) out.under.push(`${lbDayText(r.day)} · ${main.x.j.client} · ${C(-extra)} under`); extra = 0; }
+    for (const { x, p } of got) {
+      const j = x.j;
+      out.found.push(j.id);
+      if (!x.am) out.differs.push(`${lbDayText(r.day)} · ${j.client}: Excel ${C(p.amt)}, Housecall Pro ${C(j.c)}`);
+      if (j.by) { out.skipped.push(`${lbDayText(j.day)} · ${j.client}`); continue; }
+      const t = { split: "mon" }, notes = [];
+      if (x === main.x) {
+        if (r.f) { t.sAmt = r.f / 100; if (r.sName) t.sName = r.sName; }
+        if (r.sDep) t.sDep = r.sDep / 100;
+        if (r.sDepAt) t.sDepAt = r.sDepAt;
+        if (r.sDepTxt) notes.push(`Specialty deposit: ${r.sDepTxt}`);
+        if (r.j) t.mat = r.j / 100;
+        if (r.k) t.mDep = r.k / 100;
+        if (r.kAt) t.mDepAt = r.kAt;
+        if (extra) { t.extra = extra / 100; t.extraWhy = "From the Excel list (Monumental's total typed by hand)"; out.extras.push(`${lbDayText(r.day)} · ${j.client} · ${C(extra)}`); }
+        if (via) { notes.push(`In the Excel, Monumental's total included the specialty ${C(r.f)}`); out.via.push(`${lbDayText(r.day)} · ${j.client} · ${C(r.f)}`); }
+      }
+      const sn = streetNo(p.text), inv = parts.length === 1 ? r.inv.map(v => v.text).join(" / ") : ((sn && r.inv.find(v => v.text.includes(sn))) || r.inv[parts.indexOf(p)] || {}).text;
+      if (inv) t.mInv = inv.slice(0, 200);
+      const paid = r.paid || (paidThrough && j.day <= paidThrough ? paidThrough : "");
+      if (paid) t.mPaidAt = paid;
+      notes.push(`From the Excel list (${r.at})`);
+      t.note = notes.join(" · ").slice(0, 200);
+      out.save.push({ id: j.id, t });
+    }
+  }
+  return out;
+}
+/** Import the old Excel list (admins): read the months it covers from Housecall Pro, match its rows to those jobs, show
+ *  what was found, and save the vendor costs onto them in one go. Jobs already typed in the app are left alone. */
+function openRepImport() {
+  let rows = null, months = [], done = 0, busy = false, res = null, lastErr = "";
+  const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", id: "repImpStatus", role: "status" }), out = h("div", { id: "repImpOut" });
+  // nothing typed here is worth asking about on closing: the form doesn't hear these boxes
+  const quiet = e => e.stopPropagation();
+  const thru = h("input", { type: "date", id: "repImpPaid", oninput: e => { quiet(e); draw(); }, onchange: quiet }), none = h("input", { type: "checkbox", id: "repImpNone", oninput: quiet, onchange: e => { quiet(e); draw(); } });
+  const save = h("button", { class: "btn primary", type: "button", id: "repImpSave", disabled: true, onclick: () => go() }, "Save");
+  const list = (title, items, id) => items.length ? h("details", { id }, h("summary", { text: `${title}: ${fmt(items.length)}` }), h("ul", { class: "rp-implist" }, items.slice(0, 300).map(x => h("li", { text: x })))) : null;
+  const draw = () => {
+    if (!rows || busy || done < months.length) { out.replaceChildren(); save.disabled = true; return; }
+    const jobs = [];
+    for (const y of new Set(months.map(m => Number(m.slice(0, 4))))) jobs.push(...((repDoc(y) || {}).jobs || []));
+    res = repXlMatch(rows, jobs, none.checked ? "" : thru.value);
+    const ex = res.extras.length, n = res.save.length;
+    out.replaceChildren(...[
+      h("p", { class: "rp-impsum", id: "repImpSum" }, h("b", { text: `${fmt(res.found.length)} of ${fmt(res.jobs)} jobs found in Housecall Pro` }),
+        ` · ${fmt(n)} to save${res.skipped.length ? ` · ${fmt(res.skipped.length)} already typed in the app (left as they are)` : ""}`),
+      list("Not found in Housecall Pro (not saved)", res.notFound, "repImpNot"),
+      list("Amount differs from Housecall Pro (saved; the split uses Housecall Pro's amount)", res.differs, "repImpDiff"),
+      list(`Extra pay to Monumental (their total was typed above 70%)`, res.extras, "repImpExtra"),
+      list("Specialty included in Monumental's total in the Excel (saved as specialty; VODA's share matches)", res.via, "repImpVia"),
+      list("Monumental's total typed under 70% (left at 70%)", res.under, "repImpUnder")].filter(Boolean));
+    save.textContent = `Save ${fmt(n)} job${n === 1 ? "" : "s"}`;
+    save.disabled = !n || (!thru.value && !none.checked);
+    err.textContent = n && !thru.value && !none.checked ? "Pick the date Monumental was paid through, or tick that they haven't been paid." : "";
+  };
+  const read = async () => {
+    busy = true; err.textContent = ""; draw();
+    try {
+      for (; done < months.length; done++) {
+        const m = months[done], y = Number(m.slice(0, 4));
+        status.textContent = `Reading Housecall Pro: ${revMonthText(`${m}-01`)} (${done + 1} of ${months.length})…`;
+        if (!repDoc(y)) { const o = await api("repairs", { year: y }); repDocs[y] = { year: y, jobs: o.jobs || [], years: o.years || [], read: {} }; }
+        const doc = repDoc(y);
+        if (doc.read[m] && Date.now() - doc.read[m] < 20 * 3600e3) continue;
+        const o = await api("repSync", { from: `${m}-01`, to: `${m}-${String(lbDaysIn(m)).padStart(2, "0")}` }, 170000);
+        doc.jobs = doc.jobs.filter(j => !j.day.startsWith(m)).concat(o.jobs || []);
+        doc.read[m] = Date.now(); repKeep(y);
+      }
+      status.textContent = `Read ${fmt(months.length)} month${months.length === 1 ? "" : "s"} from Housecall Pro.`;
+    } catch (e) {
+      if (e && (e.error === "bad_code" || e.error === "signed_out")) { closeDialog(); signOut("Your sign-in ended. Please sign in again."); return; }
+      status.textContent = ""; lastErr = revErrText(e);
+      err.replaceChildren(lastErr, " ", h("button", { class: "btn small", type: "button", onclick: () => read() }, "Try again"));
+    } finally { busy = false; }
+    if (done >= months.length) draw();
+  };
+  const go = async () => {
+    if (!res || !res.save.length) return;
+    save.disabled = true; err.textContent = ""; status.textContent = "Saving…";
+    try {
+      const o = await api("repImport", { jobs: res.save }, 170000);
+      for (const y of new Set(months.map(m => Number(m.slice(0, 4))))) { repLoading[y] = false; await repLoad(y); }
+      dlgDirty = false; closeDialog(); toast(`Saved ${fmt(o.saved)} job${o.saved === 1 ? "" : "s"} from the Excel list`); renderRevenue();
+    } catch (e) {
+      status.textContent = "";
+      err.textContent = e && e.error === "bad_request" && (Number(e.api) || 0) < REP_IMPORT_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, "The jobs");
+      save.disabled = false;
+    }
+  };
+  const file = h("input", { type: "file", id: "repImpFile", accept: ".xlsx", oninput: quiet, onchange: async e => {
+    quiet(e);
+    const f = e.target.files[0];
+    rows = null; months = []; done = 0; err.textContent = ""; out.replaceChildren(); draw();
+    if (!f) return;
+    try {
+      status.textContent = "Opening the file…";
+      const tabs = await lbReadXlsx(await f.arrayBuffer(), n => /^\s*[A-Za-z]+\s+\d{4}\s*$/.test(n));
+      rows = tabs.map(repXlTab).filter(Boolean).flat();
+      if (!rows.length) { rows = null; status.textContent = ""; err.textContent = "No month tabs (like “October 2026”) with CLIENT NAME and TOTAL CHARGED in that file."; return; }
+      months = [...new Set(rows.map(r => r.day.slice(0, 7)))].sort().reverse();
+      status.textContent = `${fmt(rows.length)} days with jobs in ${fmt(months.length)} months.`;
+      await read();
+    } catch (x) { rows = null; status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
+  } });
+  openDialog(h("div", { class: "rp-dlg" },
+    h("h3", { id: "dlgTitle", text: "Import the old Excel list" }),
+    apiLevel && apiLevel < REP_IMPORT_API ? h("p", { class: "dlg-err", text: "First update the Google script: paste the new Code.gs from GitHub and deploy a new version." }) : null,
+    h("p", { class: "hint", text: "Choose the Excel copy of the REPAIRS ONLY list (File > Download > Microsoft Excel). The app reads those months from Housecall Pro, finds each job in the list (by name, amount and day), and saves its vendor costs: specialty contractor, Monumental's materials and deposit, their invoice number, and any extra pay. Every job found is set to Monumental's 70/30 split. Nothing is saved until you press Save." }),
+    file, status,
+    h("h4", { text: "Has Monumental been paid for these jobs?" }),
+    h("p", { class: "meta", text: "The Excel list has no payment dates for Monumental. Jobs up to this date will show as paid." }),
+    h("div", { class: "grid4" }, h("div", { class: "field" }, h("label", { for: "repImpPaid", text: "Paid through" }), thru),
+      h("label", { class: "rp-check span2" }, none, " None of them paid yet")),
+    out, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
 }
 
 /* ======================= Office scorecards ======================= */
