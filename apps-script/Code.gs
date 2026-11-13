@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 49;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 50;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -3403,19 +3403,56 @@ function hcpKey_() {
 }
 /** One read from Housecall Pro: { data } or { error } (no_key, needs_permission, hcp_key, hcp_forbidden, hcp_busy,
  *  hcp_http, hcp_unreachable, hcp_bad_answer). The key is never part of an answer. */
+function hcpUrl_(path, query) {
+  const qs = Object.keys(query || {}).filter(function (k) { return query[k] !== null && query[k] !== undefined && query[k] !== ""; })
+    .map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(query[k]); }).join("&");
+  return HCP_BASE + path + (qs ? "?" + qs : "");
+}
+// the first time, Google has to be told the script may reach Housecall Pro (run connectHousecallPro once)
+const hcpThrown_ = e => (/permission|authori[sz]/i.test(String(e && e.message ? e.message : e)) ? "needs_permission" : "hcp_unreachable");
 function hcpGet_(path, query) {
   const key = hcpKey_();
   if (!key) return { error: "no_key" };
-  const qs = Object.keys(query || {}).filter(function (k) { return query[k] !== null && query[k] !== undefined && query[k] !== ""; })
-    .map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(query[k]); }).join("&");
   let res;
   try {
-    res = UrlFetchApp.fetch(HCP_BASE + path + (qs ? "?" + qs : ""), { method: "get", muteHttpExceptions: true,
+    res = UrlFetchApp.fetch(hcpUrl_(path, query), { method: "get", muteHttpExceptions: true,
       headers: { Authorization: "Token " + key, Accept: "application/json" } });
   } catch (e) {
-    // the first time, Google has to be told the script may reach Housecall Pro (run connectHousecallPro once)
-    return { error: /permission|authori[sz]/i.test(String(e && e.message ? e.message : e)) ? "needs_permission" : "hcp_unreachable" };
+    return { error: hcpThrown_(e) };
   }
+  return hcpAnswer_(res);
+}
+const HCP_PAR = 6;   // Housecall Pro reads sent together (a job's invoices and card fee: 3 jobs at a time)
+/** Many reads at once, HCP_PAR together: [{ path, query }] → each as hcpGet_ answers it. One that comes back "too busy"
+ *  is asked again by itself a moment later. */
+function hcpGetAll_(list) {
+  if (!list.length) return [];
+  const key = hcpKey_();
+  if (!key) return list.map(function () { return { error: "no_key" }; });
+  if (typeof UrlFetchApp.fetchAll !== "function") return list.map(function (x) { return hcpGet_(x.path, x.query); });
+  const out = [];
+  for (let i = 0; i < list.length; i += HCP_PAR) {
+    const part = list.slice(i, i + HCP_PAR);
+    let res;
+    try {
+      res = UrlFetchApp.fetchAll(part.map(function (x) {
+        return { url: hcpUrl_(x.path, x.query), method: "get", muteHttpExceptions: true, headers: { Authorization: "Token " + key, Accept: "application/json" } };
+      }));
+    } catch (e) {
+      const err = hcpThrown_(e);
+      part.forEach(function () { out.push({ error: err }); });
+      continue;
+    }
+    part.forEach(function (x, k) {
+      let a = hcpAnswer_(res[k]);
+      if (a.error === "hcp_busy") { Utilities.sleep(1500); a = hcpGet_(x.path, x.query); }
+      out.push(a);
+    });
+  }
+  return out;
+}
+/** Housecall Pro's answer: { data } or { error }. */
+function hcpAnswer_(res) {
   const code = res.getResponseCode();
   if (code === 401) return { error: "hcp_key" };          // a wrong or deleted key (or no MAX plan)
   if (code === 403) return { error: "hcp_forbidden" };
@@ -3820,6 +3857,7 @@ const REP_COLS = ["Job id", "Day", "Invoice #", "Client", "Address", "Job type",
 const REP_TYPED = [["split", 14, "split"], ["sName", 15, "text"], ["sAmt", 16, "money"], ["sDep", 17, "money"], ["sDepAt", 18, "day"], ["mat", 19, "money"],
   ["mDep", 20, "money"], ["mDepAt", 21, "day"], ["extra", 22, "money"], ["extraWhy", 23, "text"], ["mInv", 24, "text"], ["mPaidAt", 25, "day"], ["note", 26, "text"], ["cName", 35, "text"]];
 const REP_MON_TAG = /monumental/i;
+const REP_DATA_VER = 1;   // raise when what's kept for a job changes: the app then reads every month from Housecall Pro again
 function repSheet_(create) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(REP_SHEET);
@@ -3903,7 +3941,7 @@ function repRead_(year) {
     if (r[1]) years[r[1].slice(0, 4)] = true;
     if (String(r[1]).indexOf(y + "-") === 0) jobs.push(repOut_(r));
   });
-  return { ok: true, year: Number(y), jobs: jobs, years: Object.keys(years).map(Number).sort() };
+  return { ok: true, year: Number(y), jobs: jobs, years: Object.keys(years).map(Number).sort(), dv: REP_DATA_VER };
 }
 /** The credit card fee in a list of line items (cents): lines named like "VODA - Credit Card Service Charge". */
 function repFeeOf_(items) {
@@ -3916,15 +3954,15 @@ function repFeeOf_(items) {
   }, 0);
 }
 /** A job's credit card fee (cents) from its line items, or null when they can't be read. */
-function repJobFee_(jobId) {
-  const r = hcpGet_("/jobs/" + encodeURIComponent(jobId) + "/line_items");
+function repJobFee_(jobId) { return repFeeFrom_(hcpGet_("/jobs/" + encodeURIComponent(jobId) + "/line_items")); }
+function repFeeFrom_(r) {
   if (r.error) return null;
   const d = r.data || {};
   return repFeeOf_(Array.isArray(d) ? d : Array.isArray(d.data) ? d.data : Array.isArray(d.line_items) ? d.line_items : []);
 }
 /** One job's invoices from Housecall Pro, kept short: number, amount, still due, paid day, status (cents). */
-function repInvoices_(jobId, tz) {
-  const r = hcpGet_("/jobs/" + encodeURIComponent(jobId) + "/invoices");
+function repInvoices_(jobId, tz) { return repInvoicesFrom_(hcpGet_("/jobs/" + encodeURIComponent(jobId) + "/invoices"), tz); }
+function repInvoicesFrom_(r, tz) {
   if (r.error) return { error: r.error, status: r.status || 0 };
   const d = r.data || {};
   const list = Array.isArray(d) ? d : Array.isArray(d.invoices) ? d.invoices : Array.isArray(d.data) ? d.data : [];
@@ -3933,6 +3971,13 @@ function repInvoices_(jobId, tz) {
     return { n: String((i && i.invoice_number) || ""), a: Number(i && i.amount) || 0, due: Number(i && i.due_amount) || 0, st: String((i && i.status) || ""),
       at: paidAt && !isNaN(paidAt.getTime()) ? Utilities.formatDate(paidAt, tz, "yyyy-MM-dd") : "", dc: String((i && i.due_concept) || "") };
   }) };
+}
+/** Has this job stayed as it was read (charged, still owed, status, invoice #), with its invoices and card fee kept? */
+function repSame_(r, job) {
+  if (!r || r[13] || !String(r[11] || "") || r[36] === "" || r[36] === null) return false;
+  if (repCents_(r[8]) !== Math.round(Number(job.total_amount) || 0)) return false;
+  if (job.outstanding_balance !== undefined && job.outstanding_balance !== null && repCents_(r[10]) !== Math.round(Number(job.outstanding_balance) || 0)) return false;
+  return String(r[2] || "") === String(job.invoice_number || "") && String(r[7] || "") === String(job.work_status || "");
 }
 /** Reads from..to (up to 31 days) from Housecall Pro again: the repair jobs scheduled on those days and their invoices.
  *  What's typed in the app stays. A job that isn't there any more is dropped, or kept (and marked) when something was
@@ -3951,7 +3996,7 @@ function repSync_(req) {
   const got = hcpJobsIn_(from, to);
   if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
   if (got.more) return { ok: false, error: "too_many" };
-  const tz = Session.getScriptTimeZone(), at = new Date().toISOString(), fresh = {};
+  const tz = Session.getScriptTimeZone(), at = new Date().toISOString(), fresh = {}, picked = [];
   for (let i = 0; i < got.jobs.length; i++) {
     const job = got.jobs[i];
     if (!job || !job.id || /cancel/i.test(String(job.work_status || ""))) continue;
@@ -3964,16 +4009,28 @@ function repSync_(req) {
     if (isNaN(start.getTime())) continue;
     const day = Utilities.formatDate(start, tz, "yyyy-MM-dd");
     if (day < from || day > to) continue;
-    const inv = repInvoices_(job.id, tz);
-    if (inv.error && inv.error !== "hcp_http") return { ok: false, error: inv.error, status: inv.status || 0 };
-    let fee = repJobFee_(job.id);
-    if (fee === null) fee = inv.error ? null : inv.fee;
+    picked.push({ job: job, known: known, tags: tagList, day: day });
+  }
+  // each job's invoices and card fee: read again only when the job changed (charged, still owed, status, invoice #) or
+  // Read again was pressed; a payment changes what's still owed, a card fee what's charged. Several are read at once.
+  const need = picked.filter(function (x) { return req.force || !repSame_(x.known, x.job); });
+  const answers = hcpGetAll_([].concat.apply([], need.map(function (x) {
+    const p = "/jobs/" + encodeURIComponent(x.job.id);
+    return [{ path: p + "/invoices" }, { path: p + "/line_items" }];
+  })));
+  need.forEach(function (x, k) { x.inv = repInvoicesFrom_(answers[2 * k], tz); x.fee = repFeeFrom_(answers[2 * k + 1]); });
+  for (let i = 0; i < picked.length; i++) {
+    const x = picked[i], job = x.job, inv = x.inv || null;
+    if (inv && inv.error && inv.error !== "hcp_http") return { ok: false, error: inv.error, status: inv.status || 0 };
+    let fee = inv ? x.fee : null;
+    if (inv && fee === null) fee = inv.error ? null : inv.fee;
     const cu = job.customer || {}, ad = job.address || {};
     const name = String(cu.company || [cu.first_name, cu.last_name].filter(Boolean).join(" ") || "").trim().slice(0, 120);
     const total = Number(job.total_amount) || 0, owed = job.outstanding_balance === undefined || job.outstanding_balance === null ? null : Number(job.outstanding_balance) || 0;
-    const tags = tagList.join("; ").slice(0, 300);
-    fresh[String(job.id)] = { day: day, inv: String(job.invoice_number || ""), client: name, addr: [ad.street, ad.street_line_2, ad.city, [ad.state, ad.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ").slice(0, 200),
-      type: hcpJobType_(job).slice(0, 80), tags: tags, ws: String(job.work_status || ""), c: total, owed: owed, invoices: inv.error ? null : inv.list, fee: fee };
+    const tags = x.tags.join("; ").slice(0, 300);
+    // a job that didn't change keeps the invoices and card fee read before (null: not touched)
+    fresh[String(job.id)] = { day: x.day, inv: String(job.invoice_number || ""), client: name, addr: [ad.street, ad.street_line_2, ad.city, [ad.state, ad.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ").slice(0, 200),
+      type: hcpJobType_(job).slice(0, 80), tags: tags, ws: String(job.work_status || ""), c: total, owed: owed, invoices: inv && !inv.error ? inv.list : null, fee: fee };
   }
   return withLock_(function () {
     const s = repSheet_(true), rows = repRows_(s);
