@@ -3651,7 +3651,7 @@ function lbXmlText(s) {
   });
 }
 /** The tabs `want(name)` picks from an .xlsx file, as { name, rows } with each cell's saved value. */
-async function lbReadXlsx(buf, want) {
+async function lbReadXlsx(buf, want, opts) {
   const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   let eocd = -1;
   for (let i = u8.length - 22; i >= Math.max(0, u8.length - 70000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
@@ -3682,7 +3682,22 @@ async function lbReadXlsx(buf, want) {
     const id = /\bId="([^"]+)"/.exec(m[0]), tg = /\bTarget="([^"]+)"/.exec(m[0]);
     if (id && tg) target[id[1]] = tg[1].replace(/^\/?xl\//, "").replace(/^\//, "");
   }
-  let shared = null;
+  // cell colors (opts.colors): each cell's text and fill color, and the colors of its runs of text, as "rrggbb"
+  let xf = [], colr = () => "";
+  if (opts && opts.colors) {
+    const st = (await read("xl/styles.xml")) || "", th = (await read("xl/theme/theme1.xml")) || "";
+    const scheme = (/<a:clrScheme\b[\s\S]*?<\/a:clrScheme>/.exec(th) || [""])[0];
+    const pal = ["dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"]
+      .map(n => ((new RegExp(`<a:${n}>[\\s\\S]*?(?:srgbClr val|lastClr)="([0-9A-Fa-f]{6})"`).exec(scheme) || [])[1] || "").toLowerCase());
+    const theme = [pal[1], pal[0], pal[3], pal[2], ...pal.slice(4)];
+    colr = tag => { const rgb = /\brgb="(?:[0-9A-Fa-f]{2})?([0-9A-Fa-f]{6})"/.exec(tag || ""); if (rgb) return rgb[1].toLowerCase(); const t = /\btheme="(\d+)"/.exec(tag || ""); return t ? theme[Number(t[1])] || "" : ""; };
+    const sec = n => (new RegExp(`<${n}\\b[^>]*>([\\s\\S]*?)</${n}>`).exec(st) || [])[1] || "";
+    const fonts = [...sec("fonts").matchAll(/<font\b[^>]*?(?:\/>|>([\s\S]*?)<\/font>)/g)].map(m => colr((/<color\b[^>]*>/.exec(m[1] || "") || [""])[0]));
+    const fills = [...sec("fills").matchAll(/<fill\b[^>]*?(?:\/>|>([\s\S]*?)<\/fill>)/g)].map(m => /patternType="solid"/.test(m[1] || "") ? colr((/<fgColor\b[^>]*>/.exec(m[1]) || [""])[0]) : "");
+    xf = [...sec("cellXfs").matchAll(/<xf\b([^>]*?)\/?>/g)].map(m => ({ font: fonts[Number((/\bfontId="(\d+)"/.exec(m[1]) || [])[1])] || "", fill: fills[Number((/\bfillId="(\d+)"/.exec(m[1]) || [])[1])] || "" }));
+  }
+  const runsOf = x => opts && opts.colors && x.includes("<r>") ? [...x.matchAll(/<r>([\s\S]*?)<\/r>/g)].map(r => ({ t: lbXmlText([...r[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(y => y[1]).join("")), c: colr((/<rPr>[\s\S]*?(<color\b[^>]*>)/.exec(r[1]) || [])[1]) })) : null;
+  let shared = null, sharedRuns = [];
   const tabs = [];
   for (const m of wb.matchAll(/<sheet\b[^>]*>/g)) {
     const nm = /\bname="([^"]*)"/.exec(m[0]), rid = /\br:id="([^"]+)"/.exec(m[0]);
@@ -3692,11 +3707,11 @@ async function lbReadXlsx(buf, want) {
     if (!shared) {
       shared = [];
       const ss = await read("xl/sharedStrings.xml");
-      if (ss) for (const si of ss.matchAll(/<si>([\s\S]*?)<\/si>/g)) shared.push(lbXmlText([...si[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join("")));
+      if (ss) for (const si of ss.matchAll(/<si>([\s\S]*?)<\/si>/g)) { shared.push(lbXmlText([...si[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join(""))); sharedRuns.push(runsOf(si[1])); }
     }
     const xml = await read("xl/" + target[rid[1]]);
     if (!xml) continue;
-    const rows = [];
+    const rows = [], fmt = [];
     for (const c of xml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const ref = /\br="([A-Z]+)(\d+)"/.exec(c[1]);
       if (!ref || c[2] == null) continue;
@@ -3715,9 +3730,14 @@ async function lbReadXlsx(buf, want) {
       for (const ch of ref[1]) col = col * 26 + ch.charCodeAt(0) - 64;
       const r = Number(ref[2]);
       (rows[r - 1] || (rows[r - 1] = []))[col - 1] = v;
+      if (opts && opts.colors) {
+        const x = xf[Number((/\bs="(\d+)"/.exec(c[1]) || [])[1])] || { font: "", fill: "" };
+        const runs = type === "s" ? sharedRuns[Number((/<v>(\d+)<\/v>/.exec(c[2]) || [])[1])] : type === "inlineStr" ? runsOf(c[2]) : null;
+        if (x.font || x.fill || runs) (fmt[r - 1] || (fmt[r - 1] = []))[col - 1] = { font: x.font, fill: x.fill, runs };
+      }
     }
     for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = [];
-    tabs.push({ name, rows });
+    tabs.push(opts && opts.colors ? { name, rows, fmt } : { name, rows });
   }
   return tabs;
 }
@@ -11647,6 +11667,33 @@ function repXlDay(v) {
   const m = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/.exec(String(v == null ? "" : v));
   return m ? `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}` : "";
 }
+/** Is this color ("rrggbb") a purple: violet to purple (hue 250°–300°), not grey, not near white or black? */
+function lbPurple(hex) {
+  if (!/^[0-9a-f]{6}$/.test(hex || "")) return false;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  if (!d || l < 0.12 || l > 0.95) return false;
+  const h = ((mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + 360) % 360;
+  return d / (1 - Math.abs(2 * l - 1)) >= 0.25 && h >= 250 && h < 300;
+}
+/** Which pieces of a cell are colored purple: a piece is when every invoice number in it is (4 digits or more, not an
+ *  amount), each by the color of its first digit, from the cell's runs of text, else its text color; a purple fill makes
+ *  them all purple. */
+function repXlPurple(raw, f, pieces) {
+  if (!f) return pieces.map(() => false);
+  if (lbPurple(f.fill)) return pieces.map(() => true);
+  const s = String(raw == null ? "" : raw), at = [];
+  for (const r of f.runs || []) for (let k = 0; k < r.t.length; k++) at.push(r.c || f.font);
+  if (!at.length) return pieces.map(() => lbPurple(f.font));
+  let from = 0;
+  return pieces.map(p => {
+    const i = s.indexOf(p.text, from);
+    if (i < 0) return lbPurple(f.font);
+    from = i + p.text.length;
+    const nums = [...p.text.matchAll(/(^|[^\d$.,])(\d{4,})/g)].map(m => m.index + m[1].length);
+    if (!nums.length) { const d = p.text.search(/\d/); nums.push(d < 0 ? 0 : d); }
+    return nums.every(k => lbPurple(at[i + k] || f.font));
+  });
+}
 /** The pieces of a cell that holds one job or several ("Name address - $1,234.56;;;;Name address - $99"). */
 function repXlParts(v, re) {
   return String(v == null ? "" : v).split(re).map(x => x.replace(/^[\s:;']+|[\s:;']+$/g, "")).filter(Boolean).map(x => {
@@ -11681,23 +11728,28 @@ function repXlTab(tab) {
     if (/^\s*MONTHLY/i.test(String(row[0] == null ? "" : row[0]))) break;
     const d = Math.round(Number(row[0])), names = get("client"), C = repXlCents(get("total"));
     if ((!names && !C) || !(d >= 1 && d <= lbDaysIn(key))) continue;
-    const g = get("g"), h0 = get("h"), q = get("q");
+    const g = get("g"), h0 = get("h"), q = get("q"), inv = repXlParts(get("t"), /;{2,}|'{2,}|:{2,}|\n+|:\s+/);
+    // invoice numbers colored purple: paid to Monumental
+    repXlPurple(get("t"), c.t >= 0 && tab.fmt && tab.fmt[i] ? tab.fmt[i][c.t] : null, inv).forEach((pp, k) => { inv[k].paid = pp; });
     out.push({ day: `${key}-${String(d).padStart(2, "0")}`, at: `${tab.name.trim()}, row ${i + 1}`, parts: repXlParts(names, /;{2,}|'{3,}|:;+|\n+/), c: C,
       f: repXlCents(get("f")), sName: typeof g === "string" ? g.trim().slice(0, 120) : fName, sDep: typeof g === "number" ? repXlCents(g) : 0,
       sDepAt: repXlDay(h0), sDepTxt: h0 != null && h0 !== "" && !repXlDay(h0) ? String(h0).slice(0, 80) : "",
       j: repXlCents(get("j")), k: repXlCents(get("k")), kAt: repXlDay(get("l")), q: q == null || q === "" ? null : repXlCents(q),
-      inv: repXlParts(get("t"), /;{2,}|'{2,}|:{2,}|\n+|:\s+/), paid: repXlDay(get("u")) });
+      inv, paid: repXlDay(get("u")) });
   }
   return out;
 }
 /** The Excel's rows matched to the jobs read from Housecall Pro (the jobs with a Monumental tag) by name, street address
  *  and amount, on any day: the Excel's days may be wrong, so a day is never needed to match; it only settles a tie (a
  *  client with more than one job). Then the jobs picked by hand. What to save on each: { save: [{ id, t }], found,
- *  notFound, missing, moved, picked, differs, extras, via, under, skipped, jobs }. Only the vendor costs are saved: the
- *  day, amount and client stay Housecall Pro's. `picks`: { "<row's place> · <piece>": job id, or "-" for a guess turned down }. */
-function repXlMatch(rows, jobs, paidThrough, picks) {
+ *  notFound, missing, moved, picked, differs, extras, via, under, skipped, paid, unpaid, partly, markOnly, jobs }. Only
+ *  the vendor costs are saved: the day, amount and client stay Housecall Pro's. Invoice numbers colored purple are paid
+ *  to Monumental: marked paid on `paidOn`, or each job's Housecall Pro day when it's empty (a Date VODA paid in the Excel
+ *  wins), jobs already typed in the app included (only that). `picks`: { "<row's place> · <piece>": job id, or "-" for a
+ *  guess turned down }. */
+function repXlMatch(rows, jobs, paidOn, picks) {
   picks = picks || {};
-  const used = new Set(), out = { save: [], found: [], notFound: [], missing: [], moved: [], picked: [], differs: [], extras: [], via: [], under: [], skipped: [], jobs: 0 };
+  const used = new Set(), out = { save: [], found: [], notFound: [], missing: [], moved: [], picked: [], differs: [], extras: [], via: [], under: [], skipped: [], paid: [], unpaid: [], partly: [], markOnly: 0, jobs: 0 };
   const live = jobs.filter(j => !j.gone), byId = new Map(jobs.map(j => [j.id, j]));
   const gap = (a, b) => Math.abs(Math.round((lbDate(a) - lbDate(b)) / 864e5));
   const streetNo = text => (/\b(\d{3,6})\b/.exec(text || "") || [])[1] || "";
@@ -11779,7 +11831,19 @@ function repXlMatch(rows, jobs, paidThrough, picks) {
       const j = x.j;
       out.found.push(j.id);
       if (!x.am) out.differs.push(`${lbDayText(r.day)} · ${j.client}: Excel ${C(p.amt)}, Housecall Pro ${C(j.c)}`);
-      if (j.by) { out.skipped.push(`${lbDayText(j.day)} · ${j.client}`); continue; }
+      // its invoice numbers (a day of several jobs: the one with its street number, else in the same place) and if they're purple
+      const sn = streetNo(p.text), pcs = parts.length === 1 ? r.inv : [(sn && r.inv.find(v => v.text.includes(sn))) || r.inv[parts.indexOf(p)]].filter(Boolean);
+      const inv = pcs.map(v => v.text).join(" / "), purple = pcs.length > 0 && pcs.every(v => v.paid), had = !!(j.t && j.t.mPaidAt);
+      const paid = had ? "" : r.paid || (purple ? paidOn || j.day : "");
+      const who = `${lbDayText(j.day)} · ${j.inv ? `#${j.inv} ` : ""}${j.client}${inv ? ` · ${inv.slice(0, 40)}` : ""}`;
+      if (paid) out.paid.push(who);
+      else if (!had && pcs.some(v => v.paid)) out.partly.push(who);
+      else if (!had) out.unpaid.push(who);
+      if (j.by) {
+        out.skipped.push(`${lbDayText(j.day)} · ${j.client}`);
+        if (paid) { out.save.push({ id: j.id, t: { mPaidAt: paid } }); out.markOnly++; }
+        continue;
+      }
       const t = { split: "mon" }, notes = [];
       if (x === main.x) {
         if (r.f) { t.sAmt = r.f / 100; if (r.sName) t.sName = r.sName; }
@@ -11792,9 +11856,7 @@ function repXlMatch(rows, jobs, paidThrough, picks) {
         if (extra) { t.extra = extra / 100; t.extraWhy = "From the Excel list (Monumental's total typed by hand)"; out.extras.push(`${lbDayText(r.day)} · ${j.client} · ${C(extra)}`); }
         if (via) { notes.push(`In the Excel, Monumental's total included the specialty ${C(r.f)}`); out.via.push(`${lbDayText(r.day)} · ${j.client} · ${C(r.f)}`); }
       }
-      const sn = streetNo(p.text), inv = parts.length === 1 ? r.inv.map(v => v.text).join(" / ") : ((sn && r.inv.find(v => v.text.includes(sn))) || r.inv[parts.indexOf(p)] || {}).text;
       if (inv) t.mInv = inv.slice(0, 200);
-      const paid = r.paid || (paidThrough && j.day <= paidThrough ? paidThrough : "");
       if (paid) t.mPaidAt = paid;
       notes.push(`From the Excel list (${r.at})`);
       t.note = notes.join(" · ").slice(0, 200);
@@ -11810,7 +11872,7 @@ function openRepImport() {
   const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", id: "repImpStatus", role: "status" }), out = h("div", { id: "repImpOut" });
   // nothing typed here is worth asking about on closing: the form doesn't hear these boxes
   const quiet = e => e.stopPropagation();
-  const thru = h("input", { type: "date", id: "repImpPaid", oninput: e => { quiet(e); draw(); }, onchange: quiet }), none = h("input", { type: "checkbox", id: "repImpNone", oninput: quiet, onchange: e => { quiet(e); draw(); } });
+  const thru = h("input", { type: "date", id: "repImpPaid", oninput: e => { quiet(e); draw(); }, onchange: quiet });
   const save = h("button", { class: "btn primary", type: "button", id: "repImpSave", disabled: true, onclick: () => go() }, "Save");
   const list = (title, items, id) => items.length ? h("details", { id }, h("summary", { text: `${title}: ${fmt(items.length)}` }), h("ul", { class: "rp-implist" }, items.slice(0, 300).map(x => h("li", { text: x })))) : null;
   // jobs picked by hand for rows not found, and guesses turned down ("-"): { "<row's place> · <piece>": job id }
@@ -11824,22 +11886,24 @@ function openRepImport() {
     if (!rows || busy || done < months.length) { out.replaceChildren(); save.disabled = true; return; }
     const jobs = [];
     for (const y of new Set(months.map(m => Number(m.slice(0, 4))))) jobs.push(...((repDoc(y) || {}).jobs || []));
-    res = repXlMatch(rows, jobs, none.checked ? "" : thru.value, picks);
-    const ex = res.extras.length, n = res.save.length;
+    res = repXlMatch(rows, jobs, thru.value, picks);
+    const n = res.save.length, full = n - res.markOnly;
     out.replaceChildren(...[
       h("p", { class: "rp-impsum", id: "repImpSum" }, h("b", { text: `${fmt(res.found.length)} of ${fmt(res.jobs)} jobs found in Housecall Pro` }),
-        ` · ${fmt(n)} to save${res.skipped.length ? ` · ${fmt(res.skipped.length)} already typed in the app (left as they are)` : ""}`),
+        ` · ${fmt(full)} to save${res.skipped.length ? ` · ${fmt(res.skipped.length)} already typed in the app (left as they are${res.markOnly ? `; ${fmt(res.markOnly)} of them marked paid` : ""})` : ""}`),
       fixList("Not found in Housecall Pro (not saved)", res.missing, "repImpNot", ["No job read from Housecall Pro has this name or street address. Pick the job and it's saved with the rest. Only jobs with a Monumental tag in Housecall Pro (like “repair - Monumental Flooring”) are read: if the job isn't in the box, add the tag to it in Housecall Pro, then ",
         h("button", { class: "btn small", type: "button", id: "repImpAgain", onclick: () => reread() }, "Read Housecall Pro again"), "."], pickBox),
       fixList("Found on another day (saved; Housecall Pro's day is kept)", res.moved, "repImpMoved", "More than a week from the Excel's day, or matched by the amount alone: check each one.", m => undo("Not this job", m, k => { picks[k] = "-"; turned.add(k); })),
       fixList("Picked by hand (saved)", res.picked, "repImpPicked", "", m => undo("Undo", m, k => { if (turned.has(k)) picks[k] = "-"; else delete picks[k]; })),
+      list("Marked paid to Monumental (purple invoice numbers)", res.paid, "repImpPaidList"),
+      list("Not marked paid (invoice number not purple)", res.unpaid, "repImpUnpaid"),
+      list("Some invoice numbers purple, some not (not marked paid: check)", res.partly, "repImpPartly"),
       list("Amount differs from Housecall Pro (saved; the split uses Housecall Pro's amount)", res.differs, "repImpDiff"),
       list(`Extra pay to Monumental (their total was typed above 70%)`, res.extras, "repImpExtra"),
       list("Specialty included in Monumental's total in the Excel (saved as specialty; VODA's share matches)", res.via, "repImpVia"),
       list("Monumental's total typed under 70% (left at 70%)", res.under, "repImpUnder")].filter(Boolean));
     save.textContent = `Save ${fmt(n)} job${n === 1 ? "" : "s"}`;
-    save.disabled = !n || (!thru.value && !none.checked);
-    err.textContent = n && !thru.value && !none.checked ? "Pick the date Monumental was paid through, or tick that they haven't been paid." : "";
+    save.disabled = !n;
   };
   const read = async () => {
     busy = true; err.textContent = ""; draw();
@@ -11904,7 +11968,7 @@ function openRepImport() {
     if (!f) return;
     try {
       status.textContent = "Opening the file…";
-      const tabs = await lbReadXlsx(await f.arrayBuffer(), n => /^\s*[A-Za-z]+\s+\d{4}\s*$/.test(n));
+      const tabs = await lbReadXlsx(await f.arrayBuffer(), n => /^\s*[A-Za-z]+\s+\d{4}\s*$/.test(n), { colors: true });
       rows = tabs.map(repXlTab).filter(Boolean).flat();
       if (!rows.length) { rows = null; status.textContent = ""; err.textContent = "No month tabs (like “October 2026”) with CLIENT NAME and TOTAL CHARGED in that file."; return; }
       // the Excel's months, and a month either side (its days may be wrong)
@@ -11917,12 +11981,11 @@ function openRepImport() {
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Import the old Excel list" }),
     apiLevel && apiLevel < REP_IMPORT_API ? h("p", { class: "dlg-err", text: "First update the Google script: paste the new Code.gs from GitHub and deploy a new version." }) : null,
-    h("p", { class: "hint", text: "Choose the Excel copy of the REPAIRS ONLY list (File > Download > Microsoft Excel). The app reads those months from Housecall Pro, finds each job in the list (by name, amount and day), and saves its vendor costs: specialty contractor, Monumental's materials and deposit, their invoice number, and any extra pay. Every job found is set to Monumental's 70/30 split. Nothing is saved until you press Save." }),
+    h("p", { class: "hint", text: "Choose the Excel copy of the REPAIRS ONLY list (File > Download > Microsoft Excel). The app reads those months from Housecall Pro, finds each job in the list (by name, address and amount), and saves its vendor costs: specialty contractor, Monumental's materials and deposit, their invoice number, and any extra pay. Every job found is set to Monumental's 70/30 split. Nothing is saved until you press Save." }),
     file, status,
-    h("h4", { text: "Has Monumental been paid for these jobs?" }),
-    h("p", { class: "meta", text: "The Excel list has no payment dates for Monumental. Jobs up to this date will show as paid." }),
-    h("div", { class: "grid4" }, h("div", { class: "field" }, h("label", { for: "repImpPaid", text: "Paid through" }), thru),
-      h("label", { class: "rp-check span2" }, none, " None of them paid yet")),
+    h("h4", { text: "Paid to Monumental" }),
+    h("p", { class: "meta", text: "Invoice numbers colored purple in the Excel are paid: those jobs are marked paid to Monumental, jobs already in the app too. The rest are left as they are. Paid on: the date below, or, left empty, each job's day in Housecall Pro (a Date VODA paid typed in the Excel is kept)." }),
+    h("div", { class: "grid4" }, h("div", { class: "field" }, h("label", { for: "repImpPaid", text: "Paid on (optional)" }), thru)),
     out, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
 }
