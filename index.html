@@ -787,27 +787,86 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   .rev-aside { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
 }
 /* Marketing: the period's totals, then where clients came from (new clients, Repeat, Referrals) */
-.mkt-deps { margin-top: -4px; }
-.mkt-acts { display: flex; flex-wrap: wrap; gap: 8px; }
-#mktTable td small, #mktMonthTable td small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; }
-#mktTable td.zero, #mktMonthTable td.zero { color: var(--muted); }
-#mktTable tbody th, #mktMonthTable tbody th { font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); white-space: normal; min-width: 7em; }
-#mktTable tbody th small, #mktMonthTable tbody th small { display: block; color: var(--muted); font-size: .7rem; font-weight: 600; }
-#mktTable tr.mkt-grp th, #mktTable tr.mkt-grp td { font-weight: 700; background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
-#mktTable tr.mkt-grp.repeat th, #mktTable tr.mkt-grp.repeat td { background: color-mix(in srgb, var(--clean) 9%, var(--surface)); }
-#mktTable tr.mkt-grp.referral th, #mktTable tr.mkt-grp.referral td { background: color-mix(in srgb, var(--soon) 9%, var(--surface)); }
-#mktTable tr.mkt-sub th { padding-left: 18px; }
-#mktTable td .rev-was, #mktMonthTable td .rev-was { display: block; margin: 4px 0 0 auto; padding: 3px 7px 4px; border-radius: 7px; width: fit-content; background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent); color: var(--muted); font-size: .74rem; font-weight: 600; line-height: 1.35; text-align: right; }
-#mktTable td small.mkt-was, #mktMonthTable td small.mkt-was { font-size: .7rem; }
-#mktTable td.ret, #mktMonthTable td.ret { font-weight: 700; }
-#mktMonthTable tr.rev-mo { cursor: pointer; }
-#mktMonthTable tr.rev-mo:hover th, #mktMonthTable tr.rev-mo:hover td { background: var(--accent-soft); }
-#mktMonthTable tr.future th, #mktMonthTable tr.future td { color: var(--muted); opacity: .6; }
-.mkt-spend { all: unset; cursor: pointer; display: inline-block; padding: 2px 6px; margin: -2px -6px; border-radius: 7px; border: 1px dashed transparent; font-variant-numeric: tabular-nums; }
-.mkt-spend:hover, .mkt-spend:focus-visible { border-color: var(--accent); color: var(--accent); }
-td.zero .mkt-spend { color: var(--accent); font-weight: 600; }
-.mkt-h3 { margin: 0 0 8px; font-size: 1rem; }
-#mktTable td small.mkt-cpj, #mktMonthTable td small.mkt-cpj { display: none; }
+.mkt-main { gap: 14px; }
+.mkt-ctl { display: grid; gap: 8px; }
+.mkt-ctl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.mkt-step { display: inline-flex; align-items: center; gap: 8px; }
+.mkt-step strong { min-width: 10em; text-align: center; font-size: 1.02rem; }
+.mkt-sel { font: inherit; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+.mkt-status { margin: -4px 0 0; color: var(--muted); font-size: .84rem; }
+.mkt-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.mkt-kpis.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mkt-kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px 12px; min-width: 0; }
+.mkt-kpi small { display: block; font-size: .7rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.mkt-kpi > b { display: block; font-family: var(--font-display); font-size: clamp(1.35rem, 2.4vw, 1.95rem); font-weight: 700; line-height: 1.15; margin: 3px 0 1px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mkt-kpi > span { display: block; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mkt-kpi .mkt-kvs { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line); font-weight: 600; }
+.mkt-kpi[data-k=ret] > b { color: var(--accent); }
+.mkt-panel { padding: 14px 16px 6px; }
+.mkt-lhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.mkt-lhead h3 { margin: 0; font-size: 1.05rem; }
+.mkt-banner { margin: 0 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); font-size: .86rem; display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; }
+.mkt-list { display: grid; font-variant-numeric: tabular-nums; font-size: .92rem; }
+.mkt-row { display: grid; grid-template-columns: var(--mkt-cols); align-items: center; column-gap: 14px; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+.mkt-row > div:not(.c-name) { text-align: right; white-space: nowrap; }
+.mkt-row small { display: block; color: var(--muted); font-size: .74rem; font-weight: 600; }
+.mkt-hdr { padding-top: 2px; padding-bottom: 7px; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.mkt-nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mkt-nm small { display: inline; font-weight: 500; }
+.mkt-label { font-weight: 600; overflow-wrap: anywhere; }
+.mkt-rk { flex: none; display: inline-grid; place-items: center; min-width: 21px; height: 21px; border-radius: 11px; font-size: .68rem; font-weight: 800; color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
+.mkt-bar { display: block; height: 6px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 7%, transparent); margin-top: 7px; overflow: hidden; max-width: 280px; }
+.mkt-bar i { display: block; height: 100%; border-radius: 6px; background: var(--accent); }
+.mkt-bar.repeat i { background: var(--clean); } .mkt-bar.referral i { background: var(--soon); }
+.mkt-meta { display: none; }
+.mkt-row .c-rev b { font-weight: 700; }
+.mkt-row .dash, .mkt-row.dash, .mkt-row div.dash { color: var(--muted); font-weight: 400; }
+.mkt-row .c-ret { font-weight: 700; }
+.mkt-row.sec { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.mkt-row.sec.repeat { background: color-mix(in srgb, var(--clean) 8%, var(--surface)); }
+.mkt-row.sec.referral { background: color-mix(in srgb, var(--soon) 8%, var(--surface)); }
+.mkt-row.sec .mkt-label { font-weight: 800; }
+.mkt-row.grp .c-name, .mkt-row.sub .c-name { padding-left: 18px; } .mkt-row.grp .mkt-label { font-weight: 700; }
+.mkt-row.sub2 .c-name { padding-left: 36px; } .mkt-row.sub2 .mkt-label { font-weight: 500; }
+.mkt-row.tot { border-bottom: 0; border-top: 2px solid var(--line); }
+.mkt-row.tot .mkt-label, .mkt-row.tot .c-rev b { font-weight: 800; }
+.mkt-row.mo { cursor: pointer; } .mkt-row.mo:hover, .mkt-row.mo:focus-visible { background: var(--accent-soft); outline: none; }
+.mkt-row.future { color: var(--muted); opacity: .55; }
+.mkt-spend { all: unset; cursor: pointer; border-radius: 7px; padding: 2px 7px; margin: -2px -7px; font-weight: 600; }
+.mkt-spend.add { color: var(--accent); font-size: .86rem; }
+.mkt-spend:hover, .mkt-spend:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.mkt-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mkt-how { flex-basis: 100%; font-size: .84rem; color: var(--muted); } .mkt-how summary { cursor: pointer; font-weight: 600; } .mkt-how p { margin: 6px 0 0; }
+@media (max-width: 760px) {
+  .mkt-main { gap: 10px; }
+  .mkt-ctl-row { justify-content: space-between; gap: 8px; }
+  .mkt-ctl-row .seg { flex: 1 1 auto; }
+  .mkt-step { flex: 1 1 auto; justify-content: space-between; }
+  .mkt-step strong { min-width: 0; }
+  .mkt-deps { flex: 1 1 100%; } .mkt-deps .seg { width: 100%; }
+  .mkt-sel { flex: 1 1 auto; }
+  .mkt-kpis, .mkt-kpis.two { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .mkt-kpi { padding: 10px 12px; }
+  .mkt-kpi > b { font-size: 1.4rem; }
+  .mkt-kpi > span { font-size: .74rem; }
+  .mkt-kpi .mkt-kvs { margin-top: 6px; padding-top: 5px; }
+  .mkt-panel { padding: 10px 10px 2px; }
+  .mkt-hdr { display: none; }
+  .mkt-list { font-size: .95rem; }
+  .mkt-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name rev" "name vs"; column-gap: 10px; padding: 10px 6px; align-items: start; }
+  .mkt-row .c-name { grid-area: name; } .mkt-row .c-rev { grid-area: rev; } .mkt-row .c-vs { grid-area: vs; }
+  .mkt-row .c-jobs, .mkt-row .c-pj, .mkt-row .c-sp, .mkt-row .c-ret, .mkt-row .c-cpj, .mkt-row .c-rev small { display: none; }
+  .mkt-row .c-rev b { font-size: 1.02rem; }
+  .mkt-row .c-vs { font-size: .78rem; display: flex; gap: 5px; justify-content: flex-end; align-items: baseline; }
+  .mkt-row .c-vs small { display: inline; font-size: .74rem; }
+  .mkt-meta { display: block; margin-top: 5px; font-size: .78rem; color: var(--muted); line-height: 1.35; }
+  .mkt-meta b { color: var(--ink); }
+  .mkt-meta-sp { display: block; margin-top: 1px; } .mkt-meta-sp .sep { display: none; }   /* spend and return: their own line */
+  .mkt-meta .mkt-spend { margin: -2px -4px; padding: 2px 4px; }
+  .mkt-bar { max-width: none; margin-top: 6px; }
+  .mkt-row.grp .c-name, .mkt-row.sub .c-name { padding-left: 12px; } .mkt-row.sub2 .c-name { padding-left: 24px; }
+  .mkt-rk { min-width: 19px; height: 19px; }
+}
 .mkt-splist, .mkt-leads { display: grid; gap: 8px; margin: 6px 0 4px; }
 .mkt-sp, .mkt-lead { display: grid; grid-template-columns: minmax(0, 1fr) 9em; gap: 10px; align-items: center; }
 .mkt-lead { grid-template-columns: minmax(0, 1fr) minmax(9em, 14em); }
@@ -819,16 +878,6 @@ td.zero .mkt-spend { color: var(--accent); font-weight: 600; }
 .mkt-impsum { margin-top: 8px; }
 dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
 @media (max-width: 760px) {
-  .mkt-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  #mktTable .pj, #mktMonthTable .pj, #mktTable .cpj, #mktMonthTable .cpj { display: none; }
-  #mktTable td small.mkt-cpj, #mktMonthTable td small.mkt-cpj { display: block; }
-  #mktTable, #mktMonthTable { font-size: .8rem; }
-  #mktTable th, #mktTable td, #mktMonthTable th, #mktMonthTable td { padding: 5px 4px; }
-  #mktTable tbody th, #mktMonthTable tbody th { min-width: 5.2em; max-width: 7.5em; font-size: .8rem; }
-  #mktTable tr.mkt-sub th { padding-left: 10px; }
-  #mktTable td .rev-was, #mktMonthTable td .rev-was { padding: 3px 4px 4px; font-size: .7rem; }
-  #mktTable td .rev-was .rev-ch, #mktMonthTable td .rev-was .rev-ch { display: block; }
-  #mktTable td .rev-was .rev-ytag, #mktMonthTable td .rev-was .rev-ytag { display: block; width: max-content; margin: 0 0 1px auto; padding: 0 3px; }
   .mkt-sp { grid-template-columns: minmax(0, 1fr) 7.5em; }
   .mkt-lead { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
@@ -10961,6 +11010,7 @@ function mktGuess(lead) {
   const l = String(lead || "").toLowerCase().trim();
   if (!l) return MKT_OTHER;
   if (/guarant|\blsa\b|local serv/.test(l)) return "Google Guaranteed";
+  if (/online ?book/.test(l)) return "Google";   // VODA's online booking is Google
   if (/google|\bgmb\b|\bgbp\b/.test(l)) return "Google";
   if (/thumb ?tack/.test(l)) return "Thumbtack";
   if (/^ai$|\bai\b|chat ?gpt|openai|gemini|perplexity|copilot/.test(l)) return "AI";
@@ -11148,6 +11198,11 @@ const mktRet = (cents, spend) => (spend > 0 ? `1 to ${(cents / spend).toFixed(1)
 const mktKey = (y, mi) => `${y}-${String(mi).padStart(2, "0")}`;
 
 /* ---- the screen ---- */
+// One list of sources: on a PC a grid (Source · Revenue · vs · Jobs · Per job · Spent · Return · Cost per job); on a
+// phone each source is two short lines (name and money, its bar, then jobs and spend). New clients first, with All
+// Google (Google and Google Guaranteed together) at the top of them when there are both; then Repeat and Referrals.
+const mktIsGoogle = n => /^google\b/i.test(n);
+const mktShortMoney = cents => revShort(cents);
 function renderMarketing() {
   const box = $("mktView");
   if (!box || view.tab !== "marketing" || !session) return;
@@ -11183,136 +11238,149 @@ function renderMarketing() {
   const upTo = soFar ? today : "";
   const back = m => `${Number(m.slice(0, 4)) - cmp}${m.slice(4)}`;
   const cmpUpTo = soFar ? revShift(today, cmp, "year") : "";
+  const lastDay = m => `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`;
+  const ranges = () => [[`${months[0]}-01`, upTo || lastDay(months[months.length - 1])]]
+    .concat(cmp ? [[`${back(months[0])}-01`, cmpUpTo || lastDay(back(months[months.length - 1]))]] : []);
   const step = n => { mktView.off = Math.min(0, off + n); renderMarketing(); };
   const title = secTitle("Marketing");
   const top = title ? h("div", { class: "lb-top" }, title) : null;
-  const yearsBack = Array.from({ length: REV_CMP_YEARS }, (_, i) => i + 1);
-  const cmpSel = h("label", { class: "rev-cmp" }, h("span", { text: "Compare" }),
-    h("select", { id: "mktCmp", "aria-label": "Compare with", onchange: e => { mktView.cmp = Number(e.target.value) || 0; mktSaveView(); renderMarketing(); } },
-      h("option", { value: "0", text: "Off" }), yearsBack.map(n => h("option", { value: String(n), text: `with ${y - n}` }))));
-  cmpSel.querySelector("select").value = String(cmp);
-  const ranges = () => [[`${months[0]}-01`, upTo || `${months[months.length - 1]}-${String(lbDaysIn(months[months.length - 1])).padStart(2, "0")}`]]
-    .concat(cmp ? [[`${back(months[0])}-01`, cmpUpTo || `${back(months[months.length - 1])}-${String(lbDaysIn(back(months[months.length - 1]))).padStart(2, "0")}`]] : []);
-  const readBtn = h("button", { class: "btn small", type: "button", id: "mktReadBtn", disabled: revSync.busy, title: "Read these days from Housecall Pro again",
-    onclick: () => { revSync.err = ""; revEnsure(ranges().slice(0, 1), true, true); } }, "Read again");
-  const bar = h("div", { class: "lb-bar rev-bar-top" },
-    lbSeg(Object.entries(MKT_PER), per, k => { mktView.per = k; mktView.off = 0; mktSaveView(); renderMarketing(); }, "Period"),
-    h("div", { class: "of-step" },
-      h("button", { class: "btn small", type: "button", id: "mktPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
-      h("strong", { id: "mktRangeLabel", text: label + (soFar ? " (so far)" : "") }),
-      h("button", { class: "btn small", type: "button", id: "mktNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
-    h("div", { class: "rev-tools" }, readBtn, cmpSel));
-  const deps = h("div", { class: "lb-bar mkt-deps" }, lbSeg(MKT_DEPS, dep, k => { mktView.dep = k; mktSaveView(); renderMarketing(); }, "Department"));
+  // the controls: the period, then the department and what to compare with
+  const cmpSel = h("select", { id: "mktCmp", class: "mkt-sel", "aria-label": "Compare with", onchange: e => { mktView.cmp = Number(e.target.value) || 0; mktSaveView(); renderMarketing(); } },
+    h("option", { value: "0", text: "No compare" }), Array.from({ length: REV_CMP_YEARS }, (_, i) => h("option", { value: String(i + 1), text: `vs ${y - i - 1}` })));
+  cmpSel.value = String(cmp);
+  const ctl = h("div", { class: "mkt-ctl" },
+    h("div", { class: "mkt-ctl-row" },
+      lbSeg(Object.entries(MKT_PER), per, k => { mktView.per = k; mktView.off = 0; mktSaveView(); renderMarketing(); }, "Period"),
+      h("div", { class: "mkt-step" },
+        h("button", { class: "btn small", type: "button", id: "mktPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        h("strong", { id: "mktRangeLabel", text: label + (soFar ? " (so far)" : "") }),
+        h("button", { class: "btn small", type: "button", id: "mktNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›"))),
+    h("div", { class: "mkt-ctl-row" },
+      h("div", { class: "mkt-deps" }, lbSeg(MKT_DEPS, dep, k => { mktView.dep = k; mktSaveView(); renderMarketing(); }, "Department")), cmpSel));
   const s = mktPeriod(months, upTo), c = cmp ? mktPeriod(months.map(back), cmpUpTo) : null;
-  if (!s || (cmp && !c)) { box.replaceChildren(...[top, bar, deps].filter(Boolean), h("p", { class: "loading", text: "Loading…" })); return; }
+  if (!s || (cmp && !c)) { box.replaceChildren(...[top, ctl].filter(Boolean), h("p", { class: "loading", text: "Loading…" })); return; }
   const cmpName = cmp ? String(y - cmp) : "", cmpShort = cmp ? `’${String(y - cmp).slice(2)}` : "";
-  const ytag = () => h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: cmpName }), h("span", { class: "t-short", text: cmpShort }));
-  const vs = (a, b) => { const ch = revChange(a, b); return h("em", { class: "rev-ch " + ch.cls, text: ch.text }); };
   const withSpend = dep === "all";
-  const fromText = x => (x.from.has("hcp") && x.from.has("hist") ? "Housecall Pro and your spreadsheets" : x.from.has("hist") ? "your spreadsheets (Clients Per Month, Summary Advertising)" : "Housecall Pro");
-  const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "mktStatus", role: "status" },
+  const chg = (a, b) => { const ch = revChange(a, b); return h("em", { class: "rev-ch " + ch.cls, text: ch.text }); };
+  const fromText = x => (x.from.has("hcp") && x.from.has("hist") ? "Housecall Pro and your spreadsheets" : x.from.has("hist") ? "your spreadsheets" : "Housecall Pro");
+  const status = h("p", { class: "mkt-status rev-status" + (revSync.busy ? " busy" : ""), id: "mktStatus", role: "status" },
     revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…`
       : !s.from.size ? (s.missing ? "Not read from Housecall Pro yet." : "Nothing in this period.")
         : `From ${fromText(s)}${s.from.has("hcp") && s.at ? ` · read ${revReadText(s.at)}` : ""}${s.missing && s.from.has("hcp") ? " · some days not read yet" : ""}`,
-    c && !revSync.busy ? h("span", { class: "rev-vs", text: ` · compared with ${per === "month" ? `${lbMonthLong(Number(months[0].slice(5)))} ${y - cmp}` : y - cmp}${soFar ? " (the same days)" : ""}` }) : null);
+    c && !revSync.busy ? h("span", { class: "rev-vs", text: ` · vs ${per === "month" ? `${lbMonthLong(Number(months[0].slice(5)))} ${y - cmp}` : y - cmp}${soFar ? " (same days)" : ""}` }) : null);
   const err = revSync.err ? h("p", { class: "dlg-err", id: "mktErr" }, revSync.err, " ",
     h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; renderMarketing(); } }, "Try again")) : null;
-  // the rows: new clients (the biggest first), then Repeat clients and Referrals
+  // the sources
   const names = new Set([...Object.keys(s.rows), ...Object.keys(withSpend ? s.spend : {}), ...(c ? Object.keys(c.rows) : []), ...(c && withSpend ? Object.keys(c.spend) : [])]);
   const line = (x, name) => { const v = mktVal(x.rows[name], dep); return { cents: v[0], jobs: v[1], spend: withSpend ? x.spend[name] || 0 : 0 }; };
   const sumOf = (x, list) => list.reduce((a, n) => { const l = line(x, n); return { cents: a.cents + l.cents, jobs: a.jobs + l.jobs, spend: a.spend + l.spend }; }, { cents: 0, jobs: 0, spend: 0 });
   const keep = n => { const a = line(s, n), b = c ? line(c, n) : null; return a.cents || a.jobs || a.spend || (b && (b.cents || b.jobs || b.spend)); };
-  const newRows = [...names].filter(n => mktGroup(n) === "new" && keep(n)).sort((a, b) => line(s, b).cents - line(s, a).cents || (MKT_ROWS.indexOf(a) + 1 || 99) - (MKT_ROWS.indexOf(b) + 1 || 99) || a.localeCompare(b));
-  const all = newRows.concat([MKT_REPEAT, MKT_REFERRAL]);
-  const T = sumOf(s, all), TC = c ? sumOf(c, all) : null;
-  const ranked = all.filter(n => line(s, n).cents > 0).sort((a, b) => line(s, b).cents - line(s, a).cents);
+  const byMoney = (a, b) => line(s, b).cents - line(s, a).cents || (MKT_ROWS.indexOf(a) + 1 || 99) - (MKT_ROWS.indexOf(b) + 1 || 99) || a.localeCompare(b);
+  const newRows = [...names].filter(n => mktGroup(n) === "new" && keep(n)).sort(byMoney);
+  const gRows = newRows.filter(mktIsGoogle), gBlock = gRows.length > 1;
+  const leaves = newRows.concat([MKT_REPEAT, MKT_REFERRAL]);
+  const T = sumOf(s, leaves), TC = c ? sumOf(c, leaves) : null, N = sumOf(s, newRows), NC = c ? sumOf(c, newRows) : null;
+  const ranked = leaves.filter(n => line(s, n).cents > 0).sort((a, b) => line(s, b).cents - line(s, a).cents);
   const rankOf = n => { const v = line(s, n).cents; return v > 0 ? ranked.findIndex(m => line(s, m).cents === v) + 1 : 0; };
-  // the totals: tiles on a PC, one thin row on a phone
-  const tile = (k, name, big, sub, was) => h("div", { class: "pay-kpi", "data-k": k }, h("small", { text: name }), h("b", { text: big }), sub ? h("span", { text: sub }) : null, was || null);
-  const ytagT = () => h("b", { class: "rev-ytag", text: cmpName });   // on a tile: the year only (a tile's spans are all shown)
-  const wasMoney = (a, b) => (TC ? h("span", { class: "rev-was" }, ytagT(), lbMoney(b / 100), " ", vs(a, b)) : null);
-  const tiles = h("div", { class: "pay-kpis rev-kpis mkt-kpis", id: "mktTiles", style: `--n:${withSpend ? 4 : 2}` },
-    tile("rev", "Revenue", lbMoney(T.cents / 100), `${revJobs(T.jobs)}${T.jobs ? ` · ${lbMoney(T.cents / 100 / T.jobs)} a job` : ""}`, wasMoney(T.cents, TC && TC.cents)),
-    tile("new", "New clients", lbMoney(sumOf(s, newRows).cents / 100), `${revJobs(sumOf(s, newRows).jobs)} · ${revPct(sumOf(s, newRows).cents, T.cents)} of all`, TC ? wasMoney(sumOf(s, newRows).cents, sumOf(c, newRows).cents) : null),
-    withSpend ? [
-      tile("spend", "Ad spend", lbMoney(T.spend / 100), T.spend ? `${lbMoney(T.jobs ? T.spend / 100 / T.jobs : 0)} a job` : "Not typed yet", wasMoney(T.spend, TC && TC.spend)),
-      tile("ret", "Return", mktRet(T.cents, T.spend), T.spend ? `every $1 brought ${lbMoney(T.cents / T.spend)}` : "", TC && TC.spend ? h("span", { class: "rev-was" }, ytagT(), mktRet(TC.cents, TC.spend)) : null),
-      tile("cpj", "Cost per new client", sumOf(s, newRows).jobs && sumOf(s, newRows).spend ? lbMoney(sumOf(s, newRows).spend / 100 / sumOf(s, newRows).jobs) : "–", "new clients' spend ÷ jobs",
-        TC && sumOf(c, newRows).jobs && sumOf(c, newRows).spend ? h("span", { class: "rev-was" }, ytagT(), lbMoney(sumOf(c, newRows).spend / 100 / sumOf(c, newRows).jobs)) : null)] : []);
-  const strip = h("div", { class: "rev-strip mkt-strip", id: "mktStrip" },
-    [["rev", "Revenue", revShort(T.cents), TC ? vs(T.cents, TC.cents) : revJobs(T.jobs)]].concat(withSpend ? [
-      ["spend", "Ad spend", revShort(T.spend), TC ? vs(T.spend, TC.spend) : T.jobs && T.spend ? `${lbMoney(T.spend / 100 / T.jobs)}/job` : ""],
-      ["ret", "Return", T.spend ? `1:${(T.cents / T.spend).toFixed(1)}` : "–", TC && TC.spend ? `${cmpShort} 1:${(TC.cents / TC.spend).toFixed(1)}` : ""]] : [
-      ["new", "New clients", revShort(sumOf(s, newRows).cents), revPct(sumOf(s, newRows).cents, T.cents)]]).map(([k, t, b, sub]) =>
-      h("div", { "data-k": k }, h("small", { text: t }), h("b", { text: b }), h("span", null, sub || ""))));
-  // the table
-  const canSpend = per === "month";
-  const head = h("tr", null, h("th", { text: "Source" }), h("th", { text: "Revenue" }), h("th", { text: "Jobs" }), h("th", { class: "pj", text: "Per job" }),
-    withSpend ? [h("th", { class: "sp", text: "Spent" }), h("th", { text: "Return" }), h("th", { class: "cpj", text: "Cost per job" })] : []);
-  const cells = (a, b, opts) => {
-    const o = opts || {};
-    return [
-      h("td", { class: "rv" + (a.cents || a.jobs ? "" : " zero"), title: lbCash(a.cents / 100) }, revCash(a.cents),
-        o.share !== false ? h("small", { text: `${revPct(a.cents, T.cents)}${o.rank ? ` · #${o.rank}` : ""}` }) : null,
-        b && (a.cents || b.cents) ? h("div", { class: "rev-was" }, ytag(), revCash(b.cents), " ", vs(a.cents, b.cents)) : null),
-      h("td", { class: a.jobs ? "" : "zero" }, fmt(a.jobs), b && (a.jobs || b.jobs) ? h("small", { class: "mkt-was" }, `${cmpShort} ${fmt(b.jobs)}`) : null),
-      h("td", { class: "pj", text: a.jobs ? lbMoney(a.cents / 100 / a.jobs) : "–" }),
+  const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
+  const canSpend = per === "month" && withSpend;
+  const ret = (cents, spend, short) => (spend > 0 ? `1${short ? ":" : " to "}${(cents / spend).toFixed(1)}` : "–");
+  const perJob = (cents, jobs) => (jobs ? lbMoney(cents / 100 / jobs) : "–");
+  // a line of the list: its name (and on a phone its numbers in short), then the columns
+  const row = (cls, name, a, b, o) => {
+    o = o || {};
+    const share = o.share === false ? null : `${pct(a.cents, o.of || T.cents)}%`;
+    // its spend, tappable in a month (one button in the Spent column, one in a phone's line)
+    const spendBtn = () => (o.edit ? h("button", { class: "mkt-spend" + (a.spend ? "" : " add"), type: "button", "data-src": o.edit, title: `Type ${o.edit}'s ad spend`, onclick: e => { e.stopPropagation(); mktSpendDlg(months[0], o.edit); } },
+      a.spend ? (o.short ? `spent ${mktShortMoney(a.spend)}` : mktShortMoney(a.spend)) : "add spend") : null);
+    const meta = [share, `${fmt(a.jobs)} job${a.jobs === 1 ? "" : "s"}`, a.jobs ? `${perJob(a.cents, a.jobs)} a job` : ""].filter(Boolean).join(" · ");
+    return h("div", Object.assign({ class: "mkt-row " + cls, role: "row" }, o.src ? { "data-src": o.src } : {}, o.attrs || {}),
+      h("div", { class: "c-name", role: "rowheader" },
+        h("div", { class: "mkt-nm" }, o.rank ? h("span", { class: "mkt-rk", text: String(o.rank) }) : null, h("span", { class: "mkt-label", text: name }), o.note ? h("small", { text: o.note }) : null),
+        o.bar !== undefined ? h("span", { class: "mkt-bar " + (o.tone || ""), "aria-hidden": "true" }, h("i", { style: `width:${Math.max(a.cents > 0 ? 1.5 : 0, Math.min(100, o.bar))}%` })) : null,
+        h("div", { class: "mkt-meta" }, h("span", { text: meta }),
+          withSpend && (a.spend || o.edit) ? h("span", { class: "mkt-meta-sp" }, h("span", { class: "sep", text: " · " }), o.edit ? (o.short = true, spendBtn()) : `spent ${mktShortMoney(a.spend)}`, a.spend ? h("b", { text: ` ${ret(a.cents, a.spend, true)}` }) : null) : null)),
+      h("div", { class: "c-rev", title: lbCash(a.cents / 100) }, h("b", null, revCash(a.cents)), share ? h("small", { text: share }) : null),
+      c ? h("div", { class: "c-vs" }, b && (a.cents || b.cents) ? [chg(a.cents, b.cents), h("small", { text: `${cmpShort} ${mktShortMoney(b.cents)}` })] : h("span", { class: "dash", text: "–" })) : null,
+      h("div", { class: "c-jobs" }, fmt(a.jobs), c && b ? h("small", { text: `${cmpShort} ${fmt(b.jobs)}` }) : null),
+      h("div", { class: "c-pj", text: perJob(a.cents, a.jobs) }),
       withSpend ? [
-        h("td", { class: "sp" + (a.spend ? "" : " zero") + (o.edit ? " mkt-edit" : "") },
-          o.edit ? h("button", { class: "mkt-spend", type: "button", "data-src": o.edit, title: `Type ${o.edit}'s ad spend`, onclick: () => mktSpendDlg(months[0], o.edit) }, a.spend ? revCash(a.spend) : "add") : a.spend ? revCash(a.spend) : "–",
-          a.spend && a.jobs ? h("small", { class: "mkt-cpj", text: `${lbMoney(a.spend / 100 / a.jobs)}/job` }) : null,   // a phone: Cost per job here
-          b && (a.spend || b.spend) ? h("div", { class: "rev-was" }, ytag(), revCash(b.spend)) : null),
-        h("td", { class: "ret" + (a.spend ? "" : " zero") }, a.spend ? [h("span", { class: "t-long", text: mktRet(a.cents, a.spend) }), h("span", { class: "t-short", text: `1:${(a.cents / a.spend).toFixed(1)}` })] : "–"),
-        h("td", { class: "cpj" + (a.spend && a.jobs ? "" : " zero"), text: a.spend && a.jobs ? lbMoney(a.spend / 100 / a.jobs) : "–" })] : []];
+        h("div", { class: "c-sp" }, (o.short = false, spendBtn()) || (a.spend ? revCash(a.spend) : h("span", { class: "dash", text: "–" })), c && b && b.spend ? h("small", { text: `${cmpShort} ${mktShortMoney(b.spend)}` }) : null),
+        h("div", { class: "c-ret" + (a.spend ? "" : " dash"), text: ret(a.cents, a.spend) }),
+        h("div", { class: "c-cpj" + (a.spend && a.jobs ? "" : " dash"), text: a.spend && a.jobs ? lbMoney(a.spend / 100 / a.jobs) : "–" })] : []);
   };
-  const row = (name, cls) => h("tr", { class: cls || null, "data-src": name },
-    h("th", null, name, name === MKT_OTHER && line(s, name).jobs ? h("small", { text: "no Lead source" }) : null),
-    cells(line(s, name), c ? line(c, name) : null, { rank: rankOf(name), edit: canSpend && withSpend ? name : "" }));
-  const grp = (name, list, cls) => h("tr", { class: "mkt-grp " + cls }, h("th", { text: name }), cells(sumOf(s, list), c ? sumOf(c, list) : null, {}));
-  const body = [grp("New clients", newRows, "new"), newRows.map(n => row(n, "mkt-sub")), row(MKT_REPEAT, "mkt-grp repeat"), row(MKT_REFERRAL, "mkt-grp referral")];
-  const table = h("div", { class: "panel" },
-    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "mktTable" },
-      h("thead", null, head), h("tbody", null, body),
-      h("tfoot", null, h("tr", { class: "rev-sum" }, h("th", { text: "Total" }), cells(T, TC, { share: false }))))));
-  // a year: month by month
+  const cols = ["minmax(150px, 2.3fr)", "minmax(92px, 1.15fr)", c ? "minmax(76px, .9fr)" : "", "minmax(54px, .6fr)", "minmax(70px, .8fr)",
+    withSpend ? "minmax(80px, .9fr) minmax(70px, .75fr) minmax(70px, .8fr)" : ""].filter(Boolean).join(" ");
+  const headRow = (first) => h("div", { class: "mkt-row mkt-hdr", role: "row", "aria-hidden": "true" },
+    h("div", { class: "c-name", text: first }), h("div", { class: "c-rev", text: "Revenue" }), c ? h("div", { class: "c-vs", text: `vs ${cmpName}` }) : null,
+    h("div", { class: "c-jobs", text: "Jobs" }), h("div", { class: "c-pj", text: "Per job" }),
+    withSpend ? [h("div", { class: "c-sp", text: "Spent" }), h("div", { class: "c-ret", text: "Return" }), h("div", { class: "c-cpj", text: "Cost / job" })] : []);
+  const leaf = (n, cls, tone) => row(cls, n, line(s, n), c ? line(c, n) : null, { src: n, rank: rankOf(n), bar: pct(line(s, n).cents, T.cents), tone, edit: canSpend ? n : "" });
+  const listRows = [headRow("Source"),
+    row("sec new", "New clients", N, NC, { src: "New clients", bar: pct(N.cents, T.cents), tone: "new" })];
+  const others = newRows.filter(n => !(gBlock && mktIsGoogle(n)));
+  const blocks = (gBlock ? [{ g: true, cents: sumOf(s, gRows).cents }] : []).concat(others.map(n => ({ n, cents: line(s, n).cents })))
+    .sort((a, b) => b.cents - a.cents);
+  for (const bk of blocks) {
+    if (bk.g) {
+      const G = sumOf(s, gRows), GC = c ? sumOf(c, gRows) : null;
+      listRows.push(row("grp", "All Google", G, GC, { src: "All Google", bar: pct(G.cents, T.cents), tone: "new" }));
+      gRows.forEach(n => listRows.push(leaf(n, "sub sub2", "new")));
+    } else listRows.push(leaf(bk.n, "sub", "new"));
+  }
+  listRows.push(leaf(MKT_REPEAT, "sec repeat", "repeat"), leaf(MKT_REFERRAL, "sec referral", "referral"),
+    row("tot", "Total", T, TC, { src: "Total", share: false }));
+  const list = h("div", { class: "mkt-list" + (withSpend ? "" : " nospend") + (c ? " cmp" : ""), id: "mktList", role: "table", style: `--mkt-cols:${cols}` }, listRows);
+  // the totals
+  const kpi = (k, name, big, sub, was) => h("div", { class: "mkt-kpi", "data-k": k }, h("small", { text: name }), h("b", null, big), sub ? h("span", { text: sub }) : null,
+    was ? h("span", { class: "mkt-kvs" }, was) : null);
+  const NJ = N.jobs && N.spend ? N.spend / N.jobs : 0, NCJ = NC && NC.jobs && NC.spend ? NC.spend / NC.jobs : 0;
+  const kpis = h("div", { class: "mkt-kpis" + (withSpend ? "" : " two"), id: "mktTiles" },
+    kpi("rev", "Revenue", revCash(T.cents), `${revJobs(T.jobs)} · ${perJob(T.cents, T.jobs)} a job`, TC ? [chg(T.cents, TC.cents), ` vs ${cmpName}`] : null),
+    withSpend ? [
+      kpi("spend", "Ad spend", revCash(T.spend), T.spend ? `${perJob(T.spend, T.jobs)} a job` : canSpend ? "Not typed yet" : "", TC ? [chg(T.spend, TC.spend), ` vs ${cmpName}`] : null),
+      kpi("ret", "Return", [h("span", { class: "t-long", text: ret(T.cents, T.spend) }), h("span", { class: "t-short", text: ret(T.cents, T.spend, true) })], T.spend ? `$1 brought ${lbMoney(T.cents / T.spend)}` : "", TC && TC.spend ? `${cmpName}: ${ret(TC.cents, TC.spend)}` : null),
+      kpi("cpj", "Cost per new client", NJ ? lbMoney(NJ / 100) : "–", `${revJobs(N.jobs)} from new clients`, NCJ ? `${cmpName}: ${lbMoney(NCJ / 100)}` : null)]
+      : kpi("new", "New clients", revCash(N.cents), `${pct(N.cents, T.cents)}% of revenue · ${revJobs(N.jobs)}`, NC ? [chg(N.cents, NC.cents), ` vs ${cmpName}`] : null));
+  const listHead = h("div", { class: "mkt-lhead" }, h("h3", { text: "Where clients came from" }),
+    canSpend ? h("button", { class: "btn small primary", type: "button", id: "mktSpendBtn", onclick: () => mktSpendDlg(months[0]) }, `Ad spend · ${MONTHS[Number(months[0].slice(5)) - 1]}`) : null);
+  const own = newRows.filter(n => !MKT_ROWS.includes(n) && line(s, n).jobs && !Object.values(mktData.map || {}).includes(n) && s.from.has("hcp"));
+  const banners = [];
+  if (own.length) banners.push(h("p", { class: "mkt-banner", id: "mktOwn" }, `From Housecall Pro, not matched yet: ${own.join(", ")}. `,
+    h("button", { class: "btn small", type: "button", onclick: () => mktLeadsDlg() }, "Match")));
+  if (!withSpend) banners.push(h("p", { class: "mkt-banner", text: "Ad spend isn't split by department: Spent and Return show under All." }));
+  if (dep !== "all" && (s.from.has("hist") || (c && c.from.has("hist")))) banners.push(h("p", { class: "mkt-banner", text: "Months from your spreadsheets split only Repeat, Referral and Repairs by department." }));
+  if (!(mktData.hist || []).length && isAdmin()) banners.push(h("p", { class: "mkt-banner", id: "mktNoHist" }, "Years before Housecall Pro: import Clients Per Month and Summary Advertising once. ",
+    h("button", { class: "btn small", type: "button", onclick: () => mktImportDlg() }, "Import")));
+  const panel = h("section", { class: "panel mkt-panel" }, listHead, ...banners, list);
+  // a year: month by month, each with a bar against the biggest month
   let byMonth = null;
   if (per === "year") {
     const lines = Array.from({ length: 12 }, (_, i) => mktKey(y, i + 1));
-    const mRow = m => {
-      const fut = m > today.slice(0, 7), x = fut ? null : mktPeriod([m], m === today.slice(0, 7) ? today : ""), cx = cmp && !fut ? mktPeriod([back(m)], m === today.slice(0, 7) ? cmpUpTo : "") : null;
-      const tot = x ? { cents: 0, jobs: 0, spend: 0 } : null;
-      if (x) { for (const n of new Set([...Object.keys(x.rows), ...Object.keys(x.spend)])) { const l = line(x, n); tot.cents += l.cents; tot.jobs += l.jobs; tot.spend += l.spend; } }
-      let b = null;
-      if (cx) { b = { cents: 0, jobs: 0, spend: 0 }; for (const n of new Set([...Object.keys(cx.rows), ...Object.keys(cx.spend)])) { const l = line(cx, n); b.cents += l.cents; b.jobs += l.jobs; b.spend += l.spend; } }
-      const mi = Number(m.slice(5));
-      return h("tr", { class: "rev-mo" + (fut ? " future" : ""), "data-month": m, tabindex: fut ? null : "0", title: fut ? null : "Show this month",
-        onclick: fut ? null : () => { mktView.per = "month"; mktView.off = (Number(m.slice(0, 4)) * 12 + mi - 1) - (ty * 12 + now.getMonth()); renderMarketing(); } },
-        h("th", null, h("span", { class: "t-long", text: lbMonthLong(mi) }), h("span", { class: "t-short", text: MONTHS[mi - 1] }),
-          x && x.from.has("hist") ? h("small", { text: "spreadsheet" }) : m === today.slice(0, 7) ? h("small", { text: "so far" }) : null),
-        tot && (tot.cents || tot.jobs || tot.spend) ? cells(tot, b, { share: false }) : h("td", { colspan: withSpend ? "6" : "3", class: "zero mkt-none", text: fut ? "" : "–" }));
-    };
-    byMonth = h("div", { class: "panel", id: "mktMonths" }, h("h3", { class: "mkt-h3", text: `${y} month by month` }),
-      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "mktMonthTable" },
-        h("thead", null, h("tr", null, h("th", { text: "Month" }), h("th", { text: "Revenue" }), h("th", { text: "Jobs" }), h("th", { class: "pj", text: "Per job" }),
-          withSpend ? [h("th", { class: "sp", text: "Spent" }), h("th", { text: "Return" }), h("th", { class: "cpj", text: "Cost per job" })] : [])),
-        h("tbody", null, lines.map(mRow)))));
+    const tot = x => { const t = { cents: 0, jobs: 0, spend: 0 }; if (x) for (const n of new Set([...Object.keys(x.rows), ...Object.keys(x.spend)])) { const l = line(x, n); t.cents += l.cents; t.jobs += l.jobs; t.spend += l.spend; } return t; };
+    const data = lines.map(m => { const fut = m > today.slice(0, 7), cur = m === today.slice(0, 7);
+      const x = fut ? null : mktPeriod([m], cur ? today : ""), cx = cmp && !fut ? mktPeriod([back(m)], cur ? cmpUpTo : "") : null;
+      return { m, fut, cur, x, a: tot(x), b: cx ? tot(cx) : null }; });
+    const max = Math.max(1, ...data.map(d => d.a.cents));
+    const mRows = data.map(d => {
+      const mi = Number(d.m.slice(5));
+      const open = () => { mktView.per = "month"; mktView.off = (Number(d.m.slice(0, 4)) * 12 + mi - 1) - (ty * 12 + now.getMonth()); renderMarketing(); };
+      if (d.fut) return h("div", { class: "mkt-row future", role: "row", "data-month": d.m }, h("div", { class: "c-name" }, h("div", { class: "mkt-nm" }, h("span", { class: "mkt-label", text: lbMonthLong(mi) }))));
+      return row("mo", lbMonthLong(mi), d.a, d.b, { share: false, bar: d.a.cents / max * 100, tone: "new", note: d.x && d.x.from.has("hist") ? "spreadsheet" : d.cur ? "so far" : "",
+        attrs: { "data-month": d.m, tabindex: "0", title: "Show this month", onclick: open, onkeydown: e => { if (e.key === "Enter") open(); } } });
+    });
+    byMonth = h("section", { class: "panel mkt-panel", id: "mktMonths" }, h("div", { class: "mkt-lhead" }, h("h3", { text: `${y} month by month` })),
+      h("div", { class: "mkt-list" + (withSpend ? "" : " nospend") + (c ? " cmp" : ""), id: "mktMonthList", role: "table", style: `--mkt-cols:${cols}` }, headRow("Month"), mRows));
   }
-  // what to do next, and how it's worked out
-  const tools = h("div", { class: "mkt-acts" },
-    canSpend ? h("button", { class: "btn small", type: "button", id: "mktSpendBtn", onclick: () => mktSpendDlg(months[0]) }, `Ad spend for ${lbMonthLong(Number(months[0].slice(5)))}`) : null,
+  // underneath: the rest of what can be done, and how it's worked out
+  const foot = h("div", { class: "mkt-foot" },
     h("button", { class: "btn small", type: "button", id: "mktLeadsBtn", onclick: () => mktLeadsDlg() }, "Lead sources"),
-    isAdmin() ? h("button", { class: "btn small", type: "button", id: "mktImportBtn", onclick: () => mktImportDlg() }, (mktData.hist || []).length ? "Import the spreadsheets again" : "Import your spreadsheets") : null);
-  const notes = [];
-  const own = newRows.filter(n => !MKT_ROWS.includes(n) && line(s, n).jobs && !Object.values(mktData.map || {}).includes(n) && s.from.has("hcp"));
-  if (own.length) notes.push(h("p", { class: "hint", id: "mktOwn" }, `Shown under their own name, from Housecall Pro's Lead source: ${own.join(", ")}. `,
-    h("button", { class: "btn small", type: "button", onclick: () => mktLeadsDlg() }, "Match them")));
-  if (!withSpend) notes.push(h("p", { class: "hint", text: "Ad spend isn't split by department, so Spent and Return show under All." }));
-  if (dep !== "all" && (s.from.has("hist") || (c && c.from.has("hist")))) notes.push(h("p", { class: "hint", text: "Months from your spreadsheets split only Repeat and Referral jobs (and Repairs) by department; the rest show under All." }));
-  if ((s.cut || (c && c.cut)) && c) notes.push(h("p", { class: "hint", text: "A month from your spreadsheets counts whole (they have no days)." }));
-  if (!(mktData.hist || []).length && isAdmin()) notes.push(h("p", { class: "hint", id: "mktNoHist" }, "Years before Housecall Pro: import Clients Per Month and Summary Advertising once. ",
-    h("button", { class: "btn small", type: "button", onclick: () => mktImportDlg() }, "Import")));
-  notes.push(h("p", { class: "hint", text: "From Housecall Pro: Repeat clients and Referrals by the Job type (… - REPEAT, … - REFERRAL); every other job by its Lead source. Revenue is what was charged, on each visit's scheduled day; a job counts once. Return: revenue ÷ ad spend. Ad spend is typed here, a month at a time." }));
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, deps, status, err, tiles, strip, tools, table, byMonth, ...notes].filter(Boolean)));
+    isAdmin() ? h("button", { class: "btn small", type: "button", id: "mktImportBtn", onclick: () => mktImportDlg() }, (mktData.hist || []).length ? "Import spreadsheets again" : "Import spreadsheets") : null,
+    h("button", { class: "btn small", type: "button", id: "mktReadBtn", disabled: revSync.busy, title: "Read these days from Housecall Pro again",
+      onclick: () => { revSync.err = ""; revEnsure(ranges().slice(0, 1), true, true); } }, "Read again"),
+    h("details", { class: "mkt-how" }, h("summary", { text: "How it's worked out" }),
+      h("p", { text: "From Housecall Pro: Repeat clients and Referrals by the Job type (… - REPEAT, … - REFERRAL); every other job by its Lead source (Lead sources matches them to rows). Revenue is what was charged, on each visit's scheduled day; a job counts once. Return: revenue ÷ ad spend (1 to 10 means every $1 brought $10). Ad spend is typed here, a month at a time. Months before Housecall Pro come from Clients Per Month and Summary Advertising." })));
+  box.replaceChildren(h("div", { class: "rev-main mkt-main" }, ...[top, ctl, status, err, kpis, panel, byMonth, foot].filter(Boolean)));
   if (!revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false, true), 0);
 }
 
