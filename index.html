@@ -786,6 +786,47 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
   .rev-aside { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
 }
+/* Operations: Accounts receivable (a tile on top of the panel on the right; a bar under the totals on a smaller screen) */
+.rev-ar { cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px; display: grid; gap: 4px; }
+.rev-ar:hover, .rev-ar:focus-visible { border-color: color-mix(in srgb, var(--soon) 60%, var(--line)); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--soon) 15%, transparent); }
+.rev-ar > small { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--soon) 70%, var(--ink)); }
+.rev-ar > b { font-family: var(--font-display); font-size: clamp(1.5rem, 2.2vw, 2rem); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rev-ar .rev-ar-n { color: var(--muted); font-size: .82rem; }
+.rev-ar-age { display: flex; height: 8px; border-radius: 6px; overflow: hidden; background: var(--line); margin: 6px 0 2px; }
+.rev-ar-age i, .rev-ar-ages i { display: block; height: 100%; }
+.rev-ar-age .a30, .rev-ar-ages .a30 { background: var(--ok); } .rev-ar-age .a60, .rev-ar-ages .a60 { background: color-mix(in srgb, var(--soon) 55%, #f5c542); }
+.rev-ar-age .a90, .rev-ar-ages .a90 { background: var(--soon); } .rev-ar-age .a91, .rev-ar-ages .a91 { background: var(--due); }
+.rev-ar-ages { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: .76rem; color: var(--muted); }
+.rev-ar-ages span { display: flex; align-items: center; gap: 5px; white-space: nowrap; } .rev-ar-ages i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.rev-ar-ages b { color: var(--ink); margin-left: auto; font-variant-numeric: tabular-nums; }
+.rev-ar-deps { display: grid; margin-top: 8px; border-top: 1px solid var(--line); }
+.rev-ar-deps button { all: unset; cursor: pointer; display: grid; grid-template-columns: auto 1fr auto; column-gap: 6px; align-items: baseline; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: .86rem; font-weight: 600; }
+.rev-ar-deps button:last-child { border-bottom: 0; }
+.rev-ar-deps button:hover, .rev-ar-deps button:focus-visible { background: var(--accent-soft); }
+.rev-ar-deps button b { font-variant-numeric: tabular-nums; }
+.rev-ar-deps button em { grid-column: 2 / 4; font-style: normal; font-weight: 500; font-size: .74rem; color: var(--muted); }
+.rev-ar-bar { all: unset; box-sizing: border-box; cursor: pointer; display: none; align-items: center; gap: 10px; width: 100%; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--soon) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--soon) 35%, var(--line)); }
+.rev-ar-bar .l { display: grid; } .rev-ar-bar small { font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--soon) 70%, var(--ink)); }
+.rev-ar-bar b { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rev-ar-bar .r { margin-left: auto; text-align: right; font-size: .8rem; color: var(--muted); } .rev-ar-bar .go { font-size: 1.4rem; color: var(--muted); }
+@media (max-width: 1399px) { .rev-ar { display: none; } .rev-ar-bar { display: flex; } }
+.rv-unpaid-body { display: grid; gap: 10px; }
+.rv-seg { flex-wrap: wrap; width: fit-content; max-width: 100%; }
+.rv-seg .seg-btn em { font-style: normal; font-weight: 600; opacity: .8; }
+#rvUnpaidTable td.rv-owes { font-weight: 700; color: color-mix(in srgb, var(--soon) 72%, var(--ink)); }
+#rvUnpaidTable td.rv-age.mid { color: var(--soon); font-weight: 700; } #rvUnpaidTable td.rv-age.old { color: var(--due); font-weight: 700; }
+#rvUnpaidTable tbody th { font-weight: 600; } #rvUnpaidTable .rv-sm { display: none; }
+#rvUnpaidTable th.rv-proj { text-align: left; }
+#rvUnpaidTable td.rv-proj { text-align: left; white-space: normal; min-width: 10em; max-width: 18em; color: var(--muted); }
+.rv-seg .seg-btn .rev-dot { margin-right: 4px; }
+dialog#dlg:has(.rv-unpaid) { width: min(1040px, calc(100% - 24px)); }
+@media (max-width: 760px) {
+  #rvUnpaidTable .rv-inv, #rvUnpaidTable .rv-ch, #rvUnpaidTable .rv-pd, #rvUnpaidTable .rv-dep, #rvUnpaidTable .rv-proj { display: none; }
+  #rvUnpaidTable .rv-sm { display: block; color: var(--muted); font-size: .72rem; font-weight: 500; }
+  #rvUnpaidTable tbody th { white-space: normal; }
+  #rvUnpaidTable th, #rvUnpaidTable td { padding: 6px 4px; }
+  .rv-seg .seg-btn { font-size: .78rem; padding: 6px 8px; }
+}
 /* Marketing: the period's totals, then where clients came from (new clients, Repeat, Referrals) */
 .mkt-main { gap: 14px; }
 .mkt-ctl { display: grid; gap: 8px; }
@@ -5601,7 +5642,7 @@ function openDialog(...content) {
   const a = document.activeElement;
   if (touch && a && dlg.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) form.focus({ preventScroll: true });
 }
-function closeDialog() { if (dlg.open) dlg.close(); dlg.replaceChildren(); dlgDirty = false; }
+function closeDialog() { if (dlg.open) dlg.close(); dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; }
 // a tap that starts and ends on the dark area around the window (not a drag that began inside it)
 dlg.addEventListener("pointerdown", e => { dlgDownOut = e.target === dlg; });
 dlg.addEventListener("click", e => { if (e.target === dlg && dlgDownOut) dismissDialog(); dlgDownOut = false; });
@@ -9865,6 +9906,7 @@ function openLbHistory() {
 // row a day on the Revenue tab. The app shows that tab, and asks for days to be read again when they're missing or may
 // have changed: the last two weeks every 10 minutes, the last two months once a day, older days once.
 const REV_API = 39;                                     // the Google script version with the Revenue tab
+const UNPAID_API = 45;                                  // ... and with each day's unpaid visits (who still owes)
 const K_REV = "voda.rev1", K_REV_VIEW = "voda.revView1";
 let revData = store.get(K_REV);                         // this year's: { year, days: { "2026-11-02": [...] }, years, connected }
 let revOther = {};                                      // other years', loaded when a period reaches into them
@@ -9902,7 +9944,10 @@ async function revLoad(y) {
   }
 }
 /** Whichever screen shows Housecall Pro's days. */
-function revRedraw() { if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing(); }
+function revRedraw() {
+  if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing();
+  if (revUnpaidRedraw && dlg.open) revUnpaidRedraw();
+}
 /** Every day from..to touches (null while a year is still loading). */
 function revDaysFor(from, to) {
   const out = {};
@@ -9921,6 +9966,7 @@ function revMerge(days) {
  *  (invoices still change) after 20 hours; older days are settled once read 2 months after the day. */
 function revStale(day, v, now, today) {
   if (!v || !v[9]) return true;
+  if (Array.isArray(v[12]) && v[12].length && now - v[9] > 20 * 3600e3) return true;   // someone still owes: payments come in
   const age = Math.round((lbDate(today) - lbDate(day)) / 864e5);
   if (age <= 13) return now - v[9] > 10 * 60e3;
   if (v[9] < lbDate(lbAddDays(day, 62)).getTime()) return now - v[9] > 20 * 3600e3;
@@ -9942,14 +9988,16 @@ async function revEnsure(ranges, force, src) {
   if (revSync.busy || (!force && revSync.err) || !session || !(canSee("revenue") || canSee("marketing"))) return;
   if (!navigator.onLine) return;
   const now = Date.now(), months = {};
-  for (let [from, to] of ranges) {
+  // a day read before the script kept sources and unpaid visits is read again when they're needed (src, or a range's third item)
+  const lacks = v => !v[11] || (apiLevel >= UNPAID_API && !Array.isArray(v[12]));
+  for (let [from, to, full] of ranges) {
     if (to > today) to = today;
     for (let d = from; d <= to; d = lbAddDays(d, 1)) {
       const doc = revDoc(Number(d.slice(0, 4)));
       if (!doc) return;
       const m = d.slice(0, 7);
       if (!force && revAsked[d] && performance.now() - revAsked[d] < 10 * 60e3) continue;
-      if (force || revStale(d, doc.days[d], now, today) || (src && !doc.days[d][11])) { if (!months[m]) months[m] = { from: d, to: d }; if (d < months[m].from) months[m].from = d; if (d > months[m].to) months[m].to = d; }
+      if (force || revStale(d, doc.days[d], now, today) || ((src || full) && lacks(doc.days[d]))) { if (!months[m]) months[m] = { from: d, to: d }; if (d < months[m].from) months[m].from = d; if (d > months[m].to) months[m].to = d; }
     }
   }
   const chunks = Object.keys(months).sort().reverse().map(k => months[k]);
@@ -10092,7 +10140,8 @@ function renderRevenue() {
     renderRevenue();
   };
   const ty = revThisYear(), yFrom = `${ty}-01-01`, ay = cmp ? ty - cmp : 0, ayFrom = `${ay}-01-01`, ayTo = cmp ? revShift(today, cmp, "year") : "";
-  const ranges = () => [[r.from, to]].concat(cmp ? [[cf, ct]] : [], [[yFrom, today]], cmp ? [[ayFrom, ayTo]] : []);
+  const arFrom = lbAddDays(today, -364);
+  const ranges = () => [[r.from, to, true]].concat(cmp ? [[cf, ct]] : [], [[yFrom, today]], cmp ? [[ayFrom, ayTo]] : [], apiLevel >= UNPAID_API ? [[arFrom, today, true]] : []);
   const title = secTitle("Operations");
   const top = title ? h("div", { class: "lb-top" }, title) : null;
   const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
@@ -10190,12 +10239,31 @@ function renderRevenue() {
   // beside the table (under it on a smaller screen): each department's average job, this year so far and the year
   // picked in Compare (the same days)
   const yDays = revDaysFor(yFrom, today), aDays = cmp ? revDaysFor(ayFrom, ayTo) : {};
-  let aside = null;
+  // Accounts receivable: everything still owed from the last 12 months
+  const ar = apiLevel && apiLevel < UNPAID_API ? null : revArSum(revDaysFor(arFrom, today), arFrom, today);
+  const arOpen = dep => revArDlg(dep || "all");
+  let arCard = null, arBar = null;
+  if (ar) {
+    const busy = ar.missing > 0;
+    const ageBar = h("div", { class: "rev-ar-age", "aria-hidden": "true" }, REV_AGES.slice(1).map(([k]) => h("i", { class: "a" + k, style: `width:${ar.t[0] ? ar.age[k][0] / ar.t[0] * 100 : 0}%` })));
+    arCard = h("div", { class: "rev-ar", id: "revAr", role: "button", tabindex: "0", title: "Who still owes", onclick: () => arOpen("all"), onkeydown: e => { if (e.key === "Enter") arOpen("all"); } },
+      h("small", { text: "Accounts receivable" }),
+      h("b", { text: busy && !ar.t[1] ? "…" : lbMoney(ar.t[0] / 100) }),
+      h("span", { class: "rev-ar-n", text: busy ? `Reading Housecall Pro… (${ar.t[1]} jobs so far)` : ar.t[1] ? `${revJobs(ar.t[1])} still owed · last 12 months` : "Nobody owes · last 12 months" }),
+      ar.t[1] ? ageBar : null,
+      ar.t[1] ? h("div", { class: "rev-ar-ages" }, REV_AGES.slice(1).map(([k, name]) => h("span", { "data-age": k }, h("i", { class: "a" + k }), `${name.replace(" days", "").replace("Up to ", "0–")} `, h("b", { text: revShort(ar.age[k][0]) })))) : null,
+      h("div", { class: "rev-ar-deps" }, [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"]].concat(ar.o[1] ? [["o", "Other"]] : []).map(([k, name]) =>
+        h("button", { type: "button", "data-ar": k, onclick: e => { e.stopPropagation(); arOpen(k); } }, h("i", { class: "rev-dot " + k }), name, h("b", { text: lbMoney(ar[k][0] / 100) }), h("em", { text: revJobs(ar[k][1]) })))));
+    arBar = h("button", { class: "rev-ar-bar", id: "revArBar", type: "button", onclick: () => arOpen("all") },
+      h("span", { class: "l" }, h("small", { text: "Accounts receivable" }), h("b", { text: busy && !ar.t[1] ? "…" : lbMoney(ar.t[0] / 100) })),
+      h("span", { class: "r", text: busy ? "Reading…" : ar.t[1] ? `${revJobs(ar.t[1])} · ${revShort(ar.age["60"][0] + ar.age["90"][0] + ar.age["91"][0])} over 30 days` : "Nobody owes" }), h("span", { class: "go", text: "›" }));
+  }
+  let aside = arCard ? h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable and average job" }, arCard) : null;
   if (yDays && aDays) {
     const ys = revSum(yDays, yFrom, today), as = cmp ? revSum(aDays, ayFrom, ayTo) : null;
     const avg = (x, k) => { const v = k === "t" ? [x.cents, x.jobs] : x[k]; return { cents: v[0], jobs: v[1], avg: v[1] ? v[0] / v[1] : 0 }; };
     const ayName = String(ay), ayShort = `’${String(ay).slice(2)}`;
-    aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Average job" },
+    aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable and average job" }, arCard,
       h("div", { class: "rev-aside-head" }, h("h3", { text: "Average job" }),
         h("p", { text: `${ty} so far · ${revSpanText(yFrom, today)}` }),
         cmp ? h("p", { class: "vs" }, "vs ", h("b", { class: "rev-ytag", text: ayName }), ` ${revSpanText(ayFrom, ayTo)}`) : h("p", { class: "vs", text: "Pick a year in Compare to see it here too." })),
@@ -10209,8 +10277,85 @@ function renderRevenue() {
             b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
       }));
   }
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, r.from > today ? null : [tiles, tilesWas, strip, table], ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, r.from > today ? null : [tiles, tilesWas, strip], arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
   if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false), 0);
+}
+
+/* ---- Accounts receivable: each day's unpaid visits (Housecall Pro's outstanding balance) ---- */
+// [job id, invoice #, client, department, charged ¢, owes ¢, project] for every visit done or under way whose client
+// still owes. The tile adds up the last 12 months; the list goes by department and by how long it's been owed.
+const REV_AGES = [["all", "All"], ["30", "Up to 30 days"], ["60", "31–60 days"], ["90", "61–90 days"], ["91", "91 days – 1 year"]];
+const revAgeOf = days => (days <= 30 ? "30" : days <= 60 ? "60" : days <= 90 ? "90" : "91");
+let revUnpaidRedraw = null;                             // the open list, drawn again as days come in
+/** What's owed from..to (null while a year loads): by department and by age, [cents, jobs]; missing: days not read
+ *  with who owes yet. */
+function revArSum(days, from, to) {
+  if (!days) return null;
+  const today = lbToday(), z = () => [0, 0];
+  const s = { r: z(), c: z(), p: z(), o: z(), t: z(), age: { 30: z(), 60: z(), 90: z(), 91: z() }, missing: 0 };
+  for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+    const v = days[d];
+    if (!v || !Array.isArray(v[12])) { s.missing++; continue; }
+    const a = revAgeOf(Math.round((lbDate(today) - lbDate(d)) / 864e5));
+    for (const u of v[12]) {
+      const k = s[u[3]] && u[3] !== "t" ? u[3] : "o", o = Number(u[5]) || 0;
+      s[k][0] += o; s[k][1]++; s.t[0] += o; s.t[1]++; s.age[a][0] += o; s.age[a][1]++;
+    }
+  }
+  return s;
+}
+/** The list: every job still owed from the last 12 months, the oldest first, by department and by how long it's been
+ *  owed (up to 30 days, 31–60, 61–90, 91 days – 1 year): client, project, job, day, charged, paid, owes, days. */
+function revArDlg(dep) {
+  const st = { age: "all", dep: dep || "all" };
+  const box = h("div", { class: "rv-unpaid-body" });
+  const draw = () => {
+    const today = lbToday(), from = lbAddDays(today, -364);
+    const days = revDaysFor(from, today);
+    if (days && !revSync.busy && !revSync.err) setTimeout(() => revEnsure([[from, today, true]], false), 0);   // the 12 months, read with who owes
+    const all = [];
+    let missing = 0;
+    if (days) for (let d = from; d <= today; d = lbAddDays(d, 1)) {
+      const v = days[d];
+      if (!v || !Array.isArray(v[12])) { missing++; continue; }
+      for (const u of v[12]) all.push({ id: u[0], inv: u[1], client: u[2] || "", dep: "rcp".includes(u[3]) ? u[3] : "o", c: Number(u[4]) || 0, owes: Number(u[5]) || 0, proj: u[6] || "", day: d, age: Math.round((lbDate(today) - lbDate(d)) / 864e5) });
+    }
+    all.sort((a, b) => b.age - a.age || b.owes - a.owes);
+    const sum = list => list.reduce((n, x) => n + x.owes, 0);
+    const byAge = (list, k) => list.filter(x => k === "all" || revAgeOf(x.age) === k), byDep = (list, k) => list.filter(x => k === "all" || x.dep === k);
+    const deps = [["all", "All"]].concat(REV_DEPTS.filter(([k]) => k !== "o" || all.some(x => x.dep === "o")).map(([k, name]) => [k, name]));
+    const seg = (items, cur, pick, label, amount) => h("div", { class: "seg rv-seg", role: "tablist", "aria-label": label }, items.map(([k, name]) =>
+      h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(k === cur), onclick: () => { pick(k); draw(); } },
+        k !== "all" && label === "Department" ? h("i", { class: "rev-dot " + k }) : null, name, amount ? h("em", { text: ` ${lbMoney(amount(k) / 100)}` }) : null)));
+    const shown = byAge(byDep(all, st.dep), st.age);
+    const dayText = d => { const x = lbDate(d), old = d.slice(0, 4) !== today.slice(0, 4);
+      return [h("span", { class: "t-long", text: `${MONTHS[x.getMonth()]} ${x.getDate()}${old ? `, ${d.slice(0, 4)}` : ""}` }), h("span", { class: "t-short", text: `${x.getMonth() + 1}/${x.getDate()}${old ? `/${d.slice(2, 4)}` : ""}` })]; };
+    const reading = !days || missing > 0;
+    box.replaceChildren(...[
+      reading ? h("p", { class: "meta rev-status busy", id: "rvUnpaidReading", text: revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…` : !days ? "Loading…" : `${missing} day${missing === 1 ? "" : "s"} not read from Housecall Pro yet.` }) : null,
+      seg(deps, st.dep, k => { st.dep = k; }, "Department", k => sum(byDep(all, k))),
+      seg(REV_AGES, st.age, k => { st.age = k; }, "How long it's been owed", k => sum(byAge(byDep(all, st.dep), k))),
+      shown.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "rvUnpaidTable" },
+        h("thead", null, h("tr", null, h("th", { text: "Client" }), h("th", { class: "rv-proj", text: "Project" }), h("th", { class: "rv-inv", text: "Job" }), h("th", { text: "Day" }), h("th", { class: "rv-dep", text: "Department" }),
+          h("th", { class: "rv-ch", text: "Charged" }), h("th", { class: "rv-pd", text: "Paid" }), h("th", { text: "Owes" }), h("th", { text: "Days" }))),
+        h("tbody", null, shown.map(x => h("tr", { "data-job": x.id, "data-age": revAgeOf(x.age), "data-dep": x.dep },
+          h("th", null, x.client || "–", h("small", { class: "rv-sm", text: [x.proj, `#${x.inv}`].filter(Boolean).join(" · ") })),
+          h("td", { class: "rv-proj", text: x.proj || "–" }), h("td", { class: "rv-inv", text: `#${x.inv}` }), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
+          h("td", { class: "rv-ch", text: lbCash(x.c / 100) }), h("td", { class: "rv-pd", text: lbCash(Math.max(0, x.c - x.owes) / 100) }),
+          h("td", { class: "rv-owes", text: lbCash(x.owes / 100) }), h("td", { class: "rv-age " + (x.age > 60 ? "old" : x.age > 30 ? "mid" : ""), text: String(x.age) })))),
+        h("tfoot", null, h("tr", null, h("th", { text: `${shown.length} job${shown.length === 1 ? "" : "s"}` }), h("td", { class: "rv-proj" }), h("td", { class: "rv-inv" }), h("td", { class: "rv-day" }), h("td", { class: "rv-dep" }),
+          h("td", { class: "rv-ch", text: lbCash(shown.reduce((n, x) => n + x.c, 0) / 100) }), h("td", { class: "rv-pd", text: lbCash(shown.reduce((n, x) => n + Math.max(0, x.c - x.owes), 0) / 100) }),
+          h("td", { class: "rv-owes", text: lbCash(sum(shown) / 100) }), h("td")))))
+        : h("p", { class: "meta", id: "rvUnpaidNone", text: !days ? "" : "Nobody owes here." })].filter(Boolean));
+  };
+  revUnpaidRedraw = draw;
+  openDialog(h("div", { class: "rp-dlg rv-unpaid" },
+    h("h3", { id: "dlgTitle", text: "Accounts receivable" }),
+    h("p", { class: "hint", text: "Jobs from the last 12 months whose client still owes (done or under way; Housecall Pro's balance), the oldest first. Days: since the job's day." }),
+    box,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
+  draw();
 }
 
 /* ======================= Repairs split: each repair job, its client payments, and Monumental's and VODA's share ======================= */
@@ -11274,12 +11419,15 @@ function renderMarketing() {
   const names = new Set([...Object.keys(s.rows), ...Object.keys(withSpend ? s.spend : {}), ...(c ? Object.keys(c.rows) : []), ...(c && withSpend ? Object.keys(c.spend) : [])]);
   const line = (x, name) => { const v = mktVal(x.rows[name], dep); return { cents: v[0], jobs: v[1], spend: withSpend ? x.spend[name] || 0 : 0 }; };
   const sumOf = (x, list) => list.reduce((a, n) => { const l = line(x, n); return { cents: a.cents + l.cents, jobs: a.jobs + l.jobs, spend: a.spend + l.spend }; }, { cents: 0, jobs: 0, spend: 0 });
-  const keep = n => { const a = line(s, n), b = c ? line(c, n) : null; return a.cents || a.jobs || a.spend || (b && (b.cents || b.jobs || b.spend)); };
+  // a source shows only when it has revenue, jobs or ad spend in the period on screen (a source that stopped, like
+  // Angie's, isn't listed after its last month); what it had in the year compared still counts in the totals
+  const has = n => { const a = line(s, n); return !!(a.cents || a.jobs || a.spend); };
+  const any = n => has(n) || (c && (() => { const b = line(c, n); return !!(b.cents || b.jobs || b.spend); })());
   const byMoney = (a, b) => line(s, b).cents - line(s, a).cents || (MKT_ROWS.indexOf(a) + 1 || 99) - (MKT_ROWS.indexOf(b) + 1 || 99) || a.localeCompare(b);
-  const newRows = [...names].filter(n => mktGroup(n) === "new" && keep(n)).sort(byMoney);
-  const gRows = newRows.filter(mktIsGoogle), gBlock = gRows.length > 1;
-  const leaves = newRows.concat([MKT_REPEAT, MKT_REFERRAL]);
-  const T = sumOf(s, leaves), TC = c ? sumOf(c, leaves) : null, N = sumOf(s, newRows), NC = c ? sumOf(c, newRows) : null;
+  const newAll = [...names].filter(n => mktGroup(n) === "new" && any(n)), newRows = newAll.filter(has).sort(byMoney);
+  const gAll = newAll.filter(mktIsGoogle), gRows = newRows.filter(mktIsGoogle), gBlock = gRows.length > 1;
+  const leavesAll = newAll.concat([MKT_REPEAT, MKT_REFERRAL]), leaves = newRows.concat([MKT_REPEAT, MKT_REFERRAL].filter(has));
+  const T = sumOf(s, leavesAll), TC = c ? sumOf(c, leavesAll) : null, N = sumOf(s, newAll), NC = c ? sumOf(c, newAll) : null;
   const ranked = leaves.filter(n => line(s, n).cents > 0).sort((a, b) => line(s, b).cents - line(s, a).cents);
   const rankOf = n => { const v = line(s, n).cents; return v > 0 ? ranked.findIndex(m => line(s, m).cents === v) + 1 : 0; };
   const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
@@ -11319,17 +11467,18 @@ function renderMarketing() {
   const listRows = [headRow("Source"),
     row("sec new", "New clients", N, NC, { src: "New clients", bar: pct(N.cents, T.cents), tone: "new" })];
   const others = newRows.filter(n => !(gBlock && mktIsGoogle(n)));
-  const blocks = (gBlock ? [{ g: true, cents: sumOf(s, gRows).cents }] : []).concat(others.map(n => ({ n, cents: line(s, n).cents })))
+  const blocks = (gBlock ? [{ g: true, cents: sumOf(s, gAll).cents }] : []).concat(others.map(n => ({ n, cents: line(s, n).cents })))
     .sort((a, b) => b.cents - a.cents);
   for (const bk of blocks) {
     if (bk.g) {
-      const G = sumOf(s, gRows), GC = c ? sumOf(c, gRows) : null;
+      const G = sumOf(s, gAll), GC = c ? sumOf(c, gAll) : null;
       listRows.push(row("grp", "All Google", G, GC, { src: "All Google", bar: pct(G.cents, T.cents), tone: "new" }));
       gRows.forEach(n => listRows.push(leaf(n, "sub sub2", "new")));
     } else listRows.push(leaf(bk.n, "sub", "new"));
   }
-  listRows.push(leaf(MKT_REPEAT, "sec repeat", "repeat"), leaf(MKT_REFERRAL, "sec referral", "referral"),
-    row("tot", "Total", T, TC, { src: "Total", share: false }));
+  if (has(MKT_REPEAT)) listRows.push(leaf(MKT_REPEAT, "sec repeat", "repeat"));
+  if (has(MKT_REFERRAL)) listRows.push(leaf(MKT_REFERRAL, "sec referral", "referral"));
+  listRows.push(row("tot", "Total", T, TC, { src: "Total", share: false }));
   const list = h("div", { class: "mkt-list" + (withSpend ? "" : " nospend") + (c ? " cmp" : ""), id: "mktList", role: "table", style: `--mkt-cols:${cols}` }, listRows);
   // the totals
   const kpi = (k, name, big, sub, was) => h("div", { class: "mkt-kpi", "data-k": k }, h("small", { text: name }), h("b", null, big), sub ? h("span", { text: sub }) : null,
@@ -11473,6 +11622,8 @@ function mktLeadsDlg() {
   openDialog(h("div", { class: "mkt-dlg" },
     h("h3", { id: "dlgTitle", text: "Lead sources" }),
     h("p", { class: "hint", text: "Each Lead source set on jobs in Housecall Pro, and the row it counts in. Repeat clients and Referrals go by the Job type (… - REPEAT, … - REFERRAL), whatever the Lead source." }),
+    order.length ? h("button", { class: "btn small", type: "button", id: "mktLeadReset", title: "Every Lead source back to the row suggested by its name (then Save)",
+      onclick: () => { for (const [lead, sel] of Object.entries(sels)) sel.value = mktGuess(lead); dlgDirty = true; } }, "Use the suggested matches") : null,
     list, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
 }
