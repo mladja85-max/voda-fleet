@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 45;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 46;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -352,6 +352,30 @@ function doPost(e) {
       case "repImport":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return repImport_(req, user); }));
+      case "cpRead":
+        if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(cpRead_());
+      case "cpParties":
+        if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpPartiesPut_(req); }));
+      case "cpFile":
+        if (!canCp_(user) || !canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
+        return json_(cpFile_(req));
+      case "cpSend":
+        if (!canCp_(user) || !canSee_(user, "repairs")) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpSend_(req, user); }));
+      case "cpPay":
+        if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpPay_(req, user); }));
+      case "cpCancel":
+        if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpCancel_(req, user); }));
+      case "cpResend":
+        if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpResend_(req); }));
+      case "cpDoc":
+        if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(cpDoc_(req));
       default:
         return json_({ ok: false, error: "bad_request" });
     }
@@ -2774,7 +2798,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || x === "marketing" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -4019,6 +4043,9 @@ function repMonInv_(req, user) {
   const at = new Date().toISOString(), who = user.name || user.id;
   let list = repMonList_(r);
   if (req.del) {
+    // one sent to accounting can't come off its job until that batch is canceled
+    const sent = list.filter(function (i) { return String(i.n) === String(req.del) && i.b && !i.paid; })[0];
+    if (sent) return { ok: false, error: "in_batch", b: sent.b };
     list = list.filter(function (i) { return String(i.n) !== String(req.del); });
   } else {
     const v = req.inv && typeof req.inv === "object" ? req.inv : null;
@@ -4027,10 +4054,14 @@ function repMonInv_(req, user) {
     if (!n || (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) || !isFinite(a) || a < 0 || a > 1e9) return { ok: false, error: "bad_value" };
     const other = Object.keys(rows).filter(function (k) { return k !== id && repMonList_(rows[k]).some(function (i) { return String(i.n) === n; }); })[0];
     if (other && !req.move) return { ok: false, error: "on_other", other: { id: other, client: String(rows[other][3] || ""), day: rows[other][1] } };
+    const inB = other && repMonList_(rows[other]).filter(function (i) { return String(i.n) === n && i.b; })[0];
+    if (inB) return { ok: false, error: "in_batch", b: inB.b };
     if (other) { rows[other][32] = JSON.stringify(repMonList_(rows[other]).filter(function (i) { return String(i.n) !== n; })); rows[other][27] = who; rows[other][28] = at; }
     const was = list.filter(function (i) { return String(i.n) === n; })[0];
     list = list.filter(function (i) { return String(i.n) !== n; });
-    list.push({ n: n, d: d, a: a, k: String(v.k || "").slice(0, 60), f: String(v.f || "").slice(0, 120), by: who, at: at, paid: was ? String(was.paid || "") : "" });
+    const keep = { n: n, d: d, a: a, k: String(v.k || "").slice(0, 60), f: String(v.f || "").slice(0, 120), by: who, at: at, paid: was ? String(was.paid || "") : "" };
+    if (was) ["sent", "b", "pay", "ref"].forEach(function (k) { if (was[k]) keep[k] = was[k]; });   // sent to accounting / paid in a batch: still so
+    list.push(keep);
     const mi = String(r[24] || "");
     if (mi.split(/\s*\/\s*/).indexOf(n) === -1) r[24] = (mi ? mi + " / " + n : n).slice(0, 200);
     if (req.extra !== undefined && req.extra !== null && req.extra !== "") {
@@ -4082,6 +4113,374 @@ function repImport_(req, user) {
   Object.keys(done).forEach(function (id) { rows[id] = done[id]; });
   if (Object.keys(done).length) repWrite_(s, rows);
   return { ok: true, saved: Object.keys(done).length, missing: missing };
+}
+
+/* ---------------- contractor payroll ---------------- */
+// A contractor's invoices (Monumental's, for now) sent to accounting from Repairs Payroll as one batch: a row per batch on
+// the "Contractor payroll" tab. Their PDFs go in a private folder in the Drive of this script's owner. Accounting checks
+// the batch, records the payment, and the contractor gets the pay stub by email; each invoice is then marked paid on its
+// job (Repairs tab), so it can't be sent or paid again. The email addresses ("Payroll emails" tab) are typed in Settings.
+const CP_SHEET = "Contractor payroll";
+const CP_COLS = ["Batch", "Vendor", "Status", "Sent at", "Sent by", "Sent to", "Invoices", "Count", "Total $", "Paid $", "Paid on", "How",
+  "Reference #", "From account (last 4)", "Approved by", "Approved at", "Vendor emailed to", "Vendor emailed at", "Canceled by", "Canceled at", "Left out"];
+const CP_PARTY_SHEET = "Payroll emails";
+const CP_PARTY_COLS = ["Name", "Email", "Kind"];
+const CP_KINDS = ["accounting", "vendor"];
+const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
+const CP_FOLDER = "VODA Hub - Contractor invoices";
+const CP_VENDOR = "Monumental Flooring";
+const CP_COMPANY = "VODA Cleaning & Restoration";
+const CP_EMAIL = /^[^\s@,;<>"']+@[^\s@,;<>"']+\.[A-Za-z]{2,}$/;
+const CP_MAX_FILE = 8 * 1024 * 1024, CP_MAX_MAIL = 22 * 1024 * 1024, CP_MAX_ITEMS = 100;
+const CP_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function canCp_(user) { return canSee_(user, "contractors"); }
+function cpSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(CP_SHEET);
+  if (!s && !create) return null;
+  if (!s) { s = ss.insertSheet(CP_SHEET); s.setFrozenRows(1); }
+  const head = s.getRange(1, 1, 1, CP_COLS.length).getValues()[0];
+  if (String(head[0]) !== CP_COLS[0] || String(head[CP_COLS.length - 1]) !== CP_COLS[CP_COLS.length - 1]) {
+    s.getRange(1, 1, 1, CP_COLS.length).setValues([CP_COLS]).setFontWeight("bold");
+    s.getRange("A:A").setNumberFormat("@");
+    s.getRange("K:N").setNumberFormat("@");   // the paid day, how, the reference # and the account's last 4 stay as typed
+  }
+  return s;
+}
+/** Every batch: [{ row, b }] in the tab's order (oldest first). */
+function cpAll_(s) {
+  const out = [];
+  if (!s || s.getLastRow() < 2) return out;
+  const tz = Session.getScriptTimeZone(), iso = function (v) { return v instanceof Date ? v.toISOString() : String(v || ""); };
+  s.getRange(2, 1, s.getLastRow() - 1, CP_COLS.length).getValues().forEach(function (r, i) {
+    if (!String(r[0] || "").trim()) return;
+    let items = [];
+    try { items = JSON.parse(String(r[6] || "[]")); } catch (e) { items = []; }
+    out.push({ row: i + 2, b: { id: String(r[0]).trim(), vendor: String(r[1] || ""), status: String(r[2] || ""), at: iso(r[3]), by: String(r[4] || ""), to: String(r[5] || ""),
+      items: Array.isArray(items) ? items : [], total: repCents_(r[8]), paid: repCents_(r[9]), paidOn: repDay_(r[10], tz), how: String(r[11] || ""), ref: String(r[12] || ""),
+      last4: String(r[13] || ""), appBy: String(r[14] || ""), appAt: iso(r[15]), vTo: String(r[16] || ""), vAt: iso(r[17]), cxBy: String(r[18] || ""), cxAt: iso(r[19]), out: String(r[20] || "") } });
+  });
+  return out;
+}
+function cpRow_(b) {
+  return [b.id, b.vendor, b.status, b.at, b.by, b.to, JSON.stringify(b.items), b.items.length, b.total / 100, b.paid / 100, b.paidOn || "", b.how || "", b.ref || "",
+    b.last4 || "", b.appBy || "", b.appAt || "", b.vTo || "", b.vAt || "", b.cxBy || "", b.cxAt || "", b.out || ""];
+}
+function cpPut_(s, row, b) {
+  s.getRange(row, 1, 1, 1).setNumberFormat("@");
+  s.getRange(row, 11, 1, 4).setNumberFormat("@");
+  s.getRange(row, 1, 1, CP_COLS.length).setValues([cpRow_(b)]);
+}
+/** The addresses typed in Settings: [{ name, email, kind }]. */
+function cpParties_() {
+  const s = SpreadsheetApp.getActive().getSheetByName(CP_PARTY_SHEET);
+  if (!s || s.getLastRow() < 2) return [];
+  return s.getRange(2, 1, s.getLastRow() - 1, CP_PARTY_COLS.length).getValues().map(function (r) {
+    return { name: String(r[0] || "").trim(), email: String(r[1] || "").trim(), kind: CP_KINDS.indexOf(String(r[2] || "").trim().toLowerCase()) === -1 ? "accounting" : String(r[2]).trim().toLowerCase() };
+  }).filter(function (p) { return p.email; });
+}
+function cpPartiesPut_(req) {
+  const list = Array.isArray(req.parties) ? req.parties : null;
+  if (!list || list.length > 50) return { ok: false, error: "bad_request" };
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const x = list[i] || {}, name = String(x.name || "").trim().slice(0, 80), email = String(x.email || "").trim().slice(0, 120), kind = String(x.kind || "");
+    if (!name || !CP_EMAIL.test(email) || CP_KINDS.indexOf(kind) === -1) return { ok: false, error: "bad_value", at: i };
+    out.push([name, email, kind]);
+  }
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(CP_PARTY_SHEET);
+  if (!s) { s = ss.insertSheet(CP_PARTY_SHEET); s.setFrozenRows(1); }
+  s.getRange(1, 1, 1, CP_PARTY_COLS.length).setValues([CP_PARTY_COLS]).setFontWeight("bold");
+  if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, CP_PARTY_COLS.length).clearContent();
+  if (out.length) s.getRange(2, 1, out.length, CP_PARTY_COLS.length).setValues(out);
+  return { ok: true, parties: cpParties_() };
+}
+/** Who an email goes to: up to 10 addresses (a list or "a@x.com, b@y.com"). */
+function cpEmails_(v) {
+  const all = (Array.isArray(v) ? v : String(v || "").split(/[,;\s]+/)).map(function (x) { return String(x || "").trim(); }).filter(Boolean);
+  const out = [], seen = {};
+  for (let i = 0; i < all.length; i++) {
+    if (!CP_EMAIL.test(all[i])) return { error: "bad_email", email: all[i].slice(0, 120) };
+    const k = all[i].toLowerCase();
+    if (!seen[k]) { seen[k] = true; out.push(all[i]); }
+  }
+  if (!out.length) return { error: "no_to" };
+  if (out.length > 10) return { error: "too_many_to" };
+  return { list: out };
+}
+/** The private Drive folder for the invoices' PDFs (made the first time). */
+function cpFolder_() {
+  const P = PropertiesService.getScriptProperties(), id = P.getProperty("CP_FOLDER_ID");
+  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* made again below */ } }
+  const f = DriveApp.createFolder(CP_FOLDER);
+  P.setProperty("CP_FOLDER_ID", f.getId());
+  return f;
+}
+/** A file this script put in that folder, or null: nothing else in the Drive can be read or emailed through the app. */
+function cpFileOk_(id) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(id || ""))) return null;
+  try {
+    const f = DriveApp.getFileById(String(id)), home = cpFolder_().getId(), it = f.getParents();
+    if (f.isTrashed()) return null;
+    while (it.hasNext()) if (it.next().getId() === home) return f;
+  } catch (e) { /* not there */ }
+  return null;
+}
+/** One invoice PDF from the app: { name, data (base64) } → { id }. */
+function cpFile_(req) {
+  const name = String(req.name || "").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 120) || "invoice.pdf";
+  let bytes;
+  try { bytes = Utilities.base64Decode(String(req.data || "")); } catch (e) { return { ok: false, error: "bad_request" }; }
+  if (!bytes || !bytes.length) return { ok: false, error: "bad_request" };
+  if (bytes.length > CP_MAX_FILE) return { ok: false, error: "too_big" };
+  if (!(bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70)) return { ok: false, error: "not_pdf" };   // %PDF
+  const f = cpFolder_().createFile(Utilities.newBlob(bytes, "application/pdf", /\.pdf$/i.test(name) ? name : name + ".pdf"));
+  return { ok: true, id: f.getId() };
+}
+const cpEsc_ = v => String(v === null || v === undefined ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function cpMoney_(c) {
+  const n = Math.round(Number(c) || 0), neg = n < 0, a = Math.abs(n), d = String(Math.floor(a / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-$" : "$") + d + "." + String(a % 100).padStart(2, "0");
+}
+function cpDay_(d) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || "")); return m ? CP_MONTHS[Number(m[2]) - 1] + " " + Number(m[3]) + ", " + m[1] : ""; }
+function cpToday_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"); }
+function cpAtDay_(iso) { const t = Date.parse(iso || ""); return isNaN(t) ? "" : Utilities.formatDate(new Date(t), Session.getScriptTimeZone(), "yyyy-MM-dd"); }
+const cpShort_ = v => String(v || "").trim().split(/\s+/)[0] || "Contractor";
+const cpPlural_ = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+/** A batch as the app gets it. */
+function cpOut_(b) {
+  return { id: b.id, vendor: b.vendor, status: b.status, at: b.at, by: b.by, to: b.to, total: b.total, paid: b.paid, paidOn: b.paidOn, how: b.how, ref: b.ref, last4: b.last4,
+    appBy: b.appBy, appAt: b.appAt, vTo: b.vTo, vAt: b.vAt, cxBy: b.cxBy, cxAt: b.cxAt, out: b.out,
+    items: b.items.map(function (i) { return { j: i.j, n: i.n, d: i.d, a: i.a, pay: i.pay, client: i.client, addr: i.addr, day: i.day, f: i.f, fn: i.fn }; }) };
+}
+/** The pay stub, as a page: the paid one (what the contractor gets) or the one waiting for approval (accounting's). */
+function cpStubHtml_(b) {
+  const paid = b.status === "paid", amt = function (i) { return paid ? i.pay : i.a; };
+  const total = b.items.reduce(function (n, i) { return n + amt(i); }, 0);
+  const th = "text-align:left;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:#5b6474;padding:6px 6px;border-bottom:1px solid #dfe3ea";
+  const td = "padding:6px 6px;border-bottom:1px solid #eef0f4;font-size:11px;vertical-align:top";
+  const meta = function (k, v) { return '<td style="padding:0 18px 0 0;vertical-align:top"><div style="font-size:9px;font-weight:bold;color:#5b6474;letter-spacing:.06em;text-transform:uppercase">' + k + '</div><div style="font-size:12px">' + cpEsc_(v) + "</div></td>"; };
+  return '<html><head><meta charset="utf-8"></head><body style="font-family:Arial,Helvetica,sans-serif;color:#111827;margin:28px">' +
+    '<table style="width:100%;border-collapse:collapse;border-bottom:3px solid #1f4fc7"><tr><td style="padding-bottom:10px"><div style="font-size:20px;font-weight:bold">' + cpEsc_(CP_COMPANY) + '</div><div style="font-size:11px;color:#5b6474">Contractor pay stub</div></td>' +
+    '<td style="padding-bottom:10px;text-align:right"><div style="font-size:20px;font-weight:bold">' + cpEsc_(b.id) + '</div><div style="font-size:11px;color:#5b6474">Batch</div></td></tr></table>' +
+    '<table style="border-collapse:collapse;margin:14px 0"><tr>' + meta("Paid to", b.vendor) + meta("Sent to accounting", cpDay_(cpAtDay_(b.at))) + meta("Approved by", paid ? b.appBy : "Waiting for approval") + meta("Invoices", String(b.items.length)) + "</tr></table>" +
+    '<table style="width:100%;border-collapse:collapse;border:2px solid ' + (paid ? "#1d7a3e" : "#a15c07") + ';margin-bottom:14px"><tr><td style="padding:8px 10px;font-weight:bold;font-size:13px;color:' + (paid ? "#17602f" : "#7a4a0c") + '">' +
+      (paid ? "PAID " + cpEsc_(cpDay_(b.paidOn)) + (b.how ? " · " + cpEsc_(b.how) : "") + (b.ref ? " · Ref " + cpEsc_(b.ref) : "") : "WAITING FOR APPROVAL") +
+      '</td><td style="padding:8px 10px;font-weight:bold;font-size:13px;text-align:right;color:' + (paid ? "#17602f" : "#7a4a0c") + '">' + cpMoney_(total) + "</td></tr></table>" +
+    '<table style="width:100%;border-collapse:collapse"><tr><th style="' + th + '">Invoice</th><th style="' + th + '">Client</th><th style="' + th + '">Job address</th><th style="' + th + '">Job date</th><th style="' + th + ';text-align:right">Amount</th></tr>' +
+    b.items.map(function (i) {
+      return "<tr><td style=\"" + td + ";font-family:'Courier New',monospace\">" + cpEsc_(i.n) + '</td><td style="' + td + '">' + cpEsc_(i.client) + '</td><td style="' + td + '">' + cpEsc_(i.addr) +
+        '</td><td style="' + td + ';white-space:nowrap">' + cpEsc_(cpDay_(i.day)) + '</td><td style="' + td + ';text-align:right;white-space:nowrap">' + cpMoney_(amt(i)) + "</td></tr>";
+    }).join("") +
+    '<tr><td colspan="4" style="padding:8px 6px;font-weight:bold;font-size:12px;border-top:2px solid #111827">' + (paid ? "Total paid · " : "Total · ") + cpPlural_(b.items.length, "invoice") +
+      '</td><td style="padding:8px 6px;font-weight:bold;font-size:12px;text-align:right;border-top:2px solid #111827">' + cpMoney_(total) + "</td></tr></table>" +
+    '<p style="font-size:10px;color:#5b6474;border-top:1px solid #dfe3ea;padding-top:8px;margin-top:18px">Questions about this payment? Reply to the email it came with.</p></body></html>';
+}
+function cpStubPdf_(b) {
+  return Utilities.newBlob(cpStubHtml_(b), "text/html", "stub.html").getAs("application/pdf").setName("Pay stub " + b.id + ".pdf");
+}
+/** The invoices as a table in an email. */
+function cpMailTable_(b, paid) {
+  const td = "padding:5px 8px;border-bottom:1px solid #eef0f4;font-size:13px", th = "padding:5px 8px;border-bottom:1px solid #dfe3ea;font-size:11px;text-align:left;color:#5b6474;text-transform:uppercase";
+  const amt = function (i) { return paid ? i.pay : i.a; }, total = b.items.reduce(function (n, i) { return n + amt(i); }, 0);
+  return '<table style="border-collapse:collapse;width:100%;max-width:760px"><tr><th style="' + th + '">Invoice</th><th style="' + th + '">Client</th>' + (paid ? '<th style="' + th + '">Address</th>' : "") +
+    '<th style="' + th + ';text-align:right">' + (paid ? "Paid" : "Amount") + "</th></tr>" +
+    b.items.map(function (i) {
+      return '<tr><td style="' + td + ';font-family:monospace">' + cpEsc_(i.n) + '</td><td style="' + td + '">' + cpEsc_(i.client) + "</td>" + (paid ? '<td style="' + td + '">' + cpEsc_(i.addr) + "</td>" : "") +
+        '<td style="' + td + ';text-align:right">' + cpMoney_(amt(i)) + "</td></tr>";
+    }).join("") +
+    '<tr><td style="padding:6px 8px;font-weight:bold;border-top:2px solid #111">' + cpPlural_(b.items.length, "invoice") + '</td><td></td>' + (paid ? "<td></td>" : "") +
+    '<td style="padding:6px 8px;font-weight:bold;border-top:2px solid #111;text-align:right">' + cpMoney_(total) + "</td></tr></table>";
+}
+/** The email to accounting: the invoices' PDFs and the pay stub. */
+function cpMailAccounting_(b, to, files) {
+  const subject = cpShort_(b.vendor) + " invoices " + b.items.length;
+  const lines = ["Hi,", "", b.vendor + " sent " + cpPlural_(b.items.length, "invoice") + " for payroll, batch " + b.id + ", total " + cpMoney_(b.total) + ". The PDFs and the pay stub are attached.", ""]
+    .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + cpMoney_(i.a); }), ["", "Approve and record the payment in VODA Hub > Leaderboard > Contractor Payroll: " + APP_URL + "#contractors"]);
+  const html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.5"><p>Hi,</p><p>' + cpEsc_(b.vendor) + " sent <b>" + cpPlural_(b.items.length, "invoice") +
+    "</b> for payroll, batch <b>" + cpEsc_(b.id) + "</b>, total <b>" + cpMoney_(b.total) + "</b>. The PDFs and the pay stub are attached.</p>" + cpMailTable_(b, false) +
+    '<p>Approve and record the payment in VODA Hub › Leaderboard › Contractor Payroll.</p><p><a href="' + APP_URL + '#contractors" style="display:inline-block;background:#1f4fc7;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Open batch ' + cpEsc_(b.id) + "</a></p></div>";
+  MailApp.sendEmail({ to: to.join(","), subject: subject, body: lines.join("\n"), htmlBody: html, name: "VODA Hub",
+    attachments: files.map(function (f) { return f.getBlob(); }).concat([cpStubPdf_(b)]) });
+}
+/** The email to the contractor: what was paid, with the pay stub. */
+function cpMailVendor_(b, to) {
+  const subject = "VODA payment · " + cpPlural_(b.items.length, "invoice") + " · " + cpMoney_(b.paid);
+  const how = (b.how ? " by " + b.how : "") + (b.ref ? ", reference " + b.ref : "");
+  const lines = ["Hi " + cpShort_(b.vendor) + " team,", "", "We paid " + cpPlural_(b.items.length, "invoice") + " on " + cpDay_(b.paidOn) + how + ". Total " + cpMoney_(b.paid) + ". The pay stub is attached.", ""]
+    .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + i.addr + " · " + cpMoney_(i.pay); }), ["", "Thank you,", CP_COMPANY]);
+  const html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.5"><p>Hi ' + cpEsc_(cpShort_(b.vendor)) + " team,</p><p>We paid <b>" + cpPlural_(b.items.length, "invoice") +
+    "</b> on <b>" + cpEsc_(cpDay_(b.paidOn)) + "</b>" + cpEsc_(how) + ". Total <b>" + cpMoney_(b.paid) + "</b>. The pay stub is attached.</p>" + cpMailTable_(b, true) +
+    "<p>Thank you,<br>" + cpEsc_(CP_COMPANY) + "</p></div>";
+  MailApp.sendEmail({ to: to.join(","), subject: subject, body: lines.join("\n"), htmlBody: html, name: CP_COMPANY, attachments: [cpStubPdf_(b)] });
+}
+/** Everything on the Contractor Payroll page: the batches (newest first) and the addresses. */
+function cpRead_() {
+  return { ok: true, batches: cpAll_(cpSheet_(false)).map(function (x) { return cpOut_(x.b); }).reverse(), parties: cpParties_() };
+}
+/** Is this invoice paid already, or waiting in a batch? { why, on, b, ref } or null. */
+function cpTaken_(n, batches) {
+  for (let i = batches.length - 1; i >= 0; i--) {
+    const b = batches[i].b, it = b.items.filter(function (x) { return String(x.n) === n; })[0];
+    if (!it) continue;
+    if (b.status === "paid") return { why: "paid", on: b.paidOn, b: b.id, ref: b.ref };
+    if (b.status === "waiting") return { why: "waiting", on: cpAtDay_(b.at), b: b.id };
+  }
+  return null;
+}
+/** Sends invoices already recorded on their jobs to accounting as a new batch: { vendor, to, items: [{ id (job), n, f (file id) }] }.
+ *  Refused, with every reason, when one is paid already, waiting in another batch, on a job marked paid, or has no PDF. */
+function cpSend_(req, user) {
+  const to = cpEmails_(req.to);
+  if (to.error) return { ok: false, error: to.error, email: to.email };
+  const vendor = String(req.vendor || CP_VENDOR).trim().slice(0, 80) || CP_VENDOR;
+  const list = Array.isArray(req.items) ? req.items : null;
+  if (!list || !list.length || list.length > CP_MAX_ITEMS) return { ok: false, error: "bad_request" };
+  const s = repSheet_(true), rows = repRows_(s), cs = cpSheet_(true), all = cpAll_(cs);
+  const items = [], files = {}, seen = {}, problems = [];
+  list.forEach(function (x) {
+    const id = String((x && x.id) || ""), n = String((x && x.n) || "").trim(), r = rows[id];
+    if (!r || !n) { problems.push({ n: n, why: "gone" }); return; }
+    if (seen[n]) { problems.push({ n: n, why: "twice" }); return; }
+    seen[n] = true;
+    const inv = repMonList_(r).filter(function (i) { return String(i.n) === n; })[0];
+    if (!inv) { problems.push({ n: n, why: "not_saved" }); return; }
+    const taken = inv.paid ? { why: "paid", on: inv.paid, b: inv.b || "", ref: inv.ref || "" } : cpTaken_(n, all);
+    if (taken) { taken.n = n; problems.push(taken); return; }
+    if (r[25]) { problems.push({ n: n, why: "job_paid", on: r[25] }); return; }
+    const f = files[x.f] || cpFileOk_(x.f);
+    if (!f) { problems.push({ n: n, why: "no_pdf" }); return; }
+    files[x.f] = f;
+    items.push({ j: id, n: n, d: String(inv.d || ""), a: Number(inv.a) || 0, pay: Number(inv.a) || 0, client: String(r[35] || r[3] || ""), addr: String(r[4] || ""), day: r[1], f: f.getId(), fn: f.getName() });
+  });
+  if (problems.length) return { ok: false, error: "cant_send", problems: problems };
+  const used = Object.keys(files).map(function (k) { return files[k]; });
+  if (used.reduce(function (n, f) { return n + (Number(f.getSize()) || 0); }, 0) > CP_MAX_MAIL) return { ok: false, error: "too_big" };
+  // the batch's name: the contractor and today ("MON-2026-11-13"), then -2, -3 on the same day
+  const pre = (vendor.replace(/[^A-Za-z]/g, "").slice(0, 3) || "CON").toUpperCase(), day = cpToday_(), have = {};
+  all.forEach(function (x) { have[x.b.id] = true; });
+  let id = pre + "-" + day, k = 1;
+  while (have[id]) id = pre + "-" + day + "-" + (++k);
+  const now = new Date().toISOString(), who = user.name || user.id;
+  const b = { id: id, vendor: vendor, status: "waiting", at: now, by: who, to: to.list.join(", "), items: items, total: items.reduce(function (n, i) { return n + i.a; }, 0), paid: 0 };
+  cpMailAccounting_(b, to.list, used);   // first: when it can't go, nothing is marked
+  items.forEach(function (i) {
+    const r = rows[i.j], inv = repMonList_(r);
+    inv.forEach(function (v) { if (String(v.n) === i.n) { v.sent = day; v.b = id; } });
+    r[32] = JSON.stringify(inv).slice(0, 45000); r[27] = who; r[28] = now;
+  });
+  repWrite_(s, rows);
+  cpPut_(cs, Math.max(cs.getLastRow(), 1) + 1, b);
+  const ids = {};
+  items.forEach(function (i) { ids[i.j] = true; });
+  return { ok: true, batch: cpOut_(b), jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
+}
+/** Finds a batch: { s, row, b } or null. */
+function cpFind_(id) {
+  const s = cpSheet_(false), x = cpAll_(s).filter(function (y) { return y.b.id === String(id || ""); })[0];
+  return x ? { s: s, row: x.row, b: x.b } : null;
+}
+/** Takes invoices off a batch on their jobs (canceled, or left out when paying): they can be sent again. */
+function cpFree_(rows, items, b) {
+  items.forEach(function (i) {
+    const r = rows[i.j];
+    if (!r) return;
+    const inv = repMonList_(r);
+    inv.forEach(function (v) { if (String(v.n) === i.n && v.b === b.id && !v.paid) { delete v.sent; delete v.b; } });
+    r[32] = JSON.stringify(inv).slice(0, 45000);
+  });
+}
+/** Accounting approves a batch and records the payment: { id, items: [{ n, ok, pay ($) }], paidOn, how, ref, last4, approvedBy, to }.
+ *  The invoices not ticked OK go back to "not sent"; the rest are marked paid on their jobs (a job whose invoices are all
+ *  paid gets "Date VODA paid Monumental"), and the contractor is emailed the pay stub. */
+function cpPay_(req, user) {
+  const x = cpFind_(req.id);
+  if (!x) return { ok: false, error: "gone" };
+  if (x.b.status !== "waiting") return { ok: false, error: "not_waiting", batch: cpOut_(x.b) };
+  const day = String(req.paidOn || ""), how = String(req.how || ""), ref = String(req.ref || "").trim().slice(0, 60), last4 = String(req.last4 || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: "bad_value", field: "paidOn" };
+  if (CP_HOW.indexOf(how) === -1) return { ok: false, error: "bad_value", field: "how" };
+  if (last4 && !/^\d{4}$/.test(last4)) return { ok: false, error: "bad_value", field: "last4" };
+  const to = cpEmails_(req.to);
+  if (to.error) return { ok: false, error: to.error, email: to.email };
+  const pick = {};
+  (Array.isArray(req.items) ? req.items : []).forEach(function (i) { if (i && i.n) pick[String(i.n)] = i; });
+  const keep = [], out = [];
+  for (let k = 0; k < x.b.items.length; k++) {
+    const i = x.b.items[k], p = pick[i.n];
+    if (!p || p.ok === false) { out.push(i); continue; }
+    const pay = Math.round(Number(p.pay) * 100);
+    if (!isFinite(pay) || pay <= 0 || pay > 1e9) return { ok: false, error: "bad_value", field: "pay", n: i.n };
+    keep.push(Object.assign({}, i, { pay: pay }));
+  }
+  if (!keep.length) return { ok: false, error: "none_ok" };
+  const now = new Date().toISOString(), who = user.name || user.id;
+  const b = Object.assign({}, x.b, { status: "paid", items: keep, total: keep.reduce(function (n, i) { return n + i.a; }, 0), paid: keep.reduce(function (n, i) { return n + i.pay; }, 0),
+    paidOn: day, how: how, ref: ref, last4: last4, appBy: String(req.approvedBy || "").trim().slice(0, 60) || who, appAt: now, vTo: to.list.join(", "), vAt: now,
+    out: out.map(function (i) { return i.n; }).join(", ").slice(0, 2000) });
+  cpMailVendor_(b, to.list);   // first: when it can't go, nothing is marked paid
+  const s = repSheet_(true), rows = repRows_(s);
+  keep.forEach(function (i) {
+    const r = rows[i.j];
+    if (!r) return;
+    const inv = repMonList_(r);
+    let hit = false;
+    inv.forEach(function (v) { if (String(v.n) === i.n) { v.paid = day; v.pay = i.pay; v.b = b.id; v.ref = ref; hit = true; } });
+    if (!hit) inv.push({ n: i.n, d: i.d, a: i.a, k: "", f: i.fn, by: who, at: now, paid: day, pay: i.pay, b: b.id, ref: ref });
+    if (!r[25] && inv.every(function (v) { return v.paid; })) r[25] = day;
+    r[32] = JSON.stringify(inv).slice(0, 45000); r[27] = who; r[28] = now;
+  });
+  cpFree_(rows, out, b);
+  repWrite_(s, rows);
+  cpPut_(x.s, x.row, b);
+  const ids = {};
+  keep.concat(out).forEach(function (i) { if (rows[i.j]) ids[i.j] = true; });
+  return { ok: true, batch: cpOut_(b), jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
+}
+/** A batch still waiting, called off: its invoices go back to "not sent". */
+function cpCancel_(req, user) {
+  const x = cpFind_(req.id);
+  if (!x) return { ok: false, error: "gone" };
+  if (x.b.status !== "waiting") return { ok: false, error: "not_waiting", batch: cpOut_(x.b) };
+  const s = repSheet_(true), rows = repRows_(s);
+  cpFree_(rows, x.b.items, x.b);
+  repWrite_(s, rows);
+  const b = Object.assign({}, x.b, { status: "canceled", cxBy: user.name || user.id, cxAt: new Date().toISOString() });
+  cpPut_(x.s, x.row, b);
+  const ids = {};
+  b.items.forEach(function (i) { if (rows[i.j]) ids[i.j] = true; });
+  return { ok: true, batch: cpOut_(b), jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
+}
+/** The email again: to accounting while the batch waits, to the contractor once it's paid ({ id, to }). */
+function cpResend_(req) {
+  const x = cpFind_(req.id);
+  if (!x) return { ok: false, error: "gone" };
+  const to = cpEmails_(req.to);
+  if (to.error) return { ok: false, error: to.error, email: to.email };
+  const b = x.b, now = new Date().toISOString();
+  if (b.status === "waiting") {
+    const files = {};
+    b.items.forEach(function (i) { if (!files[i.f]) files[i.f] = cpFileOk_(i.f); });
+    if (Object.keys(files).some(function (k) { return !files[k]; })) return { ok: false, error: "no_pdf" };
+    cpMailAccounting_(b, to.list, Object.keys(files).map(function (k) { return files[k]; }));
+    b.to = to.list.join(", ");
+  } else if (b.status === "paid") {
+    cpMailVendor_(b, to.list);
+    b.vTo = to.list.join(", "); b.vAt = now;
+  } else return { ok: false, error: "not_waiting", batch: cpOut_(b) };
+  cpPut_(x.s, x.row, b);
+  return { ok: true, batch: cpOut_(b) };
+}
+/** A file to open in the app: the pay stub ({ id }) or one of the batch's invoices ({ id, f }). */
+function cpDoc_(req) {
+  const x = cpFind_(req.id);
+  if (!x) return { ok: false, error: "gone" };
+  if (!req.f) { const p = cpStubPdf_(x.b); return { ok: true, name: p.getName(), data: Utilities.base64Encode(p.getBytes()) }; }
+  if (!x.b.items.some(function (i) { return i.f === String(req.f); })) return { ok: false, error: "gone" };
+  const f = cpFileOk_(req.f);
+  if (!f) return { ok: false, error: "no_pdf" };
+  return { ok: true, name: f.getName(), data: Utilities.base64Encode(f.getBlob().getBytes()) };
 }
 
 /* ---------------- office scorecards ---------------- */

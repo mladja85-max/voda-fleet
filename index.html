@@ -708,6 +708,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rev-sub { justify-self: start; }
 .rp-tag { display: inline-block; font-size: .7rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--bg); color: var(--muted); white-space: nowrap; }
 .rp-tag.ok { background: var(--ok-bg); color: var(--ok); } .rp-tag.due { background: var(--due-bg); color: var(--due); } .rp-tag.dep { background: var(--soon-bg); color: var(--soon); }
+.rp-tag.sent { background: var(--accent-soft); color: var(--accent); }
 .rp-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .rp-kpis .pay-kpi b { font-size: clamp(1.05rem, 1.7vw, 1.5rem); }
 .rp-kpis .pay-kpi span { display: block; color: var(--muted); font-size: .76rem; }
@@ -740,7 +741,65 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rp-line.tot { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 2px; }
 .rp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .rp-invlist { display: grid; gap: 10px; }
-.rp-inv { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+.rp-inv { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; position: relative; }
+.rp-inv:has(> .rp-tick) { padding-left: 46px; }
+.rp-inv .rp-tick { position: absolute; left: 13px; top: 11px; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.rp-inv .rp-tick:disabled { cursor: not-allowed; }
+.rp-inv.off { background: color-mix(in srgb, var(--bg) 60%, var(--surface)); }
+.rp-inv .rp-lock { border-left: 4px solid var(--due); padding: 6px 10px; background: var(--due-bg); border-radius: 8px; font-size: .9rem; font-weight: 600; }
+.rp-invfoot { display: grid; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); }
+.rp-invfoot:has(.rp-invsum:empty):has(#repInvTo:empty) { display: none; }
+.rp-invsum { display: grid; gap: 2px; } .rp-invsum b { font-size: 1.05rem; } .rp-invsum small { color: var(--muted); }
+/* Contractor Payroll */
+.cp-tos { display: grid; gap: 6px; } .cp-tos .lbl { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.cp-tolist { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-to { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; background: var(--surface); cursor: pointer; min-width: 0; }
+.cp-to input { margin: 0; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.cp-to span { display: grid; min-width: 0; } .cp-to b { font-size: .88rem; } .cp-to small { color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
+.cp-to:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.cp-tos input[type=text], .cp-party input, .cp-party select, .cp-items .cp-pay { box-sizing: border-box; font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 11px; }
+.cp-tos input[type=text] { width: 100%; }
+.cp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.cp-kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: grid; gap: 2px; }
+.cp-kpi small { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.cp-kpi b { font-size: 1.5rem; } .cp-kpi span { color: var(--muted); font-size: .86rem; }
+.cp-kpi.due { border-color: color-mix(in srgb, var(--soon) 45%, var(--line)); }
+.cp-panel { display: grid; gap: 10px; } .cp-panel .meta { margin: 0; }
+.cp-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; } .cp-head h3 { margin: 0; }
+.cp-table tbody tr { cursor: pointer; } .cp-table tr.gone { opacity: .6; }
+.cp-table td small, .cp-table th small, .cp-items td small { display: block; }
+.cp-table th, .cp-table td, .cp-items th, .cp-items td { white-space: nowrap; }
+.cp-table .l, .cp-items .l { text-align: left; } .cp-table td.st, .cp-table th.st { text-align: right; }
+.cp-items td.l { white-space: normal; } .cp-items td.c, .cp-items th.c { text-align: center; }
+.cp-items tr.off td { opacity: .5; } .cp-items .cp-pay { width: 7.5em; text-align: right; font: inherit; padding: 4px 6px; }
+.cp-items .cp-pay.bad { border-color: var(--due); }
+.cp-items input.cp-ok { width: 20px; height: 20px; accent-color: var(--accent); }
+.cp .ph, .cp-dlg .ph { display: none; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; text-align: left; }
+.linkish.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .86em; }
+.cp-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; font-size: .86rem; color: var(--muted); } .cp-steps .on { color: var(--ink); font-weight: 700; }
+.cp-payf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.cp-payf .field { margin: 0; } .cp-payf input, .cp-payf select { width: 100%; box-sizing: border-box; }
+.cp-sendbox { display: grid; gap: 8px; }
+.cp-paysum { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); } .cp-paysum b { font-size: 1.05rem; } .cp-paysum small { color: var(--muted); }
+.cp-paidbox { display: grid; gap: 3px; padding: 12px 14px; border-radius: 12px; background: var(--ok-bg); } .cp-paidbox b { color: var(--ok); } .cp-paidbox span { font-size: .9rem; }
+.cp-parties { display: grid; gap: 8px; }
+.cp-party { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, .9fr) auto; gap: 8px; align-items: center; }
+.cp-party input, .cp-party select { width: 100%; box-sizing: border-box; min-width: 0; }
+.btn.danger { border-color: var(--due); color: var(--due); }
+/* the invoices window and a batch: their buttons wrap (the main one on its own line on a phone) */
+.rp-dlg .dlg-foot .right:has(#repInvSend), .cp-dlg .dlg-foot .right { flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 560px) {
+  .cp .pc, .cp-dlg .pc { display: none; }
+  .cp .ph, .cp-dlg .ph { display: block; white-space: normal; }
+  .cp-payf { grid-template-columns: 1fr 1fr; }
+  .cp-party { grid-template-columns: 1fr auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; } .cp-party .cp-pemail, .cp-party .cp-pkind { grid-column: 1; }
+  .cp-kpi b { font-size: 1.25rem; }
+  .cp-kpis { grid-template-columns: 1fr 1fr; gap: 8px; } .cp-kpi { padding: 10px 12px; } .cp-kpi small { font-size: .66rem; } .cp-kpi span { font-size: .78rem; }
+  .cp-table th small.ph { font-weight: 500; color: var(--muted); }
+  .cp-table td small.ph { margin-top: 3px; }
+  .rp-dlg .dlg-foot .right:has(#repInvSend) > .btn.primary, .cp-dlg .dlg-foot .right > .btn.primary { flex: 1 1 100%; order: 9; }
+}
 .rp-inv .top { display: flex; justify-content: space-between; gap: 10px; } .rp-inv .top span { font-weight: 700; }
 .rp-inv p { margin: 0; } .rp-inv.saved { opacity: .7; } .rp-inv.bad { border-color: var(--due); }
 .rp-inv select { width: 100%; }
@@ -1106,6 +1165,7 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
   .t-long { display: none; }
   .t-short { display: inline; }
   .lb-tabs.four .seg-btn { font-size: .8rem; padding: 8px 2px; letter-spacing: -.01em; }   /* Revenue · Performance · Production · Payroll */
+  .lb-tabs.five .seg-btn { font-size: .68rem; padding: 8px 1px; letter-spacing: -.02em; }   /* ... and Repairs, Contractors */
   .lb-top { flex-wrap: nowrap; min-height: 38px; }
   .lb-title { font-size: 1.3rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lb-acts { flex: none; gap: 6px; }
@@ -1827,6 +1887,9 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
       <button type="button" class="view-btn" id="viewMarketing" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10v4h3l6 4V6L6 10z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>Marketing
       </button>
+      <button type="button" class="view-btn" id="viewContractors" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/><path d="M8 15h4"/></svg>Contractor Payroll
+      </button>
       <button type="button" class="view-btn" id="viewRepairs" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Repairs Payroll
       </button>
@@ -1866,6 +1929,7 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
     <section class="lb of" id="ofView" aria-label="Office" hidden></section>
     <section class="lb rev" id="revView" aria-label="Operations" hidden></section>
     <section class="lb rev" id="repView" aria-label="Repairs Payroll" hidden></section>
+    <section class="lb rev cp" id="cpView" aria-label="Contractor Payroll" hidden></section>
     <section class="lb rev mkt" id="mktView" aria-label="Marketing" hidden></section>
     <section class="panel" id="noAccess" hidden>
       <h2>Nothing here yet</h2>
@@ -4369,6 +4433,7 @@ async function refresh(quiet) {
   if (view.tab === "leaderboard" && loaded && !dlg.open && !lbShowState && !lbTyping()) lbLoad(!quiet);
   // (Office by itself only while nobody is working in this window: its boxes and menus aren't redrawn under a hand)
   if (view.tab === "office" && loaded && !dlg.open && !ofTypingNow() && !ofLoading && (!quiet || performance.now() - lbActiveAt > 15000)) ofLoad();
+  if (view.tab === "contractors" && loaded && !dlg.open && !cpLoading) cpLoad();
   try {
     const out = await api("list");
     let roleChanged = false;
@@ -4764,7 +4829,7 @@ function showSignIn(message, mode) {
 
 function signOut(message) {
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
-  lbForget(); revForget(); repForget(); mktForget(); mktAsked = false;
+  lbForget(); revForget(); repForget(); mktForget(); cpForget(); mktAsked = false;
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
@@ -6305,6 +6370,7 @@ const ST_ICONS = {
   hist: '<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>' };
 const stIcon = k => { const s = h("span", { class: "st-ic", "aria-hidden": "true" }); s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ST_ICONS[k]}</svg>`; return s; };
 /** One line of Settings: an icon, what it is, a few words on what's inside, and › when it opens something. */
@@ -6415,7 +6481,8 @@ function openSettings() {
     isAdmin() ? stRow("st-users", "users", "Users and invites", "Who can sign in and what each one sees", openUsers) : null,
     canEditLb() && lbOk ? stRow("st-emp", "emp", "Employees", "Who's on the leaderboard, their unit and role", ev => stWithLb(ev.currentTarget, () => openLbTeams())) : null,
     canSeePayroll() && lbOk ? stRow("st-rates", "pay", "Pay rates", "Everyone's day rate and commissions", ev => stWithLb(ev.currentTarget, () => openPayRates())) : null,
-    canSeePayroll() && lbOk ? stRow("st-jobs", "hist", "Job history", "Every job and every change, to download", ev => stWithLb(ev.currentTarget, () => openJobHistory(lbPayView().r))) : null].filter(Boolean);
+    canSeePayroll() && lbOk ? stRow("st-jobs", "hist", "Job history", "Every job and every change, to download", ev => stWithLb(ev.currentTarget, () => openJobHistory(lbPayView().r))) : null,
+    canSee("contractors") && apiLevel >= CP_API ? stRow("st-cpmail", "mail", "Payroll emails", "Accounting's and the vendors' email addresses", () => openCpParties()) : null].filter(Boolean);
   const name = session ? session.name || session.username || "" : "";
   openDialog(
     h("h3", { id: "dlgTitle", text: "Settings" }),
@@ -6771,19 +6838,22 @@ const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
-  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && a !== "repairs" && a !== "marketing" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
+  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && a !== "repairs" && a !== "marketing" && a !== "contractors" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
   if (canSeeLb()) out.push("leaderboard");
   if (canSee("revenue")) out.push("revenue");   // Operations
   if (canSee("office")) out.push("office");
   if (canSee("marketing")) out.push("marketing");
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
+  if (canSee("contractors") && (!apiLevel || apiLevel >= CP_API)) out.push("contractors");   // Contractor Payroll
   return out;
 }
 /** Whoever sees the Leaderboard and Repairs Payroll gets Repairs Payroll in the Leaderboard's row (Performance ·
  *  Production · VODA Payroll · Repairs Payroll) instead of a tab of its own at the top. */
 const repInLb = () => { const t = allowedTabs(); return t.includes("repairs") && t.includes("leaderboard"); };
+/** ... and Contractor Payroll next to it. */
+const cpInLb = () => { const t = allowedTabs(); return t.includes("contractors") && t.includes("leaderboard"); };
 /** The tabs on the bar at the top. */
-const navTabs = () => allowedTabs().filter(t => t !== "repairs" || !repInLb());
+const navTabs = () => allowedTabs().filter(t => (t !== "repairs" || !repInLb()) && (t !== "contractors" || !cpInLb()));
 /** The Leaderboard's or Revenue's name over it: only when there's no bar at the top already saying it. */
 const secTitle = text => (navTabs().length < 2 ? h("h2", { class: "lb-title", text }) : null);
 
@@ -6889,8 +6959,8 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = ["supplies", "leaderboard", "office", "revenue", "repairs", "marketing"].includes(tab) ? tab : "trucks";
-  if (view.tab === "leaderboard" || view.tab === "repairs") view.lbSide = view.tab;
+  view.tab = ["supplies", "leaderboard", "office", "revenue", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
+  if (view.tab === "leaderboard" || view.tab === "repairs" || view.tab === "contractors") view.lbSide = view.tab;
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -6900,9 +6970,9 @@ function applyTab() {
   const tabs = allowedTabs();
   $("askBtn").hidden = !askQuestions().length;
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
-  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs", mk = view.tab === "marketing";
+  const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs", mk = view.tab === "marketing", cp = view.tab === "contractors";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : rp ? "#repairs" : mk ? "#marketing" : "";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : rp ? "#repairs" : mk ? "#marketing" : cp ? "#contractors" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
@@ -6918,8 +6988,10 @@ function applyTab() {
   $("viewRevenue").hidden = !nav.includes("revenue");
   $("viewRepairs").hidden = !nav.includes("repairs");
   $("viewMarketing").hidden = !nav.includes("marketing");
+  $("viewContractors").hidden = !nav.includes("contractors");
   if (!tabs.includes("revenue") && !tabs.includes("marketing") && revData) revForget();
   if (!tabs.includes("marketing") && mktData) mktForget();
+  if (!tabs.includes("contractors") && cpData) cpForget();
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
@@ -6927,14 +6999,16 @@ function applyTab() {
   $("revView").hidden = !rv;
   $("repView").hidden = !rp;
   $("mktView").hidden = !mk;
+  $("cpView").hidden = !cp;
   $("noAccess").hidden = tabs.length > 0;
   $("viewTrucks").setAttribute("aria-pressed", String(trk));
   $("viewSupplies").setAttribute("aria-pressed", String(sup));
-  $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rp && folded)));
+  $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rp && folded) || (cp && cpInLb())));
   $("viewOffice").setAttribute("aria-pressed", String(of));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
   $("viewRepairs").setAttribute("aria-pressed", String(rp));
   $("viewMarketing").setAttribute("aria-pressed", String(mk));
+  $("viewContractors").setAttribute("aria-pressed", String(cp));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
   renderSupplies();
@@ -6943,6 +7017,7 @@ function applyTab() {
   if (rv) { renderRevenue(); if (loaded) revLoad(); }
   if (rp) renderRevenue();
   if (mk) renderMarketing();
+  if (cp) renderContractors();   // it loads what it needs
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
@@ -6953,7 +7028,8 @@ $("viewRevenue").addEventListener("click", () => setTab("revenue"));
   set(); if (bar && window.ResizeObserver) new ResizeObserver(set).observe(bar); else addEventListener("resize", set); })();
 $("viewRepairs").addEventListener("click", () => setTab("repairs"));
 $("viewMarketing").addEventListener("click", () => setTab("marketing"));
-$("viewLeaderboard").addEventListener("click", () => setTab(repInLb() && view.lbSide === "repairs" ? "repairs" : "leaderboard"));
+$("viewContractors").addEventListener("click", () => setTab("contractors"));
+$("viewLeaderboard").addEventListener("click", () => setTab(repInLb() && view.lbSide === "repairs" ? "repairs" : cpInLb() && view.lbSide === "contractors" ? "contractors" : "leaderboard"));
 
 function renderSupBadge() {
   const s = supOk() ? supNow() : null;
@@ -7423,7 +7499,8 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= OF_API ? [["office", "Office"]] : [],
     apiLevel >= REV_API ? [["revenue", "Operations"]] : [],
     apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : [],
-    apiLevel >= MKT_API ? [["marketing", "Marketing"]] : []);
+    apiLevel >= MKT_API ? [["marketing", "Marketing"]] : [],
+    apiLevel >= CP_API ? [["contractors", "Contractor Payroll"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -7480,7 +7557,7 @@ const lbToday = () => lbDayKey(clockNow());
 const lbMoney = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(Number(n) || 0)).toLocaleString("en-US");
 const lbFmt = (m, v) => (m.money ? lbMoney(v) : String(Math.round(Number(v) || 0)));
 const LB_TABS = { performance: "Performance", enter: "Production", payroll: "VODA Payroll" };   // Production: where each day's numbers are typed
-const LB_SHORT = { "VODA Payroll": "Payroll", "Repairs Payroll": "Repairs", "Technician sales": "Sales", "Whole company": "Company", "Week to date": "Week", "Year to date": "Year" };   // a phone's names, so every row of buttons fits on one line
+const LB_SHORT = { "VODA Payroll": "Payroll", "Repairs Payroll": "Repairs", "Contractor Payroll": "Contractors", "Technician sales": "Sales", "Whole company": "Company", "Week to date": "Week", "Year to date": "Year" };   // a phone's names, so every row of buttons fits on one line
 /** A tab's name: the long one, and on a phone the short one. */
 /** This year's jobs to check (sales over the job's revenue, or sales with no revenue), newest first. */
 const lbToCheck = () => { const y = lbYear(); return lbData ? lbJobFlags(lbData.months, `${y}-01-01`, `${y}-12-31`) : []; };
@@ -7808,16 +7885,18 @@ function lbTabOk(k) {
 /** The Leaderboard's row: Revenue (for whoever sees it), then Performance, Production and Payroll as allowed. On Revenue
  *  (cur "revenue") none of the others is lit; tapping one opens the Leaderboard on it. */
 function lbTabsEl(cur) {
-  const edit = canEditLb() && (!lbData || lbData.canEdit !== false), showRep = repInLb();
+  const edit = canEditLb() && (!lbData || lbData.canEdit !== false), showRep = repInLb(), showCp = cpInLb();
   const items = Object.entries(LB_TABS).filter(([k]) => lbTabOk(k));
-  const n = items.length + (showRep ? 1 : 0);
+  const n = items.length + (showRep ? 1 : 0) + (showCp ? 1 : 0);
   const leave = () => { if (view.tab === "leaderboard" && lbView.tab === "enter") { lbFlush(); lbCardsLeft(); } };
-  return h("div", { class: "seg lb-tabs" + (n === 4 ? " four" : ""), role: "tablist", "aria-label": "Leaderboard" },
+  return h("div", { class: "seg lb-tabs" + (n === 4 ? " four" : n >= 5 ? " five" : ""), role: "tablist", "aria-label": "Leaderboard" },
     items.map(([k, t]) => h("button", { class: "seg-btn" + (k === "performance" && edit && lbToCheck().length ? " flag" : ""), type: "button", role: "tab", "aria-selected": String(cur === k), "data-k": k,
       title: k === "performance" && edit && lbToCheck().length ? "Jobs to check" : null,
       onclick: () => { leave(); lbView.tab = k; lbSaveView(); if (view.tab !== "leaderboard") setTab("leaderboard"); else renderLeaderboard(); } }, lbTabText(t))),
     showRep ? h("button", { class: "seg-btn", type: "button", role: "tab", id: "lbRepBtn", "aria-selected": String(cur === "repairs"), "data-k": "repairs",
-      onclick: () => { if (view.tab === "repairs") return; leave(); setTab("repairs"); } }, lbTabText("Repairs Payroll")) : null);
+      onclick: () => { if (view.tab === "repairs") return; leave(); setTab("repairs"); } }, lbTabText("Repairs Payroll")) : null,
+    showCp ? h("button", { class: "seg-btn", type: "button", role: "tab", id: "lbCpBtn", "aria-selected": String(cur === "contractors"), "data-k": "contractors",
+      onclick: () => { if (view.tab === "contractors") return; leave(); setTab("contractors"); } }, lbTabText("Contractor Payroll")) : null);
 }
 /** Months of this year so far that have teams on the board. */
 function lbMonthsWith() {
@@ -10621,9 +10700,10 @@ function renderRepairs(box) {
         h("td", null, repPayTag(j, today), j.owes > 0 ? h("small", { text: `${lbCash(j.owes / 100)} ${j.paid > 0 ? "left" : "owed"}` }) : null),
         h("td", { class: "vn" }, x.f ? lbCash(x.f / 100) : "–", x.f && j.t.sName ? h("small", { text: j.t.sName }) : null),
         h("td", { class: "vn" }, x.mon ? lbCash(x.monAmt / 100) : "–", x.mon ? h("small", { text: `70%${x.j ? ` + ${lbMoney(x.j / 100)} materials` : ""}${x.x ? ` + ${lbMoney(x.x / 100)} extra` : ""}` }) : h("small", { text: "no Monumental" })),
-        h("td", { class: "vn" }, !x.mon ? "–" : j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(j.t.mPaidAt)}` }) : lbCash(x.owed / 100),
+        h("td", { class: "vn" }, !x.mon ? "–" : j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(j.t.mPaidAt)}${repMonBatches(j, true) ? ` · ${repMonBatches(j, true)}` : ""}` }) : lbCash(x.owed / 100),
           x.mon && j.t.mInv ? h("small", { text: j.t.mInv }) : x.mon && !j.t.mPaidAt && x.k ? h("small", { text: `after ${lbMoney(x.k / 100)} deposit` }) : null,
-          repMonToPay(j) ? h("span", { class: "rp-tag dep", text: `Invoice ${lbCash(repMonToPay(j) / 100)} to pay` }) : null),
+          repMonToPay(j) && repMonSent(j) ? h("span", { class: "rp-tag sent", text: `${lbCash(repMonSent(j) / 100)} sent to accounting` }) : null,
+          repMonToPay(j) > repMonSent(j) ? h("span", { class: "rp-tag dep", text: `Invoice ${lbCash((repMonToPay(j) - repMonSent(j)) / 100)} to pay` }) : null),
         h("td", { class: "vd" }, lbCash(x.voda / 100), h("small", { text: x.mon ? (x.n ? "30% + 30% on materials" : "30%") + (x.x ? " − extra" : "") : "all of it" })));
     };
     const table = h("div", { class: "panel rp-tablewrap" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "repTable" },
@@ -10719,8 +10799,9 @@ function openRepJob(id) {
       inp("mPaidAt", "Date VODA paid them", "day")),
     (j.mon || []).length ? h("div", { class: "rp-invs", id: "repJobInvs" }, h("h4", { text: "Invoices from Monumental" }), j.mon.map(v => h("div", { class: "rp-line", "data-n": v.n },
       h("span", { text: [`#${v.n}`, v.d ? repShortDay(v.d) : "", v.k].filter(Boolean).join(" · ") }),
-      h("b", null, lbCash(v.a / 100), " ", v.paid || j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: "Paid" }) : h("span", { class: "rp-tag dep", text: "To pay" }), " ",
-        h("button", { class: "btn small", type: "button", title: "Remove this invoice from the job", "aria-label": `Remove invoice ${v.n}`, onclick: async ev => {
+      h("b", null, lbCash(v.a / 100), " ", v.paid || j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: v.b && v.paid ? `Paid · ${v.b}` : "Paid" })
+        : v.b ? h("span", { class: "rp-tag sent", text: `Sent to accounting · ${v.b}` }) : h("span", { class: "rp-tag dep", text: "To pay" }), " ",
+        v.b && !v.paid ? null : h("button", { class: "btn small", type: "button", title: "Remove this invoice from the job", "aria-label": `Remove invoice ${v.n}`, onclick: async ev => {
           const b = ev.currentTarget; b.disabled = true;
           try {
             const o = await api("repMonInv", { id: j.id, del: v.n });
@@ -10768,6 +10849,10 @@ function openRepJob(id) {
 const REP_INV_API = 42;                                 // the Google script that records Monumental's invoices
 /** What Monumental is still to be paid on a job by its invoices (cents): none once "Date VODA paid them" is set. */
 const repMonToPay = j => (j.t && j.t.mPaidAt ? 0 : (j.mon || []).reduce((n, i) => n + (i.paid ? 0 : Number(i.a) || 0), 0));
+/** ... of it, what's sent to accounting and waiting there (cents). */
+const repMonSent = j => (j.t && j.t.mPaidAt ? 0 : (j.mon || []).reduce((n, i) => n + (i.b && !i.paid ? Number(i.a) || 0 : 0), 0));
+/** The batches a job's invoices were paid in (paid) or sent in: "MON-2026-11-13". */
+const repMonBatches = (j, paid) => [...new Set((j.mon || []).filter(i => i.b && !!i.paid === !!paid).map(i => i.b))].join(", ");
 /** A Monumental invoice from its PDF's lines: { n, d, items: [{ name, addr, desc, a }], a (cents) } or null. The layout is
  *  their Google Sheets invoice: "Invoice <number>", the date, then Activity / Description / Qty / Amount rows. */
 function repMonParse(pages) {
@@ -10833,64 +10918,136 @@ function repMonMatch(item, n, d, jobs) {
   }
   return out.sort((a, b) => b.score - a.score || (a.j.day < b.j.day ? 1 : -1));
 }
-/** Add Monumental's invoices: pick their PDFs; each is read here (nothing is uploaded), matched to its project, checked
- *  against Monumental's share, and saved on the job when you press Save. */
+/** Add Monumental's invoices: pick their PDFs; each is read here, matched to its project and checked against Monumental's
+ *  share. Matching ones come ticked; the ticked ones are saved on their jobs, and with Contractor Payroll sent to
+ *  accounting as a batch (their PDFs and the pay stub by email). One paid already or waiting in a batch can't be ticked. */
 function openRepMonInv() {
-  let cards = [], busy = false;
+  let cards = [], busy = false, to = null;
   const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", id: "repInvStatus", role: "status" }), list = h("div", { class: "rp-invlist", id: "repInvList" });
-  const save = h("button", { class: "btn primary", type: "button", id: "repInvSave", disabled: true, onclick: () => go() }, "Save");
+  // with Contractor Payroll, ticked invoices also go to accounting (their PDFs and the pay stub)
+  const canSend = canSee("contractors") && apiLevel >= CP_API;
+  const save = h("button", { class: "btn" + (canSend ? "" : " primary"), type: "button", id: "repInvSave", disabled: true, onclick: () => go(false) }, "Save");
+  const send = canSend ? h("button", { class: "btn primary", type: "button", id: "repInvSend", disabled: true, onclick: () => go(true) }, "Send to accounting") : null;
+  const sumBox = h("div", { class: "rp-invsum", id: "repInvSum" }), toBox = h("div", { id: "repInvTo" });
+  const fileIds = new Map();   // the PDFs already uploaded: sending again doesn't upload them twice
   const C = c => lbCash(c / 100);
   const allJobs = () => Object.values(repDocs).flatMap(d => d.jobs || []).filter(j => !j.gone).sort((a, b) => (a.day < b.day ? 1 : -1));
   const jobText = j => `${repShortDay(j.day)} ${j.day.slice(0, 4)} · ${j.client || "(no name)"} · ${repStreetText(j.addr)} · charged ${C(j.c)}`;
+  const nOf = c => (c.n || `PDF ${c.file}`).trim().slice(0, 60);
+  const jobOf = c => (c.pick ? allJobs().find(x => x.id === c.pick) : null);
+  /** Does the invoice match Monumental's share of its project (within $1, or with the extra pay ticked)? */
+  const matches = c => { const j = jobOf(c); return !!j && (Math.abs(c.item.a - repSplit(j).monAmt) <= 100 || !!c.extra); };
+  /** Paid already, sent and waiting, or its job marked paid: it can't be ticked. */
+  const lockOf = c => {
+    const n = nOf(c), j = jobOf(c), t = cpTaken(n, allJobs());
+    if (t) return t;
+    if (j && j.t && j.t.mPaidAt) return { why: "job_paid", on: j.t.mPaidAt };
+    return null;
+  };
+  const twinOn = c => cards.some(o => o !== c && !o.bad && !o.sent && o.on && nOf(o) === nOf(c));
+  const goes = c => !c.bad && !c.sent && !c.done && c.on && c.pick && !lockOf(c);
   const draw = () => {
     list.replaceChildren(...cards.map((c, i) => {
       if (c.bad) return h("div", { class: "rp-inv bad" }, h("b", { text: c.file }), h("p", { class: "dlg-err", text: c.bad }));
-      const it = c.item, j = c.pick && allJobs().find(x => x.id === c.pick);
-      const sel = h("select", { "data-i": i, "aria-label": "Project", onchange: e => { e.stopPropagation(); c.pick = e.target.value; c.move = false; c.extra = false; c.msg = ""; draw(); }, oninput: e => e.stopPropagation() },
+      const it = c.item, j = jobOf(c), lock = c.sent || c.done ? null : lockOf(c);
+      if (lock) c.on = false;
+      const head = [h("div", { class: "top" }, h("b", { text: `Invoice ${c.n || "(no number)"}` }), h("span", { text: C(it.a) })),
+        h("p", { class: "meta", text: [c.d ? lbDayText(c.d) : "", it.desc, it.name, it.addr].filter(Boolean).join(" · ") })];
+      if (c.sent) return h("div", { class: "rp-inv saved", "data-inv": c.n }, ...head, h("p", { class: "ok", text: `✓ Sent to accounting · batch ${c.sent}` }));
+      if (c.done) return h("div", { class: "rp-inv saved", "data-inv": c.n }, ...head, h("p", { class: "ok", text: "✓ Saved" }));
+      const sel = h("select", { "data-i": i, "aria-label": "Project", onchange: e => { e.stopPropagation(); c.pick = e.target.value; c.move = false; c.extra = false; c.msg = ""; c.on = matches(c) && !lockOf(c) && !twinOn(c); draw(); }, oninput: e => e.stopPropagation() },
         h("option", { value: "", text: c.cands.length ? "— Don't save this one —" : "— Pick the project —" }),
         c.cands.length ? h("optgroup", { label: "Best matches" }, c.cands.slice(0, 5).map(x => h("option", { value: x.j.id, text: `${jobText(x.j)}  (${x.why.join(", ") || "close"})` }))) : null,
         h("optgroup", { label: "All projects" }, allJobs().map(x => h("option", { value: x.j ? x.j.id : x.id, text: jobText(x) }))));
       sel.value = c.pick || "";
       let check = null;
       if (j) {
-        const x = repSplit(j), dif = it.a - x.monAmt, had = (j.mon || []).some(v => v.n === c.n);
+        const x = repSplit(j), dif = it.a - x.monAmt, had = (j.mon || []).some(v => v.n === nOf(c)), off = Math.abs(dif) > 100 && !c.extra;
         check = h("div", { class: "rp-invcheck" },
           Math.abs(dif) <= 100 ? h("p", { class: "ok", text: `✓ Matches Monumental's share of this job (${C(x.monAmt)}).` })
-            : h("p", { class: dif > 0 ? "over" : "under", text: `The invoice is ${C(Math.abs(dif))} ${dif > 0 ? "more" : "less"} than Monumental's share of this job (${C(x.monAmt)}).` }),
-          dif > 100 ? h("label", { class: "rp-check" }, h("input", { type: "checkbox", checked: !!c.extra, onchange: e => { e.stopPropagation(); c.extra = e.target.checked; }, oninput: e => e.stopPropagation() }),
+            : h("p", { class: dif > 0 ? "over" : "under", text: `The invoice is ${C(Math.abs(dif))} ${dif > 0 ? "more" : "less"} than Monumental's share of this job (${C(x.monAmt)}).${lock ? "" : off ? (c.on ? " Ticked: you chose to include it." : " Not ticked: it stays out unless you tick it.") : ""}` }),
+          dif > 100 && !lock ? h("label", { class: "rp-check" }, h("input", { type: "checkbox", class: "rp-extra", checked: !!c.extra, onchange: e => { e.stopPropagation(); c.extra = e.target.checked; if (c.extra && !twinOn(c)) c.on = true; draw(); }, oninput: e => e.stopPropagation() }),
             ` Add ${C(dif + (x.x || 0))} as extra pay to Monumental (it then matches the invoice)`) : null,
-          had ? h("p", { class: "meta", text: "Already recorded on this job; saving updates it." }) : null,
+          had && !lock ? h("p", { class: "meta", text: "Already recorded on this job; saving updates it." }) : null,
           c.msg ? h("p", { class: "dlg-err", text: c.msg }) : null,
           c.other ? h("label", { class: "rp-check" }, h("input", { type: "checkbox", checked: !!c.move, onchange: e => { e.stopPropagation(); c.move = e.target.checked; }, oninput: e => e.stopPropagation() }), " Move it to this job") : null);
       }
-      return h("div", { class: "rp-inv" + (c.saved ? " saved" : ""), "data-inv": c.n },
-        h("div", { class: "top" }, h("b", { text: `Invoice ${c.n || "(no number)"}` }), h("span", { text: C(it.a) })),
-        h("p", { class: "meta", text: [c.d ? lbDayText(c.d) : "", it.desc, it.name, it.addr].filter(Boolean).join(" · ") }),
-        c.saved ? h("p", { class: "ok", text: "✓ Saved" }) : [h("div", { class: "field" }, h("label", { text: c.cands.length ? "Project" : "Project (no match found: pick it)" }), sel), check]);
+      const tick = h("input", { type: "checkbox", class: "rp-tick", "aria-label": `Include invoice ${c.n || c.file}`, checked: !!c.on, disabled: busy || !!lock || !c.pick,
+        title: lock ? cpTakenText(lock) : !c.pick ? "Pick its project first" : c.on ? "Untick to leave it out" : "Tick to include it",
+        onchange: e => { e.stopPropagation(); c.on = e.target.checked; if (c.on) cards.forEach(o => { if (o !== c && nOf(o) === nOf(c)) o.on = false; }); draw(); }, oninput: e => e.stopPropagation() });
+      return h("div", { class: "rp-inv" + (c.on ? " on" : " off") + (lock ? " locked" : ""), "data-inv": c.n }, tick, ...head,
+        lock ? h("p", { class: "rp-lock", text: cpTakenText(lock) }) : null,
+        !lock && !c.on && twinOn(c) ? h("p", { class: "meta", text: "The same invoice # as another one here: only one of them can go." }) : null,
+        h("div", { class: "field" }, h("label", { text: c.cands.length ? "Project" : "Project (no match found: pick it)" }), sel), lock ? null : check);
     }));
-    const n = cards.filter(c => !c.bad && !c.saved && c.pick).length;
-    save.textContent = n ? `Save ${n} invoice${n === 1 ? "" : "s"}` : "Save";
+    const ok = cards.filter(goes), tot = ok.reduce((n, c) => n + c.item.a, 0), n = ok.length;
+    if (!cards.some(c => !c.bad)) sumBox.replaceChildren();
+    else sumBox.replaceChildren(...[h("b", { text: n ? `${cpPlural(n, "invoice")} · ${C(tot)}` : "Nothing ticked" }),
+      n ? h("small", { text: canSend ? `Send: saved on their jobs and emailed to accounting with ${n === 1 ? "its PDF" : "their PDFs"} and the pay stub.` : "Saved on their jobs as “to pay”." }) : null].filter(Boolean));
+    save.textContent = n ? (canSend ? `Save ${fmt(n)} without sending` : `Save ${cpPlural(n, "invoice")}`) : "Save";
     save.disabled = busy || !n;
+    if (send) { send.textContent = n ? `Send ${cpPlural(n, "invoice")} to accounting` : "Send to accounting"; send.disabled = busy || !n || !to; }
   };
-  const go = async () => {
-    busy = true; err.textContent = ""; draw();
-    for (const c of cards.filter(c => !c.bad && !c.saved && c.pick)) {
-      const j = allJobs().find(x => x.id === c.pick), x = j && repSplit(j);
-      status.textContent = `Saving invoice ${c.n}…`;
-      try {
-        const body = { id: c.pick, inv: { n: c.n || `PDF ${c.file}`.slice(0, 60), d: c.d, a: c.item.a / 100, k: c.item.desc, f: c.file }, move: !!c.move };
-        if (c.extra && x) body.extra = Math.max(0, c.item.a - (x.monAmt - (x.x || 0))) / 100;
-        const o = await api("repMonInv", body);
-        for (const d of Object.values(repDocs)) { const k = d.jobs.findIndex(v => v.id === o.job.id); if (k !== -1) { d.jobs[k] = o.job; repKeep(d.year); } if (c.move && c.other) { const q = d.jobs.find(v => v.id === c.other.id); if (q) q.mon = (q.mon || []).filter(v => v.n !== c.n); } }
-        c.saved = true; c.msg = ""; c.other = null;
-      } catch (e) {
-        if (e && e.error === "on_other") { c.other = e.other; c.msg = `Invoice ${c.n} is already on ${e.other.client || "another job"} (${repShortDay(e.other.day)}). Tick below to move it here.`; }
-        else c.msg = e && e.error === "bad_request" && (Number(e.api) || 0) < REP_INV_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, "The invoice");
-      }
+  // who accounting is: the saved addresses, once loaded
+  const drawTo = () => { if (!canSend || to || !cpData) return; to = cpToPicker("accounting", cpVendorName(), "repInvTo-p"); toBox.replaceChildren(to.el); draw(); };
+  if (canSend) { if (cpData) drawTo(); else cpLoad().then(() => { if (toBox.isConnected) { drawTo(); draw(); } if (!cpData && toBox.isConnected) toBox.replaceChildren(h("p", { class: "dlg-err", text: cpErr || "Couldn't load the email addresses." })); }); }
+  const saveOne = async c => {
+    const j = jobOf(c), x = j && repSplit(j);
+    status.textContent = `Saving invoice ${c.n}…`;
+    try {
+      const body = { id: c.pick, inv: { n: nOf(c), d: c.d, a: c.item.a / 100, k: c.item.desc, f: c.file }, move: !!c.move };
+      if (c.extra && x) body.extra = Math.max(0, c.item.a - (x.monAmt - (x.x || 0))) / 100;
+      const o = await api("repMonInv", body);
+      for (const d of Object.values(repDocs)) { const k = d.jobs.findIndex(v => v.id === o.job.id); if (k !== -1) { d.jobs[k] = o.job; repKeep(d.year); } if (c.move && c.other) { const q = d.jobs.find(v => v.id === c.other.id); if (q) q.mon = (q.mon || []).filter(v => v.n !== nOf(c)); } }
+      c.saved = true; c.msg = ""; c.other = null; c.extra = false;
+      return true;
+    } catch (e) {
+      if (e && e.error === "on_other") { c.other = e.other; c.msg = `Invoice ${c.n} is already on ${e.other.client || "another job"} (${repShortDay(e.other.day)}). Tick below to move it here.`; }
+      else if (e && e.error === "in_batch") c.msg = `It's in batch ${e.b}, waiting for accounting: it can't move until that batch is paid or canceled.`;
+      else c.msg = e && e.error === "bad_request" && (Number(e.api) || 0) < REP_INV_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, "The invoice");
+      return false;
     }
+  };
+  const cpB64 = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej({ error: "read" }); r.readAsDataURL(f); });
+  const go = async sending => {
+    const pick = cards.filter(goes);
+    if (!pick.length) return;
+    if (sending) { const bad = to ? to.bad() : "Loading the email addresses…"; if (bad) { err.textContent = bad; return; } }
+    busy = true; err.textContent = ""; draw();
+    let failed = false;
+    for (const c of pick) if (!c.saved && !(await saveOne(c))) failed = true;
+    if (!sending) {
+      pick.forEach(c => { if (c.saved) c.done = true; });
+      return finish(pick.filter(c => c.done).length ? `Saved ${cpPlural(pick.filter(c => c.done).length, "Monumental invoice")}` : "");
+    }
+    if (failed) { busy = false; status.textContent = ""; err.textContent = "Fix the invoices marked above, then send again."; draw(); return; }
+    try {
+      for (const c of pick) {
+        if (fileIds.has(c.fobj)) continue;
+        status.textContent = `Uploading ${c.file}…`;
+        if (c.fobj.size > 8 * 1024 * 1024) throw { error: "file_big", file: c.file };
+        const o = await api("cpFile", { name: c.file, data: await cpB64(c.fobj) }, 120000);
+        fileIds.set(c.fobj, o.id);
+      }
+      status.textContent = "Sending to accounting…";
+      const o = await api("cpSend", { vendor: cpVendorName(), to: to.list(), items: pick.map(c => ({ id: c.pick, n: nOf(c), f: fileIds.get(c.fobj) })) }, 170000);
+      cpTake(o);
+      pick.forEach(c => { c.sent = o.batch.id; c.on = false; });
+      return finish(`Sent ${cpPlural(pick.length, "invoice")} to accounting · batch ${o.batch.id}`);
+    } catch (e) {
+      if (e && e.error === "cant_send") {
+        for (const p of e.problems || []) { const c = pick.find(x => nOf(x) === p.n); if (c) c.msg = cpTakenText(p); }
+        err.textContent = "Some invoices can't be sent (see above). Untick them and send again.";
+      } else err.textContent = e && (e.error === "file_big" || e.error === "too_big") ? `${e.file || "A PDF"} is over 8 MB: too big to email.` : e && e.error === "not_pdf" ? "One of the files isn't a PDF." : cpCpErr(e, "The invoices");
+      busy = false; status.textContent = ""; draw(); renderRevenue();
+    }
+  };
+  const finish = msg => {
     busy = false; status.textContent = "";
     draw(); renderRevenue();
-    if (cards.every(c => c.bad || c.saved || !c.pick)) { const n = cards.filter(c => c.saved).length; if (n) { dlgDirty = false; closeDialog(); toast(`Saved ${n} Monumental invoice${n === 1 ? "" : "s"}`); renderRevenue(); } }
+    // unticked invoices stay in the window; once nothing's left to do, it closes
+    if (cards.every(c => c.bad || c.sent || c.done || !c.pick || lockOf(c))) { dlgDirty = false; closeDialog(); if (msg) toast(msg); renderRevenue(); }
+    else if (msg) toast(msg);
   };
   const quiet = e => e.stopPropagation();
   const file = h("input", { type: "file", id: "repInvFile", accept: ".pdf,application/pdf", multiple: true, oninput: quiet, onchange: async e => {
@@ -10930,11 +11087,15 @@ function openRepMonInv() {
           }
           groups.forEach((g, k) => {
             const n = groups.length > 1 ? `${inv.n} · ${k + 1}` : inv.n, cands = repMonMatch(g.item, inv.n, inv.d, allJobs());
-            cards.push({ file: f.name, n, d: inv.d, item: g.item, cands, pick: cands.length && cands[0].score >= 6 ? cands[0].j.id : "" });
+            const c = { file: f.name, fobj: f, n, d: inv.d, item: g.item, cands, pick: cands.length && cands[0].score >= 6 ? cands[0].j.id : "" };
+            // matching ones come ticked (one per invoice #); one that doesn't match stays out unless it's ticked
+            c.on = matches(c) && !lockOf(c) && !cards.some(o => o.on && nOf(o) === nOf(c));
+            cards.push(c);
           });
         } catch (x) { cards.push({ file: f.name, bad: x && x.message === "not_pdf" ? "That isn't a PDF file." : "Couldn't read this PDF." }); }
       }
-      status.textContent = `${cards.filter(c => !c.bad).length} invoice${cards.length === 1 ? "" : "s"} read. Check each project, then Save.`;
+      const good = cards.filter(c => !c.bad), ticked = good.filter(c => c.on).length;
+      status.textContent = `${good.length} invoice${good.length === 1 ? "" : "s"} read · ${ticked} ticked. Check each project, then ${canSend ? "send" : "save"}.`;
     } catch (x) {
       status.textContent = "";
       if (x && (x.error === "bad_code" || x.error === "signed_out")) { closeDialog(); signOut("Your sign-in ended. Please sign in again."); return; }
@@ -10945,9 +11106,13 @@ function openRepMonInv() {
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Monumental invoices" }),
     apiLevel && apiLevel < REP_INV_API ? h("p", { class: "dlg-err", text: "First update the Google script: paste the new Code.gs from GitHub and deploy a new version." }) : null,
-    h("p", { class: "hint", text: "Pick one or more of Monumental's invoice PDFs. They're read on this device (not uploaded anywhere); each is matched to its project by the address, then the amount and name. Check the project and the amount, then Save: the invoice is recorded on the job as “to pay”." }),
-    file, status, list, err,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }), save))));
+    h("p", { class: "hint", text: canSend
+      ? "Pick one or more of Monumental's invoice PDFs. Each is matched to its project by the address, then the amount and name. Matching ones are ticked; one that doesn't match stays out unless you tick it, and you can untick any. Send: the ticked ones are saved on their jobs as “to pay” and emailed to accounting with their PDFs and the pay stub (the PDFs are kept in a private folder in your Google Drive)."
+      : "Pick one or more of Monumental's invoice PDFs. They're read on this device (not uploaded anywhere); each is matched to its project by the address, then the amount and name. Matching ones are ticked; one that doesn't match stays out unless you tick it. Save: the ticked ones are recorded on their jobs as “to pay”." }),
+    file, status, list,
+    h("div", { class: "rp-invfoot" }, sumBox, toBox), err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }), save, send))));
+  draw();
 }
 /** Nobody has been paid yet (admins): clears "Date VODA paid them" on every job in the Repairs tab, after asking. */
 function openRepClearPaid() {
@@ -10973,6 +11138,284 @@ function openRepClearPaid() {
 }
 /** The street part of an address, for a project's line ("275 S Pickett St Unit 302, Alexandria"). */
 const repStreetText = a => { const p = String(a || "").split(",").map(x => x.trim()).filter(Boolean); return p.length >= 3 ? `${p[0]}, ${p[p.length - 2]}` : p.join(", "); };
+
+/* ---- Contractor Payroll: Monumental's invoices sent to accounting as a batch (their PDFs and a pay stub by email);
+   accounting approves and records the payment, Monumental gets the pay stub, and each invoice is marked paid on its
+   job so it can't be sent or paid twice. Names, addresses and amounts stay in this window only (not kept on the device). ---- */
+const CP_API = 46;                                       // the Google script with Contractor Payroll
+const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
+const CP_VENDOR = "Monumental Flooring";
+let cpData = null, cpLoading = false, cpErr = "", cpOld = false, cpFilter = "all";
+function cpForget() { cpData = null; cpErr = ""; }
+async function cpLoad() {
+  if (!session || !canSee("contractors") || cpLoading) return;
+  cpLoading = true;
+  if (view.tab === "contractors") renderContractors();
+  try {
+    const o = await api("cpRead", {});
+    cpData = { batches: o.batches || [], parties: o.parties || [], at: Date.now() };
+    cpErr = ""; cpOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { cpLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    cpOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < CP_API);
+    cpErr = cpOld ? "" : errText(e, "Nothing");
+  }
+  cpLoading = false;
+  if (view.tab === "contractors" && !dlg.open) renderContractors();
+}
+const cpShort = v => String(v || "").trim().split(/\s+/)[0] || "the contractor";
+const cpPlural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : /(ch|sh|s|x)$/.test(w) ? "es" : "s"}`;
+const cpDay = d => (lbIsDay(d) ? `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}` : "");
+const cpAtDay = iso => { const t = Date.parse(iso || ""); return isNaN(t) ? "" : lbDayKey(new Date(t)); };
+/** The contractor's name as typed in Payroll emails (Monumental's own line), else the usual one. */
+const cpVendorName = () => (((cpData && cpData.parties) || []).find(p => p.kind === "vendor" && /^monumental\b/i.test(p.name)) || {}).name || CP_VENDOR;
+/** A batch's status, as a tag. */
+function cpTag(b, short) {
+  if (b.status === "paid") return h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(b.paidOn)}${short ? "" : ` · sent to ${cpShort(b.vendor)}`}` });
+  if (b.status === "canceled") return h("span", { class: "rp-tag", text: "Canceled" });
+  return h("span", { class: "rp-tag dep", text: short ? "Waiting" : "Waiting for accounting" });
+}
+/** Is a Monumental invoice paid already, or sent to accounting and waiting? { why, on, b, ref } or null (its jobs and the batches). */
+function cpTaken(n, jobs) {
+  for (const j of jobs) for (const v of j.mon || []) if (v.n === n) {
+    if (v.paid) return { why: "paid", on: v.paid, b: v.b || "", ref: v.ref || "" };
+    if (v.b) return { why: "waiting", on: v.sent || "", b: v.b };
+  }
+  for (const b of (cpData && cpData.batches) || []) if (b.items.some(i => i.n === n)) {
+    if (b.status === "paid") return { why: "paid", on: b.paidOn, b: b.id, ref: b.ref };
+    if (b.status === "waiting") return { why: "waiting", on: cpAtDay(b.at), b: b.id };
+  }
+  return null;
+}
+const cpTakenText = t => (t.why === "paid" ? `Already paid${t.on ? ` on ${cpDay(t.on)}` : ""}${t.b ? ` (batch ${t.b}${t.ref ? `, ref ${t.ref}` : ""})` : ""}. It can't be sent again.`
+  : t.why === "waiting" ? `Already sent to accounting${t.on ? ` on ${cpDay(t.on)}` : ""}${t.b ? ` (batch ${t.b})` : ""}. It can't be sent twice.`
+  : t.why === "job_paid" ? `This job is already marked paid to Monumental${t.on ? ` on ${cpDay(t.on)}` : ""}. Clear that date on the job first if it's still owed.`
+  : t.why === "no_pdf" ? "Its PDF didn't upload. Send again." : t.why === "twice" ? "The same invoice # is in this batch twice." : "This invoice isn't saved on its job. Save it first.");
+/** Who an email goes to: the saved addresses (ticked for this kind of email), and any other typed in. */
+function cpToPicker(kind, vendor, idp) {
+  const ps = (cpData && cpData.parties) || [], v = cpShort(vendor).toLowerCase();
+  const mine = p => (kind === "accounting" ? p.kind === "accounting" : p.kind === "vendor" && cpShort(p.name).toLowerCase() === v);
+  const boxes = ps.map((p, i) => h("label", { class: "cp-to" + (p.kind === "vendor" ? " vn" : "") },
+    h("input", { type: "checkbox", id: `${idp}-${i}`, "data-email": p.email, checked: mine(p) }),
+    h("span", null, h("b", { text: p.name }), h("small", { text: p.email }))));
+  const other = h("input", { type: "text", id: `${idp}-other`, inputmode: "email", autocapitalize: "none", autocorrect: "off", spellcheck: "false", maxlength: "400",
+    placeholder: ps.length ? "Another address (or several, with commas)" : "Email address (or several, with commas)" });
+  const el = h("div", { class: "cp-tos", id: idp },
+    h("span", { class: "lbl", text: "Send to" }),
+    boxes.length ? h("div", { class: "cp-tolist" }, boxes) : h("p", { class: "meta", text: "No addresses saved yet. Type one here, or save them in Settings › Payroll emails." }),
+    other);
+  const list = () => [...boxes.map(b => b.querySelector("input")).filter(x => x.checked).map(x => x.dataset.email), ...other.value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean)];
+  return { el, list, bad: () => { const l = list(); if (!l.length) return "Pick who gets the email, or type an address."; const b = l.find(x => !lbEmail(x)); return b ? `“${b}” isn't an email address.` : ""; } };
+}
+/** Opens a PDF of a batch (an invoice, or the pay stub when f is empty). */
+async function cpOpenDoc(id, f, b) {
+  const w = window.open("", "_blank");   // opened on the tap, so it isn't blocked
+  if (b) b.disabled = true;
+  try {
+    const o = await api("cpDoc", { id, f: f || "" });
+    const bytes = Uint8Array.from(atob(o.data), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    if (w) w.location.href = url;
+    else { const a = h("a", { href: url, download: o.name }); document.body.append(a); a.click(); a.remove(); }
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (e) { if (w) w.close(); toast(e && e.error === "no_pdf" ? "That PDF isn't in the Drive folder any more." : errText(e, "The file")); }
+  if (b) b.disabled = false;
+}
+const cpCpErr = (e, what) => (e && e.error === "bad_email" ? `“${e.email}” isn't an email address.` : e && e.error === "no_to" ? "Pick who gets the email, or type an address."
+  : e && e.error === "too_many_to" ? "Up to 10 addresses." : e && e.error === "not_waiting" ? "This batch isn't waiting any more (it was paid or canceled on another phone)."
+  : e && e.error === "gone" ? "This batch isn't there any more." : e && e.error === "too_big" ? "The PDFs are too big for one email (over 22 MB). Send fewer at a time."
+  : e && e.error === "bad_request" && (Number(e.api) || 0) < CP_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, what));
+/** A batch's change: kept here, and its jobs updated in Repairs Payroll. */
+function cpTake(o) {
+  if (cpData && o.batch) { const k = cpData.batches.findIndex(b => b.id === o.batch.id); if (k === -1) cpData.batches.unshift(o.batch); else cpData.batches[k] = o.batch; }
+  for (const j of o.jobs || []) for (const d of Object.values(repDocs)) { const k = d.jobs.findIndex(x => x.id === j.id); if (k !== -1) { d.jobs[k] = j; repKeep(d.year); } }
+}
+
+/* ---- the page: every batch sent to accounting ---- */
+function renderContractors(box) {
+  box = box || $("cpView");
+  if (!box) return;
+  const title = secTitle("Contractor Payroll");
+  const top = cpInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("contractors")) : title ? h("div", { class: "lb-top" }, title) : null;
+  if (cpOld || (apiLevel && apiLevel < CP_API)) {
+    box.replaceChildren(...[top].filter(Boolean), h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Contractor Payroll needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  if (!cpData) {
+    if (!cpLoading && !cpErr && session) setTimeout(() => { if (!cpData && !cpLoading) cpLoad(); }, 0);
+    box.replaceChildren(...[top].filter(Boolean), h("div", { class: "panel" }, h("p", { class: "meta", id: "cpStatus", text: cpErr || "Loading Contractor Payroll…" }),
+      cpErr ? h("button", { class: "btn", type: "button", onclick: () => { cpErr = ""; cpLoad(); } }, "Try again") : null));
+    return;
+  }
+  const all = cpData.batches, waiting = all.filter(b => b.status === "waiting"), paid = all.filter(b => b.status === "paid");
+  const year = String(revThisYear()), paidYear = paid.filter(b => String(b.paidOn).startsWith(year));
+  const shown = cpFilter === "waiting" ? waiting : cpFilter === "paid" ? paid : all;
+  const seg = h("div", { class: "seg", role: "group", "aria-label": "Show", id: "cpFilter" }, [["all", "All"], ["waiting", "Waiting"], ["paid", "Paid"]].map(([k, t]) =>
+    h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(cpFilter === k), onclick: () => { cpFilter = k; renderContractors(); } }, t)));
+  const sum = (l, f) => l.reduce((n, b) => n + (b[f] || 0), 0);
+  const tiles = h("div", { class: "cp-kpis", id: "cpKpis" },
+    h("div", { class: "cp-kpi" + (waiting.length ? " due" : "") }, h("small", { text: "Waiting for accounting" }), h("b", { text: lbCash(sum(waiting, "total") / 100) }), h("span", { text: cpPlural(waiting.length, "batch") })),
+    h("div", { class: "cp-kpi" }, h("small", { text: `Paid in ${year}` }), h("b", { text: lbCash(sum(paidYear, "paid") / 100) }), h("span", { text: `${cpPlural(paidYear.length, "batch")} · ${cpPlural(paidYear.reduce((n, b) => n + b.items.length, 0), "invoice")}` })));
+  const row = b => h("tr", { "data-b": b.id, class: b.status === "canceled" ? "gone" : "", tabindex: "0", onclick: () => openCpBatch(b.id), onkeydown: e => { if (e.key === "Enter") openCpBatch(b.id); } },
+    h("th", null, b.id, h("small", { class: "ph", text: `${cpShort(b.vendor)} · sent ${repShortDay(cpAtDay(b.at))} · ${cpPlural(b.items.length, "invoice")}` })),
+    h("td", { class: "l pc", text: b.vendor }),
+    h("td", { class: "l pc" }, cpDay(cpAtDay(b.at)), h("small", { text: b.by })),
+    h("td", { class: "pc", text: fmt(b.items.length) }),
+    h("td", null, h("b", { text: lbCash((b.status === "paid" ? b.paid : b.total) / 100) }), h("small", { class: "ph" }, cpTag(b, true))),
+    h("td", { class: "st pc" }, cpTag(b)));
+  const body = shown.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-table", id: "cpTable" },
+    h("thead", null, h("tr", null, h("th", { text: "Batch" }), h("th", { class: "l pc", text: "Vendor" }), h("th", { class: "l pc", text: "Sent to accounting" }), h("th", { class: "pc", text: "Invoices" }), h("th", { text: "Amount" }), h("th", { class: "st pc", text: "Status" }))),
+    h("tbody", null, shown.map(row))))
+    : h("p", { class: "meta cp-empty", id: "cpEmpty", text: all.length ? "None here." : canSee("repairs") ? "Nothing sent to accounting yet. Send Monumental's invoices from Repairs Payroll › + Monumental invoice (PDF)." : "Nothing sent to accounting yet." });
+  box.replaceChildren(...[top,
+    tiles,
+    h("section", { class: "panel cp-panel", id: "cpPanel" },
+      h("div", { class: "cp-head" }, h("h3", { text: "Contractor payroll" }), seg),
+      h("p", { class: "meta", text: "Every batch sent to accounting: what's waiting and what's paid. Tap one to open it." }),
+      body)].filter(Boolean));
+}
+
+/* ---- a batch: accounting checks it, records the payment, and Monumental gets the pay stub ---- */
+function openCpBatch(id) {
+  const b = cpData && cpData.batches.find(x => x.id === id);
+  if (!b) return;
+  const err = h("p", { class: "dlg-err", role: "alert" }), C = c => lbCash(c / 100), vs = cpShort(b.vendor);
+  const steps = h("p", { class: "cp-steps" },
+    h("span", { class: "on" }, `① Sent to accounting ${cpDay(cpAtDay(b.at))} (${b.by})`), " → ",
+    h("span", { class: b.status === "paid" ? "on" : "" }, b.status === "canceled" ? "Canceled" : `② Paid & sent to ${vs}`));
+  const pdfBtn = (i, text) => h("button", { class: "linkish mono", type: "button", title: "Open its PDF", onclick: ev => cpOpenDoc(b.id, i.f, ev.currentTarget) }, text || i.n);
+  const stubBtn = h("button", { class: "btn", type: "button", id: "cpStubBtn", onclick: ev => cpOpenDoc(b.id, "", ev.currentTarget) }, "Pay stub (PDF)");
+  if (b.status !== "waiting") {
+    // paid or canceled: what happened, the invoices, and the email again
+    const resendBox = h("div", { id: "cpResendBox" });
+    const resend = b.status === "paid" ? h("button", { class: "btn", type: "button", id: "cpResend", onclick: () => {
+      const to = cpToPicker("vendor", b.vendor, "cpRto");
+      resendBox.replaceChildren(h("div", { class: "cp-sendbox" }, to.el, h("div", null, h("button", { class: "btn primary", type: "button", id: "cpResendGo", onclick: async ev => {
+        const bad = to.bad(); if (bad) { err.textContent = bad; return; }
+        const x = ev.currentTarget; x.disabled = true; err.textContent = "";
+        try { const o = await api("cpResend", { id: b.id, to: to.list() }); cpTake(o); toast(`Pay stub emailed to ${to.list().join(", ")}`); resendBox.replaceChildren(); }
+        catch (e) { err.textContent = cpCpErr(e, "The email"); x.disabled = false; }
+      } }, `Email ${vs} the pay stub again`))));
+    } }, `Email ${vs} again`) : null;
+    openDialog(h("div", { class: "rp-dlg cp-dlg" },
+      h("h3", { id: "dlgTitle", text: `Batch ${b.id} · ${b.vendor}` }), steps,
+      b.status === "paid" ? h("div", { class: "cp-paidbox", id: "cpPaidBox" },
+        h("b", { text: `Paid ${C(b.paid)} on ${cpDay(b.paidOn)}${b.how ? ` · ${b.how}` : ""}${b.ref ? ` · Ref ${b.ref}` : ""}` }),
+        h("span", { text: [b.last4 ? `From the account ending ${b.last4}` : "", `Approved by ${b.appBy}`].filter(Boolean).join(" · ") }),
+        h("span", { text: `Pay stub emailed to ${b.vTo}${b.vAt ? ` on ${cpDay(cpAtDay(b.vAt))}` : ""}` }),
+        b.out ? h("span", { text: `Left out (went back to not sent): ${b.out}` }) : null)
+        : h("p", { class: "meta", text: `Canceled by ${b.cxBy}${b.cxAt ? ` on ${cpDay(cpAtDay(b.cxAt))}` : ""}. Its invoices went back to not sent.` }),
+      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
+        h("thead", null, h("tr", null, h("th", { class: "l", text: "Invoice" }), h("th", { class: "l", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: b.status === "paid" ? "Paid" : "" }))),
+        h("tbody", null, b.items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l" }, pdfBtn(i)), h("td", { class: "l" }, i.client, h("small", { class: "ph", text: i.addr })), h("td", { class: "l pc", text: i.addr }),
+          h("td", { text: C(i.a) }), h("td", null, b.status === "paid" ? h("b", { text: C(i.pay) }) : "")))))),
+      err, resendBox,
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, stubBtn, resend, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
+    return;
+  }
+  // waiting: each invoice ticked OK (or left out) and what's paid on it
+  const st = b.items.map(i => ({ i, ok: true, pay: (i.a / 100).toFixed(2) }));
+  const foot = h("tfoot"), sumBox = h("div", { class: "cp-paysum", id: "cpPaySum" });
+  const go = h("button", { class: "btn primary", type: "button", id: "cpPayGo" });
+  const num = v => { const x = String(v == null ? "" : v).replace(/[$,\s]/g, ""); return x === "" ? NaN : Number(x); };
+  const draw = () => {
+    const on = st.filter(x => x.ok), pay = on.reduce((n, x) => n + Math.round((num(x.pay) || 0) * 100), 0);
+    foot.replaceChildren(h("tr", null, h("td"), h("th", { class: "l", text: `${cpPlural(on.length, "invoice")} OK` }), h("td", { class: "pc" }), h("td", { class: "pc" }),
+      h("td", { text: C(on.reduce((n, x) => n + x.i.a, 0)) }), h("td", null, h("b", { text: C(pay) }))));
+    sumBox.replaceChildren(h("b", { text: on.length ? `Pay ${C(pay)} to ${b.vendor}` : "Nothing ticked OK" }),
+      h("small", { text: on.length ? `Marks ${on.length === 1 ? "the invoice paid on its job" : `the ${fmt(on.length)} invoices paid on their jobs`}, and emails ${vs} the pay stub.${on.length < st.length ? ` ${st.length - on.length === 1 ? "The invoice left out goes" : `The ${fmt(st.length - on.length)} left out go`} back to not sent.` : ""}` : "Tick at least one invoice OK, or cancel the batch." }));
+    go.textContent = `Approve, mark paid & send to ${vs}`;
+    go.disabled = !on.length;
+  };
+  const rows = st.map(x => h("tr", { "data-n": x.i.n },
+    h("td", { class: "c" }, h("input", { type: "checkbox", class: "cp-ok", checked: true, "aria-label": `Invoice ${x.i.n} OK`, onchange: e => { x.ok = e.target.checked; e.target.closest("tr").classList.toggle("off", !x.ok); draw(); } })),
+    h("td", { class: "l" }, pdfBtn(x.i), h("small", { class: "ph", text: x.i.client })),
+    h("td", { class: "l pc" }, x.i.client),
+    h("td", { class: "l pc", text: x.i.addr }),
+    h("td", { text: C(x.i.a) }),
+    h("td", null, h("input", { type: "text", inputmode: "decimal", class: "cp-pay", value: x.pay, "aria-label": `Pay on ${x.i.n}`, oninput: e => { x.pay = e.target.value; e.target.classList.toggle("bad", !(num(x.pay) > 0)); draw(); } }))));
+  const paidOn = lbDateInput({ id: "cpPaidOn", value: lbToday() }, () => {});
+  const how = h("select", { id: "cpHow" }, CP_HOW.map(x => h("option", { value: x, text: x })));
+  const ref = h("input", { type: "text", id: "cpRef", maxlength: "60", placeholder: "ACH / check #" });
+  const last4 = h("input", { type: "text", id: "cpLast4", inputmode: "numeric", maxlength: "4", placeholder: "1234" });
+  const appBy = h("input", { type: "text", id: "cpAppBy", maxlength: "60", value: (session && session.name) || "" });
+  const to = cpToPicker("vendor", b.vendor, "cpTo");
+  const f = (id, label, el) => h("div", { class: "field" }, h("label", { for: id, text: label }), el);
+  const resendBox = h("div", { id: "cpResendBox" });
+  go.onclick = async () => {
+    const on = st.filter(x => x.ok);
+    if (on.some(x => !(num(x.pay) > 0))) { err.textContent = "Each invoice ticked OK needs what's paid on it, like 770 or 1,250.50."; return; }
+    if (!lbIsDay(paidOn.value)) { err.textContent = "Pick the day it was paid."; return; }
+    if (last4.value.trim() && !/^\d{4}$/.test(last4.value.trim())) { err.textContent = "The account: its last 4 digits only (or leave it empty)."; return; }
+    const bad = to.bad(); if (bad) { err.textContent = bad; return; }
+    go.disabled = true; err.textContent = "";
+    try {
+      const o = await api("cpPay", { id: b.id, items: st.map(x => ({ n: x.i.n, ok: x.ok, pay: num(x.pay) })), paidOn: paidOn.value, how: how.value, ref: ref.value.trim(), last4: last4.value.trim(), approvedBy: appBy.value.trim(), to: to.list() }, 120000);
+      cpTake(o); dlgDirty = false; closeDialog();
+      toast(`Paid ${lbCash(o.batch.paid / 100)} · pay stub emailed to ${vs}`);
+      renderContractors(); renderRevenue();
+    } catch (e) { err.textContent = cpCpErr(e, "The payment"); go.disabled = false; if (e && e.error === "not_waiting" && e.batch) { cpTake({ batch: e.batch }); renderContractors(); } }
+  };
+  let armed = false;
+  const cancel = h("button", { class: "btn", type: "button", id: "cpCancel", onclick: async ev => {
+    const x = ev.currentTarget;
+    if (!armed) { armed = true; x.textContent = "Tap again to cancel the batch"; x.classList.add("danger"); return; }
+    x.disabled = true; err.textContent = "";
+    try { const o = await api("cpCancel", { id: b.id }); cpTake(o); closeDialog(); toast(`Batch ${b.id} canceled: its invoices can be sent again`); renderContractors(); renderRevenue(); }
+    catch (e) { err.textContent = cpCpErr(e, "The batch"); x.disabled = false; }
+  } }, "Cancel batch");
+  const again = h("button", { class: "btn", type: "button", id: "cpAgain", onclick: () => {
+    const t2 = cpToPicker("accounting", b.vendor, "cpAto");
+    resendBox.replaceChildren(h("div", { class: "cp-sendbox" }, t2.el, h("div", null, h("button", { class: "btn primary", type: "button", id: "cpAgainGo", onclick: async ev => {
+      const bad = t2.bad(); if (bad) { err.textContent = bad; return; }
+      const x = ev.currentTarget; x.disabled = true; err.textContent = "";
+      try { const o = await api("cpResend", { id: b.id, to: t2.list() }, 120000); cpTake(o); toast(`Emailed again to ${t2.list().join(", ")}`); resendBox.replaceChildren(); }
+      catch (e) { err.textContent = cpCpErr(e, "The email"); x.disabled = false; }
+    } }, "Email accounting again"))));
+  } }, "Email accounting again");
+  openDialog(h("div", { class: "rp-dlg cp-dlg" },
+    h("h3", { id: "dlgTitle", text: `Batch ${b.id} · ${b.vendor}` }), steps,
+    h("p", { class: "hint", text: "Check each invoice against its PDF (tap its number to open it) and confirm what's paid on it. Untick one to leave it out: it goes back to not sent. Then record the payment: the jobs are marked paid and the pay stub goes to " + vs + "." }),
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
+      h("thead", null, h("tr", null, h("th", { class: "c", text: "OK" }), h("th", { class: "l", text: "Invoice" }), h("th", { class: "l pc", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: "Pay" }))),
+      h("tbody", null, rows), foot)),
+    h("div", { class: "cp-payf" }, f("cpPaidOn", "Paid on", paidOn), f("cpHow", "How", how), f("cpRef", "Reference #", ref), f("cpLast4", "From account (last 4)", last4), f("cpAppBy", "Approved by", appBy)),
+    h("div", { class: "cp-sendbox" }, to.el), sumBox, err, resendBox,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, stubBtn, again, cancel, go))));
+  draw();
+}
+
+/* ---- Settings › Payroll emails: accounting's and the contractors' addresses ---- */
+async function openCpParties() {
+  if (!cpData) { await cpLoad(); if (!cpData) { toast(cpErr || "Couldn't load the addresses. Try again."); return; } }
+  const list = cpData.parties.map(p => Object.assign({}, p));
+  const err = h("p", { class: "dlg-err", role: "alert" }), box = h("div", { class: "cp-parties", id: "cpParties" });
+  const draw = () => {
+    box.replaceChildren(...list.map((p, i) => h("div", { class: "cp-party", "data-i": i },
+      h("input", { type: "text", class: "cp-pname", maxlength: "80", value: p.name, placeholder: "Name (Accounting, Monumental Flooring…)", "aria-label": "Name", oninput: e => { p.name = e.target.value; } }),
+      h("input", { type: "text", class: "cp-pemail", inputmode: "email", autocapitalize: "none", autocorrect: "off", spellcheck: "false", maxlength: "120", value: p.email, placeholder: "email@example.com", "aria-label": "Email", oninput: e => { p.email = e.target.value; } }),
+      h("select", { class: "cp-pkind", "aria-label": "Who it is", onchange: e => { p.kind = e.target.value; } }, [["accounting", "Accounting / payroll"], ["vendor", "Vendor"]].map(([k, t]) => h("option", { value: k, text: t, selected: p.kind === k }))),
+      h("button", { class: "btn small", type: "button", "aria-label": "Remove", title: "Remove", onclick: () => { list.splice(i, 1); draw(); } }, "✕"))),
+      ...(list.length ? [] : [h("p", { class: "meta", text: "No addresses yet." })]));
+  };
+  draw();
+  openDialog(h("div", { class: "rp-dlg" },
+    h("h3", { id: "dlgTitle", text: "Payroll emails" }),
+    h("p", { class: "hint", text: "Who gets Contractor Payroll's emails: accounting / payroll (the invoices and the pay stub) and each vendor (the pay stub once paid). Each email lets you pick from this list or type any other address. Kept on the Payroll emails tab of the Google Sheet." }),
+    box,
+    h("div", null, h("button", { class: "btn", type: "button", id: "cpAddParty", onclick: () => { list.push({ name: "", email: "", kind: list.some(p => p.kind === "accounting") ? "vendor" : "accounting" }); draw(); const n = box.querySelectorAll(".cp-pname"); if (n.length) n[n.length - 1].focus(); } }, "+ Add an address")),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "cpPartiesSave", text: "Save", onclick: async ev => {
+        const out = list.map(p => ({ name: String(p.name || "").trim(), email: String(p.email || "").trim(), kind: p.kind })).filter(p => p.name || p.email);
+        const bad = out.find(p => !p.name || !lbEmail(p.email));
+        if (bad) { err.textContent = !bad.name ? `Give ${bad.email || "each address"} a name.` : `“${bad.email}” isn't an email address.`; return; }
+        const b = ev.currentTarget; b.disabled = true; err.textContent = "";
+        try { const o = await api("cpParties", { parties: out }); cpData.parties = o.parties || []; dlgDirty = false; closeDialog(); toast("Payroll emails saved"); }
+        catch (e) { err.textContent = cpCpErr(e, "The addresses"); b.disabled = false; }
+      } })))));
+}
 
 /* ---- the old Excel list ("REPAIRS ONLY": a tab a month, a row a day): its vendor costs onto the jobs from Housecall Pro ---- */
 const REP_IMPORT_API = 41;                              // the Google script that saves many jobs at once
@@ -12649,6 +13092,7 @@ else if (location.hash === "#office") { view.tab = "office"; saveView(); }
 else if (location.hash === "#revenue") { view.tab = "revenue"; saveView(); }
 else if (location.hash === "#repairs") { view.tab = "repairs"; saveView(); }
 else if (location.hash === "#marketing") { view.tab = "marketing"; saveView(); }
+else if (location.hash === "#contractors") { view.tab = "contractors"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {
