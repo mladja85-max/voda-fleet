@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 46;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 47;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4134,6 +4134,8 @@ const CP_EMAIL = /^[^\s@,;<>"']+@[^\s@,;<>"']+\.[A-Za-z]{2,}$/;
 const CP_MAX_FILE = 8 * 1024 * 1024, CP_MAX_MAIL = 22 * 1024 * 1024, CP_MAX_ITEMS = 100;
 const CP_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function canCp_(user) { return canSee_(user, "contractors"); }
+/** Where the contractor's questions go (typed in Settings › Payroll emails): the pay stub says so, and their replies go there. */
+function cpReplyTo_() { const v = String(PropertiesService.getScriptProperties().getProperty("CP_REPLY_TO") || "").trim(); return CP_EMAIL.test(v) ? v : ""; }
 function cpSheet_(create) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(CP_SHEET);
@@ -4182,6 +4184,8 @@ function cpParties_() {
 function cpPartiesPut_(req) {
   const list = Array.isArray(req.parties) ? req.parties : null;
   if (!list || list.length > 50) return { ok: false, error: "bad_request" };
+  const reply = req.replyTo === undefined ? null : String(req.replyTo || "").trim();
+  if (reply && (reply.length > 120 || !CP_EMAIL.test(reply))) return { ok: false, error: "bad_value", field: "replyTo" };
   const out = [];
   for (let i = 0; i < list.length; i++) {
     const x = list[i] || {}, name = String(x.name || "").trim().slice(0, 80), email = String(x.email || "").trim().slice(0, 120), kind = String(x.kind || "");
@@ -4194,7 +4198,8 @@ function cpPartiesPut_(req) {
   s.getRange(1, 1, 1, CP_PARTY_COLS.length).setValues([CP_PARTY_COLS]).setFontWeight("bold");
   if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, CP_PARTY_COLS.length).clearContent();
   if (out.length) s.getRange(2, 1, out.length, CP_PARTY_COLS.length).setValues(out);
-  return { ok: true, parties: cpParties_() };
+  if (reply !== null) { const P = PropertiesService.getScriptProperties(); if (reply) P.setProperty("CP_REPLY_TO", reply); else P.deleteProperty("CP_REPLY_TO"); }
+  return { ok: true, parties: cpParties_(), replyTo: cpReplyTo_() };
 }
 /** Who an email goes to: up to 10 addresses (a list or "a@x.com, b@y.com"). */
 function cpEmails_(v) {
@@ -4275,7 +4280,8 @@ function cpStubHtml_(b) {
     }).join("") +
     '<tr><td colspan="4" style="padding:8px 6px;font-weight:bold;font-size:12px;border-top:2px solid #111827">' + (paid ? "Total paid · " : "Total · ") + cpPlural_(b.items.length, "invoice") +
       '</td><td style="padding:8px 6px;font-weight:bold;font-size:12px;text-align:right;border-top:2px solid #111827">' + cpMoney_(total) + "</td></tr></table>" +
-    '<p style="font-size:10px;color:#5b6474;border-top:1px solid #dfe3ea;padding-top:8px;margin-top:18px">Questions about this payment? Reply to the email it came with.</p></body></html>';
+    '<p style="font-size:10px;color:#5b6474;border-top:1px solid #dfe3ea;padding-top:8px;margin-top:18px">Questions about this payment? Reply to ' +
+      (cpReplyTo_() ? '<b style="color:#111827">' + cpEsc_(cpReplyTo_()) + "</b>" : "the email it came with") + ".</p></body></html>";
 }
 function cpStubPdf_(b) {
   return Utilities.newBlob(cpStubHtml_(b), "text/html", "stub.html").getAs("application/pdf").setName("Pay stub " + b.id + ".pdf");
@@ -4309,15 +4315,17 @@ function cpMailVendor_(b, to) {
   const subject = "VODA payment · " + cpPlural_(b.items.length, "invoice") + " · " + cpMoney_(b.paid);
   const how = (b.how ? " by " + b.how : "") + (b.ref ? ", reference " + b.ref : "");
   const lines = ["Hi " + cpShort_(b.vendor) + " team,", "", "We paid " + cpPlural_(b.items.length, "invoice") + " on " + cpDay_(b.paidOn) + how + ". Total " + cpMoney_(b.paid) + ". The pay stub is attached.", ""]
-    .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + i.addr + " · " + cpMoney_(i.pay); }), ["", "Thank you,", CP_COMPANY]);
+    .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + i.addr + " · " + cpMoney_(i.pay); }), ["", "Questions about this payment? Reply to " + (cpReplyTo_() || "this email") + ".", "", "Thank you,", CP_COMPANY]);
   const html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.5"><p>Hi ' + cpEsc_(cpShort_(b.vendor)) + " team,</p><p>We paid <b>" + cpPlural_(b.items.length, "invoice") +
     "</b> on <b>" + cpEsc_(cpDay_(b.paidOn)) + "</b>" + cpEsc_(how) + ". Total <b>" + cpMoney_(b.paid) + "</b>. The pay stub is attached.</p>" + cpMailTable_(b, true) +
-    "<p>Thank you,<br>" + cpEsc_(CP_COMPANY) + "</p></div>";
-  MailApp.sendEmail({ to: to.join(","), subject: subject, body: lines.join("\n"), htmlBody: html, name: CP_COMPANY, attachments: [cpStubPdf_(b)] });
+    "<p>Questions about this payment? Reply to " + (cpReplyTo_() ? "<b>" + cpEsc_(cpReplyTo_()) + "</b>" : "this email") + ".</p><p>Thank you,<br>" + cpEsc_(CP_COMPANY) + "</p></div>";
+  const mail = { to: to.join(","), subject: subject, body: lines.join("\n"), htmlBody: html, name: CP_COMPANY, attachments: [cpStubPdf_(b)] };
+  if (cpReplyTo_()) mail.replyTo = cpReplyTo_();   // their reply goes there, not to the account the app sends from
+  MailApp.sendEmail(mail);
 }
 /** Everything on the Contractor Payroll page: the batches (newest first) and the addresses. */
 function cpRead_() {
-  return { ok: true, batches: cpAll_(cpSheet_(false)).map(function (x) { return cpOut_(x.b); }).reverse(), parties: cpParties_() };
+  return { ok: true, batches: cpAll_(cpSheet_(false)).map(function (x) { return cpOut_(x.b); }).reverse(), parties: cpParties_(), replyTo: cpReplyTo_() };
 }
 /** Is this invoice paid already, or waiting in a batch? { why, on, b, ref } or null. */
 function cpTaken_(n, batches) {
