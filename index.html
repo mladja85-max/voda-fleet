@@ -11690,78 +11690,80 @@ function repXlTab(tab) {
   }
   return out;
 }
-/** The Excel's rows matched to the jobs read from Housecall Pro (by name, amount and day, up to a week apart; then the
- *  same name with the same amount or street number on any day read, or the same street address up to 60 days apart, the
- *  closest; then the jobs picked by hand), and what to save on each: { save: [{ id, t }], found, notFound, missing, moved, picked, differs, extras, via,
- *  under, skipped, jobs }. Only the vendor costs are saved: the day, amount and client stay Housecall Pro's (the Excel's
- *  day only helps find the job). `picks`: { "<row's place> · <piece>": job id, or "-" for a guess turned down }. */
+/** The Excel's rows matched to the jobs read from Housecall Pro (the jobs with a Monumental tag) by name, street address
+ *  and amount, on any day: the Excel's days may be wrong, so a day is never needed to match; it only settles a tie (a
+ *  client with more than one job). Then the jobs picked by hand. What to save on each: { save: [{ id, t }], found,
+ *  notFound, missing, moved, picked, differs, extras, via, under, skipped, jobs }. Only the vendor costs are saved: the
+ *  day, amount and client stay Housecall Pro's. `picks`: { "<row's place> · <piece>": job id, or "-" for a guess turned down }. */
 function repXlMatch(rows, jobs, paidThrough, picks) {
   picks = picks || {};
-  const used = new Set(), byDay = {}, out = { save: [], found: [], notFound: [], missing: [], moved: [], picked: [], differs: [], extras: [], via: [], under: [], skipped: [], jobs: 0 };
-  for (const j of jobs) if (!j.gone) (byDay[j.day] || (byDay[j.day] = [])).push(j);
-  const near = (day, w) => { const a = []; for (let k = -w; k <= w; k++) for (const j of byDay[lbAddDays(day, k)] || []) if (!used.has(j.id)) a.push({ j, dist: Math.abs(k) }); return a; };
-  const byId = new Map(jobs.map(j => [j.id, j]));
+  const used = new Set(), out = { save: [], found: [], notFound: [], missing: [], moved: [], picked: [], differs: [], extras: [], via: [], under: [], skipped: [], jobs: 0 };
+  const live = jobs.filter(j => !j.gone), byId = new Map(jobs.map(j => [j.id, j]));
   const gap = (a, b) => Math.abs(Math.round((lbDate(a) - lbDate(b)) / 864e5));
-  const anyDay = day => jobs.filter(j => !j.gone && !used.has(j.id)).map(j => ({ j, dist: gap(j.day, day) }));
-  const nameOk = (j, text) => {
-    const w = repNorm(j.client).split(" ").filter(x => x.length > 1);
-    if (!w.length) return false;
-    const t = ` ${repNorm(text).split(" ").slice(0, w.length + 6).join(" ")} `;
-    return w.every(x => t.includes(` ${x} `));
-  };
   const streetNo = text => (/\b(\d{3,6})\b/.exec(text || "") || [])[1] || "";
   const C = c => lbCash(c / 100);
+  // each job's name words and street, worked out once
+  const info = new Map(live.map(j => [j.id, { w: repNorm(j.client).split(" ").filter(x => x.length > 1), k: repStreetKey(j.addr) }]));
+  // what to look for in a piece of the Excel: the first words (the name), the street, the amount
+  const look = (text, amt) => {
+    const tw = repNorm(text).split(" "), ka = repStreetKey(text), lead = [];
+    for (let n = 1; n <= 8; n++) lead[n] = ` ${tw.slice(0, n + 6).join(" ")} `;
+    return { lead, ka, no: (ka && ka.no) || streetNo(text), amt };
+  };
+  const sig = (j, q) => {
+    const I = info.get(j.id), kj = I.k, t = I.w.length && q.lead[Math.min(8, I.w.length)];
+    return { nm: !!t && I.w.every(x => t.includes(` ${x} `)), am: q.amt > 0 && Math.abs(j.c - q.amt) <= 100,
+      addr: !!q.ka && !!kj && q.ka.no === kj.no && q.ka.name === kj.name, st: !!q.no && !!kj && kj.no === q.no };
+  };
+  const score = s => (s.nm ? 4 : 0) + (s.addr ? 4 : s.st ? 2 : 0) + (s.am ? 3 : 0);
+  const why = s => "by " + [s.nm && "name", s.addr ? "address" : s.st && "street number", s.am && "amount"].filter(Boolean).join(" and ");
   const plan = rows.map(r => {
     const parts = r.parts.length ? r.parts.map(p => Object.assign({}, p)) : [{ text: "", amt: 0 }];
     if (parts.length === 1 && !parts[0].amt) parts[0].amt = r.c;
     out.jobs += parts.length;
     const keys = parts.map((p, i) => `${r.at} · ${i + 1}`);
-    return { r, parts, keys, hits: parts.map(() => null), no: keys.map(k => picks[k] === "-") };
+    return { r, parts, keys, q: parts.map(p => look(p.text, p.amt)), hits: parts.map(() => null), no: keys.map(k => picks[k] === "-") };
   });
+  // an amount alone is enough only when no other job and no other row has it (or it's the Excel's day too)
+  const cents = c => Math.round(c / 100);
+  const jobAmts = {}, rowAmts = {};
+  for (const j of live) for (const d of [-1, 0, 1]) jobAmts[cents(j.c) + d] = (jobAmts[cents(j.c) + d] || 0) + 1;
+  for (const x of plan) for (const p of x.parts) if (p.amt > 0) for (const d of [-1, 0, 1]) rowAmts[cents(p.amt) + d] = (rowAmts[cents(p.amt) + d] || 0) + 1;
+  const alone = amt => amt > 0 && jobAmts[cents(amt)] === 1 && rowAmts[cents(amt)] === 1;
   // picked by hand first (they're taken by no one else); "-" = the guess turned down: left for picking by hand
   for (const x of plan) x.parts.forEach((p, i) => {
     const j = byId.get(picks[x.keys[i]]);
-    if (j && !j.gone && !used.has(j.id)) { used.add(j.id); x.hits[i] = { j, sc: 99, dist: gap(j.day, x.r.day), am: p.amt > 0 && Math.abs(j.c - p.amt) <= 100, hand: true }; }
+    if (j && !j.gone && !used.has(j.id)) { used.add(j.id); x.hits[i] = { j, dist: gap(j.day, x.r.day), am: p.amt > 0 && Math.abs(j.c - p.amt) <= 100, hand: true }; }
   });
-  // then by name, amount and day, up to a week apart
+  // every row against every job: the surest matches are taken first (name, address and amount), then the closest day
+  const pairs = [];
   for (const x of plan) x.parts.forEach((p, i) => {
     if (x.hits[i] || x.no[i]) return;
-    let best = null;
-    for (const { j, dist } of near(x.r.day, 7)) {
-      const nm = nameOk(j, p.text), am = p.amt > 0 && Math.abs(j.c - p.amt) <= 100;
-      const sc = (nm ? 4 : 0) + (am ? 4 : 0) + (dist === 0 ? 2 : dist === 1 ? 1 : 0);
-      if (sc >= 6 && (!best || sc > best.sc || (sc === best.sc && dist < best.dist))) best = { j, sc, dist, am };
+    const q = x.q[i], one = alone(p.amt);
+    for (const j of live) {
+      if (used.has(j.id)) continue;
+      const s = sig(j, q);
+      if (!s.nm && !s.addr && !(s.st && s.am) && !s.am) continue;
+      const dist = gap(j.day, x.r.day);
+      if (!s.nm && !s.addr && !(s.st && s.am) && !(one || dist <= 1)) continue;
+      pairs.push({ x, i, j, dist, s, sc: score(s) });
     }
-    if (best) { used.add(best.j.id); x.hits[i] = best; }
   });
-  // still not found (a day typed wrong, an amount that changed, the client under another name): the same name with the
-  // same amount or street number on any day read, or the same street address (number and street) up to 60 days apart;
-  // the closest day, then the most that matches
-  for (const x of plan) x.parts.forEach((p, i) => {
-    if (x.hits[i] || x.no[i]) return;
-    const sn = streetNo(p.text), ka = repStreetKey(p.text);
-    let best = null;
-    for (const { j, dist } of anyDay(x.r.day)) {
-      const kj = repStreetKey(j.addr), nm = nameOk(j, p.text), am = p.amt > 0 && Math.abs(j.c - p.amt) <= 100;
-      const st = !!sn && !!kj && kj.no === sn, addr = !!ka && !!kj && ka.no === kj.no && ka.name === kj.name;
-      const why = nm && am ? "same name and amount" : nm && st ? "same name and street" : addr && dist <= 60 ? "same address" : "";
-      if (!why) continue;
-      const sc = (nm ? 2 : 0) + (addr ? 2 : st ? 1 : 0) + (am ? 1 : 0);
-      if (!best || dist < best.dist || (dist === best.dist && sc > best.sc)) best = { j, sc, dist, am, far: true, why };
-    }
-    if (best) { used.add(best.j.id); x.hits[i] = best; }
-  });
-  // the jobs left over, for picking by hand: the same name, street number or amount first, then the closest days
-  const pickable = (day, text, amt) => {
-    const sn = streetNo(text);
-    return anyDay(day).map(({ j, dist }) => ({ j, dist, sc: (nameOk(j, text) ? 4 : 0) + (sn && (repStreetKey(j.addr) || {}).no === sn ? 2 : 0) + (amt > 0 && Math.abs(j.c - amt) <= 100 ? 2 : 0) }))
-      .sort((a, b) => b.sc - a.sc || a.dist - b.dist || (a.j.day < b.j.day ? -1 : 1)).slice(0, 40)
-      .map(({ j }) => ({ id: j.id, text: `${lbDayText(j.day)} · ${j.inv ? `#${j.inv} ` : ""}${j.client || "(no name)"}${j.addr ? ` · ${String(j.addr).split(",")[0]}` : ""} · ${C(j.c)}` }));
-  };
-  for (const { r, parts, hits, keys } of plan) {
+  pairs.sort((a, b) => b.sc - a.sc || a.dist - b.dist);
+  for (const P of pairs) {
+    if (P.x.hits[P.i] || used.has(P.j.id)) continue;
+    used.add(P.j.id);
+    const amountOnly = !P.s.nm && !P.s.addr && !P.s.st;
+    P.x.hits[P.i] = { j: P.j, dist: P.dist, am: P.s.am, far: P.dist > 7 || (amountOnly && P.dist > 1), why: why(P.s) };
+  }
+  // the jobs left over, for picking by hand: the most that matches first, then the closest days
+  const pickable = (day, q) => live.filter(j => !used.has(j.id)).map(j => ({ j, dist: gap(j.day, day), sc: score(sig(j, q)) }))
+    .sort((a, b) => b.sc - a.sc || a.dist - b.dist || (a.j.day < b.j.day ? -1 : 1)).slice(0, 40)
+    .map(({ j }) => ({ id: j.id, text: `${lbDayText(j.day)} · ${j.inv ? `#${j.inv} ` : ""}${j.client || "(no name)"}${j.addr ? ` · ${String(j.addr).split(",")[0]}` : ""} · ${C(j.c)}` }));
+  for (const { r, parts, hits, keys, q } of plan) {
     parts.forEach((p, i) => {
       const x = hits[i], what = `${lbDayText(r.day)} · ${p.text.slice(0, 48) || "(no name)"} · ${C(p.amt)}`;
-      if (!x) { out.notFound.push(what); out.missing.push({ key: keys[i], day: r.day, text: what, turned: picks[keys[i]] === "-", jobs: pickable(r.day, p.text, p.amt) }); }
+      if (!x) { out.notFound.push(what); out.missing.push({ key: keys[i], day: r.day, text: what, turned: picks[keys[i]] === "-", jobs: pickable(r.day, q[i]) }); }
       else if (x.hand) out.picked.push({ key: keys[i], text: `${what} → ${lbDayText(x.j.day)} · ${x.j.inv ? `#${x.j.inv} ` : ""}${x.j.client || "(no name)"}` });
       else if (x.far) out.moved.push({ key: keys[i], text: `${x.j.client || "(no name)"}: Excel ${lbDayText(r.day)}, Housecall Pro ${lbDayText(x.j.day)}${x.j.inv ? ` (#${x.j.inv})` : ""} · ${x.why}` });
     });
@@ -11827,9 +11829,9 @@ function openRepImport() {
     out.replaceChildren(...[
       h("p", { class: "rp-impsum", id: "repImpSum" }, h("b", { text: `${fmt(res.found.length)} of ${fmt(res.jobs)} jobs found in Housecall Pro` }),
         ` · ${fmt(n)} to save${res.skipped.length ? ` · ${fmt(res.skipped.length)} already typed in the app (left as they are)` : ""}`),
-      fixList("Not found in Housecall Pro (not saved)", res.missing, "repImpNot", ["Pick the job in Housecall Pro and it's saved with the rest. Only jobs with a Monumental tag in Housecall Pro (like “repair - Monumental Flooring”) are read: if the job isn't in the box, add the tag to it in Housecall Pro, then ",
+      fixList("Not found in Housecall Pro (not saved)", res.missing, "repImpNot", ["No job read from Housecall Pro has this name or street address. Pick the job and it's saved with the rest. Only jobs with a Monumental tag in Housecall Pro (like “repair - Monumental Flooring”) are read: if the job isn't in the box, add the tag to it in Housecall Pro, then ",
         h("button", { class: "btn small", type: "button", id: "repImpAgain", onclick: () => reread() }, "Read Housecall Pro again"), "."], pickBox),
-      fixList("Matched by name or address (saved; Housecall Pro's day and amount are kept)", res.moved, "repImpMoved", "Not the same name, amount and day as the Excel, so check each one.", m => undo("Not this job", m, k => { picks[k] = "-"; turned.add(k); })),
+      fixList("Found on another day (saved; Housecall Pro's day is kept)", res.moved, "repImpMoved", "More than a week from the Excel's day, or matched by the amount alone: check each one.", m => undo("Not this job", m, k => { picks[k] = "-"; turned.add(k); })),
       fixList("Picked by hand (saved)", res.picked, "repImpPicked", "", m => undo("Undo", m, k => { if (turned.has(k)) picks[k] = "-"; else delete picks[k]; })),
       list("Amount differs from Housecall Pro (saved; the split uses Housecall Pro's amount)", res.differs, "repImpDiff"),
       list(`Extra pay to Monumental (their total was typed above 70%)`, res.extras, "repImpExtra"),
@@ -11860,16 +11862,17 @@ function openRepImport() {
     } finally { busy = false; }
     if (done >= months.length) draw();
   };
-  // the months of the rows not found, read again in full (a job just tagged in Housecall Pro shows up)
+  // every month read, read again (a job just tagged in Housecall Pro shows up, whatever its day)
   const reread = async () => {
-    const ms = [...new Set((res ? res.missing : []).flatMap(m => [-7, 0, 7].map(k => lbAddDays(m.day, k).slice(0, 7))))].filter(m => repDoc(Number(m.slice(0, 4)))).sort().reverse();
+    const ms = months.filter(m => repDoc(Number(m.slice(0, 4))));
     if (!ms.length || busy) return;
     busy = true; err.textContent = ""; draw();
     try {
       for (let k = 0; k < ms.length; k++) {
         const m = ms[k], y = Number(m.slice(0, 4)), doc = repDoc(y);
         status.textContent = `Reading Housecall Pro again: ${revMonthText(`${m}-01`)} (${k + 1} of ${ms.length})…`;
-        const o = await api("repSync", { from: `${m}-01`, to: `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`, force: true }, 170000);
+        // the script skips a month it read in the last minute unless forced (forcing reads every job's invoices too)
+        const o = await api("repSync", { from: `${m}-01`, to: `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`, force: Date.now() - (doc.read[m] || 0) < 90e3 }, 170000);
         doc.jobs = doc.jobs.filter(j => !j.day.startsWith(m)).concat(o.jobs || []);
         doc.read[m] = Date.now(); repKeep(y);
       }
@@ -11904,8 +11907,10 @@ function openRepImport() {
       const tabs = await lbReadXlsx(await f.arrayBuffer(), n => /^\s*[A-Za-z]+\s+\d{4}\s*$/.test(n));
       rows = tabs.map(repXlTab).filter(Boolean).flat();
       if (!rows.length) { rows = null; status.textContent = ""; err.textContent = "No month tabs (like “October 2026”) with CLIENT NAME and TOTAL CHARGED in that file."; return; }
-      months = [...new Set(rows.map(r => r.day.slice(0, 7)))].sort().reverse();
-      status.textContent = `${fmt(rows.length)} days with jobs in ${fmt(months.length)} months.`;
+      // the Excel's months, and a month either side (its days may be wrong)
+      const ms = [...new Set(rows.map(r => r.day.slice(0, 7)))].sort(), mo = (m, k) => { const d = new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1 + k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+      months = [...new Set([mo(ms[0], -1), ...ms, mo(ms[ms.length - 1], 1)])].sort().reverse();
+      status.textContent = `${fmt(rows.length)} days with jobs in ${fmt(ms.length)} months.`;
       await read();
     } catch (x) { rows = null; status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
   } });
