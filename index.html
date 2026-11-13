@@ -810,7 +810,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-bar b { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .rev-ar-bar .r { margin-left: auto; text-align: right; font-size: .8rem; color: var(--muted); } .rev-ar-bar .go { font-size: 1.4rem; color: var(--muted); }
 @media (max-width: 1399px) { .rev-ar { display: none; } .rev-ar-bar { display: flex; } }
-.rv-unpaid-body { display: grid; gap: 10px; }
+.rv-unpaid-body { display: flex; flex-direction: column; gap: 10px; }
 .rv-seg { flex-wrap: wrap; width: fit-content; max-width: 100%; }
 .rv-seg .seg-btn em { font-style: normal; font-weight: 600; opacity: .8; }
 #rvUnpaidTable td.rv-owes { font-weight: 700; color: color-mix(in srgb, var(--soon) 72%, var(--ink)); }
@@ -819,7 +819,17 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 #rvUnpaidTable th.rv-proj { text-align: left; }
 #rvUnpaidTable td.rv-proj { text-align: left; white-space: normal; min-width: 10em; max-width: 18em; color: var(--muted); }
 .rv-seg .seg-btn .rev-dot { margin-right: 4px; }
+/* the AR window stays put: one height, near the top, whatever is picked; only the list scrolls (its headings stay) */
 dialog#dlg:has(.rv-unpaid) { width: min(1040px, calc(100% - 24px)); }
+dialog#dlg[open]:has(.rv-unpaid) { height: min(880px, calc(100% - 48px)); max-height: none; margin: 24px auto auto; overflow: hidden; display: flex; flex-direction: column; }
+dialog#dlg[open]:has(.rv-unpaid) > form.dlg { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+dialog#dlg[open] .rv-unpaid { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+dialog#dlg[open] .rv-unpaid > h3, dialog#dlg[open] .rv-unpaid > p { margin: 0; }
+dialog#dlg[open] .rv-unpaid .rv-unpaid-body { flex: 1; min-height: 0; }
+dialog#dlg[open] .rv-unpaid .rv-unpaid-body > .lb-scroll { flex: 1; min-height: 0; overflow: auto; }
+#rvUnpaidTable thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+#rvUnpaidTable tfoot th, #rvUnpaidTable tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--surface); box-shadow: inset 0 1px 0 var(--line); }
+@media (max-width: 760px) { dialog#dlg[open]:has(.rv-unpaid) { height: calc(100% - 24px); margin: 12px auto auto; } }
 @media (max-width: 760px) {
   #rvUnpaidTable .rv-inv, #rvUnpaidTable .rv-ch, #rvUnpaidTable .rv-pd, #rvUnpaidTable .rv-dep, #rvUnpaidTable .rv-proj { display: none; }
   #rvUnpaidTable .rv-sm { display: block; color: var(--muted); font-size: .72rem; font-weight: 500; }
