@@ -192,10 +192,40 @@ button { font: inherit; color: inherit; }
 .search { position: relative; flex: 1 1 260px; max-width: 420px; }
 .search svg { position: absolute; left: 11px; top: 50%; width: 17px; height: 17px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .search input { width: 100%; font: inherit; padding: 9px 12px 9px 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+/* file boxes: drag files on (a computer) or tap to choose (a phone) */
+.drop { position: relative; display: grid; justify-items: center; align-content: center; gap: 6px; text-align: center; padding: 22px 16px; min-height: 120px; box-sizing: border-box;
+  border: 2px dashed color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 16px; cursor: pointer; color: var(--ink);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 55%, var(--surface)), var(--surface));
+  transition: border-color .15s, background .15s, transform .15s, box-shadow .15s; }
+.drop:hover { border-color: var(--accent); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 14%, transparent); }
+.drop:focus-within { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.drop.over, body.dropping .drop { border-style: solid; border-color: var(--accent); background: var(--accent-soft); transform: scale(1.01); box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 22%, transparent); }
+.drop .drop-in { position: absolute; inset: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); pointer-events: none; }
+.drop-ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, var(--line)), 0 4px 10px color-mix(in srgb, var(--accent) 15%, transparent); }
+.drop-ic svg { width: 24px; height: 24px; }
+.drop.over .drop-ic { transform: translateY(-2px); }
+.drop.has { border-style: solid; border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: linear-gradient(180deg, color-mix(in srgb, var(--ok-bg) 70%, var(--surface)), var(--surface)); }
+.drop.has .drop-ic { color: var(--ok); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.drop-t { font-size: .95rem; } .drop-t b { font-weight: 700; } .drop-t u { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+.drop-h { color: var(--muted); font-size: .78rem; }
+.drop-files { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 100%; }
+.drop-files:empty, .drop-msg:empty { display: none; }
+.drop-file { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; font-weight: 600; padding: 3px 10px; border-radius: 99px;
+  background: var(--surface); border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--line)); color: var(--ink); }
+.drop-msg { color: var(--due); font-size: .84rem; font-weight: 600; }
+.drop .on-touch { display: none; }
+@media (hover: none) and (pointer: coarse) { .drop .on-pc { display: none; } .drop .on-touch { display: inline; } .drop { min-height: 104px; padding: 18px 14px; } }
+.field > .drop { margin-top: 2px; }
 .chip-btn { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: .88rem; cursor: pointer; }
 .chip-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .sortsel { font: inherit; font-weight: 600; font-size: .88rem; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .toolbar .count { color: var(--muted); font-size: .88rem; margin-left: auto; font-variant-numeric: tabular-nums; }
+/* Report and + Add truck: in the row of filters, by the sort (the Trucks tab only) */
+.tool-acts { display: inline-flex; gap: 8px; align-items: center; }
+.tool-acts:not(:has(> .btn:not([hidden]))) { display: none; }
+.tool-acts .btn { padding: 7px 14px; font-size: .9rem; border-radius: 10px; }
+.tool-acts .btn svg { width: 17px; height: 17px; }
 .filt-btn { display: none; align-items: center; gap: 6px; white-space: nowrap; }
 .filt-btn[aria-pressed="true"], .toolbar.open .filt-btn { border-color: var(--accent); color: var(--accent); }
 .filt-btn .n { background: var(--accent); color: var(--accent-ink); border-radius: 999px; font-size: .72rem; padding: 0 6px; line-height: 1.5; }
@@ -1769,6 +1799,9 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
   .toolbar { flex-wrap: wrap; gap: 8px; }
   .toolbar .search { flex: 1 1 200px; min-width: 0; }
   .toolbar .filt-btn { display: inline-flex; }
+  .tool-acts .btn .txt { display: none; }   /* phones: icons by Filters, on the search's line */
+  .toolbar .search { flex-basis: 120px; }
+  .tool-acts .btn { padding: 7px 10px; }
   .toolbar:not(.open) > .sortsel, .toolbar:not(.open) > #tmOnly, .toolbar:not(.open) > .count { display: none; }
   .toolbar.open > .sortsel, .toolbar.open > #tmOnly { flex: 1 1 calc(50% - 4px); }
   .toolbar.open > .count { flex-basis: 100%; }
@@ -1783,7 +1816,6 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
   .me-ico { display: inline-grid; place-items: center; }
   #meBtn { padding: 0; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
   .top-actions .btn { width: 36px; height: 36px; padding: 0; }
-  body[data-tab="trucks"] .sync.idle #syncText { display: none; }
   .topbar { gap: 8px; padding: 8px 12px; }
   .brand h1 { font-size: 1.3rem; }
   .views { margin-bottom: 10px; padding: 3px; }
@@ -1881,13 +1913,6 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
     <button class="btn" type="button" id="askBtn" title="Ask" aria-label="Ask">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7.5l.9 1.8 1.9.3-1.4 1.3.3 1.9-1.7-.9-1.7.9.3-1.9-1.4-1.3 1.9-.3z"/></svg><span class="txt">Ask</span>
     </button>
-    <button class="btn" type="button" id="reportBtn" title="Report">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg><span class="txt">Report</span>
-    </button>
-    <button type="button" id="shareReport" hidden>Share report</button>
-    <button class="btn primary" type="button" id="addTruck" title="Add truck">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="txt">Add truck</span>
-    </button>
     <button class="btn ghost" type="button" id="meBtn"></button>
   </div>
 </header>
@@ -1949,6 +1974,15 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
         <option value="urgent">Most urgent first</option>
         <option value="unit">Fleet order</option>
       </select>
+      <span class="tool-acts" id="toolActs">
+        <button class="btn" type="button" id="reportBtn" title="Report">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg><span class="txt">Report</span>
+        </button>
+        <button type="button" id="shareReport" hidden>Share report</button>
+        <button class="btn primary" type="button" id="addTruck" title="Add truck">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="txt">Add truck</span>
+        </button>
+      </span>
       <span class="count" id="countText"></span>
     </div>
     <div class="layout">
@@ -5784,12 +5818,87 @@ function openDialog(...content) {
   const x = h("div", { class: "dlg-xbar" }, h("button", { class: "dlg-x", type: "button", id: "dlgX", "aria-label": "Close", title: "Close", onclick: () => dismissDialog() }, "✕"));
   const fresh = !dlg.open;   // a window drawn again while open (the checklist editor) keeps what was typed
   if (fresh) dlgDirty = false;
+  upgradeFiles(form);   // every file picker: a box to drop files on, or tap to choose
   dlg.replaceChildren(x, form);
   if (fresh) { try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); } dlg.scrollTop = 0; }
   const a = document.activeElement;
   if (touch && a && dlg.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) form.focus({ preventScroll: true });
 }
 function closeDialog() { if (dlg.open) dlg.close(); dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; }
+/* ---- file pickers: a box to drag files onto (a computer) or tap to choose (a phone); the input inside keeps its id and
+   what it does, and the box shows the files chosen ---- */
+const DROP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>';
+const DROP_DONE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m9 14 2 2 4-4"/></svg>';
+/** Does this file fit what the picker takes (".pdf,application/pdf", ".xlsx")? */
+function dropFits(f, accept) {
+  const want = String(accept || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  if (!want.length) return true;
+  const name = String(f.name || "").toLowerCase(), type = String(f.type || "").toLowerCase();
+  return want.some(w => (w.startsWith(".") ? name.endsWith(w) : w.endsWith("/*") ? type.startsWith(w.slice(0, -1)) : type === w));
+}
+/** Wraps a file input in its box. */
+function fileDrop(input) {
+  if (input.closest(".drop")) return input.closest(".drop");
+  const multi = input.multiple, accept = String(input.getAttribute("accept") || "");
+  const kind = /pdf/i.test(accept) ? "pdf" : /xls/i.test(accept) ? "xlsx" : "";
+  const noun = input.dataset.drop || (kind === "pdf" ? (multi ? "the PDFs" : "the PDF") : kind === "xlsx" ? (multi ? "the Excel files" : "the Excel file") : (multi ? "the files" : "the file"));
+  const ic = h("span", { class: "drop-ic", "aria-hidden": "true" }); ic.innerHTML = DROP_SVG;
+  const names = h("span", { class: "drop-files" }), msg = h("span", { class: "drop-msg", role: "status" });
+  const zone = h("label", { class: "drop" + (kind ? " " + kind : "") });
+  input.classList.add("drop-in");
+  input.replaceWith(zone);
+  zone.append(input, ic,
+    h("span", { class: "drop-t" },
+      h("span", { class: "on-pc" }, h("b", { text: `Drag ${noun} here` }), " or ", h("u", { text: multi ? "choose files" : "choose a file" })),
+      h("span", { class: "on-touch" }, h("b", { text: `Tap to choose ${noun}` }))),
+    h("small", { class: "drop-h", text: [kind === "pdf" ? "PDF" : kind === "xlsx" ? "Excel (.xlsx)" : "", multi ? "several at once" : ""].filter(Boolean).join(" · ") }),
+    names, msg);
+  const show = list => {
+    names.replaceChildren(...list.map(f => h("span", { class: "drop-file", text: f.name, title: f.name })));
+    zone.classList.toggle("has", list.length > 0);
+    ic.innerHTML = list.length ? DROP_DONE_SVG : DROP_SVG;
+    const pc = zone.querySelector(".on-pc u"), tc = zone.querySelector(".on-touch b");
+    if (pc) pc.textContent = list.length ? "choose again" : multi ? "choose files" : "choose a file";
+    if (tc) tc.textContent = list.length ? "Tap to choose again" : `Tap to choose ${noun}`;
+  };
+  input.addEventListener("change", () => { msg.textContent = ""; show([...(input.files || [])]); });
+  /** Files dropped on the box (or anywhere on its window): only the kind it takes, one unless it takes several. */
+  zone._take = files => {
+    if (input.disabled) return;
+    let ok = [...files].filter(f => dropFits(f, accept));
+    if (!ok.length) { msg.textContent = kind === "pdf" ? "That isn't a PDF." : kind === "xlsx" ? "That isn't an Excel file (.xlsx)." : "That file can't be used here."; return; }
+    if (!multi) ok = ok.slice(0, 1);
+    try { const dt = new DataTransfer(); ok.forEach(f => dt.items.add(f)); input.files = dt.files; }
+    catch (e) { msg.textContent = "This browser can't take dropped files: tap to choose them."; return; }
+    const left = files.length - ok.length;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    msg.textContent = left ? `${left} file${left === 1 ? "" : "s"} left out (not ${kind === "pdf" ? "a PDF" : kind === "xlsx" ? ".xlsx" : "the right kind"}).` : "";
+  };
+  let depth = 0;
+  zone.addEventListener("dragenter", e => { if (!dropHasFiles(e)) return; e.preventDefault(); depth++; zone.classList.add("over"); });
+  zone.addEventListener("dragover", e => { if (!dropHasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+  zone.addEventListener("dragleave", () => { depth = Math.max(0, depth - 1); if (!depth) zone.classList.remove("over"); });
+  zone.addEventListener("drop", e => { if (!dropHasFiles(e)) return; e.preventDefault(); e.stopPropagation(); depth = 0; zone.classList.remove("over"); zone._take(e.dataTransfer.files); });
+  return zone;
+}
+const dropHasFiles = e => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files"));
+function upgradeFiles(root) { root.querySelectorAll('input[type="file"]:not(.drop-in)').forEach(fileDrop); }
+// files dragged anywhere: the browser doesn't open them in place of the app; on a window with one box, they go in it
+document.addEventListener("dragover", e => {
+  if (!dropHasFiles(e)) return;
+  e.preventDefault();
+  const zones = dlg.open ? dlg.querySelectorAll(".drop") : [];
+  document.body.classList.toggle("dropping", zones.length === 1);
+});
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) document.body.classList.remove("dropping"); });
+document.addEventListener("drop", e => {
+  if (!dropHasFiles(e)) return;
+  e.preventDefault();
+  document.body.classList.remove("dropping");
+  const zones = dlg.open ? [...dlg.querySelectorAll(".drop")] : [];
+  if (zones.length === 1) zones[0]._take(e.dataTransfer.files);
+});
 // a tap that starts and ends on the dark area around the window (not a drag that began inside it)
 dlg.addEventListener("pointerdown", e => { dlgDownOut = e.target === dlg; });
 dlg.addEventListener("click", e => { if (e.target === dlg && dlgDownOut) dismissDialog(); dlgDownOut = false; });
@@ -11191,10 +11300,15 @@ const CP_REPLY_API = 47;                                 // ... and where vendor
 const CP_DEL_API = 48;                                   // ... and deleting a canceled batch
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
 const CP_VENDOR = "Monumental Flooring";
-let cpData = null, cpLoading = false, cpErr = "", cpOld = false, cpFilter = "all";
+let cpData = null, cpLoading = false, cpErr = "", cpOld = false, cpFilter = "all", cpLoadP = null;
 function cpForget() { cpData = null; cpErr = ""; }
-async function cpLoad() {
-  if (!session || !canSee("contractors") || cpLoading) return;
+/** Loads Contractor Payroll; while a load is on its way, whoever asks waits for that one (not an empty answer). */
+function cpLoad() {
+  if (!session || !canSee("contractors")) return Promise.resolve();
+  if (!cpLoadP) cpLoadP = cpLoad1().finally(() => { cpLoadP = null; });
+  return cpLoadP;
+}
+async function cpLoad1() {
   cpLoading = true;
   if (view.tab === "contractors") renderContractors();
   try {
@@ -11207,7 +11321,7 @@ async function cpLoad() {
     cpErr = cpOld ? "" : errText(e, "Nothing");
   }
   cpLoading = false;
-  if (!dlg.open) cpRedraw();
+  cpRedraw();   // the page behind an open window too (it isn't left saying "Loading")
 }
 const cpShort = v => String(v || "").trim().split(/\s+/)[0] || "the contractor";
 const cpPlural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : /(ch|sh|s|x)$/.test(w) ? "es" : "s"}`;
