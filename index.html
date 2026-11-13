@@ -810,7 +810,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-bar b { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .rev-ar-bar .r { margin-left: auto; text-align: right; font-size: .8rem; color: var(--muted); } .rev-ar-bar .go { font-size: 1.4rem; color: var(--muted); }
 @media (max-width: 1399px) { .rev-ar { display: none; } .rev-ar-bar { display: flex; } }
-.rv-unpaid-body { display: grid; gap: 10px; }
+.rv-unpaid-body { display: flex; flex-direction: column; gap: 10px; }
 .rv-seg { flex-wrap: wrap; width: fit-content; max-width: 100%; }
 .rv-seg .seg-btn em { font-style: normal; font-weight: 600; opacity: .8; }
 #rvUnpaidTable td.rv-owes { font-weight: 700; color: color-mix(in srgb, var(--soon) 72%, var(--ink)); }
@@ -819,7 +819,17 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 #rvUnpaidTable th.rv-proj { text-align: left; }
 #rvUnpaidTable td.rv-proj { text-align: left; white-space: normal; min-width: 10em; max-width: 18em; color: var(--muted); }
 .rv-seg .seg-btn .rev-dot { margin-right: 4px; }
+/* the AR window stays put: one height, near the top, whatever is picked; only the list scrolls (its headings stay) */
 dialog#dlg:has(.rv-unpaid) { width: min(1040px, calc(100% - 24px)); }
+dialog#dlg[open]:has(.rv-unpaid) { height: min(880px, calc(100% - 48px)); max-height: none; margin: 24px auto auto; overflow: hidden; display: flex; flex-direction: column; }
+dialog#dlg[open]:has(.rv-unpaid) > form.dlg { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+dialog#dlg[open] .rv-unpaid { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+dialog#dlg[open] .rv-unpaid > h3, dialog#dlg[open] .rv-unpaid > p { margin: 0; }
+dialog#dlg[open] .rv-unpaid .rv-unpaid-body { flex: 1; min-height: 0; }
+dialog#dlg[open] .rv-unpaid .rv-unpaid-body > .lb-scroll { flex: 1; min-height: 0; overflow: auto; }
+#rvUnpaidTable thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+#rvUnpaidTable tfoot th, #rvUnpaidTable tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--surface); box-shadow: inset 0 1px 0 var(--line); }
+@media (max-width: 760px) { dialog#dlg[open]:has(.rv-unpaid) { height: calc(100% - 24px); margin: 12px auto auto; } }
 @media (max-width: 760px) {
   #rvUnpaidTable .rv-inv, #rvUnpaidTable .rv-ch, #rvUnpaidTable .rv-pd, #rvUnpaidTable .rv-dep, #rvUnpaidTable .rv-proj { display: none; }
   #rvUnpaidTable .rv-sm { display: block; color: var(--muted); font-size: .72rem; font-weight: 500; }
@@ -10178,8 +10188,7 @@ function renderRevenue() {
     renderRevenue();
   };
   const ty = revThisYear(), yFrom = `${ty}-01-01`, ay = cmp ? ty - cmp : 0, ayFrom = `${ay}-01-01`, ayTo = cmp ? revShift(today, cmp, "year") : "";
-  const arFrom = lbAddDays(today, -364);
-  const ranges = () => [[r.from, to, true]].concat(cmp ? [[cf, ct]] : [], [[yFrom, today]], cmp ? [[ayFrom, ayTo]] : [], apiLevel >= UNPAID_API ? [[arFrom, today, true]] : []);
+  const ranges = () => [[r.from, to, true]].concat(cmp ? [[cf, ct]] : [], [[yFrom, today]], cmp ? [[ayFrom, ayTo]] : []);
   const title = secTitle("Operations");
   const top = title ? h("div", { class: "lb-top" }, title) : null;
   const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
@@ -10277,9 +10286,10 @@ function renderRevenue() {
   // beside the table (under it on a smaller screen): each department's average job, this year so far and the year
   // picked in Compare (the same days)
   const yDays = revDaysFor(yFrom, today), aDays = cmp ? revDaysFor(ayFrom, ayTo) : {};
-  // Accounts receivable: everything still owed from the last 12 months
-  const ar = apiLevel && apiLevel < UNPAID_API ? null : revArSum(revDaysFor(arFrom, today), arFrom, today);
-  const arOpen = dep => revArDlg(dep || "all");
+  // Accounts receivable: what's still owed for the jobs of the period on screen (Week, Month, Year or the dates picked)
+  const arSpan = r.from > today ? "" : revSpanText(r.from, to);
+  const ar = (apiLevel && apiLevel < UNPAID_API) || r.from > today ? null : revArSum(days, r.from, to);
+  const arOpen = dep => revArDlg(dep || "all", r.from, to);
   let arCard = null, arBar = null;
   if (ar) {
     const busy = ar.missing > 0;
@@ -10287,7 +10297,7 @@ function renderRevenue() {
     arCard = h("div", { class: "rev-ar", id: "revAr", role: "button", tabindex: "0", title: "Who still owes", onclick: () => arOpen("all"), onkeydown: e => { if (e.key === "Enter") arOpen("all"); } },
       h("small", { text: "Accounts receivable" }),
       h("b", { text: busy && !ar.t[1] ? "…" : lbMoney(ar.t[0] / 100) }),
-      h("span", { class: "rev-ar-n", text: busy ? `Reading Housecall Pro… (${ar.t[1]} jobs so far)` : ar.t[1] ? `${revJobs(ar.t[1])} still owed · last 12 months` : "Nobody owes · last 12 months" }),
+      h("span", { class: "rev-ar-n", text: busy ? `Reading Housecall Pro… (${ar.t[1]} jobs so far)` : ar.t[1] ? `${revJobs(ar.t[1])} still owed · ${arSpan}` : `Nobody owes · ${arSpan}` }),
       ar.t[1] ? ageBar : null,
       ar.t[1] ? h("div", { class: "rev-ar-ages" }, REV_AGES.slice(1).map(([k, name]) => h("span", { "data-age": k }, h("i", { class: "a" + k }), `${name.replace(" days", "").replace("Up to ", "0–")} `, h("b", { text: revShort(ar.age[k][0]) })))) : null,
       h("div", { class: "rev-ar-deps" }, [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"]].concat(ar.o[1] ? [["o", "Other"]] : []).map(([k, name]) =>
@@ -10321,8 +10331,9 @@ function renderRevenue() {
 
 /* ---- Accounts receivable: each day's unpaid visits (Housecall Pro's outstanding balance) ---- */
 // [job id, invoice #, client, department, charged ¢, owes ¢, project] for every visit done or under way whose client
-// still owes. The tile adds up the last 12 months; the list goes by department and by how long it's been owed.
-const REV_AGES = [["all", "All"], ["30", "Up to 30 days"], ["60", "31–60 days"], ["90", "61–90 days"], ["91", "91 days – 1 year"]];
+// still owes. The tile adds up the period on screen (Week, Month, Year or the dates picked); the list goes by
+// department and by how long it's been owed.
+const REV_AGES = [["all", "All"], ["30", "Up to 30 days"], ["60", "31–60 days"], ["90", "61–90 days"], ["91", "Over 90 days"]];
 const revAgeOf = days => (days <= 30 ? "30" : days <= 60 ? "60" : days <= 90 ? "90" : "91");
 let revUnpaidRedraw = null;                             // the open list, drawn again as days come in
 /** What's owed from..to (null while a year loads): by department and by age, [cents, jobs]; missing: days not read
@@ -10342,18 +10353,18 @@ function revArSum(days, from, to) {
   }
   return s;
 }
-/** The list: every job still owed from the last 12 months, the oldest first, by department and by how long it's been
- *  owed (up to 30 days, 31–60, 61–90, 91 days – 1 year): client, project, job, day, charged, paid, owes, days. */
-function revArDlg(dep) {
+/** The list: every job of the period still owed, the oldest first, by department and by how long it's been
+ *  owed (up to 30 days, 31–60, 61–90, over 90): client, project, job, day, charged, paid, owes, days. */
+function revArDlg(dep, from0, to0) {
   const st = { age: "all", dep: dep || "all" };
   const box = h("div", { class: "rv-unpaid-body" });
   const draw = () => {
-    const today = lbToday(), from = lbAddDays(today, -364);
-    const days = revDaysFor(from, today);
-    if (days && !revSync.busy && !revSync.err) setTimeout(() => revEnsure([[from, today, true]], false), 0);   // the 12 months, read with who owes
+    const today = lbToday(), from = from0 || lbAddDays(today, -364), end = to0 && to0 < today ? to0 : today;
+    const days = revDaysFor(from, end);
+    if (days && !revSync.busy && !revSync.err) setTimeout(() => revEnsure([[from, end, true]], false), 0);   // the period's days, read with who owes
     const all = [];
     let missing = 0;
-    if (days) for (let d = from; d <= today; d = lbAddDays(d, 1)) {
+    if (days) for (let d = from; d <= end; d = lbAddDays(d, 1)) {
       const v = days[d];
       if (!v || !Array.isArray(v[12])) { missing++; continue; }
       for (const u of v[12]) all.push({ id: u[0], inv: u[1], client: u[2] || "", dep: "rcp".includes(u[3]) ? u[3] : "o", c: Number(u[4]) || 0, owes: Number(u[5]) || 0, proj: u[6] || "", day: d, age: Math.round((lbDate(today) - lbDate(d)) / 864e5) });
@@ -10390,7 +10401,7 @@ function revArDlg(dep) {
   revUnpaidRedraw = draw;
   openDialog(h("div", { class: "rp-dlg rv-unpaid" },
     h("h3", { id: "dlgTitle", text: "Accounts receivable" }),
-    h("p", { class: "hint", text: "Jobs from the last 12 months whose client still owes (done or under way; Housecall Pro's balance), the oldest first. Days: since the job's day." }),
+    h("p", { class: "hint", id: "rvUnpaidSpan", text: `Jobs from ${revSpanText(from0 || lbAddDays(lbToday(), -364), to0 && to0 < lbToday() ? to0 : lbToday())} whose client still owes (done or under way; Housecall Pro's balance), the oldest first. Days: since the job's day.` }),
     box,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
   draw();
