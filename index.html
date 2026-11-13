@@ -10169,22 +10169,29 @@ async function revEnsure(ranges, force, src) {
   const chunks = Object.keys(months).sort().reverse().map(k => months[k]);
   if (!chunks.length) return;
   revSync = { busy: true, what: "", err: "", n: chunks.length, done: 0 };
-  for (const c of chunks) {
-    revSync.what = revMonthText(c.from);
-    for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) revAsked[d] = performance.now();
-    revRedraw();
-    try {
-      const out = await api("revSync", { from: c.from, to: c.to, force: !!force }, 170000);
-      revMerge(out.days);
-      revSync.done++;
-    } catch (e) {
-      if (e && (e.error === "bad_code" || e.error === "signed_out")) { revSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
-      revSync.err = revErrText(e);
-      for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) delete revAsked[d];   // not read: Try again asks for them
-      break;
+  // two months at a time, the newest first (the screen fills in as each one comes back)
+  let next = 0, out401 = false;
+  const one = async () => {
+    while (next < chunks.length && !revSync.err && !out401) {
+      const c = chunks[next++];
+      revSync.what = revMonthText(c.from);
+      for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) revAsked[d] = performance.now();
+      revRedraw();
+      try {
+        const out = await api("revSync", { from: c.from, to: c.to, force: !!force }, 170000);
+        revMerge(out.days);
+        revSync.done++;
+        revRedraw();
+      } catch (e) {
+        if (e && (e.error === "bad_code" || e.error === "signed_out")) { out401 = true; return; }
+        revSync.err = revErrText(e);
+        for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) delete revAsked[d];   // not read: Try again asks for them
+      }
     }
-  }
+  };
+  await Promise.all([one(), one()]);
   revSync.busy = false;
+  if (out401) { signOut("Your sign-in ended. Please sign in again."); return; }
   revRedraw();
 }
 /** The days from..to added up, in cents: each department's [cents, jobs], and what's in them. */
@@ -10556,9 +10563,10 @@ async function repLoad(y) {
   try {
     const out = await api("repairs", { year: y });
     const had = repDoc(y), ver = Number(out.api) || 0;
-    // after the Google script is updated, every month is read from Housecall Pro once more when it's looked at, so the
-    // jobs get what the new script keeps (addresses, card fees, names)
-    repDocs[y] = { year: y, jobs: out.jobs || [], years: out.years || [], read: had && had.api === ver ? had.read || {} : {}, api: ver };
+    // when the Google script starts keeping something new for a job (its data version), every month is read from
+    // Housecall Pro once more when it's looked at; any other update of the script leaves the months as they were read
+    const dv = d => Number(d && d.dv) || (Number(d && d.api) >= 45 ? 1 : 0);
+    repDocs[y] = { year: y, jobs: out.jobs || [], years: out.years || [], read: had && dv(had) === dv(out) ? had.read || {} : {}, api: ver, dv: dv(out) };
     repKeep(y);
     repErr = ""; repOld = false;
   } catch (e) {
@@ -10599,25 +10607,32 @@ async function repEnsure(months, force) {
   if (!todo.length) return;
   todo.sort((a, b) => (a.m < b.m ? 1 : -1));
   repSync = { busy: true, what: "", err: "", n: todo.length, done: 0 };
-  for (const c of todo) {
-    repSync.what = revMonthText(c.from);
-    repAsked[c.m] = performance.now();
-    if (view.tab === "repairs") renderRevenue();
-    try {
-      const out = await api("repSync", { from: c.from, to: c.to, force: !!force }, 170000);
-      const doc = repDoc(Number(c.m.slice(0, 4)));
-      doc.jobs = doc.jobs.filter(j => j.day < c.from || j.day > c.to).concat(out.jobs || []);
-      doc.read[c.m] = Date.now();
-      repKeep(doc.year);
-      repSync.done++;
-    } catch (e) {
-      if (e && (e.error === "bad_code" || e.error === "signed_out")) { repSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
-      repSync.err = revErrText(e);
-      delete repAsked[c.m];
-      break;
+  // two months at a time, the newest first (the screen fills in as each one comes back)
+  let next = 0, out401 = false;
+  const one = async () => {
+    while (next < todo.length && !repSync.err && !out401) {
+      const c = todo[next++];
+      repSync.what = revMonthText(c.from);
+      repAsked[c.m] = performance.now();
+      if (view.tab === "repairs") renderRevenue();
+      try {
+        const out = await api("repSync", { from: c.from, to: c.to, force: !!force }, 170000);
+        const doc = repDoc(Number(c.m.slice(0, 4)));
+        doc.jobs = doc.jobs.filter(j => j.day < c.from || j.day > c.to).concat(out.jobs || []);
+        doc.read[c.m] = Date.now();
+        repKeep(doc.year);
+        repSync.done++;
+        if (view.tab === "repairs") renderRevenue();
+      } catch (e) {
+        if (e && (e.error === "bad_code" || e.error === "signed_out")) { out401 = true; return; }
+        repSync.err = revErrText(e);
+        delete repAsked[c.m];
+      }
     }
-  }
+  };
+  await Promise.all([one(), one()]);
   repSync.busy = false;
+  if (out401) { signOut("Your sign-in ended. Please sign in again."); return; }
   if (view.tab === "repairs") renderRevenue();
 }
 /** The jobs of from..to (null while that year is loading), by day; the ones gone from Housecall Pro apart. */
@@ -11109,13 +11124,13 @@ function openRepMonInv() {
         await repLoad(yy);
         if (!repDoc(yy)) throw { error: "load", message: repErr };
       }
-      for (let k = 2; k >= 0; k--) {
-        const r = ofRange("month", -k), m = r.from.slice(0, 7), doc = repDoc(Number(m.slice(0, 4)));
-        if (doc.read[m] && Date.now() - doc.read[m] < 20 * 3600e3) continue;
-        status.textContent = `Reading Housecall Pro: ${revMonthText(r.from)}…`;
+      const stale = [2, 1, 0].map(k => ofRange("month", -k)).filter(r => { const m = r.from.slice(0, 7), doc = repDoc(Number(m.slice(0, 4))); return !(doc.read[m] && Date.now() - doc.read[m] < 20 * 3600e3); });
+      if (stale.length) status.textContent = `Reading Housecall Pro: ${stale.map(r => revMonthText(r.from)).join(", ")}…`;
+      await Promise.all(stale.map(async r => {   // the months at once
+        const m = r.from.slice(0, 7), doc = repDoc(Number(m.slice(0, 4)));
         const o = await api("repSync", { from: r.from, to: r.to }, 170000);
         doc.jobs = doc.jobs.filter(j => !j.day.startsWith(m)).concat(o.jobs || []); doc.read[m] = Date.now(); repKeep(doc.year);
-      }
+      }));
       for (const f of files) {
         status.textContent = `Reading ${f.name}…`;
         try {
