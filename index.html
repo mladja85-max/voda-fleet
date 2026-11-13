@@ -2173,6 +2173,40 @@ const lbIs = (v, word) => lbText(v).toUpperCase() === word;
 const lbTeamName = v => { const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return /^[A-Za-z][A-Za-z '-]{0,29}$/.test(s) ? s : ""; };
 const lbYm = v => (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(v || "")) ? String(v) : "");
 const lbIsDay = v => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(v || ""));
+const LB_FIRST_DAY = "2010-01-01";                      // nothing in the app is older: an earlier day is a year being typed
+/** A whole, sensible day: 2010 or later (and up to hi). */
+const lbOkDay = (v, hi) => lbIsDay(v) && v >= LB_FIRST_DAY && (!hi || v <= hi);
+/** A date box that reports only a whole, sensible day (lo..hi). While a year is typed Chrome reports each digit as a
+ *  day ("0002-…", "0020-…"), and redrawing then would lose the box: so a typed day goes over a moment after typing
+ *  stops, on Enter, or when the box is left (a day picked on the calendar right away), and never a year before lo. */
+/** A date box in box is being typed in: the screen waits (drawing again would lose what's typed) and draws once it's left. */
+function lbHoldForDate(box, redraw) {
+  const a = box && box.querySelector("input[type=date][data-typing]");   // marked by the box itself (focus can't be asked while Chrome reports a change)
+  if (!a) return false;
+  if (!a.dataset.held) { a.dataset.held = "1"; a.addEventListener("blur", () => setTimeout(redraw, 0), { once: true }); }
+  return true;
+}
+function lbDateInput(attrs, onpick, lo, hi) {
+  lo = lo && lo > LB_FIRST_DAY ? lo : LB_FIRST_DAY;
+  let timer = 0, focused = false, keyAt = 0;
+  const ok = v => lbIsDay(v) && v >= lo && (!hi || v <= hi);
+  const send = () => {
+    clearTimeout(timer); timer = 0;
+    const v = el.value;
+    if (!ok(v)) return;
+    // done typing: the screen may draw again (the box may keep the focus on its calendar button, so it's let go here)
+    focused = false; delete el.dataset.typing;
+    try { el.blur(); } catch (e) { /* drawn again anyway */ }
+    onpick(v);
+  };
+  const el = h("input", Object.assign({ type: "date" }, attrs, {
+    onfocus: () => { focused = true; el.dataset.typing = "1"; },
+    // typed: a moment after the last key; picked on the calendar: right away
+    onchange: () => { clearTimeout(timer); timer = 0; if (ok(el.value)) timer = setTimeout(send, focused && performance.now() - keyAt < 600 ? 800 : 0); },
+    onblur: () => { focused = false; delete el.dataset.typing; if (timer) send(); },
+    onkeydown: e => { keyAt = performance.now(); if (e.key === "Enter") { e.preventDefault(); send(); } } }));
+  return el;
+}
 /** An email address, or "" when it isn't one. */
 const lbEmail = v => { const s = String(v == null ? "" : v).trim(); return s.length <= 100 && /^[^\s@<>"',;=]+@[^\s@<>"',;=]+\.[A-Za-z]{2,}$/.test(s) ? s : ""; };
 /** A phone number (digits with spaces, dots, dashes, brackets, a leading +; at least 7 digits), or "". */
@@ -7715,6 +7749,7 @@ function lbShowSave() {
 function renderLeaderboard() {
   const box = $("lbView");
   if (!box || view.tab !== "leaderboard" || !session) return;
+  if (lbHoldForDate(box, renderLeaderboard)) return;   // a date being typed: draw once it's done
   if (lbOld || (apiLevel && apiLevel < LB_API && !lbData)) {
     box.replaceChildren(h("div", { class: "panel" },
       h("h2", { text: "One more step: update the Google script" }),
@@ -8023,7 +8058,7 @@ function lbEnterEl() {
     const pk = part === "trucks" ? "t" : part === "sales" ? "s" : "r";
     out.push(h("div", { class: "lb-daybar" },
       h("button", { class: "btn small", type: "button", id: "lbPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => lbGoDay(lbAddDays(day, -1)) }, "‹"),
-      h("input", { id: "lbDay", type: "date", value: day, min: first, max: last, "aria-label": "Day", onchange: e => { if (lbIsDay(e.target.value) && e.target.value.startsWith(y + "-")) lbGoDay(e.target.value); } }),
+      lbDateInput({ id: "lbDay", value: day, min: first, max: last, "aria-label": "Day" }, v => lbGoDay(v), first, last),
       h("button", { class: "btn small", type: "button", id: "lbNextDay", "aria-label": "Next day", disabled: day >= last, onclick: () => lbGoDay(lbAddDays(day, 1)) }, "›"),
       day !== lbToday() && lbToday().startsWith(y + "-") ? h("button", { class: "btn ghost small", type: "button", onclick: () => lbGoDay(lbToday()) }, "Today") : null),
       h("div", { class: "lb-week", role: "group", "aria-label": "This week" }, Array.from({ length: 7 }, (_, i) => {
@@ -8871,7 +8906,7 @@ function lbPayrollEl() {
       h("tr", { class: "tot" }, h("th", { text: "Total" }), tot.map(a => cells(a))))));
   const label = per === "month" ? `${lbMonthLong(Number(r.from.slice(5, 7)))} ${r.from.slice(0, 4)}` : lbSpanText(r.from, r.to);
   const dateBox = (id, value, aria, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: aria }),
-    h("input", { id, type: "date", value, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": aria, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
+    lbDateInput({ id, value, min: `${y}-01-01`, max: `${y}-12-31`, "aria-label": aria }, onpick, `${y}-01-01`, `${y}-12-31`));
   return [
     h("div", { class: "lb-bar" },
       // a period starts from the From day shown; any day typed in From or To makes it From – To (no button lit then)
@@ -9267,7 +9302,7 @@ function lbPerformanceEl() {
     if (f <= t) setRange(f, t);
   };
   const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
-    h("input", { id, type: "date", value, min: first, max: lastDay, "aria-label": label, onchange: e => { if (lbIsDay(e.target.value) && e.target.value >= first && e.target.value <= lastDay) onpick(e.target.value); } }));
+    lbDateInput({ id, value, min: first, max: lastDay, "aria-label": label }, onpick, first, lastDay));
   const rangeEl = h("div", { class: "lb-daybar lb-payrange", id: "lbRange" },
     h("button", { class: "btn small", type: "button", id: "lbRangePrev", "aria-label": "Earlier", disabled: !canPrev, onclick: () => step(-1) }, "‹"),
     dateBox("lbRangeFrom", shown.from, "From", v => setRange(v, v > shown.to ? lbAddDays(v, shownLen - 1) > lastDay ? lastDay : lbAddDays(v, shownLen - 1) : shown.to)),
@@ -9951,6 +9986,8 @@ function revRedraw() {
 /** Every day from..to touches (null while a year is still loading). */
 function revDaysFor(from, to) {
   const out = {};
+  if (from < LB_FIRST_DAY) from = LB_FIRST_DAY;
+  if (to < from) return out;
   for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
     const doc = revDoc(y);
     if (!doc) { revLoad(y); return null; }
@@ -10068,7 +10105,7 @@ function revShift(day, n, per) {
 function revRange(per, off) {
   if (per !== "dates") return ofRange(per, off);
   const today = lbToday();
-  let from = lbIsDay(revView.from) ? revView.from : `${today.slice(0, 7)}-01`, to = lbIsDay(revView.to) ? revView.to : today;
+  let from = lbOkDay(revView.from, today) ? revView.from : `${today.slice(0, 7)}-01`, to = lbOkDay(revView.to, today) ? revView.to : today;
   if (to < from) [from, to] = [to, from];
   return { from, to, label: revSpanText(from, to) };
 }
@@ -10115,9 +10152,10 @@ function revChange(now, then) {
 
 /* ---- the screen ---- */
 function renderRevenue() {
-  if (view.tab === "repairs") { if (session) renderRepairs($("repView")); return; }   // Repairs Payroll's screen
+  if (view.tab === "repairs") { if (session && !lbHoldForDate($("repView"), renderRevenue)) renderRepairs($("repView")); return; }   // Repairs Payroll's screen
   const box = $("revView");
   if (!box || view.tab !== "revenue" || !session) return;
+  if (lbHoldForDate(box, renderRevenue)) return;   // a date being typed: draw once it's done
   if (revOld || (apiLevel && apiLevel < REV_API && !revData)) {
     box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "Revenue needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
@@ -10149,7 +10187,7 @@ function renderRevenue() {
   // the period: Week / Month / Year with ‹ ›, or Dates (From – To), and what to compare it with
   const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; revView.from = from; revView.to = to2; revSaveView(); renderRevenue(); };
   const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
-    h("input", { id, type: "date", value, max: today, "aria-label": label, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
+    lbDateInput({ id, value, min: LB_FIRST_DAY, max: today, "aria-label": label }, onpick, LB_FIRST_DAY, today));
   const yearsBack = Array.from({ length: REV_CMP_YEARS }, (_, i) => i + 1);
   const cmpSel = h("label", { class: "rev-cmp" }, h("span", { text: "Compare" }),
     h("select", { id: "revCmp", "aria-label": "Compare with", onchange: e => { revView.cmp = Number(e.target.value) || 0; revSaveView(); renderRevenue(); } },
@@ -10497,7 +10535,7 @@ function renderRepairs(box) {
   const off = Math.max(-5000, Math.min(ahead, Number(revView.roff) || 0));
   let r;
   if (per === "dates") {
-    let a = lbIsDay(revView.rfrom) ? revView.rfrom : `${today.slice(0, 7)}-01`, b = lbIsDay(revView.rto) ? revView.rto : today;
+    let a = lbOkDay(revView.rfrom) ? revView.rfrom : `${today.slice(0, 7)}-01`, b = lbOkDay(revView.rto) ? revView.rto : today;
     if (b < a) [a, b] = [b, a];
     r = { from: a, to: b, label: revSpanText(a, b) };
   } else r = ofRange(per, off);
@@ -10514,7 +10552,7 @@ function renderRepairs(box) {
   };
   const pick = (a, b) => { if (a > b) [a, b] = [b, a]; revView.rfrom = a; revView.rto = b; revSaveView(); renderRevenue(); };
   const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
-    h("input", { id, type: "date", value, "aria-label": label, onchange: e => { if (lbIsDay(e.target.value)) onpick(e.target.value); } }));
+    lbDateInput({ id, value, min: LB_FIRST_DAY, "aria-label": label }, onpick, LB_FIRST_DAY, lbAddDays(today, 400)));
   const label = per === "day" ? (off === 0 ? "Today" : lbDayText(r.from) + (r.from > today ? " (scheduled)" : ""))
     : r.label + (r.to >= today && r.from <= today ? " (to date)" : r.from > today ? " (scheduled)" : "");
   const bar = h("div", { class: "lb-bar rp-bar" },
@@ -11787,6 +11825,7 @@ function ofShowSave() {
 function renderOffice() {
   const box = $("ofView");
   if (!box || view.tab !== "office" || !session) return;
+  if (lbHoldForDate(box, renderOffice)) return;   // a date being typed: draw once it's done
   if (ofOld || (apiLevel && apiLevel < OF_API && !ofData)) {
     box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "The Office scorecards need the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
@@ -11838,7 +11877,7 @@ function ofTodayEl() {
   if (admin) out.push(h("div", { class: "lb-bar" }, lbSeg(people.map(x => [x.name, x.name]), p.name, k => { ofFlush(); ofView.who = k; ofSaveView(); renderOffice(); }, "Who")));
   out.push(h("div", { class: "lb-daybar" },
     h("button", { class: "btn small", type: "button", id: "ofPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => go(lbAddDays(day, -1)) }, "‹"),
-    h("input", { id: "ofDay", type: "date", value: day, min: first, max: last, "aria-label": "Day", onchange: e => { if (lbIsDay(e.target.value) && e.target.value.startsWith(y + "-")) go(e.target.value); } }),
+    lbDateInput({ id: "ofDay", value: day, min: first, max: last, "aria-label": "Day" }, v => go(v), first, last),
     h("button", { class: "btn small", type: "button", id: "ofNextDay", "aria-label": "Next day", disabled: day >= last, onclick: () => go(lbAddDays(day, 1)) }, "›"),
     day !== today && today.startsWith(y + "-") ? h("button", { class: "btn ghost small", type: "button", onclick: () => go(today) }, "Today") : null),
     h("div", { class: "lb-week", role: "group", "aria-label": "This week" }, Array.from({ length: 7 }, (_, i) => {
