@@ -788,6 +788,19 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .cp-party { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, .9fr) auto; gap: 8px; align-items: center; }
 .cp-party input, .cp-party select { width: 100%; box-sizing: border-box; min-width: 0; }
 .btn.danger { border-color: var(--due); color: var(--due); }
+/* beside Repairs Payroll: a narrow list (the batch's details under its name), in the empty room on the right of a big
+   screen; under the jobs on a smaller one (the button by "+ Monumental invoice" goes down to it) */
+#repView .cp-aside { grid-template-columns: minmax(0, 1fr); }
+.cp-aside .pc { display: none; } .cp-aside .ph { display: block; white-space: normal; }
+.cp-aside .cp-kpis { grid-template-columns: 1fr 1fr; gap: 8px; } .cp-aside .cp-kpi { padding: 10px 12px; } .cp-aside .cp-kpi b { font-size: 1.25rem; }
+.cp-aside .cp-kpi small { font-size: .66rem; } .cp-aside .cp-kpi span { font-size: .78rem; }
+.cp-aside .cp-table th small.ph { font-weight: 500; color: var(--muted); } .cp-aside .cp-table td small.ph { margin-top: 3px; }
+.cp-aside .cp-head { justify-content: flex-start; } .cp-aside #cpMore { justify-self: start; }
+.rp-actions:has(.cp-jump) { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+@media (min-width: 1400px) {
+  body[data-tab="repairs"] #repView:has(> .cp-aside) { max-width: 1480px; grid-template-columns: minmax(0, 1000px) minmax(320px, 440px); align-items: start; column-gap: 24px; }
+  .cp-jump { display: none; }
+}
 /* the invoices window and a batch: their buttons wrap (the main one on its own line on a phone) */
 .rp-dlg .dlg-foot .right:has(#repInvSend), .cp-dlg .dlg-foot .right { flex-wrap: wrap; justify-content: flex-end; }
 @media (max-width: 560px) {
@@ -4434,7 +4447,7 @@ async function refresh(quiet) {
   if (view.tab === "leaderboard" && loaded && !dlg.open && !lbShowState && !lbTyping()) lbLoad(!quiet);
   // (Office by itself only while nobody is working in this window: its boxes and menus aren't redrawn under a hand)
   if (view.tab === "office" && loaded && !dlg.open && !ofTypingNow() && !ofLoading && (!quiet || performance.now() - lbActiveAt > 15000)) ofLoad();
-  if (view.tab === "contractors" && loaded && !dlg.open && !cpLoading) cpLoad();
+  if ((view.tab === "contractors" || (view.tab === "repairs" && canSee("contractors"))) && loaded && !dlg.open && !cpLoading) cpLoad();
   try {
     const out = await api("list");
     let roleChanged = false;
@@ -6845,7 +6858,8 @@ function allowedTabs() {
   if (canSee("office")) out.push("office");
   if (canSee("marketing")) out.push("marketing");
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
-  if (canSee("contractors") && (!apiLevel || apiLevel >= CP_API)) out.push("contractors");   // Contractor Payroll
+  // Contractor Payroll: beside Repairs Payroll for whoever sees that; its own page for anyone else (the accounting manager)
+  if (canSee("contractors") && !canSee("repairs") && (!apiLevel || apiLevel >= CP_API)) out.push("contractors");
   return out;
 }
 /** Whoever sees the Leaderboard and Repairs Payroll gets Repairs Payroll in the Leaderboard's row (Performance ·
@@ -6970,6 +6984,7 @@ function setTab(tab, sub) {
 function applyTab() {
   const tabs = allowedTabs();
   $("askBtn").hidden = !askQuestions().length;
+  if (view.tab === "contractors" && !tabs.includes("contractors") && tabs.includes("repairs")) view.tab = "repairs";   // the email's link: it's in Repairs Payroll
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
   const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs", mk = view.tab === "marketing", cp = view.tab === "contractors";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
@@ -10744,11 +10759,15 @@ function renderRepairs(box) {
           [1, 2, 3, 4, 5].map(() => h("td", { class: "na" })), h("td", { class: "pj", text: fmt(Math.round(s.n / nMonths)) })))))),
       laterNote, h("p", { class: "hint", text: "Tap a month to see its jobs." })];
   }
-  const invBtn = h("div", { class: "rp-actions" }, h("button", { class: "btn small primary", type: "button", id: "repInvBtn", onclick: () => openRepMonInv() }, "+ Monumental invoice (PDF)"));
+  const cpWait = cpData ? cpData.batches.filter(b => b.status === "waiting") : [];
+  const invBtn = h("div", { class: "rp-actions" }, h("button", { class: "btn small primary", type: "button", id: "repInvBtn", onclick: () => openRepMonInv() }, "+ Monumental invoice (PDF)"),
+    canSee("contractors") && apiLevel >= CP_API ? h("button", { class: "btn small cp-jump", type: "button", id: "repCpJump", onclick: () => { const a = $("repCp"); if (a) a.scrollIntoView({ behavior: "smooth", block: "start" }); } },
+      cpWait.length ? `Contractor payroll: ${cpPlural(cpWait.length, "batch")} waiting ↓` : "Contractor payroll ↓") : null);
   const imp = isAdmin() ? h("p", { class: "rp-actions" }, h("button", { class: "btn small", type: "button", id: "repImportBtn", onclick: () => openRepImport() }, "Import the old Excel list…"),
     h("button", { class: "btn small", type: "button", id: "repClearPaidBtn", onclick: () => openRepClearPaid() }, "Mark all as not paid to Monumental…")) : null;
   const hint = h("p", { class: "hint", text: "Specialty contractors are paid by VODA and come off the top. Monumental gets its materials back plus 70% of what's left; VODA gets 30%, plus 30% on Monumental's materials (materials ÷ 0.7 × 0.3). Extra pay to Monumental comes out of VODA's share. Credit card fees aren't split (jobs already paid to Monumental keep the split they were paid on). The list holds the jobs tagged “repair - Monumental Flooring” in Housecall Pro, whatever their job type." });
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, sub, bar, status, err, tiles, invBtn, ...body, hint, imp].flat().filter(Boolean)));
+  const cp = cpAside();
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, sub, bar, status, err, tiles, invBtn, ...body, hint, imp].flat().filter(Boolean)), ...(cp ? [cp] : []));
   if (!repSync.busy && !repSync.err) setTimeout(() => repEnsure(months, false), 0);
 }
 
@@ -11145,6 +11164,7 @@ const repStreetText = a => { const p = String(a || "").split(",").map(x => x.tri
    job so it can't be sent or paid twice. Names, addresses and amounts stay in this window only (not kept on the device). ---- */
 const CP_API = 46;                                       // the Google script with Contractor Payroll
 const CP_REPLY_API = 47;                                 // ... and where vendors' questions go
+const CP_DEL_API = 48;                                   // ... and deleting a canceled batch
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
 const CP_VENDOR = "Monumental Flooring";
 let cpData = null, cpLoading = false, cpErr = "", cpOld = false, cpFilter = "all";
@@ -11163,7 +11183,7 @@ async function cpLoad() {
     cpErr = cpOld ? "" : errText(e, "Nothing");
   }
   cpLoading = false;
-  if (view.tab === "contractors" && !dlg.open) renderContractors();
+  if (!dlg.open) cpRedraw();
 }
 const cpShort = v => String(v || "").trim().split(/\s+/)[0] || "the contractor";
 const cpPlural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : /(ch|sh|s|x)$/.test(w) ? "es" : "s"}`;
@@ -11238,27 +11258,25 @@ function cpTake(o) {
 }
 
 /* ---- the page: every batch sent to accounting ---- */
-function renderContractors(box) {
-  box = box || $("cpView");
-  if (!box) return;
-  const title = secTitle("Contractor Payroll");
-  const top = cpInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("contractors")) : title ? h("div", { class: "lb-top" }, title) : null;
-  if (cpOld || (apiLevel && apiLevel < CP_API)) {
-    box.replaceChildren(...[top].filter(Boolean), h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
-      h("p", { class: "meta", text: "Contractor Payroll needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
-    return;
-  }
+/** Draws Contractor Payroll where it is: its own page (someone who sees it without Repairs Payroll), or the column
+ *  beside Repairs Payroll. */
+const cpRedraw = () => { if (view.tab === "contractors") renderContractors(); else if (view.tab === "repairs") renderRevenue(); };
+let cpAll = false;   // the column beside Repairs Payroll: every batch, not just the newest
+/** The batches: the totals, All / Waiting / Paid, and the list (compact: the column beside Repairs Payroll). */
+function cpBlock(compact) {
+  if (cpOld || (apiLevel && apiLevel < CP_API)) return [h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+    h("p", { class: "meta", text: "Contractor Payroll needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." }))];
   if (!cpData) {
     if (!cpLoading && !cpErr && session) setTimeout(() => { if (!cpData && !cpLoading) cpLoad(); }, 0);
-    box.replaceChildren(...[top].filter(Boolean), h("div", { class: "panel" }, h("p", { class: "meta", id: "cpStatus", text: cpErr || "Loading Contractor Payroll…" }),
-      cpErr ? h("button", { class: "btn", type: "button", onclick: () => { cpErr = ""; cpLoad(); } }, "Try again") : null));
-    return;
+    return [h("div", { class: "panel" }, h("p", { class: "meta", id: "cpStatus", text: cpErr || "Loading Contractor Payroll…" }),
+      cpErr ? h("button", { class: "btn", type: "button", onclick: () => { cpErr = ""; cpLoad(); } }, "Try again") : null)];
   }
   const all = cpData.batches, waiting = all.filter(b => b.status === "waiting"), paid = all.filter(b => b.status === "paid");
   const year = String(revThisYear()), paidYear = paid.filter(b => String(b.paidOn).startsWith(year));
-  const shown = cpFilter === "waiting" ? waiting : cpFilter === "paid" ? paid : all;
+  const list = cpFilter === "waiting" ? waiting : cpFilter === "paid" ? paid : all, MAX = 8;
+  const shown = compact && !cpAll ? list.slice(0, MAX) : list;
   const seg = h("div", { class: "seg", role: "group", "aria-label": "Show", id: "cpFilter" }, [["all", "All"], ["waiting", "Waiting"], ["paid", "Paid"]].map(([k, t]) =>
-    h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(cpFilter === k), onclick: () => { cpFilter = k; renderContractors(); } }, t)));
+    h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(cpFilter === k), onclick: () => { cpFilter = k; cpAll = false; cpRedraw(); } }, t)));
   const sum = (l, f) => l.reduce((n, b) => n + (b[f] || 0), 0);
   const tiles = h("div", { class: "cp-kpis", id: "cpKpis" },
     h("div", { class: "cp-kpi" + (waiting.length ? " due" : "") }, h("small", { text: "Waiting for accounting" }), h("b", { text: lbCash(sum(waiting, "total") / 100) }), h("span", { text: cpPlural(waiting.length, "batch") })),
@@ -11273,13 +11291,27 @@ function renderContractors(box) {
   const body = shown.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-table", id: "cpTable" },
     h("thead", null, h("tr", null, h("th", { text: "Batch" }), h("th", { class: "l pc", text: "Vendor" }), h("th", { class: "l pc", text: "Sent to accounting" }), h("th", { class: "pc", text: "Invoices" }), h("th", { text: "Amount" }), h("th", { class: "st pc", text: "Status" }))),
     h("tbody", null, shown.map(row))))
-    : h("p", { class: "meta cp-empty", id: "cpEmpty", text: all.length ? "None here." : canSee("repairs") ? "Nothing sent to accounting yet. Send Monumental's invoices from Repairs Payroll › + Monumental invoice (PDF)." : "Nothing sent to accounting yet." });
-  box.replaceChildren(...[top,
-    tiles,
-    h("section", { class: "panel cp-panel", id: "cpPanel" },
-      h("div", { class: "cp-head" }, h("h3", { text: "Contractor payroll" }), seg),
-      h("p", { class: "meta", text: "Every batch sent to accounting: what's waiting and what's paid. Tap one to open it." }),
-      body)].filter(Boolean));
+    : h("p", { class: "meta cp-empty", id: "cpEmpty", text: all.length ? "None here." : canSee("repairs") ? "Nothing sent to accounting yet. Send Monumental's invoices with + Monumental invoice (PDF)." : "Nothing sent to accounting yet." });
+  const more = shown.length < list.length ? h("button", { class: "btn small", type: "button", id: "cpMore", onclick: () => { cpAll = true; cpRedraw(); } }, `Show all ${fmt(list.length)}`) : null;
+  return [tiles, h("section", { class: "panel cp-panel", id: "cpPanel" },
+    h("div", { class: "cp-head" }, compact ? null : h("h3", { text: "Contractor payroll" }), seg),
+    h("p", { class: "meta", text: compact ? "Batches sent to accounting. Tap one to open it." : "Every batch sent to accounting: what's waiting and what's paid. Tap one to open it." }),
+    body, more)];
+}
+/** Contractor Payroll's own page: for someone who sees it without Repairs Payroll (the accounting manager). */
+function renderContractors(box) {
+  box = box || $("cpView");
+  if (!box) return;
+  const title = secTitle("Contractor Payroll");
+  const top = cpInLb() ? h("div", { class: "lb-tabrow" }, lbTabsEl("contractors")) : title ? h("div", { class: "lb-top" }, title) : null;
+  box.replaceChildren(...[top, ...cpBlock(false)].filter(Boolean));
+}
+/** ... and beside Repairs Payroll (in the empty room on the right; under the jobs on a smaller screen). */
+function cpAside() {
+  if (!canSee("contractors") || (apiLevel && apiLevel < CP_API)) return null;
+  return h("aside", { class: "rev-aside cp-aside cp", id: "repCp", "aria-label": "Contractor payroll" },
+    h("div", { class: "rev-aside-head" }, h("h3", { text: "Contractor payroll" }), h("p", { text: "Monumental's invoices sent to accounting" })),
+    ...cpBlock(true));
 }
 
 /* ---- a batch: accounting checks it, records the payment, and Monumental gets the pay stub ---- */
@@ -11304,6 +11336,21 @@ function openCpBatch(id) {
         catch (e) { err.textContent = cpCpErr(e, "The email"); x.disabled = false; }
       } }, `Email ${vs} the pay stub again`))));
     } }, `Email ${vs} again`) : null;
+    // a canceled batch can be taken off the list (its PDFs go to the Drive's trash)
+    let armed = false;
+    const del = h("button", { class: "btn", type: "button", id: "cpDelete", onclick: async ev => {
+      const x = ev.currentTarget;
+      if (!armed) { armed = true; x.textContent = "Tap again to delete it"; x.classList.add("danger"); return; }
+      x.disabled = true; err.textContent = "";
+      try {
+        await api("cpDelete", { id: b.id });
+        cpData.batches = cpData.batches.filter(y => y.id !== b.id);
+        closeDialog(); toast(`Batch ${b.id} deleted`); cpRedraw();
+      } catch (e) {
+        err.textContent = e && e.error === "bad_request" && (Number(e.api) || 0) < CP_DEL_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : cpCpErr(e, "The batch");
+        x.disabled = false;
+      }
+    } }, "Delete batch");
     openDialog(h("div", { class: "rp-dlg cp-dlg" },
       h("h3", { id: "dlgTitle", text: `Batch ${b.id} · ${b.vendor}` }), steps,
       b.status === "paid" ? h("div", { class: "cp-paidbox", id: "cpPaidBox" },
@@ -11311,13 +11358,13 @@ function openCpBatch(id) {
         h("span", { text: [b.last4 ? `From the account ending ${b.last4}` : "", `Approved by ${b.appBy}`].filter(Boolean).join(" · ") }),
         h("span", { text: `Pay stub emailed to ${b.vTo}${b.vAt ? ` on ${cpDay(cpAtDay(b.vAt))}` : ""}` }),
         b.out ? h("span", { text: `Left out (went back to not sent): ${b.out}` }) : null)
-        : h("p", { class: "meta", text: `Canceled by ${b.cxBy}${b.cxAt ? ` on ${cpDay(cpAtDay(b.cxAt))}` : ""}. Its invoices went back to not sent.` }),
+        : h("p", { class: "meta", text: `Canceled by ${b.cxBy}${b.cxAt ? ` on ${cpDay(cpAtDay(b.cxAt))}` : ""}. Its invoices went back to not sent. Delete it to take it off the list.` }),
       h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
         h("thead", null, h("tr", null, h("th", { class: "l", text: "Invoice" }), h("th", { class: "l", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: b.status === "paid" ? "Paid" : "" }))),
         h("tbody", null, b.items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l" }, pdfBtn(i)), h("td", { class: "l" }, i.client, h("small", { class: "ph", text: i.addr })), h("td", { class: "l pc", text: i.addr }),
           h("td", { text: C(i.a) }), h("td", null, b.status === "paid" ? h("b", { text: C(i.pay) }) : "")))))),
       err, resendBox,
-      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, stubBtn, resend, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, b.status === "canceled" ? del : stubBtn, resend, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
     return;
   }
   // waiting: each invoice ticked OK (or left out) and what's paid on it
@@ -11360,15 +11407,15 @@ function openCpBatch(id) {
       const o = await api("cpPay", { id: b.id, items: st.map(x => ({ n: x.i.n, ok: x.ok, pay: num(x.pay) })), paidOn: paidOn.value, how: how.value, ref: ref.value.trim(), last4: last4.value.trim(), approvedBy: appBy.value.trim(), to: to.list() }, 120000);
       cpTake(o); dlgDirty = false; closeDialog();
       toast(`Paid ${lbCash(o.batch.paid / 100)} · pay stub emailed to ${vs}`);
-      renderContractors(); renderRevenue();
-    } catch (e) { err.textContent = cpCpErr(e, "The payment"); go.disabled = false; if (e && e.error === "not_waiting" && e.batch) { cpTake({ batch: e.batch }); renderContractors(); } }
+      cpRedraw();
+    } catch (e) { err.textContent = cpCpErr(e, "The payment"); go.disabled = false; if (e && e.error === "not_waiting" && e.batch) { cpTake({ batch: e.batch }); cpRedraw(); } }
   };
   let armed = false;
   const cancel = h("button", { class: "btn", type: "button", id: "cpCancel", onclick: async ev => {
     const x = ev.currentTarget;
     if (!armed) { armed = true; x.textContent = "Tap again to cancel the batch"; x.classList.add("danger"); return; }
     x.disabled = true; err.textContent = "";
-    try { const o = await api("cpCancel", { id: b.id }); cpTake(o); closeDialog(); toast(`Batch ${b.id} canceled: its invoices can be sent again`); renderContractors(); renderRevenue(); }
+    try { const o = await api("cpCancel", { id: b.id }); cpTake(o); closeDialog(); toast(`Batch ${b.id} canceled: its invoices can be sent again`); cpRedraw(); }
     catch (e) { err.textContent = cpCpErr(e, "The batch"); x.disabled = false; }
   } }, "Cancel batch");
   const again = h("button", { class: "btn", type: "button", id: "cpAgain", onclick: () => {

@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 47;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 48;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -373,6 +373,9 @@ function doPost(e) {
       case "cpResend":
         if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return cpResend_(req); }));
+      case "cpDelete":
+        if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpDelete_(req); }));
       case "cpDoc":
         if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(cpDoc_(req));
@@ -4303,10 +4306,10 @@ function cpMailTable_(b, paid) {
 function cpMailAccounting_(b, to, files) {
   const subject = cpShort_(b.vendor) + " invoices " + b.items.length;
   const lines = ["Hi,", "", b.vendor + " sent " + cpPlural_(b.items.length, "invoice") + " for payroll, batch " + b.id + ", total " + cpMoney_(b.total) + ". The PDFs and the pay stub are attached.", ""]
-    .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + cpMoney_(i.a); }), ["", "Approve and record the payment in VODA Hub > Leaderboard > Contractor Payroll: " + APP_URL + "#contractors"]);
+    .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + cpMoney_(i.a); }), ["", "Approve and record the payment in VODA Hub (Contractor Payroll): " + APP_URL + "#contractors"]);
   const html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.5"><p>Hi,</p><p>' + cpEsc_(b.vendor) + " sent <b>" + cpPlural_(b.items.length, "invoice") +
     "</b> for payroll, batch <b>" + cpEsc_(b.id) + "</b>, total <b>" + cpMoney_(b.total) + "</b>. The PDFs and the pay stub are attached.</p>" + cpMailTable_(b, false) +
-    '<p>Approve and record the payment in VODA Hub › Leaderboard › Contractor Payroll.</p><p><a href="' + APP_URL + '#contractors" style="display:inline-block;background:#1f4fc7;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Open batch ' + cpEsc_(b.id) + "</a></p></div>";
+    '<p>Approve and record the payment in VODA Hub (Contractor Payroll).</p><p><a href="' + APP_URL + '#contractors" style="display:inline-block;background:#1f4fc7;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Open batch ' + cpEsc_(b.id) + "</a></p></div>";
   MailApp.sendEmail({ to: to.join(","), subject: subject, body: lines.join("\n"), htmlBody: html, name: "VODA Hub",
     attachments: files.map(function (f) { return f.getBlob(); }).concat([cpStubPdf_(b)]) });
 }
@@ -4479,6 +4482,20 @@ function cpResend_(req) {
   } else return { ok: false, error: "not_waiting", batch: cpOut_(b) };
   cpPut_(x.s, x.row, b);
   return { ok: true, batch: cpOut_(b) };
+}
+/** A canceled batch taken off the list ({ id }): its row goes, and its PDFs go to the Drive's trash unless another
+ *  batch has them. Only a canceled one: waiting and paid batches are the record. */
+function cpDelete_(req) {
+  const x = cpFind_(req.id);
+  if (!x) return { ok: false, error: "gone" };
+  if (x.b.status !== "canceled") return { ok: false, error: "not_canceled", batch: cpOut_(x.b) };
+  const others = {};
+  cpAll_(x.s).forEach(function (y) { if (y.b.id !== x.b.id) y.b.items.forEach(function (i) { others[i.f] = true; }); });
+  x.s.deleteRow(x.row);
+  const files = {};
+  x.b.items.forEach(function (i) { if (i.f && !others[i.f]) files[i.f] = true; });
+  Object.keys(files).forEach(function (id) { const f = cpFileOk_(id); if (f) { try { f.setTrashed(true); } catch (e) { /* stays in the folder */ } } });
+  return { ok: true, id: x.b.id };
 }
 /** A file to open in the app: the pay stub ({ id }) or one of the batch's invoices ({ id, f }). */
 function cpDoc_(req) {
