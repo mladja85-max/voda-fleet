@@ -1,6 +1,6 @@
 // VODA Hub offline support: keeps a copy of the app on the phone so it opens without signal.
 // Truck data is not cached here; the app keeps its own last-known copy.
-const CACHE = "voda-fleet-v116";
+const CACHE = "voda-fleet-v117";
 const SHELL = ["./", "./index.html", "./config.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./favicon-32.png"];
 
@@ -17,7 +17,10 @@ self.addEventListener("activate", event => {
 });
 
 function networkFirst(request) {
-  const network = fetch(request).then(res => {
+  // Always ask the site whether the app changed (the browser may otherwise reuse a page for up to 10 minutes after an
+  // update is published): an unchanged page costs a tiny "not modified" answer.
+  const fresh = request.mode === "navigate" ? fetch(request.url, { cache: "no-cache", credentials: "same-origin" }) : fetch(request, { cache: "no-cache" });
+  const network = fresh.then(res => {
     if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(request, copy)); }
     return res;
   });
