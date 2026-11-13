@@ -872,6 +872,10 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rp-invcheck p.ok, .rp-inv p.ok { color: var(--ok); font-weight: 600; } .rp-invcheck p.over { color: var(--soon); font-weight: 600; } .rp-invcheck p.under { color: var(--muted); font-weight: 600; }
 .rp-invs .rp-line { align-items: center; } .rp-invs .btn.small { padding: 2px 8px; min-height: 0; }
 .rp-implist { margin: 6px 0 0 18px; padding: 0; font-size: .82rem; color: var(--muted); max-height: 220px; overflow: auto; }
+.rp-implist.rp-impfix { max-height: 420px; }
+.rp-impfix li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.rp-impfix li > span:first-child { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+.rp-impfix select { flex: 1 1 100%; width: 100%; min-width: 0; box-sizing: border-box; font: inherit; font-size: .85rem; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-overflow: ellipsis; }
 .rp-dlg details { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin-top: 6px; } .rp-dlg summary { cursor: pointer; font-weight: 600; font-size: .88rem; }
 .rp-impsum { margin: 8px 0 4px; } .rp-check { display: flex; align-items: center; gap: 8px; font-size: .9rem; padding-bottom: 10px; }
 .rp-hcp { background: var(--bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; font-size: .88rem; }
@@ -11686,12 +11690,19 @@ function repXlTab(tab) {
   }
   return out;
 }
-/** The Excel's rows matched to the jobs read from Housecall Pro (by name, amount and day, up to a week apart), and what
- *  to save on each: { save: [{ id, t }], found, notFound, differs, extras, via, under, skipped, jobs }. */
-function repXlMatch(rows, jobs, paidThrough) {
-  const used = new Set(), byDay = {}, out = { save: [], found: [], notFound: [], differs: [], extras: [], via: [], under: [], skipped: [], jobs: 0 };
+/** The Excel's rows matched to the jobs read from Housecall Pro (by name, amount and day, up to a week apart; then a
+ *  day typed wrong: the same name with the same amount or street number, any day read, the closest; then the jobs picked
+ *  by hand), and what to save on each: { save: [{ id, t }], found, notFound, missing, moved, picked, differs, extras, via,
+ *  under, skipped, jobs }. Only the vendor costs are saved: the day, amount and client stay Housecall Pro's (the Excel's
+ *  day only helps find the job). `picks`: { "<row's place> · <piece>": job id, or "-" for a guess turned down }. */
+function repXlMatch(rows, jobs, paidThrough, picks) {
+  picks = picks || {};
+  const used = new Set(), byDay = {}, out = { save: [], found: [], notFound: [], missing: [], moved: [], picked: [], differs: [], extras: [], via: [], under: [], skipped: [], jobs: 0 };
   for (const j of jobs) if (!j.gone) (byDay[j.day] || (byDay[j.day] = [])).push(j);
-  const near = day => { const a = []; for (let k = -7; k <= 7; k++) for (const j of byDay[lbAddDays(day, k)] || []) if (!used.has(j.id)) a.push({ j, dist: Math.abs(k) }); return a; };
+  const near = (day, w) => { const a = []; for (let k = -w; k <= w; k++) for (const j of byDay[lbAddDays(day, k)] || []) if (!used.has(j.id)) a.push({ j, dist: Math.abs(k) }); return a; };
+  const byId = new Map(jobs.map(j => [j.id, j]));
+  const gap = (a, b) => Math.abs(Math.round((lbDate(a) - lbDate(b)) / 864e5));
+  const anyDay = day => jobs.filter(j => !j.gone && !used.has(j.id)).map(j => ({ j, dist: gap(j.day, day) }));
   const nameOk = (j, text) => {
     const w = repNorm(j.client).split(" ").filter(x => x.length > 1);
     if (!w.length) return false;
@@ -11700,21 +11711,56 @@ function repXlMatch(rows, jobs, paidThrough) {
   };
   const streetNo = text => (/\b(\d{3,6})\b/.exec(text || "") || [])[1] || "";
   const C = c => lbCash(c / 100);
-  for (const r of rows) {
+  const plan = rows.map(r => {
     const parts = r.parts.length ? r.parts.map(p => Object.assign({}, p)) : [{ text: "", amt: 0 }];
     if (parts.length === 1 && !parts[0].amt) parts[0].amt = r.c;
     out.jobs += parts.length;
-    const hits = parts.map(p => {
-      let best = null;
-      for (const { j, dist } of near(r.day)) {
-        const nm = nameOk(j, p.text), am = p.amt > 0 && Math.abs(j.c - p.amt) <= 100;
-        const sc = (nm ? 4 : 0) + (am ? 4 : 0) + (dist === 0 ? 2 : dist === 1 ? 1 : 0);
-        if (sc >= 6 && (!best || sc > best.sc || (sc === best.sc && dist < best.dist))) best = { j, sc, dist, am };
-      }
-      if (best) used.add(best.j.id);
-      return best;
+    const keys = parts.map((p, i) => `${r.at} · ${i + 1}`);
+    return { r, parts, keys, hits: parts.map(() => null), no: keys.map(k => picks[k] === "-") };
+  });
+  // picked by hand first (they're taken by no one else); "-" = the guess turned down: left for picking by hand
+  for (const x of plan) x.parts.forEach((p, i) => {
+    const j = byId.get(picks[x.keys[i]]);
+    if (j && !j.gone && !used.has(j.id)) { used.add(j.id); x.hits[i] = { j, sc: 99, dist: gap(j.day, x.r.day), am: p.amt > 0 && Math.abs(j.c - p.amt) <= 100, hand: true }; }
+  });
+  // then by name, amount and day, up to a week apart
+  for (const x of plan) x.parts.forEach((p, i) => {
+    if (x.hits[i] || x.no[i]) return;
+    let best = null;
+    for (const { j, dist } of near(x.r.day, 7)) {
+      const nm = nameOk(j, p.text), am = p.amt > 0 && Math.abs(j.c - p.amt) <= 100;
+      const sc = (nm ? 4 : 0) + (am ? 4 : 0) + (dist === 0 ? 2 : dist === 1 ? 1 : 0);
+      if (sc >= 6 && (!best || sc > best.sc || (sc === best.sc && dist < best.dist))) best = { j, sc, dist, am };
+    }
+    if (best) { used.add(best.j.id); x.hits[i] = best; }
+  });
+  // a day typed wrong: the same name, and the same amount or street number, on any day read (the closest)
+  for (const x of plan) x.parts.forEach((p, i) => {
+    if (x.hits[i] || x.no[i]) return;
+    const sn = streetNo(p.text);
+    let best = null;
+    for (const { j, dist } of anyDay(x.r.day)) {
+      if (dist <= 7 || !nameOk(j, p.text)) continue;
+      const am = p.amt > 0 && Math.abs(j.c - p.amt) <= 100, st = !!sn && ((repStreetKey(j.addr) || {}).no === sn);
+      if (!am && !st) continue;
+      if (!best || dist < best.dist) best = { j, sc: 5, dist, am, far: true };
+    }
+    if (best) { used.add(best.j.id); x.hits[i] = best; }
+  });
+  // the jobs left over, for picking by hand: the same name, street number or amount first, then the closest days
+  const pickable = (day, text, amt) => {
+    const sn = streetNo(text);
+    return anyDay(day).map(({ j, dist }) => ({ j, dist, sc: (nameOk(j, text) ? 4 : 0) + (sn && (repStreetKey(j.addr) || {}).no === sn ? 2 : 0) + (amt > 0 && Math.abs(j.c - amt) <= 100 ? 2 : 0) }))
+      .sort((a, b) => b.sc - a.sc || a.dist - b.dist || (a.j.day < b.j.day ? -1 : 1)).slice(0, 40)
+      .map(({ j }) => ({ id: j.id, text: `${lbDayText(j.day)} · ${j.inv ? `#${j.inv} ` : ""}${j.client || "(no name)"}${j.addr ? ` · ${String(j.addr).split(",")[0]}` : ""} · ${C(j.c)}` }));
+  };
+  for (const { r, parts, hits, keys } of plan) {
+    parts.forEach((p, i) => {
+      const x = hits[i], what = `${lbDayText(r.day)} · ${p.text.slice(0, 48) || "(no name)"} · ${C(p.amt)}`;
+      if (!x) { out.notFound.push(what); out.missing.push({ key: keys[i], text: what, turned: picks[keys[i]] === "-", jobs: pickable(r.day, p.text, p.amt) }); }
+      else if (x.hand) out.picked.push({ key: keys[i], text: `${what} → ${lbDayText(x.j.day)} · ${x.j.inv ? `#${x.j.inv} ` : ""}${x.j.client || "(no name)"}` });
+      else if (x.far) out.moved.push({ key: keys[i], text: `${x.j.client}: Excel ${lbDayText(r.day)}, Housecall Pro ${lbDayText(x.j.day)}${x.j.inv ? ` (#${x.j.inv})` : ""}` });
     });
-    parts.forEach((p, i) => { if (!hits[i]) out.notFound.push(`${lbDayText(r.day)} · ${p.text.slice(0, 48) || "(no name)"} · ${C(p.amt)}`); });
     const got = hits.map((x, i) => x && { x, p: parts[i] }).filter(Boolean);
     if (!got.length) continue;
     // the day's costs go on its biggest job; the extra is what the Excel paid Monumental over 70%
@@ -11761,16 +11807,25 @@ function openRepImport() {
   const thru = h("input", { type: "date", id: "repImpPaid", oninput: e => { quiet(e); draw(); }, onchange: quiet }), none = h("input", { type: "checkbox", id: "repImpNone", oninput: quiet, onchange: e => { quiet(e); draw(); } });
   const save = h("button", { class: "btn primary", type: "button", id: "repImpSave", disabled: true, onclick: () => go() }, "Save");
   const list = (title, items, id) => items.length ? h("details", { id }, h("summary", { text: `${title}: ${fmt(items.length)}` }), h("ul", { class: "rp-implist" }, items.slice(0, 300).map(x => h("li", { text: x })))) : null;
+  // jobs picked by hand for rows not found, and guesses turned down ("-"): { "<row's place> · <piece>": job id }
+  const picks = {}, turned = new Set();
+  const fixList = (title, items, id, tip, row) => items.length ? h("details", { id, open: items.length <= 30 }, h("summary", { text: `${title}: ${fmt(items.length)}` }),
+    tip ? h("p", { class: "meta", text: tip }) : null, h("ul", { class: "rp-implist rp-impfix" }, items.slice(0, 300).map(m => h("li", { "data-key": m.key }, h("span", { text: m.text }), row(m))))) : null;
+  const pickBox = m => m.jobs.length ? h("select", { class: "rp-imppick", "aria-label": `Pick the job for ${m.text}`, oninput: quiet, onchange: e => { quiet(e); if (e.target.value) { picks[m.key] = e.target.value; draw(); } } },
+    h("option", { value: "", text: "Pick the job in Housecall Pro…" }), m.jobs.map(j => h("option", { value: j.id, text: j.text }))) : h("span", { class: "meta", text: "No other jobs read from Housecall Pro to pick from" });
+  const undo = (label, m, then) => h("button", { class: "btn small", type: "button", onclick: () => { then(m.key); draw(); } }, label);
   const draw = () => {
     if (!rows || busy || done < months.length) { out.replaceChildren(); save.disabled = true; return; }
     const jobs = [];
     for (const y of new Set(months.map(m => Number(m.slice(0, 4))))) jobs.push(...((repDoc(y) || {}).jobs || []));
-    res = repXlMatch(rows, jobs, none.checked ? "" : thru.value);
+    res = repXlMatch(rows, jobs, none.checked ? "" : thru.value, picks);
     const ex = res.extras.length, n = res.save.length;
     out.replaceChildren(...[
       h("p", { class: "rp-impsum", id: "repImpSum" }, h("b", { text: `${fmt(res.found.length)} of ${fmt(res.jobs)} jobs found in Housecall Pro` }),
         ` · ${fmt(n)} to save${res.skipped.length ? ` · ${fmt(res.skipped.length)} already typed in the app (left as they are)` : ""}`),
-      list("Not found in Housecall Pro (not saved)", res.notFound, "repImpNot"),
+      fixList("Not found in Housecall Pro (not saved)", res.missing, "repImpNot", "Day or name typed wrong in the Excel? Pick the job in Housecall Pro and it's saved with the rest.", pickBox),
+      fixList("Found on another day (saved; Housecall Pro's day is kept)", res.moved, "repImpMoved", "Same client, and the same amount or street number, more than a week from the day in the Excel.", m => undo("Not this job", m, k => { picks[k] = "-"; turned.add(k); })),
+      fixList("Picked by hand (saved)", res.picked, "repImpPicked", "", m => undo("Undo", m, k => { if (turned.has(k)) picks[k] = "-"; else delete picks[k]; })),
       list("Amount differs from Housecall Pro (saved; the split uses Housecall Pro's amount)", res.differs, "repImpDiff"),
       list(`Extra pay to Monumental (their total was typed above 70%)`, res.extras, "repImpExtra"),
       list("Specialty included in Monumental's total in the Excel (saved as specialty; VODA's share matches)", res.via, "repImpVia"),
