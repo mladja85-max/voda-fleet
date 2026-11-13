@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 48;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 49;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4515,6 +4515,7 @@ function cpDoc_(req) {
 
 const OF_SHEET = "Office";
 const OF_KINDS = ["out", "num", "admin"];   // counts toward the outgoing calls goal; any other number; typed by Admins only
+const OF_MAX_FIELDS = 40;   // numbers a person can have (past-only ones included)
 
 function ofSheet_(create) {
   const ss = SpreadsheetApp.getActive();
@@ -4541,7 +4542,7 @@ function ofConfig_(c) {
     if (from && to && to < from) to = from;
     const user = /^[A-Za-z0-9_-]{1,64}$/.test(String(p.user || "")) ? String(p.user) : "";
     const ids = {}, fields = [];
-    (Array.isArray(p.fields) ? p.fields : []).slice(0, 20).forEach(function (f) {
+    (Array.isArray(p.fields) ? p.fields : []).slice(0, OF_MAX_FIELDS).forEach(function (f) {
       const id = String((f && f.id) || "");
       if (!/^[a-z][a-z0-9]{0,15}$/.test(id) || id === "at" || id === "by" || ids[id]) return;
       const label = supText_(f.label, 40);

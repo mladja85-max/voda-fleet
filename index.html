@@ -646,6 +646,28 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-f.past .f-label, .of-f.past select { opacity: .55; }
 .of-f.past .f-past { color: var(--soon); font-weight: 700; }
 .of-tasks { display: grid; gap: 6px; justify-items: start; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--accent); background: var(--accent-soft); }
+/* Office people: every number and who tracks it (tap a name); each person's numbers one by one, folded */
+.of-sec { margin: 8px 0 0; font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; letter-spacing: .03em; }
+.of-opts { display: grid; gap: 8px; }
+.of-opt { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; background: var(--surface-2); }
+.of-opt.gone { opacity: .8; }
+.of-opt-h { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; } .of-opt-h b { font-size: .95rem; } .of-opt-h small { color: var(--muted); font-size: .78rem; }
+.of-kind { font-size: .7rem; font-weight: 700; padding: 1px 8px; border-radius: 99px; background: var(--bg); color: var(--muted); white-space: nowrap; }
+.of-kind.out { background: var(--accent-soft); color: var(--accent); } .of-kind.admin { background: var(--soon-bg); color: var(--soon); }
+.of-who { display: flex; flex-wrap: wrap; gap: 6px; }
+.of-who-b.past { border-style: dashed; color: var(--soon); } .of-who-b small { font-weight: 600; }
+.of-old { display: grid; gap: 8px; } .of-old summary, .of-pnums summary { cursor: pointer; font-weight: 600; color: var(--muted); font-size: .86rem; padding: 4px 0; }
+.of-old[open] > summary { margin-bottom: 4px; }
+.of-pnums { display: grid; gap: 8px; } .of-pnums[open] > summary { margin-bottom: 6px; }
+.of-pnums > .of-fields, .of-pnums > .of-tasks { margin-bottom: 8px; }
+.of-new { display: grid; gap: 8px; padding: 10px 12px; border: 1px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); }
+.of-new-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.of-new input, .of-new select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; box-sizing: border-box; }
+.of-new .of-lbl { font-size: .8rem; color: var(--muted); }
+.of-new .dlg-err:empty { display: none; }
+.of-new-act { display: flex; gap: 8px; justify-content: flex-end; }
+#ofNewOptBtn { justify-self: start; }
+@media (max-width: 560px) { .of-new-row { grid-template-columns: 1fr; } }
 .of-tasks .hint { margin: 0; }
 .of-tasks .hint.ok { color: var(--ok); font-weight: 600; }
 .of-unnamed { display: grid; gap: 6px; }
@@ -3997,6 +4019,8 @@ function lbMp4(samples, o) {
 /* ---- the office scorecards: each person's day, the 50 outgoing calls goal (Monday to Friday) ---- */
 const OF_GOAL = 50;
 const OF_KINDS = { out: "Counts toward the calls goal", num: "Other number", admin: "Admins type it (after checking the CRM)" };
+const OF_KIND_SHORT = { out: "Counts toward the goal", num: "Other number", admin: "Admins type it" };
+const OF_MAX_FIELDS = 40;                               // numbers a person can have (past-only ones included)
 /** A new person's numbers, the way "14. OFFICE SCORECARDS" had them. `of`: shown as a % of that number. */
 const OF_DEFAULT_FIELDS = [
   { id: "opp", label: "Opportunity calls", kind: "num", of: "" },
@@ -4020,7 +4044,7 @@ function ofCleanConfig(c) {
     let from = lbYm(p.from), to = lbYm(p.to);
     if (from && to && to < from) to = from;
     const ids = new Set(), fields = [];
-    for (const f of (Array.isArray(p.fields) ? p.fields : []).slice(0, 20)) {
+    for (const f of (Array.isArray(p.fields) ? p.fields : []).slice(0, OF_MAX_FIELDS)) {
       const id = String((f && f.id) || ""), label = String((f && f.label) || "").replace(/\s+/g, " ").trim().slice(0, 40);
       if (!/^[a-z][a-z0-9]{0,15}$/.test(id) || id === "at" || id === "by" || ids.has(id) || !label) continue;
       ids.add(id);
@@ -12252,6 +12276,8 @@ function mktImportDlg() {
 /* ======================= Office scorecards ======================= */
 const OF_API = 24;                                      // the Google script version with the Office section
 const OF_HIDE_API = 25;                                 // ... and with past-only numbers
+const OF_MANY_API = 49;                                 // ... and up to 40 numbers a person (20 before)
+let ofUsers = null;                                     // the logins, for Office people (this window only): it opens at once next time
 const K_OF = "voda.of1", K_OF_VIEW = "voda.ofView1";
 let ofData = store.get(K_OF);                           // { config, months: { "2026-11": doc }, year, admin, me, at }
 let ofYears = {};                                       // other years' months, loaded when a period reaches into them
@@ -12510,13 +12536,12 @@ function ofScoreEl() {
 
 /* ---- admins: the people, their numbers and their logins ---- */
 const ofNewId = (taken) => { let id; do { id = "f" + Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 5); } while (!/^[a-z][a-z0-9]{0,15}$/.test(id) || taken.has(id)); return id; };
-async function openOfPeople() {
+function openOfPeople() {
   const cfg = ofCfg();
-  let users = [];
-  try { users = ((await api("users")).users || []).filter(u => u.status !== "removed"); } catch (e) { /* logins can be picked later */ }
   const err = h("p", { class: "dlg-err", role: "alert" });
   const months = (p, cls, label, v) => h("label", { class: "of-mo" }, h("span", { text: label }), h("input", { type: "month", class: cls, value: v || "" }));
   const canHide = apiLevel >= OF_HIDE_API;
+  const norm = s => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
   const fieldRow = (f, all) => h("div", { class: "of-f" + (f.hide ? " past" : ""), "data-id": f.id },
     h("input", { class: "f-label", type: "text", value: f.label, maxlength: "40", "aria-label": "Name of the number" }),
     h("select", { class: "f-kind", "aria-label": "Kind" }, Object.entries(OF_KINDS).map(([k, t]) => h("option", { value: k, text: t, selected: k === f.kind }))),
@@ -12530,6 +12555,10 @@ async function openOfPeople() {
     if (r.querySelector(".f-hide") && r.querySelector(".f-hide").checked) f.hide = true;
     return f;
   });
+  // the logins: from the last time this window opened (it opens at once), checked again in the background
+  const loginOpts = (sel, cur) => sel.replaceChildren(h("option", { value: "", text: "Not linked" }),
+    ...(ofUsers || []).map(u => h("option", { value: u.id, text: `${u.name} (${u.username})`, selected: u.id === cur })),
+    ...(cur && !(ofUsers || []).some(u => u.id === cur) ? [h("option", { value: cur, text: ofUsers ? "(a login that was removed)" : "Linked (loading the logins…)", selected: true })] : []));
   const personEl = (p, isNew) => {
     const fields = h("div", { class: "of-fields" }, p.fields.map(f => fieldRow(f, p.fields)));
     const list = !isNew && OF_TASK_LISTS[Object.keys(OF_TASK_LISTS).find(k => k.toLowerCase() === p.name.toLowerCase())];
@@ -12540,23 +12569,123 @@ async function openOfPeople() {
         fields.replaceChildren(...next.map(f => fieldRow(f, next)));
         ev.currentTarget.closest(".of-tasks").replaceChildren(h("p", { class: "hint ok", text: "Put in. The old follow-up and other calls are past only now (their history still counts). Tap Save." }));
       } }, `Use ${p.name}'s task list`)) : null;
+    const user = h("select", { class: "p-user", "aria-label": `${p.name || "Her"} login` });
+    loginOpts(user, p.user);
     return h("div", { class: "of-person", "data-name": p.name },
       h("div", { class: "of-p-head" },
         isNew ? h("input", { class: "p-name", type: "text", placeholder: "Name", maxlength: "30", "aria-label": "Name" }) : h("strong", { class: "p-name-fixed", text: p.name }),
-        h("label", { class: "of-mo" }, h("span", { text: "Login" }), h("select", { class: "p-user", "aria-label": `${p.name || "Her"} login` },
-          [h("option", { value: "", text: "Not linked" })].concat(users.map(u => h("option", { value: u.id, text: `${u.name} (${u.username})`, selected: u.id === p.user }))))),
+        h("label", { class: "of-mo" }, h("span", { text: "Login" }), user),
         months(p, "p-from", "From", p.from), months(p, "p-to", "To (blank = now)", p.to),
         h("button", { class: "btn ghost small", type: "button", onclick: ev => { if (confirm(`Remove ${p.name || "this person"}? Her numbers stay saved, but she won't show.`)) ev.currentTarget.closest(".of-person").remove(); } }, "Remove")),
-      tasks,
-      fields,
-      h("button", { class: "btn small", type: "button", onclick: () => { const taken = new Set([...fields.querySelectorAll(".of-f")].map(x => x.dataset.id)); fields.append(fieldRow({ id: ofNewId(taken), label: "New number", kind: "out", of: "" }, p.fields)); } }, "+ Add a number"));
+      // her numbers one by one (names, kinds, %): folded; the list above is the quick way to give or take one
+      h("details", { class: "of-pnums", open: isNew }, h("summary", { class: "of-pnums-s" }),
+        tasks, fields,
+        h("button", { class: "btn small", type: "button", onclick: () => {
+          const taken = new Set([...fields.querySelectorAll(".of-f")].map(x => x.dataset.id)), row = fieldRow({ id: ofNewId(taken), label: "New number", kind: "out", of: "" }, rowsOf(fields));
+          row.dataset.added = "1"; fields.append(row);
+        } }, "+ Add a number")));
   };
   const list = h("div", { class: "of-people", id: "ofPeopleList" }, cfg.people.map(p => personEl(p, false)));
+
+  /* ---- every number, and who tracks it: tap a name to give it to her or take it off her ---- */
+  const opts = h("div", { class: "of-opts", id: "ofOpts" }), newBox = h("div", { class: "of-new", id: "ofNewOpt", hidden: true });
+  const peopleEls = () => [...list.querySelectorAll(".of-person")];
+  const nameOf = el => el.dataset.name || lbTeamName(el.querySelector(".p-name") ? el.querySelector(".p-name").value : "") || "New person";
+  const rowFor = (el, label) => [...el.querySelectorAll(".of-f")].find(r => norm(r.querySelector(".f-label").value) === norm(label));
+  /** Gives her the number: back from past only, or added with the same kind and % (of the number with that name, if she has it). */
+  const give = (el, o) => {
+    const r = rowFor(el, o.label);
+    if (r) { const c = r.querySelector(".f-hide"); if (c) c.checked = false; r.classList.remove("past"); return; }
+    const box = el.querySelector(".of-fields"), cur = rowsOf(el), taken = new Set(cur.map(f => f.id));
+    const of = o.of ? (cur.find(f => norm(f.label) === norm(o.of)) || {}).id || "" : "";
+    const row = fieldRow({ id: ofNewId(taken), label: o.label, kind: o.kind, of }, cur);
+    row.dataset.added = "1";
+    box.append(row);
+  };
+  /** Takes it off her: past only (her numbers so far still count); one added just now goes away. */
+  const take = (el, o) => {
+    const r = rowFor(el, o.label);
+    if (!r) return;
+    const c = r.querySelector(".f-hide");
+    if (r.dataset.added === "1" || !c) r.remove();
+    else { c.checked = true; r.classList.add("past"); }
+  };
+  /** Every number anyone has (by its name), who tracks it now and who has it past only. */
+  const optList = () => {
+    const out = [];
+    for (const el of peopleEls()) {
+      const fs = rowsOf(el);
+      for (const f of fs) {
+        if (!f.label) continue;
+        let o = out.find(x => norm(x.label) === norm(f.label));
+        if (!o) out.push(o = { label: f.label, kind: f.kind, of: "", on: new Set(), past: new Set(), set: false });
+        if (!f.hide && !o.set) { o.kind = f.kind; o.of = f.of ? ((fs.find(x => x.id === f.of) || {}).label || "") : ""; o.set = true; }
+        (f.hide ? o.past : o.on).add(el);
+      }
+    }
+    return out;
+  };
+  let oldOpen = false, drawing = false;
+  const optEl = o => h("div", { class: "of-opt" + (o.on.size ? "" : " gone"), "data-opt": o.label },
+    h("div", { class: "of-opt-h" }, h("b", { text: o.label }), h("span", { class: "of-kind " + o.kind, text: OF_KIND_SHORT[o.kind] || "" }), o.of ? h("small", { text: `% of ${o.of}` }) : null),
+    h("div", { class: "of-who" }, peopleEls().map(el => {
+      const st = o.on.has(el) ? "on" : o.past.has(el) ? "past" : "off", who = nameOf(el);
+      return h("button", { class: "chip-btn sm of-who-b " + st, type: "button", "aria-pressed": String(st === "on"), "data-who": who,
+        title: st === "on" ? `${who} tracks it. Tap to take it off her (what she typed so far still counts).` : st === "past" ? `Past only for ${who}. Tap to give it back to her.` : `Tap to give it to ${who}.`,
+        onclick: () => { if (st === "on") take(el, o); else give(el, o); drawOpts(); } }, st === "on" ? `✓ ${who}` : who, st === "past" ? h("small", { text: " · past" }) : null);
+    })));
+  const drawOpts = () => {
+    if (drawing) return;
+    drawing = true;
+    const all = optList(), act = all.filter(o => o.on.size), old = all.filter(o => !o.on.size);
+    const det = old.length ? h("details", { class: "of-old", open: oldOpen, ontoggle: ev => { oldOpen = ev.currentTarget.open; } }, h("summary", { text: `No one tracks these any more (${old.length}): tap a name to bring one back` }), old.map(optEl)) : null;
+    opts.replaceChildren(...act.map(optEl), ...(det ? [det] : []));
+    // each person's folded list says how many she tracks
+    for (const el of peopleEls()) {
+      const fs = rowsOf(el), on = fs.filter(f => !f.hide).length, past = fs.length - on, s = el.querySelector(".of-pnums-s");
+      if (s) s.textContent = `Her numbers one by one: ${on} tracked${past ? `, ${past} past only` : ""} (names, kinds, %)`;
+    }
+    drawing = false;
+  };
+  let queued = false;
+  const queueDraw = () => { if (queued || drawing) return; queued = true; setTimeout(() => { queued = false; drawOpts(); }, 120); };
+  list.addEventListener("input", queueDraw);
+  list.addEventListener("change", queueDraw);
+  new MutationObserver(() => { if (!drawing) queueDraw(); }).observe(list, { childList: true, subtree: true });
+  const openNew = () => {
+    const name = h("input", { type: "text", id: "ofNewName", maxlength: "40", placeholder: "Name, like Past client follow-ups", "aria-label": "Name of the new number" });
+    const kind = h("select", { id: "ofNewKind", "aria-label": "Kind" }, Object.entries(OF_KINDS).map(([k, t]) => h("option", { value: k, text: t })));
+    const ofSel = h("select", { id: "ofNewOf", "aria-label": "Show as a % of" }, [h("option", { value: "", text: "No %" })].concat(optList().filter(o => o.on.size).map(o => h("option", { value: o.label, text: `% of ${o.label}` }))));
+    const who = new Set(), msg = h("p", { class: "dlg-err", role: "alert" });
+    const chips = h("div", { class: "of-who" }, peopleEls().map(el => h("button", { class: "chip-btn sm", type: "button", "aria-pressed": "false", "data-who": nameOf(el),
+      onclick: ev => { const b = ev.currentTarget, on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on)); if (on) who.add(el); else who.delete(el); } }, nameOf(el))));
+    const close = () => { newBox.hidden = true; newBox.replaceChildren(); };
+    newBox.hidden = false;
+    newBox.replaceChildren(h("b", { text: "A new number to follow up on" }),
+      h("div", { class: "of-new-row" }, name, kind, ofSel),
+      h("span", { class: "of-lbl", text: "Who tracks it (tap each one)" }), chips, msg,
+      h("div", { class: "of-new-act" }, h("button", { class: "btn small", type: "button", onclick: close }, "Cancel"),
+        h("button", { class: "btn small primary", type: "button", id: "ofNewAdd", onclick: () => {
+          const label = name.value.replace(/\s+/g, " ").trim();
+          if (!label) { msg.textContent = "Give it a name."; return; }
+          if (optList().some(o => norm(o.label) === norm(label))) { msg.textContent = `“${label}” is already on the list: tap the names on it instead.`; return; }
+          if (!who.size) { msg.textContent = "Tap who tracks it."; return; }
+          for (const el of who) give(el, { label, kind: kind.value, of: ofSel.value });
+          close(); drawOpts();
+        } }, "Add it")));
+    if (!isTouch()) name.focus();
+  };
   openDialog(
     h("h3", { id: "dlgTitle", text: "Office people" }),
-    h("p", { class: "hint", text: "Each person types her own day under her login. Calls that count toward the goal add up to her outgoing calls; admin-only numbers (like Scheduled / completed) are typed by admins after checking the CRM. Past only: a number that's no longer typed but whose history still counts. A login also needs Office ticked in Settings > Users." }),
+    h("p", { class: "hint", text: "Each person types her own day under her login. Calls that count toward the goal add up to her outgoing calls; admin-only numbers (like Scheduled / completed) are typed by admins after checking the CRM. A login also needs Office ticked in Settings > Users." }),
     canHide ? null : h("p", { class: "dlg-err", id: "ofHideOld", text: "To use the task lists and past-only numbers, update the Google script first: paste the newest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that." }),
     h("label", { class: "of-mo" }, h("span", { text: "Outgoing calls goal (a day, Monday to Friday)" }), h("input", { type: "text", inputmode: "numeric", id: "ofGoal", value: String(cfg.goal) })),
+    h("h4", { class: "of-sec", text: "Numbers and who tracks them" }),
+    h("p", { class: "hint", text: "Tap a name to give her the number, or tap it again to take it off her: she stops typing it, and what she typed so far still counts (past only). New number: something new to follow up on, for whoever you pick." }),
+    opts,
+    h("button", { class: "btn small", type: "button", id: "ofNewOptBtn", onclick: () => openNew() }, "+ New number"),
+    newBox,
+    h("h4", { class: "of-sec", text: "People" }),
     list,
     h("button", { class: "btn small", type: "button", id: "ofAddPerson", onclick: () => list.append(personEl({ name: "", user: "", from: lbToday().slice(0, 7), to: "", fields: OF_DEFAULT_FIELDS.map(f => Object.assign({}, f)) }, true)) }, "+ Add a person"),
     err,
@@ -12575,6 +12704,8 @@ async function openOfPeople() {
           if (fields.some(f => !f.label)) { err.textContent = `${name}: every number needs a name.`; return; }
           if (!fields.some(f => f.kind === "out" && !f.hide)) { err.textContent = `${name}: at least one number she types has to count toward the calls goal.`; return; }
           if (fields.some(f => f.hide) && apiLevel < OF_HIDE_API) { err.textContent = "Past-only numbers need the newest Google script. Update it first (see the note at the top)."; return; }
+          if (fields.length > OF_MAX_FIELDS) { err.textContent = `${name}: up to ${OF_MAX_FIELDS} numbers (past-only ones too). Remove some she never typed.`; return; }
+          if (fields.length > 20 && apiLevel < OF_MANY_API) { err.textContent = `${name} has ${fields.length} numbers: more than 20 needs the newest Google script. Paste the new Code.gs and deploy a new version first.`; return; }
           people.push({ name, user: el.querySelector(".p-user").value, from: el.querySelector(".p-from").value, to: el.querySelector(".p-to").value, fields });
         }
         const b = $("ofPeopleSave"); b.disabled = true; b.textContent = "Saving…";
@@ -12585,6 +12716,13 @@ async function openOfPeople() {
           closeDialog(); toast("Office people saved"); renderOffice();
         } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
       } }))));
+  drawOpts();
+  // the logins, fresh (the window is already open); a choice made meanwhile stays
+  api("users").then(o => {
+    ofUsers = ((o && o.users) || []).filter(u => u.status !== "removed");
+    if (!list.isConnected) return;
+    for (const s of list.querySelectorAll(".p-user")) loginOpts(s, s.value);
+  }).catch(() => { /* logins can be picked later */ });
 }
 
 /* ---- admins: 14. OFFICE SCORECARDS from Excel (2025 on: the two-person layout) ---- */
