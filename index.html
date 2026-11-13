@@ -784,6 +784,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .cp-paysum { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); } .cp-paysum b { font-size: 1.05rem; } .cp-paysum small { color: var(--muted); }
 .cp-paidbox { display: grid; gap: 3px; padding: 12px 14px; border-radius: 12px; background: var(--ok-bg); } .cp-paidbox b { color: var(--ok); } .cp-paidbox span { font-size: .9rem; }
 .cp-parties { display: grid; gap: 8px; }
+.cp-reply { margin-top: 6px; } .cp-reply small { display: block; margin-top: 4px; }
 .cp-party { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, .9fr) auto; gap: 8px; align-items: center; }
 .cp-party input, .cp-party select { width: 100%; box-sizing: border-box; min-width: 0; }
 .btn.danger { border-color: var(--due); color: var(--due); }
@@ -11143,6 +11144,7 @@ const repStreetText = a => { const p = String(a || "").split(",").map(x => x.tri
    accounting approves and records the payment, Monumental gets the pay stub, and each invoice is marked paid on its
    job so it can't be sent or paid twice. Names, addresses and amounts stay in this window only (not kept on the device). ---- */
 const CP_API = 46;                                       // the Google script with Contractor Payroll
+const CP_REPLY_API = 47;                                 // ... and where vendors' questions go
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
 const CP_VENDOR = "Monumental Flooring";
 let cpData = null, cpLoading = false, cpErr = "", cpOld = false, cpFilter = "all";
@@ -11153,7 +11155,7 @@ async function cpLoad() {
   if (view.tab === "contractors") renderContractors();
   try {
     const o = await api("cpRead", {});
-    cpData = { batches: o.batches || [], parties: o.parties || [], at: Date.now() };
+    cpData = { batches: o.batches || [], parties: o.parties || [], replyTo: o.replyTo || "", at: Date.now() };
     cpErr = ""; cpOld = false;
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { cpLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -11191,18 +11193,23 @@ const cpTakenText = t => (t.why === "paid" ? `Already paid${t.on ? ` on ${cpDay(
   : t.why === "waiting" ? `Already sent to accounting${t.on ? ` on ${cpDay(t.on)}` : ""}${t.b ? ` (batch ${t.b})` : ""}. It can't be sent twice.`
   : t.why === "job_paid" ? `This job is already marked paid to Monumental${t.on ? ` on ${cpDay(t.on)}` : ""}. Clear that date on the job first if it's still owed.`
   : t.why === "no_pdf" ? "Its PDF didn't upload. Send again." : t.why === "twice" ? "The same invoice # is in this batch twice." : "This invoice isn't saved on its job. Save it first.");
-/** Who an email goes to: the saved addresses (ticked for this kind of email), and any other typed in. */
+/** Who an email goes to: the saved addresses for this kind of email, and any other typed in. Accounting's email lists
+ *  only accounting / payroll's addresses (all ticked); the contractor's lists only that contractor's people (a Vendor
+ *  line, or a name or address with its name in it, like ...@monumentalflooring.com), ticked when they're its own. */
 function cpToPicker(kind, vendor, idp) {
-  const ps = (cpData && cpData.parties) || [], v = cpShort(vendor).toLowerCase();
-  const mine = p => (kind === "accounting" ? p.kind === "accounting" : p.kind === "vendor" && cpShort(p.name).toLowerCase() === v);
+  const v = cpShort(vendor).toLowerCase(), theirs = p => !!v && `${p.name} ${p.email}`.toLowerCase().includes(v);
+  const ps = ((cpData && cpData.parties) || []).filter(p => (kind === "accounting" ? p.kind === "accounting" && !theirs(p) : p.kind === "vendor" || theirs(p)));
+  const mine = p => (kind === "accounting" ? true : theirs(p) || ps.length === 1);
   const boxes = ps.map((p, i) => h("label", { class: "cp-to" + (p.kind === "vendor" ? " vn" : "") },
     h("input", { type: "checkbox", id: `${idp}-${i}`, "data-email": p.email, checked: mine(p) }),
     h("span", null, h("b", { text: p.name }), h("small", { text: p.email }))));
   const other = h("input", { type: "text", id: `${idp}-other`, inputmode: "email", autocapitalize: "none", autocorrect: "off", spellcheck: "false", maxlength: "400",
     placeholder: ps.length ? "Another address (or several, with commas)" : "Email address (or several, with commas)" });
+  const none = kind === "accounting" ? "No accounting / payroll address saved yet. Type one here, or save it in Settings › Payroll emails."
+    : `No ${cpShort(vendor)} address saved yet. Type one here, or save it in Settings › Payroll emails (as Vendor).`;
   const el = h("div", { class: "cp-tos", id: idp },
-    h("span", { class: "lbl", text: "Send to" }),
-    boxes.length ? h("div", { class: "cp-tolist" }, boxes) : h("p", { class: "meta", text: "No addresses saved yet. Type one here, or save them in Settings › Payroll emails." }),
+    h("span", { class: "lbl", text: kind === "accounting" ? "Send to accounting" : `Send to ${cpShort(vendor)}` }),
+    boxes.length ? h("div", { class: "cp-tolist" }, boxes) : h("p", { class: "meta", text: none }),
     other);
   const list = () => [...boxes.map(b => b.querySelector("input")).filter(x => x.checked).map(x => x.dataset.email), ...other.value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean)];
   return { el, list, bad: () => { const l = list(); if (!l.length) return "Pick who gets the email, or type an address."; const b = l.find(x => !lbEmail(x)); return b ? `“${b}” isn't an email address.` : ""; } };
@@ -11390,6 +11397,7 @@ async function openCpParties() {
   if (!cpData) { await cpLoad(); if (!cpData) { toast(cpErr || "Couldn't load the addresses. Try again."); return; } }
   const list = cpData.parties.map(p => Object.assign({}, p));
   const err = h("p", { class: "dlg-err", role: "alert" }), box = h("div", { class: "cp-parties", id: "cpParties" });
+  const reply = h("input", { type: "text", id: "cpReplyTo", inputmode: "email", autocapitalize: "none", autocorrect: "off", spellcheck: "false", maxlength: "120", value: cpData.replyTo || "", placeholder: "service@yourcompany.com" });
   const draw = () => {
     box.replaceChildren(...list.map((p, i) => h("div", { class: "cp-party", "data-i": i },
       h("input", { type: "text", class: "cp-pname", maxlength: "80", value: p.name, placeholder: "Name (Accounting, Monumental Flooring…)", "aria-label": "Name", oninput: e => { p.name = e.target.value; } }),
@@ -11401,18 +11409,26 @@ async function openCpParties() {
   draw();
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Payroll emails" }),
-    h("p", { class: "hint", text: "Who gets Contractor Payroll's emails: accounting / payroll (the invoices and the pay stub) and each vendor (the pay stub once paid). Each email lets you pick from this list or type any other address. Kept on the Payroll emails tab of the Google Sheet." }),
+    h("p", { class: "hint", text: "Who gets Contractor Payroll's emails. Accounting / payroll: your own people, who get the invoices and the pay stub. Vendor: the contractor's people (Monumental's office), who get only the pay stub once it's paid. Each email lists only its own kind, and any other address can be typed. Kept on the Payroll emails tab of the Google Sheet." }),
     box,
     h("div", null, h("button", { class: "btn", type: "button", id: "cpAddParty", onclick: () => { list.push({ name: "", email: "", kind: list.some(p => p.kind === "accounting") ? "vendor" : "accounting" }); draw(); const n = box.querySelectorAll(".cp-pname"); if (n.length) n[n.length - 1].focus(); } }, "+ Add an address")),
+    h("div", { class: "field cp-reply" }, h("label", { for: "cpReplyTo", text: "Vendors' questions go to" }), reply,
+      h("small", { class: "meta", text: "The pay stub says “Questions about this payment? Reply to …” with this address, and the vendor's replies go there." })),
     err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
       h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
       h("button", { class: "btn primary", type: "button", id: "cpPartiesSave", text: "Save", onclick: async ev => {
         const out = list.map(p => ({ name: String(p.name || "").trim(), email: String(p.email || "").trim(), kind: p.kind })).filter(p => p.name || p.email);
-        const bad = out.find(p => !p.name || !lbEmail(p.email));
+        const bad = out.find(p => !p.name || !lbEmail(p.email)), rt = reply.value.trim();
         if (bad) { err.textContent = !bad.name ? `Give ${bad.email || "each address"} a name.` : `“${bad.email}” isn't an email address.`; return; }
+        if (rt && !lbEmail(rt)) { err.textContent = `“${rt}” isn't an email address.`; return; }
         const b = ev.currentTarget; b.disabled = true; err.textContent = "";
-        try { const o = await api("cpParties", { parties: out }); cpData.parties = o.parties || []; dlgDirty = false; closeDialog(); toast("Payroll emails saved"); }
+        try {
+          const o = await api("cpParties", { parties: out, replyTo: rt });
+          cpData.parties = o.parties || []; cpData.replyTo = o.replyTo === undefined ? rt : o.replyTo || "";
+          dlgDirty = false; closeDialog();
+          toast(rt && (Number(o.api) || 0) < CP_REPLY_API ? "Saved. Update the Google script so the pay stub shows the questions address." : "Payroll emails saved");
+        }
         catch (e) { err.textContent = cpCpErr(e, "The addresses"); b.disabled = false; }
       } })))));
 }
