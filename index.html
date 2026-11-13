@@ -11191,18 +11191,23 @@ const cpTakenText = t => (t.why === "paid" ? `Already paid${t.on ? ` on ${cpDay(
   : t.why === "waiting" ? `Already sent to accounting${t.on ? ` on ${cpDay(t.on)}` : ""}${t.b ? ` (batch ${t.b})` : ""}. It can't be sent twice.`
   : t.why === "job_paid" ? `This job is already marked paid to Monumental${t.on ? ` on ${cpDay(t.on)}` : ""}. Clear that date on the job first if it's still owed.`
   : t.why === "no_pdf" ? "Its PDF didn't upload. Send again." : t.why === "twice" ? "The same invoice # is in this batch twice." : "This invoice isn't saved on its job. Save it first.");
-/** Who an email goes to: the saved addresses (ticked for this kind of email), and any other typed in. */
+/** Who an email goes to: the saved addresses for this kind of email, and any other typed in. Accounting's email lists
+ *  only accounting / payroll's addresses (all ticked); the contractor's lists only that contractor's people (a Vendor
+ *  line, or a name or address with its name in it, like ...@monumentalflooring.com), ticked when they're its own. */
 function cpToPicker(kind, vendor, idp) {
-  const ps = (cpData && cpData.parties) || [], v = cpShort(vendor).toLowerCase();
-  const mine = p => (kind === "accounting" ? p.kind === "accounting" : p.kind === "vendor" && cpShort(p.name).toLowerCase() === v);
+  const v = cpShort(vendor).toLowerCase(), theirs = p => !!v && `${p.name} ${p.email}`.toLowerCase().includes(v);
+  const ps = ((cpData && cpData.parties) || []).filter(p => (kind === "accounting" ? p.kind === "accounting" && !theirs(p) : p.kind === "vendor" || theirs(p)));
+  const mine = p => (kind === "accounting" ? true : theirs(p) || ps.length === 1);
   const boxes = ps.map((p, i) => h("label", { class: "cp-to" + (p.kind === "vendor" ? " vn" : "") },
     h("input", { type: "checkbox", id: `${idp}-${i}`, "data-email": p.email, checked: mine(p) }),
     h("span", null, h("b", { text: p.name }), h("small", { text: p.email }))));
   const other = h("input", { type: "text", id: `${idp}-other`, inputmode: "email", autocapitalize: "none", autocorrect: "off", spellcheck: "false", maxlength: "400",
     placeholder: ps.length ? "Another address (or several, with commas)" : "Email address (or several, with commas)" });
+  const none = kind === "accounting" ? "No accounting / payroll address saved yet. Type one here, or save it in Settings › Payroll emails."
+    : `No ${cpShort(vendor)} address saved yet. Type one here, or save it in Settings › Payroll emails (as Vendor).`;
   const el = h("div", { class: "cp-tos", id: idp },
-    h("span", { class: "lbl", text: "Send to" }),
-    boxes.length ? h("div", { class: "cp-tolist" }, boxes) : h("p", { class: "meta", text: "No addresses saved yet. Type one here, or save them in Settings › Payroll emails." }),
+    h("span", { class: "lbl", text: kind === "accounting" ? "Send to accounting" : `Send to ${cpShort(vendor)}` }),
+    boxes.length ? h("div", { class: "cp-tolist" }, boxes) : h("p", { class: "meta", text: none }),
     other);
   const list = () => [...boxes.map(b => b.querySelector("input")).filter(x => x.checked).map(x => x.dataset.email), ...other.value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean)];
   return { el, list, bad: () => { const l = list(); if (!l.length) return "Pick who gets the email, or type an address."; const b = l.find(x => !lbEmail(x)); return b ? `“${b}” isn't an email address.` : ""; } };
@@ -11401,7 +11406,7 @@ async function openCpParties() {
   draw();
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Payroll emails" }),
-    h("p", { class: "hint", text: "Who gets Contractor Payroll's emails: accounting / payroll (the invoices and the pay stub) and each vendor (the pay stub once paid). Each email lets you pick from this list or type any other address. Kept on the Payroll emails tab of the Google Sheet." }),
+    h("p", { class: "hint", text: "Who gets Contractor Payroll's emails. Accounting / payroll: your own people, who get the invoices and the pay stub. Vendor: the contractor's people (Monumental's office), who get only the pay stub once it's paid. Each email lists only its own kind, and any other address can be typed. Kept on the Payroll emails tab of the Google Sheet." }),
     box,
     h("div", null, h("button", { class: "btn", type: "button", id: "cpAddParty", onclick: () => { list.push({ name: "", email: "", kind: list.some(p => p.kind === "accounting") ? "vendor" : "accounting" }); draw(); const n = box.querySelectorAll(".cp-pname"); if (n.length) n[n.length - 1].focus(); } }, "+ Add an address")),
     err,
