@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 53;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 54;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -325,6 +325,17 @@ function doPost(e) {
       case "revSync":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
+      case "priceList":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(priceList_(user, false));
+      case "priceScan":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(priceList_(user, true));
+      case "priceCheck":
+        if (!canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return priceCheck_(req, user); }));
+      case "setPriceCheck":
+        return json_(withLock_(function () { return setAdminFlag_(req, PRICE_CHECK); }));
       case "goals":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(goalsRead_(req.year));
@@ -517,7 +528,7 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech"];
-const ADMIN_ACTIONS = ["hcpTest", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setShop",
+const ADMIN_ACTIONS = ["hcpTest", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
   "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
@@ -757,19 +768,22 @@ function saveUser_(req) {
 /** Admin: Payroll on or off for an admin ({ id, on }). Only an admin who sees Payroll can switch it, for himself or
  *  another admin; while no admin sees it yet, any admin can switch it on (the first time). Nobody switches himself off,
  *  so there's always someone who can. Technicians never see Payroll. */
-function setPayroll_(req) {
+function setPayroll_(req) { return setAdminFlag_(req, PAYROLL); }
+/** A per-admin switch (VODA Payroll, checking price changes): an admin who has it switches it for the others; the first
+ *  time, any admin can switch it on (for himself or another admin). */
+function setAdminFlag_(req, FLAG) {
   const s = usersSheet_();
   const all = readUsers_(s);
   const x = all.filter(function (y) { return y.u.id === String(req.id || ""); })[0];
   if (!x) return { ok: false, error: "gone" };
   if (x.u.role !== "admin") return { ok: false, error: "bad_request" };
-  const has = function (u) { return u.role === "admin" && u.status === "active" && parseAccess_(u.access).indexOf(PAYROLL) !== -1; };
+  const has = function (u) { return u.role === "admin" && u.status === "active" && parseAccess_(u.access).indexOf(FLAG) !== -1; };
   const anyone = all.some(function (y) { return has(y.u); });
   const me = all.filter(function (y) { return y.u.id === req.user.id; })[0];
   if (anyone ? !(me && has(me.u)) : !req.on) return { ok: false, error: "not_allowed" };
   if (!req.on && x.u.id === req.user.id) return { ok: false, error: "self" };
-  const access = parseAccess_(x.u.access).filter(function (a) { return a !== PAYROLL; });
-  if (req.on) access.push(PAYROLL);
+  const access = parseAccess_(x.u.access).filter(function (a) { return a !== FLAG; });
+  if (req.on) access.push(FLAG);
   if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   return { ok: true, user: publicUser_(x.u) };
 }
@@ -2794,6 +2808,7 @@ function supplyEmailTest() {
 // Empty means Trucks only (how every technician worked before checklists). "-" means nothing yet. Admins see everything.
 
 const ACCESS_DEFAULT = ["trucks"];
+const PRICE_CHECK = "pricecheck";   // an admin who marks Housecall Pro price changes checked (switched per admin, like Payroll)
 const PAYROLL = "payroll";   // an admin who sees Leaderboard > Payroll (switched per admin, see setPayroll_)
 function parseAccess_(s) {
   s = String(s === null || s === undefined ? "" : s).trim();
@@ -3960,6 +3975,166 @@ function repRead_(year) {
   });
   return { ok: true, year: Number(y), jobs: jobs, years: Object.keys(years).map(Number).sort(), dv: REP_DATA_VER };
 }
+/* ---- Price changes: a job's amount changed in Housecall Pro after the app saw it (a discount, a reduction, more work,
+   a job from months ago edited). Every hour the script asks Housecall Pro for the jobs changed most recently and compares
+   each one's amount with the last one the app saw (the Price watch tab, else the Revenue tab's day). A difference is a
+   warning on the Price changes tab, with the job's Private notes (why it changed, if someone wrote it): admins see them
+   on Operations; an admin switched on for it marks each one checked. Housecall Pro's API doesn't say who changed it (its
+   Activity feed isn't in the API). ---- */
+const PRICE_SHEET = "Price changes", WATCH_SHEET = "Price watch";
+const PRICE_COLS = ["ID", "Noticed", "Last noticed", "Changes", "Job id", "Job #", "Client", "Visit day", "Department", "Job type", "Was $", "Now $",
+  "Change $", "Was seen", "Private notes", "New note", "Status", "Checked by", "Checked at", "Check note", "Monumental", "Job status"];
+const WATCH_COLS = ["Job id", "Job #", "Amount $", "Notes", "Seen"];
+const PRICE_PAGES = 10, PRICE_AT = "PRICE_SCAN_AT", PRICE_ERR = "PRICE_SCAN_ERR";
+function canPriceCheck_(user) { return !!user && user.role === "admin" && parseAccess_(user.access).indexOf(PRICE_CHECK) !== -1; }
+function priceSheet_(name, cols) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(name);
+  if (!s) {
+    s = ss.insertSheet(name);
+    s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:A").setNumberFormat("@");
+  }
+  return s;
+}
+const priceNotes_ = job => (Array.isArray(job && job.notes) ? job.notes : []).map(function (n) {
+  return [String((n && n.id) || ""), String((n && n.content) || "").replace(/\s+/g, " ").trim().slice(0, 600)];
+}).filter(function (n) { return n[1]; });
+/** The hourly check (a time trigger; Check now in the app). Reads the jobs changed since the last check (the first time:
+ *  the last day), newest first, up to PRICE_PAGES pages of 100. */
+function priceScan() {
+  const out = priceScan_();
+  PropertiesService.getScriptProperties().setProperty(PRICE_ERR, out.ok ? "" : String(out.error || "error"));
+  return out;
+}
+function priceScan_() {
+  const P = PropertiesService.getScriptProperties(), now = Date.now(), last = Number(P.getProperty(PRICE_AT)) || 0;
+  const since = last ? last - 15 * 60e3 : now - 24 * 3600e3;   // a quarter hour's overlap, so nothing slips between checks
+  const got = [];
+  for (let page = 1; page <= PRICE_PAGES; page++) {
+    const r = hcpGet_("/jobs", { sort_by: "updated_at", sort_direction: "desc", page: page, page_size: 100 });
+    if (r.error) return { ok: false, error: r.error, status: r.status || 0 };
+    const list = Array.isArray(r.data && r.data.jobs) ? r.data.jobs : [];
+    let older = false;
+    for (let i = 0; i < list.length; i++) { if ((Date.parse(list[i].updated_at) || 0) < since) { older = true; break; } got.push(list[i]); }
+    if (older || !list.length || page >= (Number(r.data && r.data.total_pages) || 1)) break;
+  }
+  return withLock_(function () { return priceCompare_(got, now); });
+}
+/** Each job changed: its amount against the last one seen; a difference is a warning (one open warning a job: a later
+ *  change updates it). Then what was seen is kept, and the day of a changed job is read again on Revenue. */
+function priceCompare_(jobs, now) {
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), at = new Date(now).toISOString();
+  const ws = priceSheet_(WATCH_SHEET, WATCH_COLS), wrows = ws.getLastRow() > 1 ? ws.getRange(2, 1, ws.getLastRow() - 1, WATCH_COLS.length).getValues() : [];
+  const watch = {};
+  wrows.forEach(function (r, i) { if (r[0]) watch[String(r[0])] = { i: i, inv: String(r[1] || ""), c: Math.round((Number(r[2]) || 0) * 100), notes: priceJson_(r[3]), at: r[4] instanceof Date ? r[4].toISOString() : String(r[4] || "") }; });
+  let rev = null;   // the Revenue tab's visits (only read if a job isn't on Price watch yet): id → [cents, day, read at]
+  const revOf = function (id) {
+    if (!rev) {
+      rev = {};
+      const rows = revRows_(revSheet_(false));
+      Object.keys(rows).forEach(function (d) { priceJson_(rows[d][14]).forEach(function (v) { if (v && v[0]) rev[String(v[0])] = [Math.round(Number(v[4]) || 0), d, rows[d][10]]; }); });
+    }
+    return rev[id] || null;
+  };
+  const ps = priceSheet_(PRICE_SHEET, PRICE_COLS), prows = ps.getLastRow() > 1 ? ps.getRange(2, 1, ps.getLastRow() - 1, PRICE_COLS.length).getValues() : [];
+  const openOf = {};
+  prows.forEach(function (r, i) { if (r[0] && String(r[16]) === "open") openOf[String(r[4])] = i; });
+  const stale = {}, added = [];
+  let found = 0;
+  const seen = {};
+  jobs.forEach(function (job) {
+    const id = String((job && job.id) || "");
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    const cents = Math.round(Number(job.total_amount) || 0), notes = priceNotes_(job), w = watch[id];
+    let was = null, wasAt = "", known = null;
+    if (w) { was = w.c; wasAt = w.at; known = w.notes; }
+    else { const v = revOf(id); if (v) { was = v[0]; wasAt = v[2]; } }
+    if (was !== null && was !== cents) {
+      const start = new Date((job.schedule && job.schedule.scheduled_start) || ""), day = isNaN(start.getTime()) ? "" : Utilities.formatDate(start, tz, "yyyy-MM-dd");
+      const type = hcpJobType_(job), tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return typeof t === "object" && t ? (t.name || "") : String(t); });
+      const fresh = known ? notes.filter(function (n) { return !known.some(function (k) { return k[0] === n[0] && k[1] === n[1]; }); }).map(function (n) { return n[0]; }) : null;
+      const shown = JSON.stringify(notes.map(function (n) { return { c: n[1], n: fresh && fresh.indexOf(n[0]) !== -1 ? 1 : 0 }; }));
+      const i = openOf[id];
+      if (i !== undefined) {
+        // still open: the latest amount on it (the change from the amount first seen), its notes, one more change
+        const r = prows[i];
+        r[2] = at; r[3] = (Number(r[3]) || 1) + 1; r[11] = cents / 100; r[12] = Math.round(cents - Math.round((Number(r[10]) || 0) * 100)) / 100;
+        r[14] = shown; const n0 = String(r[15] || "");
+        r[15] = n0 === "yes" || (fresh && fresh.length) ? "yes" : n0;   // a note since the amount first seen: yes; else as it was r[21] = String(job.work_status || "");
+      } else {
+        const row = [Utilities.getUuid(), at, at, 1, id, String(job.invoice_number || ""), hcpClient_(job), day, revDept_(type), type, was / 100, cents / 100,
+          (cents - was) / 100, wasAt, shown, fresh ? (fresh.length ? "yes" : "no") : "", "open", "", "", "", tags.some(function (t) { return REP_MON_TAG.test(t); }) ? "yes" : "", String(job.work_status || "")];
+        openOf[id] = prows.length; prows.push(row); added.push(row);
+      }
+      found++;
+      if (day) stale[day] = true;
+    }
+    const keep = [id, String(job.invoice_number || ""), cents / 100, JSON.stringify(notes), at];
+    if (w) wrows[w.i] = keep; else { watch[id] = { i: wrows.length }; wrows.push(keep); }
+  });
+  if (wrows.length) { ws.getRange(2, 1, wrows.length, WATCH_COLS.length).setValues(wrows); ws.getRange(2, 1, wrows.length, 1).setNumberFormat("@"); }
+  if (prows.length) { ps.getRange(2, 1, prows.length, PRICE_COLS.length).setValues(prows); ps.getRange(2, 1, prows.length, 1).setNumberFormat("@"); }
+  // the days of changed jobs: read again on Revenue (and so on Operations' totals and the goal)
+  const days = Object.keys(stale);
+  if (days.length) {
+    const rs = revSheet_(false);
+    if (rs && rs.getLastRow() > 1) rs.getRange(2, 1, rs.getLastRow() - 1, 1).getValues().forEach(function (r, i) {
+      const d = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM-dd") : String(r[0] || "").trim();
+      if (stale[d]) rs.getRange(i + 2, 11).setValues([[""]]);
+    });
+  }
+  P.setProperty(PRICE_AT, String(now));
+  return { ok: true, read: jobs.length, found: found, added: added.length };
+}
+function priceJson_(v) { try { const x = JSON.parse(String(v || "[]")); return Array.isArray(x) ? x : []; } catch (e) { return []; } }
+/** The warning as the app gets it. */
+function priceOut_(r) {
+  return { id: String(r[0]), noticed: r[1] instanceof Date ? r[1].toISOString() : String(r[1]), last: r[2] instanceof Date ? r[2].toISOString() : String(r[2]),
+    changes: Number(r[3]) || 1, job: String(r[4]), inv: String(r[5]), client: String(r[6]), day: r[7] instanceof Date ? Utilities.formatDate(r[7], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(r[7] || ""),
+    dept: String(r[8] || "o"), type: String(r[9] || ""), was: Math.round((Number(r[10]) || 0) * 100), now: Math.round((Number(r[11]) || 0) * 100),
+    wasAt: r[13] instanceof Date ? r[13].toISOString() : String(r[13] || ""), notes: priceJson_(r[14]), newNote: String(r[15] || ""), status: String(r[16]),
+    by: String(r[17] || ""), at: r[18] instanceof Date ? r[18].toISOString() : String(r[18] || ""), note: String(r[19] || ""), mon: String(r[20]) === "yes", ws: String(r[21] || "") };
+}
+/** An admin: the open warnings and the last 50 checked, when the last check ran and whether it runs by itself. Check now
+ *  (scan), or no check for 2 hours: one now. The hourly check is set up the first time. */
+function priceList_(user, scan) {
+  const P = PropertiesService.getScriptProperties();
+  let trigger = false;
+  try {
+    trigger = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "priceScan"; });
+    if (!trigger) { ScriptApp.newTrigger("priceScan").timeBased().everyHours(1).create(); trigger = true; }
+  } catch (e) { trigger = false; }
+  let err = String(P.getProperty(PRICE_ERR) || "");
+  if (hcpKey_() && (scan || Date.now() - (Number(P.getProperty(PRICE_AT)) || 0) > 2 * 3600e3)) { const out = priceScan(); err = out.ok ? "" : String(out.error || "error"); }
+  const s = SpreadsheetApp.getActive().getSheetByName(PRICE_SHEET), rows = s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, PRICE_COLS.length).getValues().filter(function (r) { return r[0]; }) : [];
+  const all = rows.map(priceOut_);
+  const open = all.filter(function (x) { return x.status === "open"; }).sort(function (a, b) { return a.last < b.last ? 1 : -1; });
+  const checked = all.filter(function (x) { return x.status === "checked"; }).sort(function (a, b) { return a.at < b.at ? 1 : -1; }).slice(0, 50);
+  return { ok: true, open: open, checked: checked, scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err, trigger: trigger, connected: !!hcpKey_(), mayCheck: canPriceCheck_(user) };
+}
+/** An admin switched on for it: marks warnings checked ({ ids, note }), with his name and when. */
+function priceCheck_(req, user) {
+  const ids = (Array.isArray(req.ids) ? req.ids : []).map(String).filter(Boolean);
+  if (!ids.length || ids.length > 500) return { ok: false, error: "bad_request" };
+  const s = SpreadsheetApp.getActive().getSheetByName(PRICE_SHEET);
+  if (!s || s.getLastRow() < 2) return { ok: false, error: "gone" };
+  const rows = s.getRange(2, 1, s.getLastRow() - 1, PRICE_COLS.length).getValues(), at = new Date().toISOString(), note = String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 300);
+  let n = 0;
+  rows.forEach(function (r) { if (ids.indexOf(String(r[0])) !== -1 && String(r[16]) === "open") { r[16] = "checked"; r[17] = String(user.name || "").slice(0, 60); r[18] = at; r[19] = note; n++; } });
+  if (!n) return { ok: false, error: "gone" };
+  s.getRange(2, 1, rows.length, PRICE_COLS.length).setValues(rows);
+  return Object.assign(priceList_(user, false), { checkedNow: n });
+}
+/** Run once from the script editor if the app says the hourly check isn't set up: Run > priceWatchSetup. */
+function priceWatchSetup() {
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "priceScan") ScriptApp.deleteTrigger(tr); });
+  ScriptApp.newTrigger("priceScan").timeBased().everyHours(1).create();
+  Logger.log(JSON.stringify(priceScan()));
+}
+
 /* ---- Company goal (Operations): each year's goal for each department and each month's Super, Minimum and Bonus goals,
    in cents, kept in Script Properties. Everyone who sees Revenue reads them; only an admin sets them. A month with no
    goals of its own uses the last month before it that has some (the app shows that). ---- */

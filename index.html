@@ -919,6 +919,39 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
   .rev-aside { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
 }
+/* Operations: price changes (admins), under the period: a red box with each changed job; a plain line when none */
+.price-warn { display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--radius); border: 1.5px solid color-mix(in srgb, var(--due) 55%, var(--line));
+  background: color-mix(in srgb, var(--due) 7%, var(--surface)); box-shadow: 0 6px 20px -12px color-mix(in srgb, var(--due) 60%, transparent); }
+.price-head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
+.price-head strong { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: .02em; text-transform: uppercase; color: var(--due); }
+.price-ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--due); color: #fff; font-weight: 900; font-size: 1.1rem; }
+.price-sub { margin: 2px 0 0; font-size: .8rem; color: var(--muted); } .price-sub.bad { color: var(--due); }
+.price-tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.price-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.price-card { display: grid; gap: 6px; padding: 11px 13px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--due); }
+.price-card.up { border-left-color: var(--ok); }
+.price-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: .84rem; }
+.price-inv { font-size: 1rem; user-select: all; } .price-client { font-weight: 700; }
+.price-dep { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); } .price-day { color: var(--muted); }
+.price-chip { font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.price-chip.mon { background: color-mix(in srgb, var(--soon) 15%, var(--surface)); color: var(--soon); }
+.price-chip.warn { background: color-mix(in srgb, var(--due) 14%, var(--surface)); color: var(--due); }
+.price-chip.new { background: var(--accent); color: #fff; margin-right: 6px; }
+.price-amt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; font-variant-numeric: tabular-nums; }
+.price-amt .was { color: var(--muted); text-decoration: line-through; } .price-amt .arrow { color: var(--muted); }
+.price-amt .now { font-family: var(--font-display); font-size: 1.45rem; }
+.price-diff { font-weight: 800; color: var(--due); } .price-card.up .price-diff { color: var(--ok); }
+.price-meta { margin: 0; font-size: .76rem; color: var(--muted); }
+.price-notes { display: grid; gap: 4px; padding: 7px 9px; border-radius: 8px; background: var(--bg); }
+.price-nh { font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.price-note { margin: 0; font-size: .84rem; white-space: pre-wrap; } .price-note.new { font-weight: 600; } .price-note.none { color: var(--muted); font-style: italic; }
+.price-acts { display: flex; justify-content: flex-end; } .price-wait { font-size: .74rem; color: var(--muted); }
+.price-more { justify-self: start; }
+.price-ok { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: .82rem; color: var(--muted); }
+.price-ok > span { color: var(--ok); font-weight: 600; } .price-ok.bad { color: var(--due); }
+.price-hist { display: grid; gap: 8px; max-height: 60vh; overflow: auto; }
+.price-hrow { display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: .86rem; } .price-hrow small { color: var(--muted); }
+@media (max-width: 640px) { .price-head { grid-template-columns: auto 1fr; } .price-tools { grid-column: 1 / -1; justify-content: flex-start; } .price-list { grid-template-columns: 1fr; } }
 /* Operations: the company goal. Meant to catch the eye first: deep VODA blue, gold, big white numbers; a shine across it
    and its bars filling when it's first drawn, and a slow gold glow (none for anyone who turned motion down). */
 .goal { --gold: #ffcc33; --gold2: #ff9f1a; --gw: rgba(255, 255, 255, .74);
@@ -6907,7 +6940,8 @@ async function openUsers() {
   const call = async (action, data, okMsg) => {
     err.textContent = "";
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(); return out; }
-    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it." : errText(e, "Nothing"); return null; }
+    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
+      : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
   const fmtAt = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "never";
   const row = u => {
@@ -6924,7 +6958,14 @@ async function openUsers() {
       : canPay ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "payroll", id: "pay-" + (u.username || u.id), "aria-pressed": String(hasPay),
           onclick: async () => { const out = await call("setPayroll", { id: u.id, on: !hasPay }, me ? "VODA Payroll is on for you: Leaderboard > VODA Payroll" : `${u.name} ${hasPay ? "no longer sees" : "now sees"} VODA Payroll`); if (out && me) refresh(true); } }, me ? "Turn on VODA Payroll for me" : "VODA Payroll")
       : h("span", { class: "user-meta", text: hasPay ? "Sees VODA Payroll" : "No VODA Payroll" });
-    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }), pay)
+    // Price changes: only admins switched on mark them checked; switched like Payroll
+    const hasPc = Array.isArray(u.access) && u.access.includes("pricecheck");
+    const canPc = apiLevel >= PRICE_API && u.status !== "invited" && (pcMe ? !me : !pcAny);
+    const pc = u.role !== "admin" || apiLevel < PRICE_API ? null
+      : canPc ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "pricecheck", id: "pc-" + (u.username || u.id), "aria-pressed": String(hasPc),
+          onclick: () => call("setPriceCheck", { id: u.id, on: !hasPc }, `${me ? "You" : u.name} ${hasPc ? "no longer check" + (me ? "" : "s") : "now check" + (me ? "" : "s")} price changes`) }, "Checks price changes")
+      : h("span", { class: "user-meta", text: hasPc ? "Checks price changes" : "Doesn't check price changes" });
+    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }), pay, pc)
       : apiLevel >= SUP_API ? accessChips(access, async (next, name, on) => {
           const out = await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
           if (!out) load();
@@ -6944,13 +6985,15 @@ async function openUsers() {
              h("button", { class: "btn small ghost" + (u.status === "active" ? " danger" : ""), type: "button", text: u.status === "active" ? "Turn off" : "Turn on",
                onclick: () => call("saveUser", { id: u.id, status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]));
   };
-  let payAny = false, payMe = false;   // does any admin see Payroll yet; do I
+  let payAny = false, payMe = false, pcAny = false, pcMe = false;   // does any admin see Payroll (check price changes) yet; do I
   const load = async () => {
     try {
       const out = await api("users");
       const users = (out.users || []).slice().sort((a, b) => (a.status === "invited") - (b.status === "invited") || String(a.name).localeCompare(String(b.name)));
       const pays = u => u.role === "admin" && u.status === "active" && Array.isArray(u.access) && u.access.includes("payroll");
       payAny = users.some(pays); payMe = users.some(u => session && u.id === session.id && pays(u));
+      const pcs = u => u.role === "admin" && u.status === "active" && Array.isArray(u.access) && u.access.includes("pricecheck");
+      pcAny = users.some(pcs); pcMe = users.some(u => session && u.id === session.id && pcs(u));
       listBox.replaceChildren(...users.map(row));
     } catch (e) { listBox.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Nothing") })); }
   };
@@ -10462,7 +10505,7 @@ const REV_CMP_YEARS = 5;                                // compare with up to 5 
 // a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
 const REV_DEPTS = [["r", "Restoration", "Rest."], ["c", "Cleaning", "Clean."], ["p", "Repairs", "Repairs"], ["o", "Other", "Other"]];
 const revThisYear = () => clockNow().getFullYear();
-function revForget() { revData = null; revOther = {}; store.del(K_REV); if (typeof goalsForget === "function") goalsForget(); }
+function revForget() { revData = null; revOther = {}; store.del(K_REV); if (typeof goalsForget === "function") goalsForget(); if (typeof priceForget === "function") priceForget(); }
 const revDoc = y => (y === revThisYear() ? revData : revOther[y]) || null;
 async function revLoad(y) {
   y = y || revThisYear();
@@ -10850,7 +10893,7 @@ function renderRevenue() {
   const goal = revGoalEl(r.from > today ? today : to, goalDays), slot = goal ? revGoalSlot() : "";
   if (slot === "side") { if (aside) aside.prepend(goal); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, goal); }
   box.classList.toggle("goal3", slot === "wide");
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, slot === "top" ? goal : null, r.from > today ? null : [tiles, tilesWas, strip], arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? goal : null, r.from > today ? null : [tiles, tilesWas, strip], arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [goal] : []));
   if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
 }
@@ -10860,6 +10903,109 @@ function revUnread(from, to) {
   if (!days) return out;
   for (let d = from < LB_FIRST_DAY ? LB_FIRST_DAY : from; d <= to; d = lbAddDays(d, 1)) if (!days[d] || !days[d][9]) out.push([d, d]);
   return out;
+}
+
+/* ---- Price changes (Operations, admins): a job's amount changed in Housecall Pro after the app saw it. The Google script
+   checks every hour (Check now: at once); each warning has the job, the old and new amount, when it was noticed and the
+   job's Private notes. Housecall Pro's API doesn't say who changed it: the notes, or the job's Activity feed in Housecall
+   Pro, do. An admin switched on for it (Settings > Users) marks each one checked, with what he found. ---- */
+const PRICE_API = 54;                                   // the Google script that watches the amounts
+let priceDoc = null, priceBusy = false, priceTried = 0, priceErr = "", priceMore = false;
+const priceMarked = new Set();                          // warnings whose visit day this window has had read again
+function priceForget() { priceDoc = null; priceTried = 0; priceMarked.clear(); }
+const priceOn = () => isAdmin() && apiLevel >= PRICE_API;
+/** The open warnings and the last ones checked (again after 5 minutes; Check now: scan). */
+async function priceLoad(scan) {
+  if (!session || !priceOn() || priceBusy) return;
+  if (!scan && (Date.now() - priceTried < 5 * 60e3)) return;
+  priceBusy = true; priceTried = Date.now();
+  if (scan && view.tab === "revenue") renderRevenue();
+  try {
+    const out = await api(scan ? "priceScan" : "priceList", {}, 170000);
+    priceDoc = out; priceErr = "";
+    // a changed job's visit day: read again here too (Operations' totals, the goal)
+    for (const w of out.open || []) {
+      if (priceMarked.has(w.id) || !w.day) continue;
+      priceMarked.add(w.id);
+      const doc = revDoc(Number(w.day.slice(0, 4)));
+      if (doc && doc.days[w.day]) { doc.days[w.day] = doc.days[w.day].slice(); doc.days[w.day][9] = 0; delete revAsked[w.day]; }
+    }
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { priceBusy = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    priceErr = errText(e, "The price check");
+  } finally {
+    priceBusy = false;
+    if (view.tab === "revenue") renderRevenue();
+  }
+}
+const priceCash = c => lbCash(c / 100);
+const priceChange = w => { const d = w.now - w.was; return `${d < 0 ? "−" : "+"}${lbCash(Math.abs(d) / 100)}${w.was ? ` (${d < 0 ? "−" : "+"}${Math.abs(Math.round(d / w.was * 1000) / 10)}%)` : ""}`; };
+const priceWhen = iso => (iso ? `${fmtWhen(iso).replace(/, \d{4}$/, "")}, ${fmtTime(new Date(iso))}` : "");
+/** One warning: the job, old → new, when, the Private notes, Checked. */
+function priceCard(w, may) {
+  const d = w.now - w.was, dep = REV_DEPTS.find(x => x[0] === w.dept) || REV_DEPTS[3];
+  return h("div", { class: "price-card" + (d < 0 ? " down" : " up"), "data-price": w.id, "data-inv": w.inv },
+    h("div", { class: "price-top" }, h("b", { class: "price-inv", text: `#${w.inv}` }), h("span", { class: "price-client", text: w.client || "(no name)" }),
+      h("span", { class: "price-dep" }, h("i", { class: "rev-dot " + dep[0] }), dep[1]), w.mon ? h("span", { class: "price-chip mon", text: "Monumental" }) : null,
+      w.day ? h("span", { class: "price-day", text: `visit ${lbDayText(w.day)}${w.day.slice(0, 4) !== String(clockNow().getFullYear()) ? `, ${w.day.slice(0, 4)}` : ""}` }) : null),
+    h("div", { class: "price-amt" }, h("span", { class: "was", text: priceCash(w.was) }), h("span", { class: "arrow", text: "→" }), h("b", { class: "now", text: priceCash(w.now) }),
+      h("span", { class: "price-diff", text: d === 0 ? "back to the first amount" : `${priceChange(w)} ${d < 0 ? "lower" : "higher"}` })),
+    h("p", { class: "price-meta", text: [`Noticed ${priceWhen(w.noticed)}`, w.changes > 1 ? `changed ${w.changes} times (last ${priceWhen(w.last)})` : "",
+      w.wasAt ? `the old amount was seen ${fmtWhen(w.wasAt)}` : "", w.ws ? `job ${w.ws}` : ""].filter(Boolean).join(" · ") }),
+    h("div", { class: "price-notes" }, h("small", { class: "price-nh", text: "Private notes" }),
+      w.newNote === "no" ? h("span", { class: "price-chip warn", text: "⚠ No new note explaining it" }) : null,
+      w.notes.length ? w.notes.slice().reverse().map(n => h("p", { class: "price-note" + (n.n ? " new" : "") }, n.n ? h("span", { class: "price-chip new", text: "New" }) : null, n.c))
+        : h("p", { class: "price-note none", text: "No Private notes on the job." })),
+    h("div", { class: "price-acts" }, may ? h("button", { class: "btn small primary", type: "button", "data-check": w.id, onclick: () => priceCheckDlg([w]) }, "✓ Checked")
+      : h("span", { class: "price-wait", text: "An admin switched on for it marks it checked (Settings › Users)." })));
+}
+/** Marking warnings checked: what was found (optional). */
+function priceCheckDlg(list) {
+  const err = h("p", { class: "dlg-err", role: "alert" }), note = h("textarea", { id: "priceNote", rows: "3", maxlength: "300", placeholder: "e.g. The adjuster asked for it; Anahi wrote it in the notes" });
+  openDialog(h("h2", { text: list.length === 1 ? `Checked: #${list[0].inv}` : `Mark ${list.length} price changes checked` }),
+    h("p", { class: "meta", text: list.length === 1 ? `${list[0].client || ""} · ${priceCash(list[0].was)} → ${priceCash(list[0].now)} (${priceChange(list[0])})` : list.map(w => `#${w.inv} ${priceChange(w)}`).join(" · ") }),
+    h("div", { class: "field" }, h("label", { for: "priceNote", text: "What you found (optional)" }), note), err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "priceCheckGo", text: "Mark checked", onclick: async ev => {
+        const b = ev.currentTarget; b.disabled = true; err.textContent = "";
+        try {
+          priceDoc = await api("priceCheck", { ids: list.map(w => w.id), note: note.value });
+          dlgDirty = false; closeDialog(); toast(list.length === 1 ? "Marked checked" : `${list.length} marked checked`); renderRevenue();
+        } catch (e) { err.textContent = e && e.error === "gone" ? "Already checked by someone else. Close and look again." : errText(e, "It"); b.disabled = false; }
+      } }))));
+}
+/** The last ones checked: who, when, what they found. */
+function priceHistoryDlg() {
+  const list = (priceDoc && priceDoc.checked) || [];
+  openDialog(h("h2", { text: "Price changes checked" }),
+    list.length ? h("div", { class: "price-hist", id: "priceHist" }, list.map(w => h("div", { class: "price-hrow" },
+      h("b", { text: `#${w.inv} ${w.client || ""}` }), h("span", { text: `${priceCash(w.was)} → ${priceCash(w.now)} (${priceChange(w)})${w.day ? ` · visit ${lbDayText(w.day)}` : ""}` }),
+      h("small", { text: `Checked by ${w.by || "?"}, ${priceWhen(w.at)}${w.note ? `: ${w.note}` : ""}` }))))
+      : h("p", { class: "meta", text: "None checked yet." }),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+}
+/** On Operations, under the period: the warnings (admins), or a line saying there are none. */
+function revPriceEl() {
+  if (!priceOn()) return null;
+  priceLoad(false);
+  const P = priceDoc;
+  if (!P) return priceErr ? h("p", { class: "price-ok bad", id: "priceOk", text: `Price changes: ${priceErr}` }) : null;
+  const when = P.scanAt ? `Housecall Pro looked at ${priceWhen(new Date(P.scanAt).toISOString())}` : "Not looked at yet";
+  const btn = (text, id, f, dis) => h("button", { class: "btn small" + (id === "priceNow" ? "" : " ghost"), type: "button", id, disabled: !!dis, onclick: f }, text);
+  const tools = [btn(priceBusy ? "Checking…" : "Check now", "priceNow", () => priceLoad(true), priceBusy || !P.connected), btn("History", "priceHistBtn", priceHistoryDlg)];
+  const setup = P.trigger === false ? h("p", { class: "price-sub", text: "The hourly check isn't running: in the Google Sheet, Extensions > Apps Script, pick priceWatchSetup and press Run once." }) : null;
+  const err = P.err ? h("p", { class: "price-sub bad", text: `Housecall Pro: ${revErrText({ error: P.err })}` }) : null;
+  if (!P.open.length) return h("div", { class: "price-ok", id: "priceOk" }, h("span", { text: `✓ No price changes to check · ${when}` }), ...tools, setup, err);
+  const n = P.open.length, shown = priceMore ? P.open : P.open.slice(0, 3);
+  return h("section", { class: "price-warn", id: "priceWarn", role: "alert" },
+    h("div", { class: "price-head" }, h("span", { class: "price-ic", "aria-hidden": "true", text: "!" }),
+      h("div", null, h("strong", { text: `${n} price change${n === 1 ? "" : "s"} in Housecall Pro to check` }),
+        h("p", { class: "price-sub", text: `Amounts changed after the app saw them. Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` })),
+      h("div", { class: "price-tools" }, ...tools, P.mayCheck && n > 1 ? btn(`Mark all ${n} checked`, "priceAll", () => priceCheckDlg(P.open)) : null)),
+    setup, err,
+    h("div", { class: "price-list", id: "priceList" }, shown.map(w => priceCard(w, P.mayCheck))),
+    n > 3 ? h("button", { class: "btn small ghost price-more", type: "button", id: "priceMore", onclick: () => { priceMore = !priceMore; renderRevenue(); } }, priceMore ? "Show fewer" : `Show all ${n}`) : null);
 }
 
 /* ---- Company goal (Operations, beside Accounts receivable): the year's goal for each department and what's left of it
