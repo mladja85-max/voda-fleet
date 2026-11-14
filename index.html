@@ -1449,24 +1449,24 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
 .lb-grid td > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .lb-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-left: 6px; }
 .lb-table tfoot th, .lb-table tfoot td { font-weight: 700; border-bottom: 0; }
-/* Totals: one look on every page, a VODA blue band with white text, so a total never blends with the subtotals (weeks,
-   months) above it. The same blue in the dark theme. A comparison inside a total stays a white chip. */
-:root { --total-bg: #1f4fbf; --total-ink: #ffffff; }
+/* Totals: one look on every page, light and calm: a pale blue row under a VODA blue line, the totals in VODA blue (bigger
+   on a wide screen), so a total never blends with the subtotals (weeks, months) above it. A comparison inside a total is
+   plain text under the number, no box. The dark theme uses its own blue. */
+:root { --total-bg: color-mix(in srgb, var(--accent) 8%, var(--surface)); --total-ink: var(--accent); --total-line: var(--accent); }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td), .mkt-row.tot {
-  background: var(--total-bg) !important; color: var(--total-ink) !important; border-top: 0 !important; border-bottom: 0 !important; font-weight: 700; }
+  background: var(--total-bg) !important; color: var(--total-ink) !important; border-top: 3px solid var(--total-line) !important; border-bottom: 0 !important; font-weight: 700; }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) { padding-top: 11px; padding-bottom: 11px; }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > th, .mkt-row.tot .mkt-label { text-transform: uppercase; letter-spacing: .06em; }
 @media (max-width: 600px) { :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > th, .mkt-row.tot .mkt-label { text-transform: none; letter-spacing: 0; } }
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) :is(small, em, b, strong, span), .mkt-row.tot :is(div, small, b, span, .mkt-label, .dash) { color: color-mix(in srgb, var(--total-ink) 86%, transparent) !important; }
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) > b, .mkt-row.tot .c-rev b { color: var(--total-ink) !important; }
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was { background: var(--surface) !important; color: var(--ink) !important; box-shadow: none; }
+@media (min-width: 761px) { :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > td { font-family: var(--font-display); font-size: 1.15rem; } }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) :is(span, b, strong), .mkt-row.tot :is(.mkt-label, .c-rev b) { color: var(--total-ink) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) small, .mkt-row.tot small { color: var(--muted) !important; font-family: var(--font-body); }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was { display: block; background: none !important; box-shadow: none !important; padding: 2px 0 0 !important; margin: 3px 0 0 auto !important; font-family: var(--font-body); font-size: .72rem; font-weight: 600; }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was :is(small, span, b:not(.rev-ytag)) { color: var(--muted) !important; }
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ch.up { color: var(--ok) !important; }
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ch.down { color: var(--due) !important; }
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ytag, :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ytag * { color: var(--ink) !important; }
-/* a change shown right on the band (not in a chip): light green / light red, readable on the blue */
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) .up:not(.rev-was *), .mkt-row.tot .up { color: #b7f5c9 !important; }
-:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) .down:not(.rev-was *), .mkt-row.tot .down { color: #ffc7bd !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ytag { background: var(--surface) !important; border-color: color-mix(in srgb, var(--accent) 25%, var(--line)) !important; color: var(--total-ink) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ytag * { color: var(--total-ink) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-ch.up, .mkt-row.tot .up { color: var(--ok) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-ch.down, .mkt-row.tot .down { color: var(--due) !important; }
 /* Status tables ranked: tap a heading to rank by it */
 .lb-rank thead th { padding: 0; }
 .lb-rank .lbs-sort { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 5px 6px; cursor: pointer; text-align: inherit; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
@@ -1978,12 +1978,6 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
 
   <div id="app" hidden>
     <nav class="views" id="views" aria-label="Sections">
-      <button type="button" class="view-btn" id="viewTrucks" aria-pressed="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4.5L22 12.5V16h-8"/><circle cx="6" cy="17.5" r="2"/><circle cx="18" cy="17.5" r="2"/></svg>Trucks
-      </button>
-      <button type="button" class="view-btn" id="viewSupplies" aria-pressed="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="4" width="15" height="18" rx="2"/><path d="M9 4V2.5h6V4"/><path d="M8.5 13l2.5 2.5 4.5-5"/></svg>Checklists<span class="vbadge" id="supBadge" hidden></span>
-      </button>
       <button type="button" class="view-btn" id="viewLeaderboard" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>Leaderboard
       </button>
@@ -2001,6 +1995,12 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
       </button>
       <button type="button" class="view-btn" id="viewRepairs" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Repairs Payroll
+      </button>
+      <button type="button" class="view-btn" id="viewTrucks" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4.5L22 12.5V16h-8"/><circle cx="6" cy="17.5" r="2"/><circle cx="18" cy="17.5" r="2"/></svg>Trucks
+      </button>
+      <button type="button" class="view-btn" id="viewSupplies" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="4" width="15" height="18" rx="2"/><path d="M9 4V2.5h6V4"/><path d="M8.5 13l2.5 2.5 4.5-5"/></svg>Checklists<span class="vbadge" id="supBadge" hidden></span>
       </button>
     </nav>
     <div id="fleetView">
