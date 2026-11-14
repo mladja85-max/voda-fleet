@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 51;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 52;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -3012,7 +3012,10 @@ function lbConfig_(c) {
       if (Array.isArray(w) && lbDay_(w[1])) was.push([lbDay_(w[0]), lbDay_(w[1])]);
     });
     if (was.length) team.was = was;
-    if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
+    if (t.noSale === true) {   // not on the technician sales goal (an estimator): from a month on (noSaleFrom), or always
+      team.noSale = true;
+      if (lbYm_(t.noSaleFrom)) team.noSaleFrom = lbYm_(t.noSaleFrom);
+    }
     if (LB_ROLES.indexOf(t.role) !== -1) team.role = t.role;
     out.teams.push(lbPerson_(team, t));
   });
