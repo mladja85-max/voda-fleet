@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 57;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 58;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -342,9 +342,6 @@ function doPost(e) {
       case "estSync":
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(estSync_(req, user));
-      case "estPut":
-        if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(withLock_(function () { return estPut_(req, user); }));
       case "goals":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(goalsRead_(req.year));
@@ -2846,7 +2843,7 @@ const LB_COLS = ["key", "json", "updatedAt", "by"];
 const LB_ACCESS = ["leaderboard", "leaderboard-import", "leaderboard-reviews"];   // sees the standings; types the numbers and sets up the teams; types the 5-star reviews
 const LB_UNITS = ["Cleaning", "Restoration"];
 // What each person does (Employees): pay rates are set by role and person under Payroll
-const LB_ROLES = ["assistant", "clean1", "clean2", "clean3", "rest1", "rest2", "rest3"];
+const LB_ROLES = ["assistant", "clean1", "clean2", "clean3", "rest1", "rest2", "rest3", "estimator", "supervisor"];
 const LB_PARTS = { t: 4, s: 5, r: 1 };   // a truck's day: jobs, work day, revenue, # of techs; a technician's day: up sale, add-on, rugs in plant, additional service, jobs; a team's 5-star reviews that day
 // One cell holds 50,000 characters. A month typed as day totals is about 7,000; typed by job (each job's revenue,
 // sales and crew) a busy month can pass 45,000, so the rest goes on in the cells after "by" (each starts with "~").
@@ -3995,17 +3992,20 @@ function repRead_(year) {
 const EST_SHEET = "Estimates";
 const EST_COLS = ["Estimate id", "Estimate #", "Created", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
-  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text"];
+  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro"];
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees the estimates he's in charge of; sees them all
-const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE";
+const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "2";   // 2: water/mold from tags (everything read again once)
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
 function estAll_(user) { return !!user && (user.role === "admin" || canSee_(user, "estimates-all")); }
 function estSheet_(create) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(EST_SHEET);
   if (!s && !create) return null;
-  if (!s) {
-    s = ss.insertSheet(EST_SHEET);
+  const fresh = !s;
+  if (fresh) s = ss.insertSheet(EST_SHEET);
+  // a new sheet has 26 columns (A to Z): room for every one
+  if (s.getMaxColumns() < EST_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), EST_COLS.length - s.getMaxColumns());
+  if (fresh) {
     s.getRange(1, 1, 1, EST_COLS.length).setValues([EST_COLS]).setFontWeight("bold");
     s.setFrozenRows(1);
     s.getRange("A:C").setNumberFormat("@");
@@ -4025,16 +4025,11 @@ function estRows_(s) {
   });
   return out;
 }
-/** Water damage or mold, from what the estimate says (its job type first, then its options' names, then the rest);
- *  "" when it can't tell (both, or neither). */
-function estKind_(type, names, text) {
-  const mold = /\bmou?ld|remediat|containment|antimicrob|mycotox|spores?\b/i, water = /\bwater|flood|leak|mitigat|dry(ing|[- ]?out)\b|dehu|extract|sewage|burst/i;
-  for (const t of [type, names, text]) {
-    const m = mold.test(t || ""), w = water.test(t || "");
-    if (m !== w) return m ? "mold" : "water";
-    if (m && w) return "";
-  }
-  return "";
+/** Water damage or mold, from the estimate's tags in Housecall Pro (e.g. "Water Damage Cleanup", "Mold Remediation");
+ *  "" when it has neither (or both). */
+function estKind_(tags) {
+  const m = tags.some(function (t) { return /mou?ld/i.test(t); }), w = tags.some(function (t) { return /water|flood/i.test(t); });
+  return m === w ? "" : m ? "mold" : "water";
 }
 /** An estimate from Housecall Pro as a row (what was typed in the app for it kept). */
 function estRow_(e, old, tz, at) {
@@ -4055,44 +4050,84 @@ function estRow_(e, old, tz, at) {
   const names = opts.map(function (o) { return String(o.name || ""); }).join(" · ");
   const notes = [].concat(Array.isArray(e.notes) ? e.notes : [], ...opts.map(function (o) { return Array.isArray(o.notes) ? o.notes : []; }))
     .map(function (n) { return String((n && n.content) || n || ""); }).join(" ");
-  const tags = [].concat(Array.isArray(e.tags) ? e.tags : []).map(function (t) { return typeof t === "object" && t ? t.name : String(t); }).join(" ");
-  const text = [String(e.description || ""), opts.map(function (o) { return String(o.message_from_pro || ""); }).join(" "), notes, tags].join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
-  const dept = revDept_(type) !== "o" ? revDept_(type) : revDept_(unit);   // no job type: its business unit
+  // its tags (the estimate's and each option's), once each
+  const tagList = [].concat(Array.isArray(e.tags) ? e.tags : [], ...opts.map(function (o) { return Array.isArray(o.tags) ? o.tags : []; }))
+    .map(function (t) { return String((typeof t === "object" && t ? t.name : t) || "").trim(); }).filter(function (t, i, a) { return t && a.indexOf(t) === i; });
+  const text = [String(e.description || ""), opts.map(function (o) { return String(o.message_from_pro || ""); }).join(" "), notes].join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
+  const kind = estKind_(tagList);
+  let dept = revDept_(type) !== "o" ? revDept_(type) : revDept_(unit);   // no job type: its business unit
+  if (dept === "o" && kind) dept = "r";   // a Water or Mold tag: Restoration
   const created = new Date(e.created_at || ""), day = isNaN(created.getTime()) ? "" : Utilities.formatDate(created, tz, "yyyy-MM-dd");
   const emps = (Array.isArray(e.assigned_employees) ? e.assigned_employees : []).map(function (x) { return [x.first_name, x.last_name].filter(Boolean).join(" "); }).filter(Boolean).join(", ");
   const a = e.address || {};
   const row = [String(e.id), String(e.estimate_number || ""), day, String(e.created_at || ""), hcpClient_(e), [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), dept,
-    dept === "r" ? estKind_(type, names, text) : "", type, status, by, decided, total / 100, approved / 100,
-    JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
-    "", "", "", "", "", text];
-  if (old) for (let c = 20; c <= 24; c++) row[c] = old[c];   // who's in charge, a kind picked by hand: kept
+    dept === "r" ? kind : "", type, status, by, decided, total / 100, approved / 100,
+    JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o), String(o.status || "").slice(0, 40)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
+    "", "", "", "", "", text, tagList.join(", "), opts.map(function (o) { return String(o.status || ""); }).filter(Boolean).join(", ")];
   return row;
 }
-/** A row as the app gets it. */
-function estOut_(r) {
+/** Who's in charge of an estimate: of the people assigned to it in Housecall Pro, the one with the highest role in
+ *  Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant; anyone else last); of equals, the first assigned. */
+const EST_RANK = { supervisor: 7, estimator: 6, clean3: 5, rest3: 5, clean2: 4, rest2: 4, clean1: 3, rest1: 3, assistant: 2 };
+const estNorm_ = function (v) { return String(v || "").toLowerCase().replace(/[^a-z' -]/g, "").replace(/\s+/g, " ").trim(); };
+/** Someone in Employees by his Housecall Pro name: the whole name (or a former name), else the first name when only
+ *  one person has it. */
+function estPerson_(name, roster) {
+  const n = estNorm_(name), first = n.split(" ")[0];
+  const names = function (p) { return [p.name].concat(p.aka || []).map(estNorm_); };
+  const whole = roster.filter(function (p) { return names(p).indexOf(n) !== -1; });
+  if (whole.length) return whole[0];
+  const byFirst = roster.filter(function (p) { return names(p).some(function (x) { return x.split(" ")[0] === first; }); });
+  return byFirst.length === 1 ? byFirst[0] : null;
+}
+/** Everyone in Employees (on the leaderboard or not). */
+function estRoster_() {
+  const s = SpreadsheetApp.getActive().getSheetByName(LB_SHEET), keys = lbKeys_(s);
+  const want = (keys || []).filter(function (k) { return k.key === "config"; });
+  if (!want.length) return [];
+  const cfg = lbConfig_(lbParse_(lbRowsAt_(s, want)[0].json));
+  return (cfg.teams || []).concat(cfg.reviewers || []);
+}
+function estLead_(emps, roster) {
+  let best = null;
+  String(emps || "").split(", ").filter(Boolean).forEach(function (n) {
+    const p = estPerson_(n, roster), r = p ? (EST_RANK[p.role] || 1) : 0;
+    if (!best || r > best.rank) best = { name: n, role: p && p.role ? p.role : "", rank: r };
+  });
+  return best;
+}
+/** Is the signed-in person this Housecall Pro name? His whole name, or his first name when the app has only that. */
+function estIsMe_(user, name) {
+  const u = estNorm_(user && user.name), n = estNorm_(name);
+  return !!u && !!n && (u === n || (u.indexOf(" ") === -1 && n.split(" ")[0] === u));
+}
+/** An estimate as the app gets it (inc: who's in charge). */
+function estOut_(r, lead) {
   let opts = [];
   try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
-  return { id: String(r[0]), n: String(r[1] || ""), day: String(r[2] || ""), client: String(r[4] || ""), addr: String(r[5] || ""), dept: String(r[6] || "o"), autoKind: String(r[7] || ""),
-    kind: String(r[22] || r[7] || ""), type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
+  return { id: String(r[0]), n: String(r[1] || ""), day: String(r[2] || ""), client: String(r[4] || ""), addr: String(r[5] || ""), dept: String(r[6] || "o"),
+    kind: String(r[6]) === "r" ? String(r[7] || "") : "", type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
     est: Math.round((Number(r[12]) || 0) * 100), appr: Math.round((Number(r[13]) || 0) * 100), opts: opts, ws: String(r[15] || ""), emps: String(r[16] || ""), lead: String(r[17] || ""),
-    who: String(r[20] || ""), whoName: String(r[21] || ""), typedBy: String(r[23] || "") };
+    inc: lead ? lead.name : "", incRole: lead ? lead.role : "", tags: String(r[26] || ""), hcpSt: String(r[27] || ""),
+    sent: String(r[9]) !== "open" || /sent|submit/i.test(String(r[27] || "")) };
 }
 /** A year's estimates (by the day each was created): all of them for an admin or someone who sees them all, else
- *  only the ones he's in charge of; and whether the first read from Housecall Pro is done. */
+ *  only the ones he's in charge of in Housecall Pro; and whether the first read from Housecall Pro is done. */
 function estRead_(year, user) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
-  const rows = estRows_(estSheet_(false)), all = estAll_(user), years = {};
+  const rows = estRows_(estSheet_(false)), all = estAll_(user), years = {}, roster = estRoster_();
   const list = [];
   Object.keys(rows).forEach(function (id) {
     const r = rows[id];
     if (r[2]) years[r[2].slice(0, 4)] = true;
     if (String(r[2]).indexOf(y + "-") !== 0) return;
-    if (!all && String(r[20]) !== String(user.id)) return;
-    list.push(estOut_(r));
+    const lead = estLead_(r[16], roster);
+    if (!all && !(lead && estIsMe_(user, lead.name))) return;
+    list.push(estOut_(r, lead));
   });
   const P = PropertiesService.getScriptProperties();
-  return { ok: true, year: Number(y), estimates: list, years: Object.keys(years).map(Number).sort(), all: all, readAt: Number(P.getProperty(EST_AT)) || 0,
-    done: P.getProperty(EST_DONE) === "yes", connected: !!hcpKey_() };
+  return { ok: true, year: Number(y), estimates: list, years: Object.keys(years).map(Number).sort(), all: all, me: String(user.name || ""), readAt: Number(P.getProperty(EST_AT)) || 0,
+    done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V, connected: !!hcpKey_() };
 }
 /** Reads estimates from Housecall Pro into the tab, EST_PAGES pages a call from req.page ({ next } is the page to ask
  *  for next, 0 when done; { by } goes back as sort). The first time (or full): newest first by the day created, back to
@@ -4101,7 +4136,7 @@ function estRead_(year, user) {
 function estSync_(req, user) {
   const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = Date.now();
   if (!hcpKey_()) return { ok: false, error: "no_key" };
-  const backfill = P.getProperty(EST_DONE) !== "yes" || req.full === true;
+  const backfill = P.getProperty(EST_DONE) !== "yes" || P.getProperty(EST_SCHEMA) !== EST_V || req.full === true;
   const dayOf = function (v) { const d = new Date(v || 0); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, "yyyy-MM-dd"); };
   const from = (new Date().getFullYear() - 1) + "-01-01", recent = dayOf(now - 120 * 864e5);
   const since = (Number(P.getProperty(EST_AT)) || 0) - 15 * 60e3;
@@ -4140,39 +4175,11 @@ function estSync_(req, user) {
       s.getRange(2, 1, all.length, 3).setNumberFormat("@");
       s.getRange(2, 1, all.length, EST_COLS.length).setValues(all);
     }
-    if (!next) { if (backfill) P.setProperty(EST_DONE, "yes"); P.setProperty(EST_AT, String(now)); }
-    return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" };
+    s.getRange(1, 1, 1, EST_COLS.length).setValues([EST_COLS]).setFontWeight("bold");
+    if (!next) { if (backfill) { P.setProperty(EST_DONE, "yes"); P.setProperty(EST_SCHEMA, EST_V); } P.setProperty(EST_AT, String(now)); }
+    return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
   });
 }
-/** Who's in charge of an estimate (an admin picks: any user, or nobody), and water or mold for a Restoration one (an
- *  admin or the person in charge). */
-function estPut_(req, user) {
-  const s = estSheet_(false), rows = estRows_(s), id = String(req.id || ""), r = rows[id];
-  if (!r) return { ok: false, error: "gone" };
-  const admin = user.role === "admin", mine = String(r[20]) === String(user.id);
-  if (req.who !== undefined) {
-    if (!admin) return { ok: false, error: "not_allowed" };
-    const who = String(req.who || "");
-    if (who) {
-      const u = readUsers_(usersSheet_()).filter(function (x) { return x.u.id === who; })[0];
-      if (!u) return { ok: false, error: "bad_request" };
-      r[20] = who; r[21] = String(u.u.name || "").slice(0, 60);
-    } else { r[20] = ""; r[21] = ""; }
-  }
-  if (req.kind !== undefined) {
-    if (!admin && !mine) return { ok: false, error: "not_allowed" };
-    if (["", "water", "mold"].indexOf(String(req.kind)) === -1 || String(r[6]) !== "r") return { ok: false, error: "bad_request" };
-    r[22] = String(req.kind);
-  }
-  r[23] = String(user.name || "").slice(0, 60); r[24] = new Date().toISOString();
-  // its row on the tab: found by id (the tab keeps its order)
-  const ids = s.getRange(2, 1, s.getLastRow() - 1, 1).getValues().map(function (x) { return String(x[0]); });
-  const i = ids.indexOf(id);
-  if (i === -1) return { ok: false, error: "gone" };
-  s.getRange(i + 2, 1, 1, EST_COLS.length).setValues([r]);
-  return { ok: true, estimate: estOut_(r) };
-}
-
 /* ---- Price changes: a job's amount changed in Housecall Pro after the app saw it (a discount, a reduction, more work,
    a job from months ago edited). Every hour the script asks Housecall Pro for the jobs changed most recently and compares
    each one's amount with the last one the app saw (the Price watch tab, else the Revenue tab's day). A difference is a

@@ -2158,6 +2158,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-rates em { font-style: normal; font-size: .7rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .est-line { color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .est-line .est-open { font-style: normal; color: var(--soon); font-weight: 600; }
+.est-ns { font-style: normal; color: var(--due); font-weight: 700; } .est-ptable td.est-ns { color: var(--due); }
 .est-bar { display: flex; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 4px; box-shadow: inset 0 0 0 1px var(--line); }
 .est-bar i { display: block; height: 100%; } .est-bar i.ok { background: var(--ok); } .est-bar i.op { background: color-mix(in srgb, var(--soon) 55%, transparent); }
 .est-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--muted); }
@@ -2185,24 +2186,22 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-day, .est-no { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .est-cl { display: grid; min-width: 0; } .est-cl b, .est-cl small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .est-cl small { color: var(--muted); font-size: .76rem; }
 .est-chip { font-style: normal; display: inline-flex; align-items: center; font-size: .8rem; font-weight: 600; white-space: nowrap; }
-.est-kind, .est-who { font: inherit; font-size: .84rem; padding: 5px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100%; min-width: 0; }
-.est-kind.u { border-color: var(--accent); border-style: dashed; color: var(--accent); font-weight: 600; }
-.est-kind.m { border-left: 4px solid var(--mold); } .est-kind.w { border-left: 4px solid var(--accent); }
 .est-amt { display: grid; text-align: right; font-variant-numeric: tabular-nums; } .est-amt small { color: var(--muted); font-size: .72rem; line-height: 1.25; }
 .est-st { display: grid; } .est-st b { font-size: .84rem; } .est-st small { color: var(--muted); font-size: .74rem; white-space: nowrap; }
 .est-st.ok b { color: var(--ok); } .est-st.no b { color: var(--due); } .est-st.cx b { color: var(--muted); text-decoration: line-through; }
 .est-st.op b { color: var(--soon); } .est-st.op.slow small { color: var(--soon); font-weight: 600; } .est-st.op.late small { color: var(--due); font-weight: 700; }
-.est-in { min-width: 0; } .est-in .muted { color: var(--muted); font-style: italic; }
+.est-in { min-width: 0; display: grid; } .est-in .muted { color: var(--muted); font-style: italic; }
+.est-in b, .est-in small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .est-in small { color: var(--muted); font-size: .74rem; }
+.est-grp { display: grid; justify-items: start; min-width: 0; } .est-notag { color: var(--muted); font-size: .7rem; white-space: nowrap; }
 @media (max-width: 1100px) { .est-row { grid-template-columns: 62px 54px minmax(0, 1fr) 124px 100px 118px 150px; gap: 10px; } }
 @media (max-width: 860px) {
   .est-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "cl amt" "meta st" "grp in"; gap: 4px 10px; padding: 10px 2px; }
   .est-row.est-hdr { display: none; }
   .est-cl { grid-area: cl; } .est-amt { grid-area: amt; } .est-st { grid-area: st; text-align: right; } .est-grp { grid-area: grp; } .est-in { grid-area: in; text-align: right; }
   .est-day { grid-area: meta; font-size: .78rem; } .est-no { grid-area: meta; font-size: .78rem; margin-left: 52px; }
-  .est-in .est-who { max-width: 170px; }
   .est-tiles, .est-tiles.two-rows { grid-template-columns: 1fr 1fr; } .est-tiles .est-all, .est-tiles.two-rows .est-all { grid-column: 1 / -1; grid-row: auto; }
   .est-filters .seg-btn { padding: 6px 8px; font-size: .82rem; gap: 4px; } .est-filters select { flex: 1 1 140px; }
-  .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(7), .est-ptable td:nth-child(7) { display: none; }
+  .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(8), .est-ptable td:nth-child(8) { display: none; }
 }
 @media (max-width: 420px) { .est-tile { padding: 9px 10px; } .est-rates { gap: 10px; } .est-ptable { font-size: .82rem; } .est-ptable td, .est-ptable th { padding: 6px 4px; } }
 /* Employees › Counts in: the lists someone counts in, quick picks */
@@ -2757,7 +2756,7 @@ function lbCleanConfig(c) {
 }
 /** What each person does (Employees). */
 const LB_ROLES = { assistant: "Assistant", clean1: "Cleaning tech 1", clean2: "Cleaning tech 2", clean3: "Cleaning tech 3",
-  rest1: "Restoration tech 1", rest2: "Restoration tech 2", rest3: "Restoration tech 3" };
+  rest1: "Restoration tech 1", rest2: "Restoration tech 2", rest3: "Restoration tech 3", estimator: "Estimator", supervisor: "Supervisor" };
 /** A reviews-only person by name (any capitals), or null. */
 const lbReviewerOf = (cfg, name) => ((cfg && cfg.reviewers) || []).find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 /** On the leaderboard at some point in month `key` (the stretch he's on now, or an earlier one). */
@@ -13622,15 +13621,18 @@ function mktImportDlg() {
 
 /* ======================= Estimates ======================= */
 const EST_API = 56;                                     // the Google script version with Estimates
+const EST_AUTO_API = 58;                                // ... and in charge from Housecall Pro, water/mold from its tags
 const K_EST = "voda.est1", K_EST_VIEW = "voda.estView1";
 const EST_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates: "Dates" };
 // the groups: Restoration as water damage or mold (and the ones not sorted yet), Cleaning, Repairs, Other
 const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
-const EST_ST = { all: "All", open: "Open", approved: "Approved", declined: "Declined", canceled: "Canceled" };
+const EST_ST = { all: "All", open: "Open", notsent: "Not sent", approved: "Approved", declined: "Declined", canceled: "Canceled" };
+/** Open and not sent to the client yet (Housecall Pro: Scheduled, In progress, Completed; not Sent). */
+const estNotSent = e => e.st === "open" && e.sent === false;
 let estData = store.get(K_EST);                         // this year's: { year, estimates, years, all, readAt, done, connected }
 let estOther = {};                                      // other years' (looked at in this window)
 const estLoading = {};
-let estErr = "", estOld = false, estUsers = null, estShown = 100;
+let estErr = "", estOld = false, estShown = 100;
 const estSync = { busy: false, n: 0, err: "", tried: 0 };
 const estView = Object.assign({ per: "month", off: 0, from: "", to: "", grp: "all", st: "all", who: "", q: "" }, store.get(K_EST_VIEW) || {});
 const estSaveView = () => store.set(K_EST_VIEW, { per: estView.per, from: estView.from, to: estView.to, grp: estView.grp, st: estView.st, who: estView.who });
@@ -13638,7 +13640,7 @@ const estCanSee = () => canSee("estimates") || canSee("estimates-all");
 const estGroup = e => (e.dept === "r" ? (e.kind === "water" ? "w" : e.kind === "mold" ? "m" : "u") : e.dept === "c" || e.dept === "p" ? e.dept : "o");
 /** What an estimate is worth: the option approved, else its largest. */
 const estValue = e => (e.st === "approved" ? e.appr || e.est : e.est);
-function estForget() { estData = null; estOther = {}; estUsers = null; store.del(K_EST); }
+function estForget() { estData = null; estOther = {}; store.del(K_EST); }
 const estDoc = y => (y === revThisYear() ? estData : estOther[y]) || null;
 async function estLoad(y) {
   y = y || revThisYear();
@@ -13646,7 +13648,7 @@ async function estLoad(y) {
   estLoading[y] = true;
   try {
     const out = await api("estimates", { year: y });
-    const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false };
+    const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, me: out.me || "", readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false };
     if (y === revThisYear()) { estData = doc; store.set(K_EST, doc); } else estOther[y] = doc;
     estErr = ""; estOld = false;
   } catch (e) {
@@ -13697,41 +13699,13 @@ function estAuto() {
   if (!d || !d.connected || estSync.busy || estSync.err || Date.now() - estSync.tried < 60e3) return;
   if (!d.done || Date.now() - d.readAt > 10 * 60e3) setTimeout(() => estRun(), 0);
 }
-/** Admins: the people who can be put in charge (everyone signed up and on). */
-async function estUsersLoad() {
-  if (estUsers || !isAdmin()) return;
-  estUsers = [];
-  try {
-    const out = await api("users");
-    estUsers = (out.users || []).filter(u => u.status === "active").sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  } catch (e) { /* the names already on the estimates still show */ }
-  if (view.tab === "estimates") renderEstimates();
-}
-const estSeesEst = u => u.role === "admin" || (Array.isArray(u.access) && (u.access.includes("estimates") || u.access.includes("estimates-all")));
-/** Who's in charge (an admin), or water or mold (an admin or whoever's in charge of it). */
-async function estPut(e, patch) {
-  const was = Object.assign({}, e);
-  if (patch.who !== undefined) { const u = (estUsers || []).find(x => x.id === patch.who); e.who = patch.who; e.whoName = u ? u.name : ""; }
-  if (patch.kind !== undefined) e.kind = patch.kind;
-  renderEstimates();
-  try {
-    const out = await api("estPut", Object.assign({ id: e.id }, patch));
-    Object.assign(e, out.estimate || {});
-    if (estData && estDoc(Number(e.day.slice(0, 4))) === estData) store.set(K_EST, estData);
-    toast(patch.who !== undefined ? (e.whoName ? `${e.whoName} is in charge of #${e.n}` : `Nobody in charge of #${e.n}`) : `#${e.n}: ${e.kind === "mold" ? "Mold" : "Water damage"}`);
-  } catch (err) {
-    Object.assign(e, was);
-    toast(errText(err, "Not saved"));
-  }
-  renderEstimates();
-}
 /** Added up: estimates (canceled ones left out), approved, open, declined; dollars estimated and approved. */
 function estStats(list) {
-  const s = { n: 0, appr: 0, open: 0, decl: 0, canc: 0, val: 0, apprVal: 0 };
+  const s = { n: 0, appr: 0, open: 0, ns: 0, decl: 0, canc: 0, val: 0, apprVal: 0 };
   for (const e of list) {
     if (e.st === "canceled") { s.canc++; continue; }
     s.n++; s.val += estValue(e);
-    if (e.st === "approved") { s.appr++; s.apprVal += estValue(e); } else if (e.st === "open") s.open++; else s.decl++;
+    if (e.st === "approved") { s.appr++; s.apprVal += estValue(e); } else if (e.st === "open") { s.open++; if (estNotSent(e)) s.ns++; } else s.decl++;
   }
   return s;
 }
@@ -13756,7 +13730,6 @@ function renderEstimates() {
     return;
   }
   const doc = estData, admin = isAdmin(), all = doc.all, today = lbToday();
-  if (admin) estUsersLoad();
   estAuto();
   // the period: Day / Week / Month / Year with ‹ ›, or Dates (From – To)
   const per = EST_PER[estView.per] ? estView.per : "month";
@@ -13802,10 +13775,11 @@ function renderEstimates() {
     !doc.connected ? (admin ? "Housecall Pro isn't connected. Settings › Housecall Pro." : "Housecall Pro isn't connected right now. An admin can check it in Settings › Housecall Pro.")
       : estSync.busy ? `Reading estimates from Housecall Pro${doc.done ? "" : " (the first time takes a minute or two)"}… ${estSync.n ? `${fmt(estSync.n)} so far` : ""}`
         : doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)}` : "Not read from Housecall Pro yet.",
-    all ? null : h("span", { text: " · the estimates you're in charge of" }));
+    all ? null : h("span", { text: ` · the estimates you're in charge of in Housecall Pro (as ${doc.me || "you"})` }));
+  const oldScript = apiLevel && apiLevel < EST_AUTO_API ? h("p", { class: "dlg-err", id: "estOldScript", text: "Update the Google script (paste the latest Code.gs, then Deploy › Manage deployments › New version) so Estimates reads who's in charge and the Water/Mold tags from Housecall Pro." }) : null;
   const err = estSync.err ? h("p", { class: "dlg-err", id: "estErr" }, estSync.err, " ",
     h("button", { class: "btn small", type: "button", onclick: () => { estSync.err = ""; estRun(); } }, "Try again")) : null;
-  const head = [title ? h("div", { class: "lb-top" }, title) : null, bar, status, err].filter(Boolean);
+  const head = [title ? h("div", { class: "lb-top" }, title) : null, bar, status, oldScript, err].filter(Boolean);
   const list = r.from > today ? [] : estFor(r.from, to);
   if (!list) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` })); return; }
   // the tiles: every estimate, then each group (approval rate by estimates and by dollars); a tile picks the list's group
@@ -13820,40 +13794,42 @@ function renderEstimates() {
       h("div", { class: "est-rates" },
         h("div", null, h("b", { text: estPct(s.appr, s.n) }), h("em", { text: "of estimates" })),
         h("div", null, h("b", { text: estPct(s.apprVal, s.val) }), h("em", { text: "of dollars" }))),
-      h("span", { class: "est-line" }, `${fmt(s.appr)} approved of ${fmt(s.n)}`, s.open ? h("i", { class: "est-open", text: ` · ${fmt(s.open)} open` }) : null),
+      h("span", { class: "est-line" }, `${fmt(s.appr)} approved of ${fmt(s.n)}`, s.open ? h("i", { class: "est-open", text: ` · ${fmt(s.open)} open` }) : null,
+        s.ns ? h("i", { class: "est-ns", text: ` · ${fmt(s.ns)} not sent` }) : null),
       h("span", { class: "est-line" }, `${lbMoney(s.apprVal / 100)} of ${lbMoney(s.val / 100)}`),
       h("div", { class: "est-bar", "aria-hidden": "true" }, h("i", { class: "ok", style: `width:${s.n ? s.appr / s.n * 100 : 0}%` }), h("i", { class: "op", style: `width:${s.n ? s.open / s.n * 100 : 0}%` })));
   };
   const tiles = h("div", { class: "est-tiles" + (groups.length > 3 ? " two-rows" : ""), id: "estTiles", style: `--c:${groups.length > 3 ? Math.ceil(groups.length / 2) : groups.length}` }, tile("all", "All estimates", list), groups.map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))));
-  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved).");
+  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage or Mold: the estimate's tag in Housecall Pro. In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant).");
   // by person (whoever sees them all)
   const inGrp = grp === "all" ? list : list.filter(e => grpOf.get(e) === grp);
   let people = null;
   if (all) {
     const by = new Map();
-    for (const e of inGrp) { const k = e.who || "-"; if (!by.has(k)) by.set(k, { name: e.who ? e.whoName || "?" : "Nobody yet", items: [] }); by.get(k).items.push(e); }
+    for (const e of inGrp) { const k = e.inc || "-"; if (!by.has(k)) by.set(k, { name: e.inc || "Nobody assigned in Housecall Pro", items: [] }); by.get(k).items.push(e); }
     const rows = [...by.entries()].map(([k, v]) => [k, v.name, estStats(v.items)]).sort((a, b) => (a[0] === "-") - (b[0] === "-") || b[2].n - a[2].n || a[1].localeCompare(b[1]));
     people = rows.length ? h("div", { class: "panel est-people" },
       h("h3", { text: `By person in charge${grp === "all" ? "" : ` · ${EST_GROUPS.find(g => g[0] === grp)[1]}`}` }),
       h("table", { class: "est-ptable", id: "estPeople" },
-        h("thead", null, h("tr", null, ["In charge", "Estimates", "Approved", "Open", "Rate", "Rate $", "Approved $"].map((t, i) => h("th", { class: i ? "num" : "", text: t })))),
+        h("thead", null, h("tr", null, ["In charge", "Estimates", "Approved", "Open", "Not sent", "Rate", "Rate $", "Approved $"].map((t, i) => h("th", { class: i ? "num" : "", text: t })))),
         h("tbody", null, rows.map(([k, name, s]) => h("tr", { "data-who": k, class: estView.who === k ? "on" : "", tabindex: "0", title: "Show only these",
           onclick: () => { estView.who = estView.who === k ? "" : k; redraw(); }, onkeydown: ev => { if (ev.key === "Enter") { estView.who = estView.who === k ? "" : k; redraw(); } } },
           h("td", { class: k === "-" ? "muted" : "" }, name), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }), h("td", { class: "num", text: fmt(s.open) }),
+          h("td", { class: "num" + (s.ns ? " est-ns" : ""), text: fmt(s.ns) }),
           h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) }), h("td", { class: "num", text: lbMoney(s.apprVal / 100) })))))) : null;
   }
   // the list: filters (status, person, search), then the estimates, newest first
   const who = all ? estView.who : "";
   const q = String(estView.q || "").trim().toLowerCase();
-  const stOk = e => estView.st === "all" || e.st === estView.st;
-  const whoOk = e => !who || (who === "-" ? !e.who : e.who === who);
-  const qOk = e => !q || [e.client, e.n, e.addr, e.type, e.emps, e.whoName, e.lead].some(v => String(v || "").toLowerCase().includes(q));
+  const stOk = e => estView.st === "all" || (estView.st === "notsent" ? estNotSent(e) : e.st === estView.st);
+  const whoOk = e => !who || (who === "-" ? !e.inc : e.inc === who);
+  const qOk = e => !q || [e.client, e.n, e.addr, e.type, e.emps, e.inc, e.lead, e.tags].some(v => String(v || "").toLowerCase().includes(q));
   const base = inGrp.filter(e => whoOk(e) && qOk(e));
   const shown = base.filter(stOk).sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
-  const stCount = k => (k === "all" ? base.length : base.filter(e => e.st === k).length);
+  const stCount = k => (k === "all" ? base.length : k === "notsent" ? base.filter(estNotSent).length : base.filter(e => e.st === k).length);
   const whoSel = all ? h("select", { id: "estWho", "aria-label": "In charge", onchange: ev => { estView.who = ev.target.value; redraw(); } },
-    h("option", { value: "", text: "Everyone" }), h("option", { value: "-", text: "Nobody in charge yet" }),
-    [...new Map(list.filter(e => e.who).map(e => [e.who, e.whoName || "?"])).entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => h("option", { value: id, text: name }))) : null;
+    h("option", { value: "", text: "Everyone" }), h("option", { value: "-", text: "Nobody assigned" }),
+    [...new Set(list.filter(e => e.inc).map(e => e.inc))].sort((a, b) => a.localeCompare(b)).map(name => h("option", { value: name, text: name }))) : null;
   if (whoSel) whoSel.value = [...whoSel.options].some(o => o.value === who) ? who : "";
   const search = h("input", { type: "search", id: "estFind", placeholder: "Client, estimate #, address…", value: estView.q || "", "aria-label": "Search estimates",
     oninput: ev => { estView.q = ev.target.value; estShown = 100; const at = ev.target.selectionStart; renderEstimates(); const f = $("estFind"); if (f) { f.focus(); try { f.setSelectionRange(at, at); } catch (e) { /* not a text box */ } } } });
@@ -13862,20 +13838,6 @@ function renderEstimates() {
       onclick: () => { estView.st = k; redraw(); } }, t, h("i", { class: "est-n", text: fmt(stCount(k)) })))),
     whoSel, search,
     grp !== "all" || who || q || estView.st !== "all" ? h("button", { class: "btn small ghost", type: "button", id: "estClear", onclick: () => { Object.assign(estView, { grp: "all", st: "all", who: "", q: "" }); redraw(); } }, "Show all") : null);
-  const pickWho = e => {
-    const sel = h("select", { class: "est-who", "aria-label": `In charge of estimate ${e.n}`, onchange: ev => estPut(e, { who: ev.target.value }) },
-      h("option", { value: "", text: "— Pick someone —" }),
-      (estUsers || []).map(u => h("option", { value: u.id, text: u.name + (estSeesEst(u) ? "" : " (can't see Estimates yet)") })));
-    if (e.who && !(estUsers || []).some(u => u.id === e.who)) sel.append(h("option", { value: e.who, text: e.whoName || "?" }));
-    sel.value = e.who || "";
-    return sel;
-  };
-  const pickKind = e => {
-    const sel = h("select", { class: "est-kind " + estGroup(e), "aria-label": `Water or mold, estimate ${e.n}`, onchange: ev => estPut(e, { kind: ev.target.value }) },
-      e.kind ? null : h("option", { value: "", text: "Not sorted" }), h("option", { value: "water", text: "Water damage" }), h("option", { value: "mold", text: "Mold" }));
-    sel.value = e.kind || "";
-    return sel;
-  };
   const grpName = e => { const g = estGroup(e); return g === "u" ? "Restoration" : EST_GROUPS.find(x => x[0] === g)[1]; };
   const stEl = e => {
     const dec = e.dec ? lbDayKey(new Date(e.dec)) : "";
@@ -13883,20 +13845,24 @@ function renderEstimates() {
     if (e.st === "declined") return h("span", { class: "est-st no" }, h("b", { text: "Declined" }), h("small", { text: [e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", dec ? estDayShort(dec, today) : ""].filter(Boolean).join(" · ") }));
     if (e.st === "canceled") return h("span", { class: "est-st cx" }, h("b", { text: "Canceled" }));
     const age = estAge(e.day, today);
-    return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : "") }, h("b", { text: "Open" }), h("small", { text: age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}` }));
+    const ns = estNotSent(e), days = age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}`;
+    return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title: e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "" }, h("b", { text: "Open" }),
+      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : null, days));
   };
   const row = e => {
-    const canKind = e.dept === "r" && (admin || (e.who && session && e.who === session.id));
-    const opts = Array.isArray(e.opts) ? e.opts : [];
+    const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);
     return h("div", { class: "est-row", "data-id": e.id, "data-g": estGroup(e), "data-st": e.st },
       h("span", { class: "est-day", text: estDayShort(e.day, today) }),
       h("span", { class: "est-no", text: `#${e.n}` }),
       h("span", { class: "est-cl" }, h("b", { text: e.client || "No name" }),
-        h("small", { text: [e.addr, e.emps ? `Housecall Pro: ${e.emps}` : ""].filter(Boolean).join(" · ") })),
-      h("span", { class: "est-grp" }, canKind ? pickKind(e) : h("i", { class: "est-chip " + estGroup(e) }, h("i", { class: "est-dot " + estGroup(e) }), grpName(e))),
+        h("small", { text: e.addr })),
+      // water or mold: the estimate's tag in Housecall Pro (locked); no tag: says so
+      h("span", { class: "est-grp", title: e.tags ? `Tags in Housecall Pro: ${e.tags}` : estGroup(e) === "u" ? "No Water or Mold tag on this estimate in Housecall Pro" : "" },
+        h("i", { class: "est-chip " + estGroup(e) }, h("i", { class: "est-dot " + estGroup(e) }), grpName(e)), estGroup(e) === "u" ? h("small", { class: "est-notag", text: "no Water/Mold tag" }) : null),
       h("span", { class: "est-amt" }, h("b", { text: lbMoney(estValue(e) / 100) }), opts.length > 1 ? h("small", { text: `${opts.length} options${e.st === "approved" && e.est !== e.appr ? `, up to ${lbMoney(e.est / 100)}` : ""}` }) : null),
       stEl(e),
-      h("span", { class: "est-in" }, admin ? pickWho(e) : h("span", { class: e.whoName ? "" : "muted", text: e.whoName || "Nobody yet" })));
+      h("span", { class: "est-in" }, e.inc ? h("b", { text: e.inc }) : h("span", { class: "muted", text: "Nobody assigned" }),
+        e.inc && (e.incRole || others.length) ? h("small", { text: [LB_ROLES[e.incRole] || "", others.length ? `with ${others.join(", ")}` : ""].filter(Boolean).join(" · ") }) : null));
   };
   const more = shown.length - estShown;
   const listBox = h("div", { class: "panel est-list" },
@@ -13905,7 +13871,8 @@ function renderEstimates() {
     shown.length ? h("div", { class: "est-rows", id: "estRows" },
       h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Created", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
       shown.slice(0, estShown).map(row))
-      : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : "No estimates created in these days." }),
+      : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates created in these days."
+        : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
   box.replaceChildren(...head, tiles, how, people, listBox);
 }
