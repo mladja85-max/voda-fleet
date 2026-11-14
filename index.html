@@ -457,6 +457,13 @@ dialog#dlg::backdrop { background: rgba(8, 12, 18, .55); }
 .dlg-xbar { position: sticky; top: 0; height: 0; z-index: 5; }
 .dlg-x { all: unset; box-sizing: border-box; position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; font-size: 1.05rem; font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); cursor: pointer; }
 .dlg-x:hover { color: var(--ink); border-color: var(--accent); }
+/* ‹ back to the window this one was opened from (Settings), in the top left corner; the title moves down under it */
+.dlg-back { all: unset; box-sizing: border-box; position: absolute; top: 10px; left: 10px; height: 36px; padding: 0 14px 0 10px; display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 999px; font-weight: 700; font-size: .9rem; color: var(--accent); background: var(--surface); border: 1px solid var(--line); cursor: pointer; max-width: calc(100% - 70px); }
+.dlg-back span:first-child { font-size: 1.3rem; line-height: 1; margin-top: -2px; }
+.dlg-back span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlg-back:hover { border-color: var(--accent); } .dlg-back:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+form.dlg.has-back { padding-top: 58px; }
 .dlg-x:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
 .dlg > h3:first-child { padding-right: 40px; }
 .dlg { padding: 18px; display: grid; gap: 14px; }
@@ -5168,7 +5175,7 @@ function signOut(message) {
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
-  if (dlg.open) dlg.close();
+  closeDialog();
   showSignIn(message);
 }
 
@@ -6067,12 +6074,47 @@ $("tmOnly").addEventListener("click", () => { view.tmOnly = !view.tmOnly; $("tmO
 
 /* ---------- dialogs ---------- */
 const dlg = $("dlg");
-// Every window closes with the ✕ at its top (it stays there while you scroll), a tap on the dark area around it, or
-// Esc / the phone's back gesture. A window with a Save button asks first if something was typed and not saved.
+// Every window closes with the ✕ at its top (it stays there while you scroll) or a tap on the dark area around it. Back
+// (a phone's Back, Esc, a mouse's back button, ‹ in its top corner) goes back to the window it was
+// opened from (Settings › Employees › Back: Settings); the first one closes. A window with a Save button asks first if
+// something was typed and not saved.
 let dlgDirty = false, dlgDownOut = false;
 const dlgHasSave = () => [...dlg.querySelectorAll(".btn.primary")].some(b => /^save\b/i.test(b.textContent.trim()));
-const dlgMayClose = () => !(dlgDirty && dlgHasSave()) || confirm("Close without saving what you typed?");
+const dlgMayClose = back => !(dlgDirty && dlgHasSave()) || confirm(back ? "Go back without saving what you typed?" : "Close without saving what you typed?");
 function dismissDialog() { if (dlg.open && dlgMayClose()) closeDialog(); }
+const dlgStack = [];                    // the windows under the one open: [{ form, top, dirty, title }]
+let dlgNoPush = false, dlgClosing = false;
+const dlgTitleOf = form => { const t = form && form.querySelector("h2, h3"); return t ? t.textContent.trim() : ""; };
+/** The ✕, and ‹ back to the window under this one. */
+const dlgBar = () => h("div", { class: "dlg-xbar" },
+  dlgStack.length ? h("button", { class: "dlg-back", type: "button", id: "dlgBack", "aria-label": `Back to ${dlgStack[dlgStack.length - 1].title}`, onclick: () => dlgBack() },
+    h("span", { "aria-hidden": "true", text: "‹" }), h("span", { text: dlgStack[dlgStack.length - 1].title })) : null,
+  h("button", { class: "dlg-x", type: "button", id: "dlgX", "aria-label": "Close", title: "Close", onclick: () => dismissDialog() }, "✕"));
+/** Back a window (the first one: closes, asking first if something typed isn't saved). A window that says how to draw
+ *  itself (Settings) is drawn fresh; any other comes back as it was left. */
+function dlgBack() {
+  if (!dlg.open) return;
+  if (!dlgStack.length) { dismissDialog(); return; }
+  if (!dlgMayClose(true)) return;
+  const s = dlgStack.pop();
+  if (s.form._rebuild) { dlgNoPush = true; try { s.form._rebuild(); } finally { dlgNoPush = false; } dlgDirty = false; }
+  else {
+    s.form.classList.toggle("has-back", dlgStack.length > 0);
+    dlg.replaceChildren(dlgBar(), s.form);
+    dlgDirty = s.dirty;
+  }
+  dlg.scrollTop = s.top;
+}
+// a phone's Back, Esc: back a window (never straight out of all of them)
+dlg.addEventListener("cancel", e => { e.preventDefault(); dlgBack(); });
+// a window the browser closed by itself (a phone's Back it wouldn't hold back): it stays open, back a window
+dlg.addEventListener("close", () => {
+  if (dlgClosing) { dlgClosing = false; return; }
+  if (dlg.querySelector(":scope > form.dlg")) { try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); } }
+});
+// a mouse's back button (or a keyboard's Back key) while a window is open: back a window, not away from the app
+for (const t of ["mousedown", "mouseup"]) window.addEventListener(t, e => { if (e.button === 3 && dlg.open) { e.preventDefault(); if (t === "mouseup") dlgBack(); } }, true);
+window.addEventListener("keydown", e => { if (dlg.open && (e.key === "BrowserBack" || (e.altKey && e.key === "ArrowLeft"))) { e.preventDefault(); dlgBack(); } }, true);
 /* ---- Totals say what each number is: on every total row (a table's, Marketing's) each number gets its column's
    heading over it, small, since the headings are far up the page by the time you get to the total. Done for any table
    drawn or redrawn anywhere (a page, a window). ---- */
@@ -6130,18 +6172,25 @@ new MutationObserver(() => { if (!totalsQueued) { totalsQueued = true; requestAn
 function openDialog(...content) {
   // On phones the form itself takes focus, so the keyboard stays down until a box is tapped.
   const touch = isTouch();
+  const typed = e => !(e.target && e.target.closest && e.target.closest("[data-nodirty]"));   // a search box isn't something typed to save
   const form = h("form", { class: "dlg", method: "dialog", tabindex: touch ? "-1" : null, autofocus: touch, onsubmit: e => e.preventDefault(),
-    oninput: () => { dlgDirty = true; }, onchange: () => { dlgDirty = true; } }, ...content);
-  const x = h("div", { class: "dlg-xbar" }, h("button", { class: "dlg-x", type: "button", id: "dlgX", "aria-label": "Close", title: "Close", onclick: () => dismissDialog() }, "✕"));
+    oninput: e => { if (typed(e)) dlgDirty = true; }, onchange: e => { if (typed(e)) dlgDirty = true; } }, ...content);
   const fresh = !dlg.open;   // a window drawn again while open (the checklist editor) keeps what was typed
-  if (fresh) dlgDirty = false;
+  // opened from another window (another title): that one waits under it for Back; drawn again (the same title): in place
+  const prev = fresh ? null : dlg.querySelector(":scope > form.dlg"), title = dlgTitleOf(form);
+  const pushed = !!prev && !dlgNoPush && !!dlgTitleOf(prev) && dlgTitleOf(prev) !== title;
+  if (fresh) dlgStack.length = 0;
+  if (pushed) dlgStack.push({ form: prev, top: dlg.scrollTop, dirty: dlgDirty, title: dlgTitleOf(prev) });
+  if (fresh || pushed) dlgDirty = false;
+  form.classList.toggle("has-back", dlgStack.length > 0);
   upgradeFiles(form);   // every file picker: a box to drop files on, or tap to choose
-  dlg.replaceChildren(x, form);
+  dlg.replaceChildren(dlgBar(), form);
   if (fresh) { try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); } dlg.scrollTop = 0; }
+  else if (pushed) dlg.scrollTop = 0;
   const a = document.activeElement;
   if (touch && a && dlg.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) form.focus({ preventScroll: true });
 }
-function closeDialog() { if (dlg.open) dlg.close(); dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; }
+function closeDialog() { if (dlg.open) { dlgClosing = true; dlg.close(); } dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; dlgStack.length = 0; }
 /* ---- file pickers: a box to drag files onto (a computer) or tap to choose (a phone); the input inside keeps its id and
    what it does, and the box shows the files chosen ---- */
 const DROP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>';
@@ -6219,7 +6268,6 @@ document.addEventListener("drop", e => {
 // a tap that starts and ends on the dark area around the window (not a drag that began inside it)
 dlg.addEventListener("pointerdown", e => { dlgDownOut = e.target === dlg; });
 dlg.addEventListener("click", e => { if (e.target === dlg && dlgDownOut) dismissDialog(); dlgDownOut = false; });
-dlg.addEventListener("cancel", e => { if (!dlgMayClose()) { e.preventDefault(); return; } dlg.replaceChildren(); dlgDirty = false; });
 
 function numField(labelText, id, value, hint, mode) {
   return h("div", { class: "field" },
@@ -6967,6 +7015,7 @@ function openSettings() {
         closeDialog(); signOut(n ? "Your changes will be sent when you sign back in." : "");
       }, "out")),
     h("p", { class: "st-ver", text: "VODA Hub" }));
+  dlg.querySelector(":scope > form.dlg")._rebuild = openSettings;   // Back to Settings: drawn fresh
   $("st-passrow").setAttribute("aria-expanded", "false");
 }
 
@@ -10056,7 +10105,7 @@ function openLbTeams() {
   };
   // search a name, a unit, Open all
   let empUnit = "all";
-  const find = h("input", { type: "search", id: "lbFind", placeholder: "Search a name", autocomplete: "off", "aria-label": "Search a name", oninput: () => filter() });
+  const find = h("input", { type: "search", id: "lbFind", placeholder: "Search a name", autocomplete: "off", "aria-label": "Search a name", "data-nodirty": "1", oninput: () => filter() });
   const unitBtn = (k, label) => h("button", { class: "seg-btn", type: "button", "data-unit": k, "aria-pressed": String(k === empUnit), onclick: e => {
     empUnit = k; for (const b of e.currentTarget.parentNode.children) b.setAttribute("aria-pressed", String(b.dataset.unit === k)); filter(); } }, label);
   const allBtn = h("button", { class: "btn small ghost", type: "button", id: "lbOpenAll", onclick: () => {
