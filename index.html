@@ -13772,7 +13772,7 @@ function renderEstimates() {
   const readBtn = h("button", { class: "btn small", type: "button", id: "estReadBtn", disabled: estSync.busy || !doc.connected,
     title: "Read what changed in Housecall Pro", onclick: () => { estRun(); } }, "Read again");
   const fullBtn = admin ? h("button", { class: "btn small ghost", type: "button", id: "estFullBtn", disabled: estSync.busy || !doc.connected,
-    title: "Read every estimate since January 1 of last year again (a minute or two)", onclick: () => { estRun(true); } }, "Read all") : null;
+    title: "Read every estimate in Housecall Pro again (a few minutes)", onclick: () => { estRun(true); } }, "Read all") : null;
   const bar = h("div", { class: "lb-bar rev-bar-top" },
     lbSeg(Object.entries(EST_PER), per, k => {
       if (k === "dates" && per !== "dates") { estView.from = r.from; estView.to = to; }   // Dates starts from the period on screen
@@ -13791,7 +13791,7 @@ function renderEstimates() {
     h("div", { class: "rev-tools" }, readBtn, fullBtn));
   const status = h("p", { class: "lb-sub rev-status" + (estSync.busy ? " busy" : ""), id: "estStatus", role: "status" },
     !doc.connected ? (admin ? "Housecall Pro isn't connected. Settings › Housecall Pro." : "Housecall Pro isn't connected right now. An admin can check it in Settings › Housecall Pro.")
-      : estSync.busy ? `Reading estimates from Housecall Pro${doc.done ? "" : " (the first time takes a minute or two)"}… ${estSync.n ? `${fmt(estSync.n)} so far` : ""}`
+      : estSync.busy ? `Reading estimates from Housecall Pro${doc.done ? "" : " (every estimate it has: the first time takes a few minutes)"}… ${estSync.n ? `${fmt(estSync.n)} so far` : ""}`
         : doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)}` : "Not read from Housecall Pro yet.",
     all ? null : h("span", { text: ` · the estimates you're in charge of in Housecall Pro (as ${doc.me || "you"})` }));
   const oldScript = apiLevel && apiLevel < EST_AUTO_API ? h("p", { class: "dlg-err", id: "estOldScript", text: "Update the Google script (paste the latest Code.gs, then Deploy › Manage deployments › New version) so Estimates reads who's in charge and the Water/Mold tags from Housecall Pro." }) : null;
@@ -13800,6 +13800,14 @@ function renderEstimates() {
   const head = [title ? h("div", { class: "lb-top" }, title) : null, bar, status, oldScript, err].filter(Boolean);
   const list = r.from > today ? [] : estFor(r.from, to);
   if (!list) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` })); return; }
+  // nothing created in these days: says so (and where Housecall Pro's estimates start) instead of tiles full of zeros
+  if (!list.length && doc.done && !estSync.busy) {
+    const first = (doc.years || []).length ? Math.min(...doc.years) : 0;
+    box.replaceChildren(...head, h("div", { class: "panel est-empty", id: "estEmpty" },
+      h("p", null, h("b", { text: `No estimates created in ${r.label}.` }),
+        first && Number(r.to.slice(0, 4)) < first ? ` Housecall Pro's estimates start in ${first}.` : r.from > today ? "" : " Every estimate in Housecall Pro is read; none were created in these days.")));
+    return;
+  }
   // the tiles: every estimate, then each group (approval rate by estimates and by dollars); a tile picks the list's group
   const grpOf = new Map(list.map(e => [e, estGroup(e)]));
   const groups = EST_GROUPS.filter(([k]) => !["u", "o"].includes(k) || list.some(e => grpOf.get(e) === k));

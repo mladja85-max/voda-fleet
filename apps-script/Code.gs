@@ -3994,7 +3994,7 @@ const EST_COLS = ["Estimate id", "Estimate #", "Created", "Created at", "Client"
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
   "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro"];
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees the estimates he's in charge of; sees them all
-const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "2";   // 2: water/mold from tags (everything read again once)
+const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "3";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
 function estAll_(user) { return !!user && (user.role === "admin" || canSee_(user, "estimates-all")); }
 function estSheet_(create) {
@@ -4012,7 +4012,8 @@ function estSheet_(create) {
   }
   return s;
 }
-function estRows_(s) {
+/** Every estimate on the tab by id; at (if given): each one's row number on the tab. */
+function estRows_(s, at) {
   const out = {};
   if (!s || s.getLastRow() < 2) return out;
   const tz = Session.getScriptTimeZone();
@@ -4022,6 +4023,7 @@ function estRows_(s) {
     r[2] = repDay_(r[2], tz);
     [3, 11, 18, 19, 24].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
     out[id] = r;
+    if (at) at[id] = i + 2;
   });
   return out;
 }
@@ -4131,15 +4133,15 @@ function estRead_(year, user) {
     done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V, connected: !!hcpKey_() };
 }
 /** Reads estimates from Housecall Pro into the tab, EST_PAGES pages a call from req.page ({ next } is the page to ask
- *  for next, 0 when done; { by } goes back as sort). The first time (or full): newest first by the day created, back to
- *  January 1 of last year. After that: the ones changed since the last read (a quarter hour's overlap), the most
+ *  for next, 0 when done; { by } goes back as sort). The first time (or full): newest first by the day created, every
+ *  estimate Housecall Pro has. After that: the ones changed since the last read (a quarter hour's overlap), the most
  *  recently changed first; if Housecall Pro doesn't sort them that way, every estimate created in the last 120 days. */
 function estSync_(req, user) {
   const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = Date.now();
   if (!hcpKey_()) return { ok: false, error: "no_key" };
   const backfill = P.getProperty(EST_DONE) !== "yes" || P.getProperty(EST_SCHEMA) !== EST_V || req.full === true;
   const dayOf = function (v) { const d = new Date(v || 0); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, "yyyy-MM-dd"); };
-  const from = (new Date().getFullYear() - 1) + "-01-01", recent = dayOf(now - 120 * 864e5);
+  const recent = dayOf(now - 120 * 864e5);
   const since = (Number(P.getProperty(EST_AT)) || 0) - 15 * 60e3;
   let by = backfill || req.sort === "created_at" ? "created_at" : "updated_at";   // (req.by is the signed-in person)
   let page = Math.max(1, Math.floor(Number(req.page) || 1)), next = 0;
@@ -4154,29 +4156,46 @@ function estSync_(req, user) {
     let older = false;
     for (let i = 0; i < list.length && !older; i++) {
       const e = list[i];
-      older = by === "created_at" ? dayOf(e.created_at) < (backfill ? from : recent) : (Date.parse(e.updated_at) || 0) < since;
+      older = by === "created_at" ? !backfill && dayOf(e.created_at) < recent : (Date.parse(e.updated_at) || 0) < since;
       if (!older) got.push(e);
     }
     next = older || !list.length || page >= (Number(r.data && r.data.total_pages) || 1) ? 0 : page + 1;
     if (!next) break;
   }
   return withLock_(function () {
-    const s = estSheet_(true), rows = estRows_(s), at = new Date(now).toISOString();
+    // only what changed is written: an estimate already on the tab in its own row, a new one added at the bottom; many
+    // changed (Read all) or the first read finished: the whole tab, newest first
+    const s = estSheet_(true), rowAt = {}, rows = estRows_(s, rowAt), at = new Date(now).toISOString(), W = EST_COLS.length;
+    const upd = {}, add = {};
     let changed = 0;
     got.forEach(function (e) {
       if (!e || !e.id) return;
-      const row = estRow_(e, rows[String(e.id)], tz, at);
+      const id = String(e.id), row = estRow_(e, rows[id], tz, at);
       if (!row[2]) return;
-      rows[String(e.id)] = row; changed++;
+      rows[id] = row; changed++;
+      if (rowAt[id]) upd[id] = row; else add[id] = row;
     });
-    const all = Object.keys(rows).map(function (id) { return rows[id]; })
-      .sort(function (a, b) { return a[2] < b[2] ? 1 : a[2] > b[2] ? -1 : String(a[1]) < String(b[1]) ? 1 : -1; });
-    if (all.length) {
-      if (s.getMaxRows() < all.length + 1) s.insertRowsAfter(s.getMaxRows(), all.length + 101 - s.getMaxRows());
-      s.getRange(2, 1, all.length, 3).setNumberFormat("@");
-      s.getRange(2, 1, all.length, EST_COLS.length).setValues(all);
+    const nUpd = Object.keys(upd).length, adds = Object.keys(add).map(function (id) { return add[id]; });
+    if ((!next && backfill) || nUpd > 40) {
+      const all = Object.keys(rows).map(function (id) { return rows[id]; })
+        .sort(function (a, b) { return a[2] < b[2] ? 1 : a[2] > b[2] ? -1 : String(a[1]) < String(b[1]) ? 1 : -1; });
+      if (all.length) {
+        if (s.getMaxRows() < all.length + 1) s.insertRowsAfter(s.getMaxRows(), all.length + 101 - s.getMaxRows());
+        s.getRange(2, 1, all.length, 3).setNumberFormat("@");
+        s.getRange(2, 1, all.length, W).setValues(all);
+      }
+    } else {
+      Object.keys(upd).forEach(function (id) { s.getRange(rowAt[id], 1, 1, W).setValues([upd[id]]); });
+      if (adds.length) {
+        const first = Math.max(2, s.getLastRow() + 1);
+        if (s.getMaxRows() < first + adds.length - 1) s.insertRowsAfter(s.getMaxRows(), first + adds.length + 100 - s.getMaxRows());
+        s.getRange(first, 1, adds.length, 3).setNumberFormat("@");
+        s.getRange(first, 1, adds.length, W).setValues(adds);
+        const all = s.getRange(2, 1, s.getLastRow() - 1, W);
+        if (typeof all.sort === "function") all.sort([{ column: 3, ascending: false }, { column: 2, ascending: false }]);   // newest at the top again
+      }
     }
-    s.getRange(1, 1, 1, EST_COLS.length).setValues([EST_COLS]).setFontWeight("bold");
+    s.getRange(1, 1, 1, W).setValues([EST_COLS]).setFontWeight("bold");
     if (!next) { if (backfill) { P.setProperty(EST_DONE, "yes"); P.setProperty(EST_SCHEMA, EST_V); } P.setProperty(EST_AT, String(now)); }
     return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
   });
