@@ -938,7 +938,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-dhead .ar { color: var(--due); } .rev-ar-dhead .col { color: var(--accent); }
 .rev-ar-deps button .nm { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .rev-ar-deps button .col { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
-.rev-ar-deps button > b { text-align: right; }
+.rev-ar-deps button > b { text-align: right; color: var(--due); }
 .rev-ar-deps button { all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr 6.2em 6.2em; column-gap: 8px; align-items: baseline; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: .86rem; font-weight: 600; }
 .rev-ar-deps button:last-child { border-bottom: 0; }
 .rev-ar-deps button:hover, .rev-ar-deps button:focus-visible { background: var(--accent-soft); }
@@ -1449,6 +1449,24 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
 .lb-grid td > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .lb-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-left: 6px; }
 .lb-table tfoot th, .lb-table tfoot td { font-weight: 700; border-bottom: 0; }
+/* Totals: one look on every page, a VODA blue band with white text, so a total never blends with the subtotals (weeks,
+   months) above it. The same blue in the dark theme. A comparison inside a total stays a white chip. */
+:root { --total-bg: #1f4fbf; --total-ink: #ffffff; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td), .mkt-row.tot {
+  background: var(--total-bg) !important; color: var(--total-ink) !important; border-top: 0 !important; border-bottom: 0 !important; font-weight: 700; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) { padding-top: 11px; padding-bottom: 11px; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > th, .mkt-row.tot .mkt-label { text-transform: uppercase; letter-spacing: .06em; }
+@media (max-width: 600px) { :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > th, .mkt-row.tot .mkt-label { text-transform: none; letter-spacing: 0; } }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) :is(small, em, b, strong, span), .mkt-row.tot :is(div, small, b, span, .mkt-label, .dash) { color: color-mix(in srgb, var(--total-ink) 86%, transparent) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) > b, .mkt-row.tot .c-rev b { color: var(--total-ink) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was { background: var(--surface) !important; color: var(--ink) !important; box-shadow: none; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was :is(small, span, b:not(.rev-ytag)) { color: var(--muted) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ch.up { color: var(--ok) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ch.down { color: var(--due) !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ytag, :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was .rev-ytag * { color: var(--ink) !important; }
+/* a change shown right on the band (not in a chip): light green / light red, readable on the blue */
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) .up:not(.rev-was *), .mkt-row.tot .up { color: #b7f5c9 !important; }
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) .down:not(.rev-was *), .mkt-row.tot .down { color: #ffc7bd !important; }
 /* Status tables ranked: tap a heading to rank by it */
 .lb-rank thead th { padding: 0; }
 .lb-rank .lbs-sort { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 5px 6px; cursor: pointer; text-align: inherit; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
