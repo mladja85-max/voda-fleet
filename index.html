@@ -2205,6 +2205,21 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(7), .est-ptable td:nth-child(7) { display: none; }
 }
 @media (max-width: 420px) { .est-tile { padding: 9px 10px; } .est-rates { gap: 10px; } .est-ptable { font-size: .82rem; } .est-ptable td, .est-ptable th { padding: 6px 4px; } }
+/* Employees › Counts in: the lists someone counts in, quick picks */
+.lb-cnt-box { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.lb-cnt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; justify-content: space-between; }
+.lb-cnt-head > b { font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.lb-cnt-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.lb-cnt-box .lb-days { margin: 0; }
+.lb-cnt-box .check small { color: var(--muted); font-weight: 500; }
+.lb-cnt-box input:disabled + span { opacity: .75; }
+.lb-rvrow > .lb-body > .lb-cnt-box { flex: 1 1 100%; min-width: 0; }
+.lb-rvrow .lb-cnt-box input[type="checkbox"] { width: auto; padding: 0; border: 0; background: none; flex: none; }
+/* a long line (Counts nowhere, a long role) never makes the card wider than the window: the role and the chip shorten */
+.lb-team, .lb-rvrow { grid-template-columns: minmax(0, 1fr); }
+.lb-sum .lb-sn { min-width: min(7.5em, 40%); }   /* the name shortens last */
+.lb-sum .lb-sr { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lb-sum .lb-se { flex: 0 2 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -2674,6 +2689,8 @@ const lbEmail = v => { const s = String(v == null ? "" : v).trim(); return s.len
 const lbPhone = v => { const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return s.length <= 25 && /^\+?[0-9(][0-9 ().-]*$/.test(s) && s.replace(/\D/g, "").length >= 7 ? s : ""; };
 /** A person's email, phone and former names (aka: what he was called before a rename), cleaned onto `p`. */
 function lbPersonMore(p, raw) {
+  // left out of 5-star reviews / Production (Counts in): from a month on, or always
+  for (const k of ["noRv", "noProd"]) if (raw && raw[k] === true) { p[k] = true; if (lbYm(raw[k + "From"])) p[k + "From"] = lbYm(raw[k + "From"]); }
   if (lbEmail(raw && raw.email)) p.email = lbEmail(raw.email);
   if (lbPhone(raw && raw.phone)) p.phone = lbPhone(raw.phone);
   const aka = [];
@@ -2761,12 +2778,19 @@ const lbOnBy = (t, key, today) => { const end = today && today < lbLastDay(key) 
 const lbCurrent = (t, key) => !t.left || t.left.slice(0, 7) >= key;
 /** The employees who aren't on the leaderboard in month `key`: the people never on it (helpers), and anyone who's off
  *  it that month and still with the company. Never ranked; their reviews and the jobs they help on still count. */
-const lbOffBoard = (cfg, key) => cfg.reviewers.concat(cfg.teams.filter(t => !lbOnBoard(t, key) && lbCurrent(t, key)).map(t => Object.assign({ name: t.name, unit: t.unit }, t.role ? { role: t.role } : {})));
+const lbOffBoard = (cfg, key) => cfg.reviewers.concat(cfg.teams.filter(t => !lbOnBoard(t, key) && lbCurrent(t, key)).map(t => Object.assign({ name: t.name, unit: t.unit }, t.role ? { role: t.role } : {},
+  Object.fromEntries(["noRv", "noRvFrom", "noProd", "noProdFrom"].filter(k => t[k]).map(k => [k, t[k]])))));
 /** The roster entry for a name (any capitals), or null. */
 const lbTeamOf = (cfg, name) => cfg.teams.find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
 /** Is he an estimator (no sales goal, not ranked in technician sales) in this month ("2026-03")? Ticked with a month:
  *  from that month on (before it he was a technician); ticked without one: always. */
 const lbEst = (t, key) => !!(t && t.noSale && (!t.noSaleFrom || !key || key >= t.noSaleFrom));
+/** Left out of a list in month `key` (Employees › Counts in): noSale (technician sales), noRv (5-star reviews: not
+ *  listed there, nor to type in Production), noProd (Production: not someone to pick to work with a truck); with a
+ *  month: from that month on; without one: always. */
+const lbOut = (t, k, key) => !!(t && t[k] && (!t[k + "From"] || !key || key >= t[k + "From"]));
+const LB_CNT = { sales: "noSale", rv: "noRv", prod: "noProd" };   // Counts in: each tick's setting
+const LB_CNT_API = 57;                                  // the Google script that keeps reviews and Production left out
 /** The unit a team is ranked in that month ("2026-11"), or "" when it isn't on the board then. */
 function lbUnitIn(cfg, name, key) { const t = lbTeamOf(cfg, name); return t && lbOnBoard(t, key) ? t.unit : ""; }
 /** The teams on the board that month, Cleaning first, in roster order. */
@@ -9232,7 +9256,7 @@ const LB_JOB_SALES = ["Up sale", "Add-on", "Rugs", "Additional"];
  *  kind picked (Technician: a tech role; Assistant: the assistant role; no role yet: both), never the truck himself. */
 function lbCrewChoices(key, owner, kind, taken) {
   const cfg = lbCfg();
-  const all = cfg.teams.filter(t => lbOnBoard(t, key)).concat(lbOffBoard(cfg, key));
+  const all = cfg.teams.filter(t => lbOnBoard(t, key)).concat(lbOffBoard(cfg, key).filter(p => !lbOut(p, "noProd", key)));
   const fits = p => (kind === "assistant" ? p.role === "assistant" : p.role && p.role !== "assistant") || !p.role;
   return all.filter(p => p.name.toLowerCase() !== owner.toLowerCase() && !taken.some(n => n.toLowerCase() === p.name.toLowerCase()) && fits(p))
     .sort((a, b) => !a.role - !b.role || a.name.localeCompare(b.name));
@@ -9507,9 +9531,12 @@ function lbReviewsEl(day) {
   const base = (lbData.months[key] || {}).reviews || {};
   // the board, then the reviews-only people (helpers), then anyone else with reviews that day (so they can be cleared)
   const cfg = lbCfg();
-  const teams = lbTeamsFor(key, Object.keys(d.r || {}).filter(n => lbEntry(d.r[n], LB_REVIEW.length).length).concat(Object.keys(base).filter(n => lbVal(base[n])))
-    .filter(n => !lbOffBoard(cfg, key).some(p => p.name.toLowerCase() === n.toLowerCase())));
-  teams.splice(teams.findIndex(t => t.off) < 0 ? teams.length : teams.findIndex(t => t.off), 0, ...lbOffBoard(cfg, key).map(r => ({ name: r.name, unit: r.unit, reviewer: true })));
+  const typed = Object.keys(d.r || {}).filter(n => lbEntry(d.r[n], LB_REVIEW.length).length).concat(Object.keys(base).filter(n => lbVal(base[n])));
+  const has = n => typed.some(x => x.toLowerCase() === n.toLowerCase());
+  const offRv = lbOffBoard(cfg, key).filter(p => has(p.name) || !lbOut(p, "noRv", key));
+  const teams = lbTeamsFor(key, typed.filter(n => !lbOffBoard(cfg, key).some(p => p.name.toLowerCase() === n.toLowerCase())))
+    .filter(t => has(t.name) || !lbOut(lbTeamOf(cfg, t.name), "noRv", key));
+  teams.splice(teams.findIndex(t => t.off) < 0 ? teams.length : teams.findIndex(t => t.off), 0, ...offRv.map(r => ({ name: r.name, unit: r.unit, reviewer: true })));
   // a total typed for the whole month before reviews were typed by day: kept, and can be changed or cleared here
   const baseBox = t => lbVal(base[t.name]) ? h("label", { class: "lb-rv-base", "data-team": t.name },
     h("span", null, h("b", { text: `${lbMonthLong(month)} total typed earlier` }), h("small", { text: `From before reviews were typed by day (the sheet's monthly count). It counts on top of the days, so clear it if those reviews are also typed on their day.` })),
@@ -9979,7 +10006,7 @@ function lbPerformanceEl() {
   const rvOnly = lbOffBoard(cfg, key).map(r => ({ name: r.name, unit: r.unit, reviewer: true, note: "not ranked" }))
     .filter(r => !board.some(t => t.name === r.name) && (lbReviewerOf(cfg, r.name) && !lbPast() || (custom ? spanRv(r.name) : ytdRv(r.name)) > 0));
   const rvOf = t => (!t.reviewer ? R(t).reviews : custom ? spanRv(t.name) : per === "ytd" ? ytdRv(t.name) : monthRv(t.name));
-  const rvBoard = board.concat(rvOnly), rvTotal = rvBoard.reduce((n, t) => n + rvOf(t), 0);
+  const rvBoard = board.concat(rvOnly).filter(t => !lbOut(lbTeamOf(cfg, t.name) || lbReviewerOf(cfg, t.name), "noRv", key)), rvTotal = rvBoard.reduce((n, t) => n + rvOf(t), 0);
   const reviews = week ? h("p", { class: "meta", id: "lbsNoReviews", text: "5-star reviews are counted by month: see them under Month or Year to date." }) : h("div", { class: "panel" }, h("h2", { text: "5-star reviews" }),
     per === "ytd" || custom ? lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: custom ? "Reviews" : [lbYtdText(month), "Year"], def: true, v: rvOf, f: t => fmt(rvOf(t)) }], rvBoard, () => true, ["Total", fmt(rvTotal)])
       : lbRankTable("lbsReviews", [{ k: "name", label: "Team" }, { k: "reviews", label: [lbMonthLong(month), lbMonthLong(month).slice(0, 3)], def: true, v: rvOf, f: t => fmt(rvOf(t)) },
@@ -10165,7 +10192,12 @@ function openLbTeams() {
     const u = sum.querySelector(".lb-su"); u.textContent = unit; u.dataset.unit = unit;
     sum.querySelector(".lb-sr").textContent = role;
     const ss = sum.querySelector(".lb-ss"); ss.textContent = st; ss.className = "lb-ss " + cls;
-    sum.querySelector(".lb-se").hidden = !(team && f(".t-nosale").checked);
+    // Counts in: what he's left out of ("Counts nowhere": off the leaderboard, no reviews, not in Production)
+    const offs = [["sales", "sales goal"], ["rv", "reviews"], ["prod", "Production"]].filter(([k]) => f(`.c-${k}`) && !f(`.c-${k}`).checked).map(x => x[1]);
+    const nowhere = !(team && f(".t-on").checked) && f(".c-rv") && !f(".c-rv").checked && !f(".c-prod").checked;
+    const se = sum.querySelector(".lb-se");
+    se.hidden = !offs.length;
+    se.textContent = nowhere ? "Counts nowhere" : `No ${offs.join(", ")}`;
   };
   const setOpen = (row, on) => {
     if (on && !empAll) for (const r of document.querySelectorAll("#dlg .lb-team.open, #dlg .lb-rvrow.open")) if (r !== row) { r.classList.remove("open"); r.querySelector(":scope > .lb-sum").setAttribute("aria-expanded", "false"); }
@@ -10177,7 +10209,7 @@ function openLbTeams() {
     const order = row.classList.contains("lb-team") ? body.querySelector(".lb-order") : null;
     const sum = h("div", { class: "lb-sum", role: "button", tabindex: "0", "aria-expanded": "false", title: "Open or close" },
       order, h("span", { class: "lb-av", "aria-hidden": "true" }), h("strong", { class: "lb-sn" }), h("span", { class: "lb-su" }), h("span", { class: "lb-sr" }),
-      h("span", { class: "lb-ss" }), h("span", { class: "lb-se", text: "Estimator" }), h("span", { class: "lb-chev", "aria-hidden": "true", text: "▾" }));
+      h("span", { class: "lb-ss" }), h("span", { class: "lb-se", text: "" }), h("span", { class: "lb-chev", "aria-hidden": "true", text: "▾" }));
     row.replaceChildren(sum, body);
     const toggle = e => { if (e.target.closest(".lb-order")) return; setOpen(row, !row.classList.contains("open")); };
     sum.addEventListener("click", toggle);
@@ -10215,6 +10247,33 @@ function openLbTeams() {
   /** One person: unit, role, the On the leaderboard check mark with its exact days, and Left the company with his last
    *  day. Unticking On the leaderboard asks for his last day on it (today to start with); ticking it for someone who
    *  came off starts a new stretch (today to start with), and his earlier months stay as they were. */
+  // Counts in: a tick for each list (unticked: left out from a month, so the months before stay as they were)
+  const CNT_TXT = { sales: ["Technician sales", "sales goal, Today's focus"], rv: ["5-star reviews", "listed, typed in Production"], prod: ["Production", "picked to work with a truck"] };
+  const cntTick = (k, p) => {
+    const off = !!p[LB_CNT[k]];
+    const el = h("div", { class: "lb-days lb-cnt", "data-cnt": k },
+      h("label", { class: "check" }, h("input", { type: "checkbox", class: `c-${k}`, checked: !off }), h("span", null, CNT_TXT[k][0], " ", h("small", { text: `(${CNT_TXT[k][1]})` }))),
+      h("div", { class: `field c-${k}from-f`, hidden: !off }, h("label", { text: "Left out from (empty: always)" }),
+        h("input", { type: "month", class: `c-${k}from`, value: p[LB_CNT[k] + "From"] || "", min: "2015-01", max: `${clockNow().getFullYear() + 1}-12`, placeholder: "YYYY-MM",
+          "aria-label": `${CNT_TXT[k][0]}: left out from (month; empty: always)` })));
+    const box = el.querySelector(`.c-${k}`), m = el.querySelector(`.c-${k}from`);
+    box.addEventListener("change", () => { el.querySelector(`.c-${k}from-f`).hidden = box.checked; if (!box.checked && !m.value) m.value = nowKey; });
+    return el;
+  };
+  /** Technician (everything), Estimator (nothing), Reviews only: the ticks set at once. */
+  const cntPick = (row, k) => {
+    const set = (c, on) => { const b = row.querySelector(`.c-${c}`); if (b && !b.disabled && b.checked !== on) { b.checked = on; b.dispatchEvent(new Event("change")); } };
+    if (row.classList.contains("lb-team")) { const on = row.querySelector(".t-on"), want = k === "tech"; if (on.checked !== want) { on.checked = want; on.dispatchEvent(new Event("change")); } }
+    else if (k === "tech") { row.querySelector("[data-up]").click(); return; }
+    set("sales", k === "tech"); set("rv", k !== "est"); set("prod", k === "tech");
+    summarize(row);
+  };
+  const cntBox = (row, ...ticks) => h("div", { class: "lb-cnt-box" },
+    h("div", { class: "lb-cnt-head" }, h("b", { text: "Counts in" }),
+      h("div", { class: "lb-cnt-picks", role: "group", "aria-label": "Quick picks" }, [["tech", "Technician"], ["est", "Estimator"], ["rv", "Reviews only"]].map(([k, t]) =>
+        h("button", { class: "chip-btn sm", type: "button", "data-pick": k, title: k === "tech" ? "Everything: on the leaderboard, sales, reviews, Production" : k === "est" ? "Nowhere: off the leaderboard, no sales, no reviews, not in Production" : "Only 5-star reviews",
+          onclick: ev => cntPick(ev.currentTarget.closest(".lb-team, .lb-rvrow"), k) }, t)))),
+    ...ticks);
   const rowEl = (t, isNew) => {
     // the check mark is on while he has no last day; with one (also a day still to come) it's off and the day shows
     const first = lbFirstOn(t), last = lbLastOn(t), onNow = !last;
@@ -10236,23 +10295,24 @@ function openLbTeams() {
         h("div", { class: "field" }, h("label", { text: "Role" }), lbRoleSelect("t-role", t.role, t.name)),
         h("div", { class: "field" }, h("label", { text: "Email" }), mailBox("t-email", t.email, t.name)),
         h("div", { class: "field" }, h("label", { text: "Phone" }), phoneBox("t-phone", t.phone, t.name))),
-      h("div", { class: "lb-days" },
-        h("label", { class: "check" }, h("input", { type: "checkbox", class: "t-on", checked: onNow }), h("span", null, "On the leaderboard")),
-        dateField("t-since", "Since (first day)", first),
-        dateField("t-until", "Last day on it", last, onNow)),
-      h("p", { class: "hint t-was", hidden: !(t.was || []).length, text: (t.was || []).length ? `Earlier on the leaderboard: ${t.was.map(w => `${w[0] ? dayLong(w[0]) : "the start"} – ${dayLong(w[1])}`).join("; ")}.` : "" }),
+      cntBox(null,
+        h("div", { class: "lb-days" },
+          h("label", { class: "check" }, h("input", { type: "checkbox", class: "t-on", checked: onNow }), h("span", null, "Revenue ranking ", h("small", { text: "(on the leaderboard)" }))),
+          dateField("t-since", "Since (first day)", first),
+          dateField("t-until", "Last day on it", last, onNow)),
+        h("p", { class: "hint t-was", hidden: !(t.was || []).length, text: (t.was || []).length ? `Earlier on the leaderboard: ${t.was.map(w => `${w[0] ? dayLong(w[0]) : "the start"} – ${dayLong(w[1])}`).join("; ")}.` : "" }),
+        cntTick("sales", t), cntTick("rv", t), cntTick("prod", t)),
       h("div", { class: "lb-days" },
         h("label", { class: "check" }, h("input", { type: "checkbox", class: "t-left", checked: !!t.left }), h("span", null, "Left the company")),
-        dateField("t-leftday", "Last day", t.left, !t.left)),
-      // Estimator (no sales goal), from a month on: before it he's a technician, ranked in sales; no month: always
-      h("div", { class: "lb-days lb-est" },
-        h("label", { class: "check lb-nosale", title: "Left out of Today's focus and technician sales; still ranked on revenue" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
-          h("span", null, "Estimator ", h("small", { text: "(no sales goal)" }))),
-        h("div", { class: "field t-nosalefrom-f", hidden: !t.noSale }, h("label", { text: "From (empty: always)" }),
-          h("input", { type: "month", class: "t-nosalefrom", value: t.noSaleFrom || "", min: "2015-01", max: `${clockNow().getFullYear() + 1}-12`, placeholder: "YYYY-MM", "aria-label": "Estimator from (month; empty: always)" }))));
+        dateField("t-leftday", "Last day", t.left, !t.left)));
     const q = c => row.querySelector(c);
     const show = (c, on) => { q(c + "-f").hidden = !on; };
-    q(".t-nosale").addEventListener("change", () => show(".t-nosalefrom", q(".t-nosale").checked));
+    // on the leaderboard: his days are typed in Production, so Production stays ticked
+    const prodLock = () => { const p = q(".c-prod"), on = q(".t-on").checked;
+      if (on && !p.checked) { p.checked = true; p.dispatchEvent(new Event("change")); }
+      p.disabled = on; p.closest("label").title = on ? "On the leaderboard: his days are typed in Production" : ""; };
+    prodLock();
+    q(".t-on").addEventListener("change", prodLock);
     q(".t-on").addEventListener("change", () => {
       const on = q(".t-on").checked;
       show(".t-until", !on);
@@ -10323,6 +10383,7 @@ function openLbTeams() {
       h("select", { class: "r-unit", "aria-label": `${r.name || "Their"} unit` }, LB_GROUPS.map(g => h("option", { value: g, text: g, selected: g === r.unit }))),
       lbRoleSelect("r-role", r.role, r.name),
       mailBox("r-email", r.email, r.name), phoneBox("r-phone", r.phone, r.name),
+      cntBox(null, cntTick("rv", r), cntTick("prod", r)),
       h("div", { class: "lb-rvacts" },
         isNew ? null : renameBtn(r.name, rvName, "r-rename"),
         h("button", { class: "btn ghost small", type: "button", "data-up": r.name || "", "aria-label": `Put ${r.name || "this name"} on the leaderboard`, onclick: () => {
@@ -10344,6 +10405,7 @@ function openLbTeams() {
     // the long explanations, folded away
     h("details", { class: "lb-howto", id: "lbHowTo" }, h("summary", { text: "How Employees works" }),
     h("p", { class: "hint", text: "On the leaderboard: ranked in Performance from the day under Since. Revenue, jobs, work days and sales count only on the days someone is on it; his 5-star reviews count from his first one. Untick the check mark to take someone off from a day you pick; tick Left the company when he's gone. ↑ ↓ set the order of the cards in Production and of the columns in Payroll." }),
+      h("p", { class: "hint", text: "Counts in: a tick for each list someone counts in: Revenue ranking (on the leaderboard), Technician sales (the sales goal and Today's focus), 5-star reviews, and Production (someone to pick to work with a truck). Untick one to leave him out from a month (this month to start; empty: always), so the months before stay as they were. Quick picks: Technician (everything), Estimator (nowhere), Reviews only. Payroll doesn't change." }),
       h("p", { class: "hint", text: "Not on the leaderboard: still with the company, not ranked: helpers and techs who don't compete for a spot yet, and anyone who came off the leaderboard (a tech who became a supervisor). Their reviews and the jobs they help on count. Tick On the leaderboard to rank someone from that day. Removing a helper's name keeps what was typed for it." })),
     onHead,
     list,
@@ -10369,6 +10431,18 @@ function openLbTeams() {
           const teams = [], names = new Set();
           // each person's email and phone (blank clears them) and the names he had before a rename
           let typedContact = false;
+          // Counts in: each list unticked is left out from its month ("" = always)
+          const cntSave = (person, row, name) => {
+            for (const [k, f] of Object.entries(LB_CNT)) {
+              const box = row.querySelector(`.c-${k}`);
+              if (!box || box.checked) continue;
+              person[f] = true;
+              const m = row.querySelector(`.c-${k}from`).value.trim();
+              if (m && !/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) { err.textContent = `${name}: “${CNT_TXT[k][0]}: left out from” should be a month, like 2026-01.`; return false; }
+              if (m) person[f + "From"] = m;
+            }
+            return true;
+          };
           const contact = (person, row, mailSel, phoneSel) => {
             const mail = row.querySelector(mailSel).value.trim(), phone = row.querySelector(phoneSel).value.trim();
             if (mail && !lbEmail(mail)) { err.textContent = `${person.name}: that email doesn't look right.`; row.querySelector(mailSel).focus(); return false; }
@@ -10400,12 +10474,7 @@ function openLbTeams() {
             if (o && lbLastOn(o) && since && since > lbLastOn(o)) was.push([lbFirstOn(o), lbLastOn(o)]);
             if (was.length) team.was = was;
             if (row.querySelector(".t-role").value) team.role = row.querySelector(".t-role").value;
-            if (row.querySelector(".t-nosale").checked) {
-              team.noSale = true;
-              const nf = row.querySelector(".t-nosalefrom").value.trim();
-              if (nf && !/^\d{4}-(0[1-9]|1[0-2])$/.test(nf)) { err.textContent = `${name}: “Estimator from” should be a month, like 2026-01.`; return; }
-              if (nf) team.noSaleFrom = nf;
-            }
+            if (!cntSave(team, row, name)) return;
             if (!contact(team, row, ".t-email", ".t-phone")) return;
             teams.push(team);
           }
@@ -10419,6 +10488,7 @@ function openLbTeams() {
             names.add(name.toLowerCase());
             const rv = { name, unit: row.querySelector(".r-unit").value };
             if (row.querySelector(".r-role").value) rv.role = row.querySelector(".r-role").value;
+            if (!cntSave(rv, row, name)) return;
             if (!contact(rv, row, ".r-email", ".r-phone")) return;
             reviewers.push(rv);
           }
@@ -10429,6 +10499,7 @@ function openLbTeams() {
           const plain = t => (!t.on || t.on === t.from + "-01") && (!t.off || t.off === lbLastDay(t.to)) && (t.left || "") === (t.to ? lbLastDay(t.to) : "") && !t.was;
           if (apiLevel && apiLevel < LB_DATES_API && !teams.every(plain)) { err.textContent = "Exact days and Left the company need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           if (typedContact && apiLevel && apiLevel < LB_PEOPLE_API) { err.textContent = "Emails and phone numbers need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+          if (teams.concat(reviewers).some(t => t.noRv || t.noProd) && apiLevel && apiLevel < LB_CNT_API) { err.textContent = "5-star reviews and Production (Counts in) need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           if (teams.some(t => t.noSaleFrom) && apiLevel && apiLevel < LB_EST_FROM_API) { err.textContent = "“Estimator from” needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after."; return; }
           if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "Estimator needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
@@ -10509,7 +10580,7 @@ function openLbReviewsXl() {
         const b = $("lbRvXlGo"); b.disabled = true; b.textContent = "Saving…";
         try {
           const cur = lbCleanConfig(lbData.config);
-          const reviewers = cur.reviewers.filter(r => !pick.some(x => x.name.toLowerCase() === r.name.toLowerCase())).concat(pick.map(x => Object.assign({ name: x.name, unit: x.unit }, (lbReviewerOf(cur, x.name) || {}).role ? { role: lbReviewerOf(cur, x.name).role } : {})));
+          const reviewers = cur.reviewers.filter(r => !pick.some(x => x.name.toLowerCase() === r.name.toLowerCase())).concat(pick.map(x => Object.assign({}, lbReviewerOf(cur, x.name) || {}, { name: x.name, unit: x.unit })));   // his role, contact and Counts in kept
           const patches = {};
           for (const x of pick) for (const [k, n] of Object.entries(x.months)) ((patches[k] || (patches[k] = { reviews: {} })).reviews)[x.name] = n;
           const writes = [{ key: "config", data: { teams: cur.teams, goal: cur.goal, reviewers } }].concat(Object.keys(patches).sort().map(k => ({ key: k, patch: patches[k] })));
