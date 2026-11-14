@@ -1796,6 +1796,53 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
   .lb-days .lb-nosale { margin-left: 0; }
 }
 .lb-teams-more { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Employees: one line a person (who, unit, role, where he stands); a tap opens his fields, one at a time */
+.lb-emp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 2px; }
+.lb-emp-bar input[type=search] { flex: 1 1 180px; min-width: 0; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.lb-empseg { flex: 0 0 auto; }
+.lb-howto { font-size: .86rem; } .lb-howto > summary { cursor: pointer; color: var(--accent); font-weight: 600; } .lb-howto .hint { margin: 6px 0 0; }
+.lb-emp-h { margin: 6px 0 0; font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.lb-team, .lb-rvrow { padding: 0; gap: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); display: grid; }
+.lb-team.lb-hide, .lb-rvrow.lb-hide { display: none; }
+.lb-sum { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 7px 12px; cursor: pointer; min-height: 46px; box-sizing: border-box; }
+.lb-sum:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.lb-sum:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lb-sum .lb-order { margin-right: -2px; }
+.lb-av { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: .74rem; font-weight: 800; background: var(--accent-soft); color: var(--accent); }
+.lb-sn { font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; letter-spacing: .02em; flex: 1 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-su, .lb-ss, .lb-se { font-size: .7rem; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.lb-su { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); }
+.lb-su[data-unit="Cleaning"] { background: color-mix(in srgb, var(--clean) 14%, var(--surface)); color: var(--clean); }
+.lb-sr { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+.lb-ss.on { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.lb-ss.off { background: var(--bg); color: var(--muted); } .lb-ss.gone { background: color-mix(in srgb, var(--due) 10%, var(--surface)); color: var(--due); }
+.lb-se { background: color-mix(in srgb, var(--soon) 14%, var(--surface)); color: var(--soon); } .lb-se[hidden] { display: none; }
+.lb-chev { flex: none; color: var(--muted); transition: transform .15s; } .open > .lb-sum .lb-chev { transform: rotate(180deg); }
+/* open: the line above already says who it is */
+.lb-body .lb-team-top > .t-label, .lb-rvrow > .lb-body > strong { display: none; }
+.lb-body .lb-team-top { justify-content: flex-end; }
+.lb-body { display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.lb-team:not(.open) > .lb-body, .lb-rvrow:not(.open) > .lb-body { display: none; }
+.lb-team.open { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--accent) 50%, transparent); }
+.lb-body .lb-team-top > .btn.danger, .lb-body .lb-rvacts > .btn.danger { border-color: transparent; color: var(--muted); }
+.lb-body .lb-team-top > .btn.danger:hover, .lb-body .lb-rvacts > .btn.danger:hover { color: var(--due); }
+.lb-rvrow > .lb-body { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lb-rvrow:not(.open) > .lb-body { display: none; }
+.lb-rvrow > .lb-body > strong, .lb-rvrow > .lb-body > .r-name { flex: 1 1 7em; min-width: 0; }
+.lb-rvrow > .lb-body > select { flex: 1 1 130px; max-width: 170px; }
+.lb-rvrow > .lb-body > .r-email, .lb-rvrow > .lb-body > .r-phone { flex: 1 1 130px; width: auto; }
+.lb-tools { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.lb-tools .field { max-width: 260px; }
+/* Save and Cancel stay at the bottom of the window while the list scrolls */
+dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; background: var(--surface); padding: 10px 0 2px; margin-top: 4px; border-top: 1px solid var(--line); }
+/* a phone: who on the first line, unit, where he stands and role under it */
+@media (max-width: 560px) {
+  .lb-sum { flex-wrap: wrap; padding: 8px 10px; gap: 4px 8px; }
+  .lb-sn { flex: 1 1 40%; } .lb-chev { order: 0; }
+  .lb-su, .lb-ss, .lb-se { order: 2; } .lb-sr { order: 3; }
+  .lb-sum::after { content: ""; order: 1; flex-basis: 100%; height: 0; }   /* line 2 starts here */
+}
+
 .lb-move-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .lb-move-check { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; }
 .lb-move-prev { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: .9rem; }
@@ -9892,6 +9939,7 @@ const lbRoleSelect = (cls, role, name) => h("select", { class: cls, "aria-label"
   [h("option", { value: "", text: "No role yet", selected: !role })].concat(Object.entries(LB_ROLES).map(([k, t]) => h("option", { value: k, text: t, selected: k === role }))));
 
 /* ---- teams: who's on the board, in which unit, from which month ---- */
+let empAll = !!store.get("voda.empOpenAll");            // Employees: everyone's fields open (else one person at a time)
 function openLbTeams() {
   const y = lbYear(), cfg = lbCleanConfig(lbData.config);
   const err = h("p", { class: "dlg-err", role: "alert" });
@@ -9946,6 +9994,7 @@ function openLbTeams() {
         // and said on his row in the window just opened again
         const row = [...document.querySelectorAll("#dlg .lb-team, #dlg .lb-rvrow")].find(r => r.dataset.name === to);
         if (row) {
+          row.classList.add("open");
           (row.querySelector(".lb-team-top") || row).appendChild(h("p", { class: "lb-rename-msg ok", role: "status", text: `Renamed from ${name}: every year's numbers, shared jobs, reviews and pay rates now say ${to}.` }));
           row.scrollIntoView({ block: "nearest" });
         }
@@ -9958,8 +10007,75 @@ function openLbTeams() {
     input.addEventListener("keydown", k => { if (k.key === "Enter") { k.preventDefault(); go.click(); } });
     label.replaceWith(box); btn.hidden = true; input.focus(); input.select();
   } }, "Rename");
-  const mailBox = (cls, v, who) => h("input", { type: "email", class: cls, maxlength: "100", autocomplete: "off", inputmode: "email", value: v || "", placeholder: "name@example.com", "aria-label": `${who || "Their"} email` });
-  const phoneBox = (cls, v, who) => h("input", { type: "tel", class: cls, maxlength: "25", autocomplete: "off", value: v || "", placeholder: "(555) 123-4567", "aria-label": `${who || "Their"} phone` });
+  const mailBox = (cls, v, who) => h("input", { type: "email", class: cls, maxlength: "100", autocomplete: "off", inputmode: "email", value: v || "", placeholder: "Add email", "aria-label": `${who || "Their"} email` });
+  const phoneBox = (cls, v, who) => h("input", { type: "tel", class: cls, maxlength: "25", autocomplete: "off", value: v || "", placeholder: "Add phone", "aria-label": `${who || "Their"} phone` });
+  /* Each person is one line (who, unit, role, where he stands); a tap opens his fields, one person at a time (Open all:
+     everyone, remembered). The fields are the same either way: Save reads them whether open or closed. */
+  const monYr = d => { const x = lbDate(d); return `${MONTHS[x.getMonth()]} ${x.getFullYear()}`; };
+  const initials = n => String(n || "").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "+";
+  const summarize = row => {
+    const sum = row.querySelector(":scope > .lb-sum");
+    if (!sum) return;
+    const team = row.classList.contains("lb-team"), f = c => row.querySelector(c);
+    const name = row.dataset.new ? ((f(team ? ".t-name" : ".r-name") || {}).value || "").trim() || "New person" : row.dataset.name;
+    const unit = f(team ? ".t-unit" : ".r-unit").value, rs = f(team ? ".t-role" : ".r-role");
+    const role = rs && rs.value && rs.selectedOptions[0] ? rs.selectedOptions[0].textContent : "No role yet";
+    let st = "Not ranked", cls = "off";
+    if (team) {
+      const left = f(".t-left").checked && f(".t-leftday").value, on = f(".t-on").checked, since = f(".t-since").value, until = f(".t-until").value;
+      st = left ? `Left ${monYr(left)}` : on ? (since ? `Since ${monYr(since)}` : "On the leaderboard") : until ? `Off since ${monYr(until)}` : "Off the leaderboard";
+      cls = left ? "gone" : on ? "on" : "off";
+    }
+    sum.querySelector(".lb-av").textContent = initials(name);
+    sum.querySelector(".lb-sn").textContent = name;
+    const u = sum.querySelector(".lb-su"); u.textContent = unit; u.dataset.unit = unit;
+    sum.querySelector(".lb-sr").textContent = role;
+    const ss = sum.querySelector(".lb-ss"); ss.textContent = st; ss.className = "lb-ss " + cls;
+    sum.querySelector(".lb-se").hidden = !(team && f(".t-nosale").checked);
+  };
+  const setOpen = (row, on) => {
+    if (on && !empAll) for (const r of document.querySelectorAll("#dlg .lb-team.open, #dlg .lb-rvrow.open")) if (r !== row) { r.classList.remove("open"); r.querySelector(":scope > .lb-sum").setAttribute("aria-expanded", "false"); }
+    row.classList.toggle("open", on);
+    row.querySelector(":scope > .lb-sum").setAttribute("aria-expanded", String(on));
+  };
+  const compact = (row, open) => {
+    const body = h("div", { class: "lb-body" }, ...[...row.childNodes]);
+    const order = row.classList.contains("lb-team") ? body.querySelector(".lb-order") : null;
+    const sum = h("div", { class: "lb-sum", role: "button", tabindex: "0", "aria-expanded": "false", title: "Open or close" },
+      order, h("span", { class: "lb-av", "aria-hidden": "true" }), h("strong", { class: "lb-sn" }), h("span", { class: "lb-su" }), h("span", { class: "lb-sr" }),
+      h("span", { class: "lb-ss" }), h("span", { class: "lb-se", text: "Estimator" }), h("span", { class: "lb-chev", "aria-hidden": "true", text: "▾" }));
+    row.replaceChildren(sum, body);
+    const toggle = e => { if (e.target.closest(".lb-order")) return; setOpen(row, !row.classList.contains("open")); };
+    sum.addEventListener("click", toggle);
+    sum.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target === sum) { e.preventDefault(); toggle(e); } });
+    row.addEventListener("input", () => { summarize(row); filter(); });
+    row.addEventListener("change", () => { summarize(row); filter(); });
+    summarize(row);
+    if (open) setOpen(row, true);
+    return row;
+  };
+  // search a name, a unit, Open all
+  let empUnit = "all";
+  const find = h("input", { type: "search", id: "lbFind", placeholder: "Search a name", autocomplete: "off", "aria-label": "Search a name", oninput: () => filter() });
+  const unitBtn = (k, label) => h("button", { class: "seg-btn", type: "button", "data-unit": k, "aria-pressed": String(k === empUnit), onclick: e => {
+    empUnit = k; for (const b of e.currentTarget.parentNode.children) b.setAttribute("aria-pressed", String(b.dataset.unit === k)); filter(); } }, label);
+  const allBtn = h("button", { class: "btn small ghost", type: "button", id: "lbOpenAll", onclick: () => {
+    empAll = !empAll; store.set("voda.empOpenAll", empAll); allBtn.textContent = empAll ? "Close all" : "Open all";
+    for (const r of document.querySelectorAll("#dlg .lb-team, #dlg .lb-rvrow")) setOpen(r, empAll);
+  } }, empAll ? "Close all" : "Open all");
+  const onHead = h("h4", { class: "lb-emp-h", id: "lbOnHead" }), offHead = h("h4", { class: "lb-emp-h", id: "lbOffHead" });
+  function filter() {
+    const q = find.value.trim().toLowerCase(), n = { list: [0, 0], off: [0, 0] };
+    for (const [box, k] of [[list, "list"], [offList, "off"], [rvList, "off"], [formerList, "former"]]) for (const r of box.children) {
+      const nm = (r.querySelector(".lb-sn") || {}).textContent || "", un = (r.querySelector(".t-unit, .r-unit") || {}).value;
+      const ok = (!q || nm.toLowerCase().includes(q) || r.dataset.new) && (empUnit === "all" || un === empUnit);
+      r.classList.toggle("lb-hide", !ok);
+      if (n[k]) { n[k][1]++; if (ok) n[k][0]++; }
+      if (k === "former" && ok && q) formerBox.open = true;
+    }
+    const txt = (label, [a, b]) => `${label} · ${a === b ? b : `${a} of ${b}`}`;
+    onHead.textContent = txt("On the leaderboard", n.list); offHead.textContent = txt("Not on the leaderboard", n.off);
+  }
   const dateField = (cls, label, value, hidden) => h("div", { class: "field " + cls + "-f", hidden: !!hidden }, h("label", { text: label }),
     h("input", { type: "date", class: cls, value: value || "", min: "2015-01-01", max: `${clockNow().getFullYear() + 1}-12-31` }));
   /** One person: unit, role, the On the leaderboard check mark with its exact days, and Left the company with his last
@@ -10022,7 +10138,7 @@ function openLbTeams() {
       if (q(".t-on").checked) { q(".t-on").checked = false; if (ended) q(".t-since").value = first; show(".t-until", true); }
       if (!q(".t-until").value || q(".t-until").value > q(".t-leftday").value) q(".t-until").value = ended && last <= q(".t-leftday").value ? last : q(".t-leftday").value;
     });
-    return row;
+    return compact(row, isNew || empAll);
   };
   // off the leaderboard and still with the company (a tech who became a supervisor): listed under Not on the leaderboard
   const offList = h("div", { class: "lb-teams", id: "lbOffList" });
@@ -10045,7 +10161,7 @@ function openLbTeams() {
       catch (e) { if (btn) { btn.disabled = false; btn.textContent = "Remove"; } toast(errText(e, "Nothing")); return; }
       if (btn) { btn.disabled = false; btn.textContent = "Remove"; }
     }
-    if (!lastNum[k] && !used.has(k)) { row.remove(); toast(`${t.name} comes off the list when you tap Save.`); return; }
+    if (!lastNum[k] && !used.has(k)) { row.remove(); filter(); toast(`${t.name} comes off the list when you tap Save.`); return; }
     if (row.querySelector(".t-left").checked) { toast(`${t.name} has numbers, so he stays under Former employees.`); return; }
     const m = lastNum[k] ? (lastNum[k] > nowKey ? nowKey : lastNum[k]) : prevKey;   // his last month with numbers
     let day = m === nowKey ? today : lbLastDay(m);
@@ -10055,7 +10171,7 @@ function openLbTeams() {
     row.querySelector(".t-leftday").value = day;
     row.querySelector(".t-left").checked = true;
     row.querySelector(".t-left").dispatchEvent(new Event("change"));
-    formerList.append(row); formerCount();
+    formerList.append(row); formerCount(); summarize(row); filter();
     toast(`${t.name} moves to Former employees when you tap Save.`);
   };
   for (const t of cfg.teams) {
@@ -10083,29 +10199,36 @@ function openLbTeams() {
           row.remove();
           toast(`${name} goes on the leaderboard from ${dayLong(startDay)}. Change the day if it's another one, then tap Save.`);
         } }, "Put on the leaderboard"),
-        h("button", { class: "btn ghost small danger", type: "button", "aria-label": `Remove ${r.name || "this name"}`, onclick: () => row.remove() }, "Remove")));
-    return row;
+        h("button", { class: "btn ghost small danger", type: "button", "aria-label": `Remove ${r.name || "this name"}`, onclick: () => { row.remove(); filter(); } }, "Remove")));
+    return compact(row, isNew || empAll);
   };
   for (const r of cfg.reviewers) rvList.append(rvRow(r, false));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Employees" }),
+    // find someone: a name, a unit; Open all
+    h("div", { class: "lb-emp-bar" }, find, h("div", { class: "seg lb-empseg", role: "group", "aria-label": "Unit" }, unitBtn("all", "All"), LB_GROUPS.map(g => unitBtn(g, g))), allBtn),
+    // the long explanations, folded away
+    h("details", { class: "lb-howto", id: "lbHowTo" }, h("summary", { text: "How Employees works" }),
     h("p", { class: "hint", text: "On the leaderboard: ranked in Performance from the day under Since. Revenue, jobs, work days and sales count only on the days someone is on it; his 5-star reviews count from his first one. Untick the check mark to take someone off from a day you pick; tick Left the company when he's gone. ↑ ↓ set the order of the cards in Production and of the columns in Payroll." }),
+      h("p", { class: "hint", text: "Not on the leaderboard: still with the company, not ranked: helpers and techs who don't compete for a spot yet, and anyone who came off the leaderboard (a tech who became a supervisor). Their reviews and the jobs they help on count. Tick On the leaderboard to rank someone from that day. Removing a helper's name keeps what was typed for it." })),
+    onHead,
     list,
-    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: startDay.slice(0, 7), on: startDay, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); } }, "+ Add a person to the leaderboard")),
+    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: startDay.slice(0, 7), on: startDay, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); filter(); } }, "+ Add a person to the leaderboard")),
     h("div", { class: "lb-rvsec" },
-      h("h4", { text: "Not on the leaderboard" }),
-      h("p", { class: "hint", text: "Still with the company, not ranked: helpers and techs who don't compete for a spot yet, and anyone who came off the leaderboard (a tech who became a supervisor). Their reviews and the jobs they help on count. Tick On the leaderboard to rank someone from that day. Removing a helper's name keeps what was typed for it." }),
+      offHead,
       offList, rvList,
       h("div", { class: "lb-rvbtns" },
-        h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); } }, "+ Add a person"),
-        h("button", { class: "btn ghost small", type: "button", id: "lbRvXl", onclick: () => openLbReviewsXl() }, "Their reviews from Excel…"))),
+        h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); filter(); } }, "+ Add a person"))),
     formerBox,
-    h("div", { class: "field" }, h("label", { for: "lbGoal", text: "Technician sales goal per month $" }), h("input", { id: "lbGoal", type: "text", inputmode: "decimal", value: String(cfg.goal) })),
-    err,
-    h("div", { class: "dlg-foot" },
+    // the rest: the sales goal and the tools, together at the bottom
+    h("div", { class: "lb-tools", id: "lbTools" }, h("h4", { class: "lb-emp-h", text: "Tools" }),
+      h("div", { class: "field" }, h("label", { for: "lbGoal", text: "Technician sales goal per month $" }), h("input", { id: "lbGoal", type: "text", inputmode: "decimal", value: String(cfg.goal) })),
       h("div", { class: "lb-teams-more" },
-        h("button", { class: "btn ghost", type: "button", id: "lbMoveBtn", onclick: () => openLbMove() }, "Move numbers…"),
-        h("button", { class: "btn ghost", type: "button", id: "lbLoadXl", onclick: () => openLbHistory() }, "Load from Excel…")),
+        h("button", { class: "btn ghost small", type: "button", id: "lbMoveBtn", onclick: () => openLbMove() }, "Move numbers…"),
+        h("button", { class: "btn ghost small", type: "button", id: "lbLoadXl", onclick: () => openLbHistory() }, "Load from Excel…"),
+        h("button", { class: "btn ghost small", type: "button", id: "lbRvXl", onclick: () => openLbReviewsXl() }, "Their reviews from Excel…"))),
+    err,
+    h("div", { class: "dlg-foot lb-emp-foot" },
       h("div", { class: "right" },
         h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
         h("button", { class: "btn primary", type: "button", id: "lbTeamsSave", text: "Save", onclick: async () => {
@@ -10186,6 +10309,7 @@ function openLbTeams() {
             renderLeaderboard();
           } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
         } }))));
+  filter();
 }
 /** The reviews-only people's 5-star reviews from the REVIEWS tables of 5. Revenue per truck: adds them to Reviews only
  *  and saves their month counts, every year in the file. Nothing else changes (trucks, sales, teams' reviews). */
