@@ -13627,7 +13627,7 @@ const EST_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates:
 // the groups: Restoration as water damage or mold (and the ones not sorted yet), Cleaning, Repairs, Other
 const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
 const EST_ST = { all: "All", open: "Open", notsent: "Not sent", approved: "Approved", declined: "Declined", canceled: "Canceled" };
-/** Open and not sent to the client yet (Housecall Pro: Scheduled, In progress, Completed; not Sent). */
+/** Open and not sent to the client yet (Housecall Pro: Scheduled, In progress, Completed; Sent, even a failed email, is sent). */
 const estNotSent = e => e.st === "open" && e.sent === false;
 let estData = store.get(K_EST);                         // this year's: { year, estimates, years, all, readAt, done, connected }
 let estOther = {};                                      // other years' (looked at in this window)
