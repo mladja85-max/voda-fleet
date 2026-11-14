@@ -1252,6 +1252,10 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
 .lb-week-bar { height: 8px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; margin-top: 4px; }
 .lb-week-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
 .lb-tabs { justify-self: start; max-width: 100%; overflow-x: auto; }
+.wh-tabs { width: fit-content; max-width: 100%; margin: 0 0 14px; } .wh-tabs[hidden] { display: none; }
+@media (max-width: 560px) { .wh-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; box-sizing: border-box; }
+  .wh-tabs .seg-btn { justify-content: center; padding: 8px 4px; font-size: .9rem; } }
+.wh-tabs .vbadge { margin-left: 6px; font-size: .7rem; padding: 0 6px; min-width: 18px; }
 .t-short { display: none; }
 /* a phone: the tabs fill the width side by side (short names), and the title row is the same height on every tab,
    so nothing slides sideways or jumps down when a tab is tapped */
@@ -1996,13 +2000,15 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
       <button type="button" class="view-btn" id="viewRepairs" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Repairs Payroll
       </button>
-      <button type="button" class="view-btn" id="viewTrucks" aria-pressed="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4.5L22 12.5V16h-8"/><circle cx="6" cy="17.5" r="2"/><circle cx="18" cy="17.5" r="2"/></svg>Trucks
-      </button>
-      <button type="button" class="view-btn" id="viewSupplies" aria-pressed="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="4" width="15" height="18" rx="2"/><path d="M9 4V2.5h6V4"/><path d="M8.5 13l2.5 2.5 4.5-5"/></svg>Checklists<span class="vbadge" id="supBadge" hidden></span>
+      <button type="button" class="view-btn" id="viewWarehouse" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V9l9-5 9 5v12"/><path d="M7 21v-8h10v8"/><path d="M7 17h10"/></svg>Warehouse<span class="vbadge" id="supBadge" hidden></span>
       </button>
     </nav>
+    <!-- Warehouse: Trucks and Checklists, as a row like the Leaderboard's (only for whoever sees both) -->
+    <div class="seg wh-tabs" id="whTabs" role="tablist" aria-label="Warehouse" hidden>
+      <button type="button" class="seg-btn" role="tab" id="viewTrucks" aria-selected="false">Trucks</button>
+      <button type="button" class="seg-btn" role="tab" id="viewSupplies" aria-selected="false">Checklists<span class="vbadge" id="supBadgeSub" hidden></span></button>
+    </div>
     <div id="fleetView">
     <section class="kpis" id="kpis" aria-label="Fleet summary"></section>
     <section class="tmcheck" id="tmcheck" aria-label="Tuesday TM hrs check" hidden></section>
@@ -4785,8 +4791,8 @@ function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "T
 
 /* ---------- view (filters, search, sort) ---------- */
 const K_VIEW = "voda.view";
-const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "", list: "", lbSide: "leaderboard" }, store.get(K_VIEW) || {});
-function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab, list: view.list, lbSide: view.lbSide }); }
+const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "", list: "", lbSide: "leaderboard", whSide: "trucks" }, store.get(K_VIEW) || {});
+function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab, list: view.list, lbSide: view.lbSide, whSide: view.whSide }); }
 const DIVISIONS = ["Cleaning", "Restoration"];
 const divClass = d => d === "Cleaning" ? "cleaning" : d === "Restoration" ? "restoration" : "none";
 const inScope = t => !view.division || t.division === view.division;
@@ -7069,7 +7075,8 @@ const repInLb = () => { const t = allowedTabs(); return t.includes("repairs") &&
 /** ... and Contractor Payroll next to it. */
 const cpInLb = () => { const t = allowedTabs(); return t.includes("contractors") && t.includes("leaderboard"); };
 /** The tabs on the bar at the top. */
-const navTabs = () => allowedTabs().filter(t => (t !== "repairs" || !repInLb()) && (t !== "contractors" || !cpInLb()));
+const navTabs = () => allowedTabs().filter(t => (t !== "repairs" || !repInLb()) && (t !== "contractors" || !cpInLb()))
+  .map(t => (t === "trucks" || t === "supplies" ? "warehouse" : t)).filter((t, i, a) => a.indexOf(t) === i);   // Trucks and Checklists: one Warehouse tab
 /** The Leaderboard's or Revenue's name over it: only when there's no bar at the top already saying it. */
 const secTitle = text => (navTabs().length < 2 ? h("h2", { class: "lb-title", text }) : null);
 
@@ -7177,6 +7184,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 function setTab(tab, sub) {
   view.tab = ["supplies", "leaderboard", "office", "revenue", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
   if (view.tab === "leaderboard" || view.tab === "repairs" || view.tab === "contractors") view.lbSide = view.tab;
+  if (view.tab === "trucks" || view.tab === "supplies") view.whSide = view.tab;
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -7198,8 +7206,8 @@ function applyTab() {
   $("views").classList.toggle("many", nav.length > 3);   // phones: four tabs become icons with a small label
   $("views").classList.toggle("five", nav.length > 4);   // ... five: a smaller label
   $("views").classList.toggle("six", nav.length > 5);    // ... six: smaller still
-  $("viewTrucks").hidden = !tabs.includes("trucks");
-  $("viewSupplies").hidden = !tabs.includes("supplies");
+  $("viewWarehouse").hidden = !tabs.includes("trucks") && !tabs.includes("supplies");
+  $("whTabs").hidden = !(trk || sup) || !tabs.includes("trucks") || !tabs.includes("supplies");
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
   $("viewRevenue").hidden = !nav.includes("revenue");
@@ -7218,8 +7226,9 @@ function applyTab() {
   $("mktView").hidden = !mk;
   $("cpView").hidden = !cp;
   $("noAccess").hidden = tabs.length > 0;
-  $("viewTrucks").setAttribute("aria-pressed", String(trk));
-  $("viewSupplies").setAttribute("aria-pressed", String(sup));
+  $("viewWarehouse").setAttribute("aria-pressed", String(trk || sup));
+  $("viewTrucks").setAttribute("aria-selected", String(trk));
+  $("viewSupplies").setAttribute("aria-selected", String(sup));
   $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rp && folded) || (cp && cpInLb())));
   $("viewOffice").setAttribute("aria-pressed", String(of));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
@@ -7238,6 +7247,8 @@ function applyTab() {
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
+// Warehouse: the one of Trucks and Checklists used last (that this person may see)
+$("viewWarehouse").addEventListener("click", () => { const t = allowedTabs(); setTab(t.includes(view.whSide) ? view.whSide : t.includes("trucks") ? "trucks" : "supplies"); });
 $("viewOffice").addEventListener("click", () => setTab("office"));
 $("viewRevenue").addEventListener("click", () => setTab("revenue"));
 // the bar at the top's height, so panels that stay in view while scrolling sit just under it
@@ -7252,11 +7263,9 @@ function renderSupBadge() {
   const s = supOk() ? supNow() : null;
   const mine = new Set(visLists(s).map(l => l.id));
   const n = s ? s.requests.filter(r => r.status === "To order" && mine.has(r.list)).length : 0;
-  const b = $("supBadge");
-  b.hidden = !n;
-  b.textContent = String(n);
-  b.title = n ? `${n} to order` : "";
+  for (const b of [$("supBadge"), $("supBadgeSub")]) { b.hidden = !n; b.textContent = String(n); b.title = n ? `${n} to order` : ""; }
   $("viewSupplies").setAttribute("aria-label", n ? `Checklists, ${n} to order` : "Checklists");
+  $("viewWarehouse").setAttribute("aria-label", n ? `Warehouse, ${n} to order in Checklists` : "Warehouse");
 }
 function supTabNow(sc) {
   if (view.supTab === "check" || view.supTab === "orders") return view.supTab;
