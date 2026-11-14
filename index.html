@@ -312,7 +312,7 @@ button { font: inherit; color: inherit; }
 .user-row { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
 .user-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .user-top strong { font-size: 1rem; }
-.user-meta { color: var(--muted); font-size: .84rem; }
+.user-meta { color: var(--muted); font-size: .84rem; } .user-meta.warn { color: var(--due); font-weight: 600; }
 .user-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .user-acts select { font: inherit; font-size: .88rem; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .code-box { display: grid; gap: 8px; padding: 12px; border-radius: 10px; border: 1.5px solid var(--accent); background: var(--accent-soft); }
@@ -922,8 +922,13 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 /* Operations: price changes (admins), under the period: a red box with each changed job; a plain line when none */
 .price-warn { display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--radius); border: 1.5px solid color-mix(in srgb, var(--due) 55%, var(--line));
   background: color-mix(in srgb, var(--due) 7%, var(--surface)); box-shadow: 0 6px 20px -12px color-mix(in srgb, var(--due) 60%, transparent); }
-.price-head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
+.price-head { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+.price-toggle { all: unset; cursor: pointer; display: flex; align-items: center; gap: 12px; min-width: 0; border-radius: 10px; }
+.price-toggle:focus-visible { outline: 2px solid var(--due); outline-offset: 3px; }
+.price-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
 .price-head strong { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: .02em; text-transform: uppercase; color: var(--due); }
+.price-show { font-size: .8rem; font-weight: 800; color: var(--due); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.price-warn:not(.open) { padding-block: 10px; }
 .price-ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--due); color: #fff; font-weight: 900; font-size: 1.1rem; }
 .price-sub { margin: 2px 0 0; font-size: .8rem; color: var(--muted); } .price-sub.bad { color: var(--due); }
 .price-tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
@@ -951,7 +956,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .price-ok > span { color: var(--ok); font-weight: 600; } .price-ok.bad { color: var(--due); }
 .price-hist { display: grid; gap: 8px; max-height: 60vh; overflow: auto; }
 .price-hrow { display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: .86rem; } .price-hrow small { color: var(--muted); }
-@media (max-width: 640px) { .price-head { grid-template-columns: auto 1fr; } .price-tools { grid-column: 1 / -1; justify-content: flex-start; } .price-list { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .price-head { grid-template-columns: 1fr; } .price-tools { justify-content: flex-start; } .price-list { grid-template-columns: 1fr; } }
 /* Operations: the company goal. Meant to catch the eye first: deep VODA blue, gold, big white numbers; a shine across it
    and its bars filling when it's first drawn, and a slow gold glow (none for anyone who turned motion down). */
 .goal { --gold: #ffcc33; --gold2: #ff9f1a; --gw: rgba(255, 255, 255, .74);
@@ -6941,7 +6946,7 @@ async function openUsers() {
     err.textContent = "";
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(); return out; }
     catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
-      : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who checks price changes can switch it." : errText(e, "Nothing"); return null; }
+      : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
   const fmtAt = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "never";
   const row = u => {
@@ -6958,18 +6963,23 @@ async function openUsers() {
       : canPay ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "payroll", id: "pay-" + (u.username || u.id), "aria-pressed": String(hasPay),
           onclick: async () => { const out = await call("setPayroll", { id: u.id, on: !hasPay }, me ? "VODA Payroll is on for you: Leaderboard > VODA Payroll" : `${u.name} ${hasPay ? "no longer sees" : "now sees"} VODA Payroll`); if (out && me) refresh(true); } }, me ? "Turn on VODA Payroll for me" : "VODA Payroll")
       : h("span", { class: "user-meta", text: hasPay ? "Sees VODA Payroll" : "No VODA Payroll" });
-    // Price changes: only admins switched on mark them checked; switched like Payroll
+    // Price changes: only admins switched on mark them checked. A tap on the chip switches it on or off (✓ = on): an admin
+    // who sees VODA Payroll or checks price changes can, for anyone (himself too); the first time, any admin
     const hasPc = Array.isArray(u.access) && u.access.includes("pricecheck");
-    const canPc = apiLevel >= PRICE_API && u.status !== "invited" && (pcMe ? !me : !pcAny);
-    const pc = u.role !== "admin" || apiLevel < PRICE_API ? null
+    const canPc = apiLevel >= PRICE_API && u.status !== "invited" && (apiLevel >= PRICE_SW_API ? pcMe || payMe || !pcAny : pcMe ? !me : !pcAny);
+    const pc = (u.role !== "admin" && apiLevel < PRICE_SW_API) || apiLevel < PRICE_API ? null
       : canPc ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "pricecheck", id: "pc-" + (u.username || u.id), "aria-pressed": String(hasPc),
+          title: hasPc ? "Tap to switch off" : "Tap to switch on",
           onclick: () => call("setPriceCheck", { id: u.id, on: !hasPc }, `${me ? "You" : u.name} ${hasPc ? "no longer check" + (me ? "" : "s") : "now check" + (me ? "" : "s")} price changes`) }, "Checks price changes")
       : h("span", { class: "user-meta", text: hasPc ? "Checks price changes" : "Doesn't check price changes" });
     const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }), pay, pc)
-      : apiLevel >= SUP_API ? accessChips(access, async (next, name, on) => {
+      : apiLevel >= SUP_API ? [accessChips(access.filter(a => a !== "pricecheck"), async (next, name, on) => {
           const out = await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
           if (!out) load();
-        }, "acc-" + (u.username || u.id)) : null;
+        }, "acc-" + (u.username || u.id)),
+        // a technician can be switched on for price changes too (he needs Operations to see them)
+        pc ? h("div", { class: "acc acc-pc" }, h("span", { class: "acc-lbl", text: "Price changes:" }), pc,
+          hasPc && !access.includes("revenue") ? h("span", { class: "user-meta warn", text: "Tick Operations too, so they see them." }) : null) : null] : null;
     return h("div", { class: "user-row", "data-user": u.username || u.name },
       h("div", { class: "user-top" }, h("strong", { text: u.name }), u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
         u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null),
@@ -6992,7 +7002,7 @@ async function openUsers() {
       const users = (out.users || []).slice().sort((a, b) => (a.status === "invited") - (b.status === "invited") || String(a.name).localeCompare(String(b.name)));
       const pays = u => u.role === "admin" && u.status === "active" && Array.isArray(u.access) && u.access.includes("payroll");
       payAny = users.some(pays); payMe = users.some(u => session && u.id === session.id && pays(u));
-      const pcs = u => u.role === "admin" && u.status === "active" && Array.isArray(u.access) && u.access.includes("pricecheck");
+      const pcs = u => u.status === "active" && Array.isArray(u.access) && u.access.includes("pricecheck");
       pcAny = users.some(pcs); pcMe = users.some(u => session && u.id === session.id && pcs(u));
       listBox.replaceChildren(...users.map(row));
     } catch (e) { listBox.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Nothing") })); }
@@ -7004,7 +7014,7 @@ async function openUsers() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
     h("p", { text: apiLevel >= SUP_API
-      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)."
+      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "")
       : "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
     h("fieldset", null, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
@@ -10910,10 +10920,12 @@ function revUnread(from, to) {
    job's Private notes. Housecall Pro's API doesn't say who changed it: the notes, or the job's Activity feed in Housecall
    Pro, do. An admin switched on for it (Settings > Users) marks each one checked, with what he found. ---- */
 const PRICE_API = 54;                                   // the Google script that watches the amounts
+const PRICE_SW_API = 55;                                // ... and lets an admin who sees VODA Payroll switch who checks them
 let priceDoc = null, priceBusy = false, priceTried = 0, priceErr = "", priceMore = false;
+let priceOpen = !!store.get("voda.priceOpen");          // the red box open (the list) or closed (one line); remembered
 const priceMarked = new Set();                          // warnings whose visit day this window has had read again
 function priceForget() { priceDoc = null; priceTried = 0; priceMarked.clear(); }
-const priceOn = () => isAdmin() && apiLevel >= PRICE_API;
+const priceOn = () => apiLevel >= PRICE_API && (isAdmin() || userAccess().includes("pricecheck"));
 /** The open warnings and the last ones checked (again after 5 minutes; Check now: scan). */
 async function priceLoad(scan) {
   if (!session || !priceOn() || priceBusy) return;
@@ -10957,7 +10969,7 @@ function priceCard(w, may) {
       w.notes.length ? w.notes.slice().reverse().map(n => h("p", { class: "price-note" + (n.n ? " new" : "") }, n.n ? h("span", { class: "price-chip new", text: "New" }) : null, n.c))
         : h("p", { class: "price-note none", text: "No Private notes on the job." })),
     h("div", { class: "price-acts" }, may ? h("button", { class: "btn small primary", type: "button", "data-check": w.id, onclick: () => priceCheckDlg([w]) }, "✓ Checked")
-      : h("span", { class: "price-wait", text: "An admin switched on for it marks it checked (Settings › Users)." })));
+      : h("span", { class: "price-wait", text: "Someone switched on for it marks it checked (Settings › Users › Checks price changes)." })));
 }
 /** Marking warnings checked: what was found (optional). */
 function priceCheckDlg(list) {
@@ -10998,14 +11010,19 @@ function revPriceEl() {
   const err = P.err ? h("p", { class: "price-sub bad", text: `Housecall Pro: ${revErrText({ error: P.err })}` }) : null;
   if (!P.open.length) return h("div", { class: "price-ok", id: "priceOk" }, h("span", { text: `✓ No price changes to check · ${when}` }), ...tools, setup, err);
   const n = P.open.length, shown = priceMore ? P.open : P.open.slice(0, 3);
-  return h("section", { class: "price-warn", id: "priceWarn", role: "alert" },
-    h("div", { class: "price-head" }, h("span", { class: "price-ic", "aria-hidden": "true", text: "!" }),
-      h("div", null, h("strong", { text: `${n} price change${n === 1 ? "" : "s"} in Housecall Pro to check` }),
-        h("p", { class: "price-sub", text: `Amounts changed after the app saw them. Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` })),
-      h("div", { class: "price-tools" }, ...tools, P.mayCheck && n > 1 ? btn(`Mark all ${n} checked`, "priceAll", () => priceCheckDlg(P.open)) : null)),
+  const toggle = () => { priceOpen = !priceOpen; store.set("voda.priceOpen", priceOpen); renderRevenue(); };
+  // the red header opens and closes the list (closed: one line with how many)
+  return h("section", { class: "price-warn" + (priceOpen ? " open" : ""), id: "priceWarn", role: "alert" },
+    h("div", { class: "price-head" },
+      h("button", { class: "price-toggle", type: "button", id: "priceToggle", "aria-expanded": String(priceOpen), "aria-controls": "priceList", onclick: toggle },
+        h("span", { class: "price-ic", "aria-hidden": "true", text: "!" }),
+        h("span", { class: "price-title" }, h("strong", { text: `${n} price change${n === 1 ? "" : "s"} in Housecall Pro to check` }),
+          h("span", { class: "price-show", text: priceOpen ? "Hide ▴" : "Show ▾" }))),
+      h("div", { class: "price-tools" }, ...tools, priceOpen && P.mayCheck && n > 1 ? btn(`Mark all ${n} checked`, "priceAll", () => priceCheckDlg(P.open)) : null)),
+    priceOpen ? h("p", { class: "price-sub", text: `Amounts changed after the app saw them. Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` }) : null,
     setup, err,
-    h("div", { class: "price-list", id: "priceList" }, shown.map(w => priceCard(w, P.mayCheck))),
-    n > 3 ? h("button", { class: "btn small ghost price-more", type: "button", id: "priceMore", onclick: () => { priceMore = !priceMore; renderRevenue(); } }, priceMore ? "Show fewer" : `Show all ${n}`) : null);
+    priceOpen ? h("div", { class: "price-list", id: "priceList" }, shown.map(w => priceCard(w, P.mayCheck))) : null,
+    priceOpen && n > 3 ? h("button", { class: "btn small ghost price-more", type: "button", id: "priceMore", onclick: () => { priceMore = !priceMore; renderRevenue(); } }, priceMore ? "Show fewer" : `Show all ${n}`) : null);
 }
 
 /* ---- Company goal (Operations, beside Accounts receivable): the year's goal for each department and what's left of it
