@@ -943,7 +943,8 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-deps button:last-child { border-bottom: 0; }
 .rev-ar-deps button:hover, .rev-ar-deps button:focus-visible { background: var(--accent-soft); }
 .rev-ar-deps button b { font-variant-numeric: tabular-nums; }
-.rev-ar-deps button em { grid-column: 1 / -1; padding-left: 14px; font-style: normal; font-weight: 500; font-size: .74rem; color: var(--muted); }
+.rev-ar-deps button .pct { font-size: .74rem; font-weight: 600; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.rev-ar-deps button em { grid-column: 1; padding-left: 14px; font-style: normal; font-weight: 500; font-size: .74rem; color: var(--muted); }
 .rev-ar-bar { all: unset; box-sizing: border-box; cursor: pointer; display: none; align-items: center; gap: 10px; width: 100%; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--soon) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--soon) 35%, var(--line)); }
 .rev-ar-bar .l { display: grid; } .rev-ar-bar .l.col small, .rev-ar-bar .l.col b { color: var(--accent); } .rev-ar-bar small { font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--soon) 70%, var(--ink)); }
 .rev-ar-bar b { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--due); }
@@ -1243,6 +1244,7 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
 .lb-days .check input { margin: 0; }
 .lb-days .lb-nosale { font-weight: 400; margin-left: auto; }
 .lb-days .lb-nosale small { display: inline; }
+.lb-days.lb-est { margin-top: 2px; } .lb-days.lb-est .lb-nosale { margin-left: 0; }
 .lb-days .field { flex: 1 1 140px; max-width: 200px; min-width: 0; }
 .lb-days .field[hidden], .lb-team .t-was[hidden] { display: none; }
 .lb-team .t-was { margin: 0; }
@@ -1463,6 +1465,11 @@ dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > th, .mkt-row.tot .mkt-label { text-transform: uppercase; letter-spacing: .06em; }
 @media (max-width: 600px) { :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > th, .mkt-row.tot .mkt-label { text-transform: none; letter-spacing: 0; } }
 @media (min-width: 761px) { :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > td { font-family: var(--font-display); font-size: 1.15rem; } }
+/* each total's column heading over it (labelTotals) */
+:is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > td[data-col]::before, .mkt-row.tot > [data-col]::before {
+  content: attr(data-col); display: block; margin-bottom: 2px; font-family: var(--font-body); font-size: .6rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap; line-height: 1.2; }
+@media (max-width: 560px) { :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > td[data-col-short]::before, .mkt-row.tot > [data-col-short]::before { content: attr(data-col-short); } }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) :is(span, b, strong), .mkt-row.tot :is(.mkt-label, .c-rev b) { color: var(--total-ink) !important; }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) > :is(th, td) small, .mkt-row.tot small { color: var(--muted) !important; font-family: var(--font-body); }
 :is(.lb-table tfoot tr:first-child, .lb-pay tfoot tr.tot) .rev-was { display: block; background: none !important; box-shadow: none !important; padding: 2px 0 0 !important; margin: 3px 0 0 auto !important; font-family: var(--font-body); font-size: .72rem; font-weight: 600; }
@@ -2458,7 +2465,10 @@ function lbCleanConfig(c) {
       if (b && (!a || a <= b) && first && b < first) was.push([a, b]);
     }
     if (was.length) team.was = was.sort((x, y) => x[1].localeCompare(y[1]));
-    if (t.noSale === true) team.noSale = true;   // not on the technician sales goal (an estimator)
+    if (t.noSale === true) {   // not on the technician sales goal (an estimator): from a month on, or always
+      team.noSale = true;
+      if (lbYm(t.noSaleFrom)) team.noSaleFrom = lbYm(t.noSaleFrom);
+    }
     if (LB_ROLES[t.role]) team.role = t.role;
     out.teams.push(lbPersonMore(team, t));
   }
@@ -2498,6 +2508,9 @@ const lbCurrent = (t, key) => !t.left || t.left.slice(0, 7) >= key;
 const lbOffBoard = (cfg, key) => cfg.reviewers.concat(cfg.teams.filter(t => !lbOnBoard(t, key) && lbCurrent(t, key)).map(t => Object.assign({ name: t.name, unit: t.unit }, t.role ? { role: t.role } : {})));
 /** The roster entry for a name (any capitals), or null. */
 const lbTeamOf = (cfg, name) => cfg.teams.find(x => x.name.toLowerCase() === String(name || "").toLowerCase()) || null;
+/** Is he an estimator (no sales goal, not ranked in technician sales) in this month ("2026-03")? Ticked with a month:
+ *  from that month on (before it he was a technician); ticked without one: always. */
+const lbEst = (t, key) => !!(t && t.noSale && (!t.noSaleFrom || !key || key >= t.noSaleFrom));
 /** The unit a team is ranked in that month ("2026-11"), or "" when it isn't on the board then. */
 function lbUnitIn(cfg, name, key) { const t = lbTeamOf(cfg, name); return t && lbOnBoard(t, key) ? t.unit : ""; }
 /** The teams on the board that month, Cleaning first, in roster order. */
@@ -3227,7 +3240,7 @@ function lbFocus(cfgIn, docs, year, asOf) {
   const revenue = [], thin = [];
   for (const unit of LB_GROUPS) {
     // an estimator (noSale) isn't a technician: not judged, and not part of the others' numbers either
-    const teams = board.filter(t => t.unit === unit && !t.noSale).map(t => Object.assign({ team: t.name }, get(win, t.name)));
+    const teams = board.filter(t => t.unit === unit && !lbEst(t, key)).map(t => Object.assign({ team: t.name }, get(win, t.name)));
     const judged = teams.filter(x => x.workDays >= F.minDays);
     thin.push(...teams.filter(x => x.workDays < F.minDays).map(x => x.team));
     for (const x of judged) {
@@ -3259,7 +3272,7 @@ function lbFocus(cfgIn, docs, year, asOf) {
     || (a.fix === "room" ? b.worth - a.worth : a.share - b.share) || a.team.localeCompare(b.team));
 
   // sales: the month so far against the goal's pace, in each unit's working days (an estimator isn't on the goal)
-  const goal = cfg.goal, sellers = board.filter(t => !t.noSale), pace = {};
+  const goal = cfg.goal, sellers = board.filter(t => !lbEst(t, key)), pace = {};
   for (const u of LB_GROUPS) {
     const total = lbWorkDays(key, u), left = lbDaysLeft(key, lbAddDays(asOf, 1), u), done = total - left;
     pace[u] = { week: lbWeekOf(u), total, left, done, expected: total ? goal * done / total : 0 };
@@ -3291,7 +3304,7 @@ function lbFocus(cfgIn, docs, year, asOf) {
   const order = { behind: 0, early: 1, onPace: 2, done: 3, none: 4 };
   sales.sort((a, b) => LB_GROUPS.indexOf(a.unit) - LB_GROUPS.indexOf(b.unit) || order[a.status] - order[b.status]
     || (a.status === "behind" || a.status === "early" ? a.sales - b.sales : b.sales - a.sales) || a.team.localeCompare(b.team));
-  return { asOf, from, key, span, goal, pace, revenue, thin, sales, kinds, units, noSale: board.filter(t => t.noSale).map(t => t.name) };
+  return { asOf, from, key, span, goal, pace, revenue, thin, sales, kinds, units, noSale: board.filter(t => lbEst(t, key)).map(t => t.name) };
 }
 
 
@@ -5884,6 +5897,57 @@ let dlgDirty = false, dlgDownOut = false;
 const dlgHasSave = () => [...dlg.querySelectorAll(".btn.primary")].some(b => /^save\b/i.test(b.textContent.trim()));
 const dlgMayClose = () => !(dlgDirty && dlgHasSave()) || confirm("Close without saving what you typed?");
 function dismissDialog() { if (dlg.open && dlgMayClose()) closeDialog(); }
+/* ---- Totals say what each number is: on every total row (a table's, Marketing's) each number gets its column's
+   heading over it, small, since the headings are far up the page by the time you get to the total. Done for any table
+   drawn or redrawn anywhere (a page, a window). ---- */
+// a heading's words: its long name, or its short one (a phone's), when it has both
+const totalHead = (el, short) => {
+  if (!el) return "";
+  const c = el.cloneNode(true);
+  c.querySelectorAll(short ? ".t-long" : ".t-short").forEach(x => x.remove());
+  return c.textContent.replace(/[▲▼↑↓⇅]/g, "").replace(/\s+/g, " ").trim();
+};
+const totalMark = (cell, head) => {
+  if (!cell.textContent.trim()) return;   // an empty cell (a column with no total) gets no heading
+  const long = totalHead(head), short = totalHead(head, true);
+  if (!long) return;
+  cell.dataset.col = long;
+  if (short && short !== long) cell.dataset.colShort = short;
+};
+function labelTotals() {
+  for (const t of document.querySelectorAll("table")) {
+    const tr = t.tFoot && t.tFoot.rows[0];
+    if (!tr || !t.tHead || tr.dataset.labeled) continue;
+    // each column's lowest heading (headings that span rows or columns placed in a grid first)
+    const grid = [];
+    [...t.tHead.rows].forEach((row, ri) => {
+      let c = 0;
+      for (const cell of row.cells) {
+        while (grid[ri] && grid[ri][c] !== undefined) c++;
+        for (let r = 0; r < (cell.rowSpan || 1); r++) for (let k = 0; k < (cell.colSpan || 1); k++) (grid[ri + r] || (grid[ri + r] = []))[c + k] = cell;
+        c += cell.colSpan || 1;
+      }
+    });
+    const low = grid[grid.length - 1] || [];
+    let c = 0;
+    for (const cell of tr.cells) {
+      if (cell.tagName === "TD") totalMark(cell, low[c]);
+      c += cell.colSpan || 1;
+    }
+    tr.dataset.labeled = "1";
+  }
+  for (const tot of document.querySelectorAll(".mkt-row.tot:not([data-labeled])")) {
+    const hdr = tot.parentElement && tot.parentElement.querySelector(".mkt-row.mkt-hdr");
+    if (hdr) for (const cell of tot.children) {
+      const k = [...cell.classList].find(x => x.startsWith("c-") && x !== "c-name");
+      if (k) totalMark(cell, hdr.querySelector("." + k));
+    }
+    tot.dataset.labeled = "1";
+  }
+}
+let totalsQueued = false;
+new MutationObserver(() => { if (!totalsQueued) { totalsQueued = true; requestAnimationFrame(() => { totalsQueued = false; labelTotals(); }); } })
+  .observe(document.documentElement, { childList: true, subtree: true });
 function openDialog(...content) {
   // On phones the form itself takes focus, so the keyboard stays down until a box is tapped.
   const touch = isTouch();
@@ -6368,7 +6432,7 @@ function askOil() {
 /** The month's technicians with jobs (estimators left out: they have no sales goal). */
 function askTechs(key) {
   const cfg = lbCfg();
-  return lbRecords().filter(r => r.month === key && r.group && r.jobs > 0 && !(lbTeamOf(cfg, r.team) || {}).noSale);
+  return lbRecords().filter(r => r.month === key && r.group && r.jobs > 0 && !lbEst(lbTeamOf(cfg, r.team), key));
 }
 const ASK_KINDS = { up: ["up sale", "up sales"], addon: ["add-on", "add-ons"] };
 /** The lowest of one kind of sale per job in the newest month typed: who needs to improve on it. */
@@ -6463,7 +6527,7 @@ function askLead() {
 }
 function askGoal() {
   const now = clockNow(), key = lbMonthKey(now.getFullYear(), now.getMonth() + 1), cfg = lbCfg(), goal = cfg.goal, today = lbToday();
-  const recs = lbRecords().filter(r => r.month === key && r.group && !(lbTeamOf(cfg, r.team) || {}).noSale);
+  const recs = lbRecords().filter(r => r.month === key && r.group && !lbEst(lbTeamOf(cfg, r.team), key));
   if (!recs.length) return { none: `No one on the board for ${lbMonthLong(now.getMonth() + 1)} yet.` };
   const rows = recs.map(r => { const left = lbDaysLeft(key, today, r.group); return { r, left, g: lbGoal(r, goal, left) }; })
     .sort((a, b) => a.g.done - b.g.done || b.g.left - a.g.left);
@@ -7744,6 +7808,7 @@ function accessChips(selected, onchange, idPrefix) {
 const LB_API = 22;                                     // the Google script version with typed-in leaderboard numbers
 const LB_RV_API = 23;                                  // ... and with 5-star reviews typed by day
 const LB_NOSALE_API = 26;                              // ... and with Estimator (noSale) on a team
+const LB_EST_FROM_API = 52;                             // ... and with the month he became an estimator (noSaleFrom)
 const LB_REVIEWERS_API = 27;                           // ... and with reviews-only people (cfg.reviewers)
 const LB_ROLES_API = 29;                               // ... and with roles and the pay rates (Payroll)
 const LB_JOBS_API = 30;                                // ... and with a truck's jobs, who worked with him, the split log
@@ -8448,14 +8513,14 @@ function lbSaleFoot(day, team) {
   const t = lbTeamOf(lbCfg(), team);
   const g = lbGoal(r, lbCfg().goal, lbDaysLeft(day.slice(0, 7), lbToday(), t ? t.unit : ""));
   const dayTxt = p && (p.ownSales.length || p.help.some(x => x.splitSales)) ? `Day: ${lbMoney(p.sales.reduce((n, v) => n + v, 0))}` : "Nothing typed for this day";
-  if (t && t.noSale) return `${dayTxt} · Month: ${lbMoney(g.mtd)} (no sales goal)`;
+  if (lbEst(t, day.slice(0, 7))) return `${dayTxt} · Month: ${lbMoney(g.mtd)} (no sales goal)`;
   return `${dayTxt} · Month: ${lbMoney(g.mtd)} of ${lbMoney(lbCfg().goal)}${g.done ? ", goal reached" : `, ${lbMoney(g.left)} to go`}`;
 }
 /** His sales this month against the goal: "Sales this month: $350 of $3,000, $2,650 to go". */
 function lbSaleGoalText(day, team) {
   const r = lbRecOf(day.slice(0, 7), team) || { sales: 0 }, t = lbTeamOf(lbCfg(), team);
   const g = lbGoal(r, lbCfg().goal, lbDaysLeft(day.slice(0, 7), lbToday(), t ? t.unit : ""));
-  if (t && t.noSale) return `Sales this month: ${lbMoney(g.mtd)} (no sales goal)`;
+  if (lbEst(t, day.slice(0, 7))) return `Sales this month: ${lbMoney(g.mtd)} (no sales goal)`;
   return `Sales this month: ${lbMoney(g.mtd)} of ${lbMoney(lbCfg().goal)}${g.done ? ", goal reached" : `, ${lbMoney(g.left)} to go`}`;
 }
 function lbDayTotalText(day) {
@@ -9533,7 +9598,8 @@ function lbPerformanceEl() {
       ["Total", lbMoney(sum(list, "revenue")), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "jobs"))), lbMoney(lbDiv(sum(list, "revenue"), sum(list, "workDays"))), fmt(sum(list, "jobs")), fmt(sum(list, "workDays")), "", "", ""])));
   // a technician with a day of numbers (truck or sales) is ranked in sales, even at $0
   // an estimator (ticked in Teams) is shown but not ranked
-  const sold = t => !t.noSale && (R(t).saleDays > 0 || R(t).truckDays > 0 || R(t).sales > 0);
+  const estKey = span ? span.to.slice(0, 7) : key, est = t => lbEst(t, estKey);
+  const sold = t => !est(t) && (R(t).saleDays > 0 || R(t).truckDays > 0 || R(t).sales > 0);
   const gOf = t => lbGoal(R(t), goal, leftOf(t.unit));
   const kindCols = [
     { k: "saleJobs", label: "Jobs", v: t => R(t).saleJobs, f: t => fmt(R(t).saleJobs) },
@@ -9554,8 +9620,8 @@ function lbPerformanceEl() {
     h("p", { class: "lb-sub", id: "lbsDaysLeft", text: left ? `Goal ${lbMoney(goal)} each · working days left in ${lbMonthLong(month)}: ${LB_GROUPS.filter(u => board.some(t => t.unit === u)).map(u => `${u} ${leftOf(u)} (${LB_WEEK_TEXT[lbWeekOf(u)]})`).join(", ")}${lbClosedText(key, today).replace(/^, /, " · ")}` : `Goal ${lbMoney(goal)} each` }),
     lbRankTable("lbsSales", [{ k: "name", label: "Tech" },
       { k: "sales", label: "Month to date", def: true, v: t => R(t).sales, f: t => lbMoney(R(t).sales) },
-      { k: "left", label: "Left to goal", low: true, v: t => gOf(t).left, f: t => { const g = gOf(t); return t.noSale ? "No goal" : g.done ? "Done" : lbMoney(g.left); } },
-      { k: "need", label: "Need per day", low: true, v: t => gOf(t).perDay, f: t => { const g = gOf(t); return t.noSale || g.done || !leftOf(t.unit) ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", ""].concat(kindFoot)));
+      { k: "left", label: "Left to goal", low: true, v: t => gOf(t).left, f: t => { const g = gOf(t); return est(t) ? "No goal" : g.done ? "Done" : lbMoney(g.left); } },
+      { k: "need", label: "Need per day", low: true, v: t => gOf(t).perDay, f: t => { const g = gOf(t); return est(t) || g.done || !leftOf(t.unit) ? "–" : lbMoney(g.perDay); } }].concat(kindCols), board, sold, ["Total", lbMoney(sum(board, "sales")), "", ""].concat(kindFoot)));
   // everyone's reviews count from his first one: a helper's (never on the leaderboard), and the months before a tech
   // went on it. Off the leaderboard this month and still here: listed when he has reviews this year, not ranked
   const ytdRv = name => lbRecords().filter(r => r.team === name && r.month <= key && r.month.startsWith(y + "-")).reduce((s, r) => s + r.reviews, 0);
@@ -9760,11 +9826,16 @@ function openLbTeams() {
       h("p", { class: "hint t-was", hidden: !(t.was || []).length, text: (t.was || []).length ? `Earlier on the leaderboard: ${t.was.map(w => `${w[0] ? dayLong(w[0]) : "the start"} – ${dayLong(w[1])}`).join("; ")}.` : "" }),
       h("div", { class: "lb-days" },
         h("label", { class: "check" }, h("input", { type: "checkbox", class: "t-left", checked: !!t.left }), h("span", null, "Left the company")),
-        dateField("t-leftday", "Last day", t.left, !t.left),
+        dateField("t-leftday", "Last day", t.left, !t.left)),
+      // Estimator (no sales goal), from a month on: before it he's a technician, ranked in sales; no month: always
+      h("div", { class: "lb-days lb-est" },
         h("label", { class: "check lb-nosale", title: "Left out of Today's focus and technician sales; still ranked on revenue" }, h("input", { type: "checkbox", class: "t-nosale", checked: !!t.noSale }),
-          h("span", null, "Estimator ", h("small", { text: "(no sales goal)" })))));
+          h("span", null, "Estimator ", h("small", { text: "(no sales goal)" }))),
+        h("div", { class: "field t-nosalefrom-f", hidden: !t.noSale }, h("label", { text: "From (empty: always)" }),
+          h("input", { type: "month", class: "t-nosalefrom", value: t.noSaleFrom || "", min: "2015-01", max: `${clockNow().getFullYear() + 1}-12`, placeholder: "YYYY-MM", "aria-label": "Estimator from (month; empty: always)" }))));
     const q = c => row.querySelector(c);
     const show = (c, on) => { q(c + "-f").hidden = !on; };
+    q(".t-nosale").addEventListener("change", () => show(".t-nosalefrom", q(".t-nosale").checked));
     q(".t-on").addEventListener("change", () => {
       const on = q(".t-on").checked;
       show(".t-until", !on);
@@ -9905,7 +9976,12 @@ function openLbTeams() {
             if (o && lbLastOn(o) && since && since > lbLastOn(o)) was.push([lbFirstOn(o), lbLastOn(o)]);
             if (was.length) team.was = was;
             if (row.querySelector(".t-role").value) team.role = row.querySelector(".t-role").value;
-            if (row.querySelector(".t-nosale").checked) team.noSale = true;
+            if (row.querySelector(".t-nosale").checked) {
+              team.noSale = true;
+              const nf = row.querySelector(".t-nosalefrom").value.trim();
+              if (nf && !/^\d{4}-(0[1-9]|1[0-2])$/.test(nf)) { err.textContent = `${name}: “Estimator from” should be a month, like 2026-01.`; return; }
+              if (nf) team.noSaleFrom = nf;
+            }
             if (!contact(team, row, ".t-email", ".t-phone")) return;
             teams.push(team);
           }
@@ -9929,6 +10005,7 @@ function openLbTeams() {
           const plain = t => (!t.on || t.on === t.from + "-01") && (!t.off || t.off === lbLastDay(t.to)) && (t.left || "") === (t.to ? lbLastDay(t.to) : "") && !t.was;
           if (apiLevel && apiLevel < LB_DATES_API && !teams.every(plain)) { err.textContent = "Exact days and Left the company need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           if (typedContact && apiLevel && apiLevel < LB_PEOPLE_API) { err.textContent = "Emails and phone numbers need the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
+          if (teams.some(t => t.noSaleFrom) && apiLevel && apiLevel < LB_EST_FROM_API) { err.textContent = "“Estimator from” needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after."; return; }
           if (teams.some(t => t.noSale) && apiLevel && apiLevel < LB_NOSALE_API) { err.textContent = "Estimator needs the newest Google script: paste the latest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that."; return; }
           const b = $("lbTeamsSave"); b.disabled = true; b.textContent = "Saving…";
           try {
@@ -10619,7 +10696,10 @@ function renderRevenue() {
       h("div", { class: "rev-ar-deps" }, h("div", { class: "rev-ar-dhead", "aria-hidden": "true" }, h("span"), h("span", { class: "ar", text: "AR" }), h("span", { class: "col", text: "Collected" })),
         [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"]].concat(ar.o[1] || ar.col.o ? [["o", "Other"]] : []).map(([k, name]) =>
           h("button", { type: "button", "data-ar": k, "aria-label": `${name}: ${lbMoney(ar[k][0] / 100)} owed, ${colText(k)} collected`, onclick: e => { e.stopPropagation(); arOpen(k); } },
-            h("span", { class: "nm" }, h("i", { class: "rev-dot " + k }), name), h("b", { text: lbMoney(ar[k][0] / 100) }), h("span", { class: "col", text: colText(k) }), h("em", { text: revJobs(ar[k][1]) })))));
+            h("span", { class: "nm" }, h("i", { class: "rev-dot " + k }), name), h("b", { text: lbMoney(ar[k][0] / 100) }), h("span", { class: "col", text: colText(k) }),
+            // under them: the share of what the department charged in the period that's still owed, and that's been paid
+            h("em", { text: revJobs(ar[k][1]) }), h("small", { class: "pct pct-ar", title: "Share of what it charged that's still owed", text: revPct(ar[k][0], s[k][0]) }),
+            h("small", { class: "pct pct-col", title: "Share of what it charged that's been paid", text: colOk && !(colBusy && !ar.col.t) ? revPct(ar.col[k], s[k][0]) : "" })))));
     arBar = h("button", { class: "rev-ar-bar", id: "revArBar", type: "button", onclick: () => arOpen("all") },
       h("span", { class: "l" }, h("small", { text: "Accounts receivable" }), h("b", { text: busy && !ar.t[1] ? "…" : lbMoney(ar.t[0] / 100) })),
       h("span", { class: "l col" }, h("small", { text: "Collected" }), h("b", { text: colText("t") })),
@@ -13313,7 +13393,7 @@ function lbSalesSlide(month) {
   const leftOf = unit => lbDaysLeft(key, today, unit);
   const recOf = name => lbRecords().find(r => r.month === key && r.team === name) || { up: 0, addon: 0, rugs: 0, extra: 0, sales: 0, saleJobs: 0 };
   // technicians on the sales goal (an estimator isn't on this slide)
-  const rows = lbBoardShown(cfg, key).filter(t => !t.noSale).map(t => { const r = recOf(t.name); return { team: t.name, unit: t.unit, left: leftOf(t.unit), up: r.up, addon: r.addon, rugs: r.rugs, extra: r.extra, jobs: r.saleJobs, perJob: lbDiv(r.sales, r.saleJobs), mtd: r.sales, g: lbGoal(r, cfg.goal, leftOf(t.unit)) }; }).sort(lbAz);
+  const rows = lbBoardShown(cfg, key).filter(t => !lbEst(t, key)).map(t => { const r = recOf(t.name); return { team: t.name, unit: t.unit, left: leftOf(t.unit), up: r.up, addon: r.addon, rugs: r.rugs, extra: r.extra, jobs: r.saleJobs, perJob: lbDiv(r.sales, r.saleJobs), mtd: r.sales, g: lbGoal(r, cfg.goal, leftOf(t.unit)) }; }).sort(lbAz);
   const units = LB_GROUPS.filter(u => rows.some(r => r.unit === u)), left = Math.max(0, ...units.map(leftOf));
   const cols = [["up", "Up sale", true], ["addon", "Add-on", true], ["rugs", "Rugs in plant", true], ["extra", "Additional", true], ["jobs", "Jobs", false], ["perJob", "Per job", true]]
     .filter(([k]) => k !== "rugs" || rows.some(r => r.rugs > 0));   // no rugs in plant column in a month nobody sold one
