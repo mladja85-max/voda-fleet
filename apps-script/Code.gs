@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 50;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 51;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -3595,13 +3595,16 @@ function connectHousecallPro() {
 // first visit; canceled jobs are left out. The app reads the tab, and asks for days to be read again from Housecall Pro
 // when they're missing or may have changed (an invoice changed after the day).
 const REV_SHEET = "Revenue";
-const REV_COLS = ["Day", "Restoration $", "Restoration jobs", "Cleaning $", "Cleaning jobs", "Repairs $", "Repairs jobs", "Other $", "Other jobs", "Visits", "Read from Housecall Pro", "Other job types", "Sources", "Unpaid"];
+const REV_COLS = ["Day", "Restoration $", "Restoration jobs", "Cleaning $", "Cleaning jobs", "Repairs $", "Repairs jobs", "Other $", "Other jobs", "Visits", "Read from Housecall Pro", "Other job types", "Sources", "Unpaid", "Jobs"];
 // Sources (for Marketing): each kind of job and lead source that day, "repeat|Google": [Restoration ¢, jobs, Cleaning ¢,
 // jobs, Repairs ¢, jobs, Other ¢, jobs]. The kind is REPEAT or REFERRAL from the Job type, else "" and the Lead source
 // decides. Empty on days read before Marketing (they're read again when Marketing needs them).
 // Unpaid (Operations): that day's visits whose client still owes (Housecall Pro's outstanding balance), done or under
 // way (not still to come), [job id, invoice #, client, department, charged ¢, owes ¢, project (the job's description, else
 // its Job type)]: Accounts receivable. Empty on days read before it.
+// Jobs (Operations): every visit that day (canceled left out), [job id, invoice #, client, department, charged ¢, owes ¢,
+// project, work status, 1 if the job's first visit else 0]: the list behind each department's tile, and what's been
+// collected (charged less what's still owed, deposits on visits still to come included). Empty on days read before it.
 const REV_DEPTS = ["r", "c", "p", "o"];   // Restoration, Cleaning, Repairs, Other: their $ and jobs columns in that order
 const REV_FRESH_MS = 60 * 1000;           // days read this recently aren't read again (two phones opening the tab at once)
 /** "Restoration Residential - REFERRAL" → "r"; "Cleaning…" → "c"; "Repair…" → "p"; anything else → "o". */
@@ -3630,7 +3633,7 @@ function revRows_(s) {
     const day = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM-dd") : String(r[0] || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
     const at = r[10] instanceof Date ? r[10].toISOString() : String(r[10] || "");
-    out[day] = [day].concat(r.slice(1, 10).map(function (v) { return Number(v) || 0; }), [at, String(r[11] || ""), String(r[12] || ""), String(r[13] || "")]);
+    out[day] = [day].concat(r.slice(1, 10).map(function (v) { return Number(v) || 0; }), [at, String(r[11] || ""), String(r[12] || ""), String(r[13] || ""), String(r[14] || "")]);
   });
   return out;
 }
@@ -3638,14 +3641,17 @@ function revRows_(s) {
  *  unpaid (each null when read before it was kept)]. */
 function revOut_(row) {
   const parse = function (t) { if (!t) return null; try { return JSON.parse(t); } catch (e) { return null; } };
-  const src = parse(row[12]), unpaid = parse(row[13]);
-  return row.slice(1, 10).concat([Date.parse(row[10]) || 0, row[11], src && typeof src === "object" && !Array.isArray(src) ? src : null, Array.isArray(unpaid) ? unpaid : null]);
+  const src = parse(row[12]), unpaid = parse(row[13]), jobs = parse(row[14]);
+  return row.slice(1, 10).concat([Date.parse(row[10]) || 0, row[11], src && typeof src === "object" && !Array.isArray(src) ? src : null, Array.isArray(unpaid) ? unpaid : null,
+    Array.isArray(jobs) ? jobs : null]);
 }
 /** Clients' names and projects in Unpaid go only to those who see Operations (Marketing alone gets the amounts). */
 function revPrivate_(out, user) {
   if (out && out.days && !canSee_(user, "revenue")) Object.keys(out.days).forEach(function (d) {
     const u = out.days[d][12];
     if (Array.isArray(u)) out.days[d][12] = u.map(function (x) { return [x[0], x[1], "", x[3], x[4], x[5], ""]; });
+    const js = out.days[d][13];
+    if (Array.isArray(js)) out.days[d][13] = js.map(function (x) { return [x[0], x[1], "", x[3], x[4], x[5], "", x[7], x[8]]; });
   });
   return out;
 }
@@ -3680,7 +3686,7 @@ function revSync_(req) {
   if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
   if (got.more) return { ok: false, error: "too_many" };
   const tz = Session.getScriptTimeZone(), at = new Date().toISOString(), acc = {};
-  list.forEach(function (d) { acc[d] = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], visits: 0, other: {}, src: {}, unpaid: [] }; });
+  list.forEach(function (d) { acc[d] = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], visits: 0, other: {}, src: {}, unpaid: [], jobs: [] }; });
   got.jobs.forEach(function (job) {
     if (!job || /cancel/i.test(String(job.work_status || ""))) return;
     const start = new Date((job.schedule && job.schedule.scheduled_start) || "");
@@ -3697,6 +3703,8 @@ function revSync_(req) {
     if (first) v[i + 1]++;
     // still owed: done or under way (a visit still to come isn't owed yet)
     const owes = Math.round(Number(job.outstanding_balance) || 0);
+    a.jobs.push([String(job.id || ""), String(job.invoice_number || ""), hcpClient_(job), k, Math.round(cents), owes,
+      String(job.description || type || "").replace(/\s+/g, " ").trim().slice(0, 80), String(job.work_status || "").slice(0, 30), first ? 1 : 0]);
     if (owes > 0 && !/^(scheduled|unscheduled|needs scheduling)$/i.test(String(job.work_status || "").trim()))
       a.unpaid.push([String(job.id || ""), String(job.invoice_number || ""), hcpClient_(job), k, Math.round(cents), owes,
         String(job.description || type || "").replace(/\s+/g, " ").trim().slice(0, 80)]);
@@ -3707,11 +3715,11 @@ function revSync_(req) {
     list.forEach(function (d) {
       const a = acc[d], row = [d];
       REV_DEPTS.forEach(function (k) { row.push(Math.round(a[k][0]) / 100, a[k][1]); });
-      row.push(a.visits, at, Object.keys(a.other).sort().join("; "), JSON.stringify(a.src), JSON.stringify(a.unpaid));
+      row.push(a.visits, at, Object.keys(a.other).sort().join("; "), JSON.stringify(a.src), JSON.stringify(a.unpaid), JSON.stringify(a.jobs));
       rows[d] = row;
     });
     const all = Object.keys(rows).sort().map(function (d) { return rows[d]; });
-    if (String(s.getRange(1, REV_COLS.length).getValue()) !== REV_COLS[REV_COLS.length - 1]) s.getRange(1, 1, 1, REV_COLS.length).setValues([REV_COLS]).setFontWeight("bold");   // a tab made before Marketing or Unpaid
+    if (String(s.getRange(1, REV_COLS.length).getValue()) !== REV_COLS[REV_COLS.length - 1]) s.getRange(1, 1, 1, REV_COLS.length).setValues([REV_COLS]).setFontWeight("bold");   // a tab made before Marketing, Unpaid or Jobs
     s.getRange(2, 1, all.length, 1).setNumberFormat("@");   // before the days go in, so none turns into a date
     s.getRange(2, 1, all.length, REV_COLS.length).setValues(all);
     return { ok: true, days: pick(rows) };
