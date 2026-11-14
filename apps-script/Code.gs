@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 54;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 55;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -326,16 +326,16 @@ function doPost(e) {
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
       case "priceList":
-        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(priceList_(user, false));
       case "priceScan":
-        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(priceList_(user, true));
       case "priceCheck":
         if (!canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return priceCheck_(req, user); }));
       case "setPriceCheck":
-        return json_(withLock_(function () { return setAdminFlag_(req, PRICE_CHECK); }));
+        return json_(withLock_(function () { return setPriceCheck_(req); }));
       case "goals":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(goalsRead_(req.year));
@@ -754,6 +754,7 @@ function saveUser_(req) {
     // What a technician sees: takes effect on his phone at the next refresh; he stays signed in.
     const access = cleanAccess_(req.access);
     if (!access) return { ok: false, error: "bad_request" };
+    if (parseAccess_(x.u.access).indexOf(PRICE_CHECK) !== -1) access.push(PRICE_CHECK);   // switched only with setPriceCheck
     if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   }
   if (x.u.role !== role || x.u.status !== status) {
@@ -3986,7 +3987,8 @@ const PRICE_COLS = ["ID", "Noticed", "Last noticed", "Changes", "Job id", "Job #
   "Change $", "Was seen", "Private notes", "New note", "Status", "Checked by", "Checked at", "Check note", "Monumental", "Job status"];
 const WATCH_COLS = ["Job id", "Job #", "Amount $", "Notes", "Seen"];
 const PRICE_PAGES = 10, PRICE_AT = "PRICE_SCAN_AT", PRICE_ERR = "PRICE_SCAN_ERR";
-function canPriceCheck_(user) { return !!user && user.role === "admin" && parseAccess_(user.access).indexOf(PRICE_CHECK) !== -1; }
+/** Marks price changes checked (and sees them): anyone switched on for it, an admin or not. */
+function canPriceCheck_(user) { return !!user && user.status !== "disabled" && parseAccess_(user.access).indexOf(PRICE_CHECK) !== -1; }
 function priceSheet_(name, cols) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(name);
@@ -4127,6 +4129,21 @@ function priceCheck_(req, user) {
   if (!n) return { ok: false, error: "gone" };
   s.getRange(2, 1, rows.length, PRICE_COLS.length).setValues(rows);
   return Object.assign(priceList_(user, false), { checkedNow: n });
+}
+/** Who marks price changes checked (and sees them): anyone, an admin or a technician; switched on or off by an admin who
+ *  sees VODA Payroll or checks price changes himself (for anyone, himself too); the first time, by any admin. */
+function setPriceCheck_(req) {
+  const s = usersSheet_(), all = readUsers_(s);
+  const x = all.filter(function (y) { return y.u.id === String(req.id || ""); })[0];
+  if (!x) return { ok: false, error: "gone" };
+  const has = function (u, F) { return u.role === "admin" && u.status === "active" && parseAccess_(u.access).indexOf(F) !== -1; };
+  const me = all.filter(function (y) { return y.u.id === req.user.id; })[0];
+  const anyone = all.some(function (y) { return y.u.status === "active" && parseAccess_(y.u.access).indexOf(PRICE_CHECK) !== -1; });
+  if (anyone ? !(me && (has(me.u, PRICE_CHECK) || has(me.u, PAYROLL))) : !req.on) return { ok: false, error: "not_allowed" };
+  const access = parseAccess_(x.u.access).filter(function (a) { return a !== PRICE_CHECK; });
+  if (req.on) access.push(PRICE_CHECK);
+  if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
+  return { ok: true, user: publicUser_(x.u) };
 }
 /** Run once from the script editor if the app says the hourly check isn't set up: Run > priceWatchSetup. */
 function priceWatchSetup() {
