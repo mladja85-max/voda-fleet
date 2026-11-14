@@ -982,6 +982,13 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .goal-mtd b { justify-self: end; font-family: var(--font-display); font-size: clamp(2rem, 2.6vw, 2.5rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .goal-mtd span { grid-column: 1 / -1; justify-self: end; font-size: .74rem; font-weight: 600; opacity: .8; }
 .goal-lead { margin: 0; font-size: .9rem; color: var(--gw); }
+.goal-lead.small { font-size: .74rem; }
+/* the days picked (a Week or Dates): across the whole panel, set off from the year and the month under it */
+.goal-days { grid-column: 1 / -1; display: grid; gap: 7px; padding: 12px 12px 14px; border-radius: 14px;
+  background: linear-gradient(160deg, rgba(255, 206, 70, .20), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 1.5px rgba(255, 214, 90, .6); }
+.goal-days .goal-title { flex-wrap: wrap; row-gap: 2px; }
+.goal-days .goal-row { padding: 7px 10px; } .goal-days .goal-rg { font-size: 1.25rem; }
+.goal-days .goal-deps { background: rgba(4, 14, 48, .3); }
 .goal-old p { margin: 0; font-size: .86rem; color: var(--gw); }
 .goal-dlg .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .goal-dlg h3 { margin: 14px 0 6px; font-size: 1rem; } .goal-dlg-total { margin: 4px 0 0; font-weight: 800; color: var(--accent); }
@@ -989,7 +996,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 /* a wide screen: the goal in its own column, right of the panel, in the space beside the page */
 @media (min-width: 2040px) {
   body[data-tab="revenue"] #revView.goal3 { max-width: none; width: 1768px; grid-template-columns: minmax(0, 1000px) 360px 360px; }
-  #revView.goal3 > .goal { position: sticky; top: calc(var(--top-h, 74px) + 12px); }
+  #revView.goal3 > .goal { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 214, 90, .6) transparent; }
 }
 /* Operations: Accounts receivable (a tile on top of the panel on the right; a bar under the totals on a smaller screen) */
 .rev-ar { cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px; display: grid; gap: 4px; grid-template-columns: 1fr auto; }
@@ -10838,7 +10845,9 @@ function renderRevenue() {
       }));
   }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
-  const goal = revGoalEl(r.from > today ? today : to), slot = goal ? revGoalSlot() : "";
+  // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
+  const goalDays = (per === "week" || per === "dates") && r.from <= today ? { from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
+  const goal = revGoalEl(r.from > today ? today : to, goalDays), slot = goal ? revGoalSlot() : "";
   if (slot === "side") { if (aside) aside.prepend(goal); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, goal); }
   box.classList.toggle("goal3", slot === "wide");
   box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, slot === "top" ? goal : null, r.from > today ? null : [tiles, tilesWas, strip], arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
@@ -10913,7 +10922,64 @@ const GOAL_WIDE = "(min-width: 2040px)", GOAL_SIDE = "(min-width: 1400px)";
 const revGoalSlot = () => (matchMedia(GOAL_WIDE).matches ? "wide" : matchMedia(GOAL_SIDE).matches ? "side" : "top");
 for (const q of [GOAL_WIDE, GOAL_SIDE]) { const mq = matchMedia(q); const f = () => { if (view.tab === "revenue") renderRevenue(); }; if (mq.addEventListener) mq.addEventListener("change", f); }
 /** The goal, as of a day (the last day of the period on screen, today at most). */
-function revGoalEl(asOf) {
+/** Working days (Monday to Saturday, not the four closed days) from a to b. */
+function goalWorkDays(a, b) { let n = 0; for (let d = a; d <= b; d = lbAddDays(d, 1)) if (lbWorkDay(d)) n++; return n; }
+/** The goals for from..to, shrunk to its working days: each month's Super, Minimum and Bonus by the share of that month's
+ *  working days that are in from..to; each department's year goal by the share of the year's. A goal some month (or year)
+ *  of it has none of can't be worked out (miss). In cents. */
+function goalForDays(G, from, to) {
+  const o = { n: goalWorkDays(from, to), sup: 0, min: 0, bon: 0, r: 0, c: 0, p: 0, miss: new Set() };
+  for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = lbAddDays(`${m}-${String(lbDaysIn(m)).padStart(2, "0")}`, 1).slice(0, 7)) {
+    const a = from > `${m}-01` ? from : `${m}-01`, e = `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`, b = to < e ? to : e, n = goalWorkDays(a, b), all = lbWorkDays(m);
+    if (!n || !all) continue;
+    const mg = goalMonth(G, m);
+    for (const [k] of GOAL_MONTH) { if (!mg || mg[k] == null) o.miss.add(k); else o[k] += mg[k] * n / all; }
+  }
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
+    const a = from > `${y}-01-01` ? from : `${y}-01-01`, b = to < `${y}-12-31` ? to : `${y}-12-31`, n = goalWorkDays(a, b), all = goalWorkDays(`${y}-01-01`, `${y}-12-31`);
+    if (!n) continue;
+    const yg = (G.years || {})[String(y)];
+    for (const [k] of GOAL_DEPTS) { if (!yg) o.miss.add(k); else o[k] += (yg[k] || 0) * n / all; }
+  }
+  for (const k of ["sup", "min", "bon", "r", "c", "p"]) o[k] = Math.round(o[k]);
+  return o;
+}
+/** The days picked (a Week or Dates): their goals against what they produced. */
+function goalDaysEl(G, P) {
+  for (let y = Number(P.from.slice(0, 4)); y <= Number(P.upto.slice(0, 4)); y++) goalsLoad(y);
+  const g = goalForDays(G, P.from, P.to), days = revDaysFor(P.from, P.upto), ps = days ? revSum(days, P.from, P.upto) : null;
+  let contr = 0, cOk = true;
+  for (let d = P.from; d <= P.upto; d = lbAddDays(d, 1)) { const cd = goalsDocs[Number(d.slice(0, 4))]; if (!cd) { cOk = false; break; } contr += Number(cd.contractors[d]) || 0; }
+  const oneMonth = P.from.slice(0, 7) === P.to.slice(0, 7), mName = lbMonthLong(Number(P.from.slice(5, 7)));
+  const share = oneMonth ? `${fmt(g.n)} of ${fmt(lbWorkDays(P.from.slice(0, 7)))} working days in ${mName}` : `${fmt(g.n)} working day${g.n === 1 ? "" : "s"}`;
+  const el = h("div", { class: "goal-days", id: "goalDays" },
+    h("h3", { class: "goal-title" }, P.label, h("small", { text: share + (P.upto < P.to ? ` · so far: ${revSpanText(P.from, P.upto)}` : "") })));
+  if (!g.n) { el.append(h("p", { class: "goal-lead", text: "No working days in these days." })); return el; }
+  const rows = GOAL_MONTH.filter(([k]) => !g.miss.has(k));
+  for (const [k, label] of rows) {
+    const goal = g[k], done = ps ? (k === "bon" ? (cOk ? ps.cents - contr : null) : ps.cents) : null, hit = done != null && goal > 0 && done >= goal;
+    el.append(h("div", { class: "goal-row " + k + (hit ? " hit" : ""), "data-k": k },
+      h("span", { class: "goal-rn", text: label }), h("b", { class: "goal-rg", text: lbMoney(goal / 100) }),
+      goalBar(done || 0, goal, "gold"),
+      h("span", { class: "goal-rs" }, done == null ? "…" : hit ? h("span", { class: "goal-hit-t", text: `✓ Reached · ${k === "bon" ? "counts" : "produced"} ${lbMoney(done / 100)}` })
+        : h("span", null, `${k === "bon" ? "counts" : "produced"} `, h("b", { text: lbMoney(done / 100) })), done != null ? h("em", { text: goalPct(done, goal) }) : null),
+      k === "bon" && done != null ? h("small", { class: "goal-bon", text: `All revenue less ${lbMoney(contr / 100)} to the repair contractors` }) : null));
+  }
+  const gone = GOAL_MONTH.filter(([k]) => g.miss.has(k)).map(([, l]) => l.replace(" goal", ""));
+  if (gone.length) el.append(h("p", { class: "goal-lead small", text: `No ${gone.join(", ")} goal for some months of these days${isAdmin() ? ": set them with Edit on the month" : ""}.` }));
+  if (GOAL_DEPTS.some(([k]) => !g.miss.has(k))) el.append(h("div", { class: "goal-deps goal-ddays", id: "goalDaysDeps" },
+    h("span", { class: "goal-rl", text: "By department" }), h("span", { class: "goal-rl r", text: "Produced" }),
+    GOAL_DEPTS.filter(([k]) => !g.miss.has(k)).map(([k, name]) => {
+      const goal = g[k], done = ps ? ps[k][0] : null, hit = done != null && goal > 0 && done >= goal;
+      return [h("span", { class: "goal-dn " + k }, h("i", { class: "rev-dot " + k }), name),
+        h("span", { class: "goal-dl" + (hit ? " hit" : ""), "data-k": k }, h("b", { text: done == null ? "…" : lbMoney(done / 100) })),
+        goalBar(done || 0, goal, k),
+        h("span", { class: "goal-dg", "data-k": k }, "Goal ", h("b", { text: lbMoney(goal / 100) })),
+        h("small", { class: "goal-dp" }, done == null ? "" : hit ? `✓ Reached · ${goalPct(done, goal)}` : `${lbMoney((goal - done) / 100)} to go · ${goalPct(done, goal)}`)];
+    })));
+  return el;
+}
+function revGoalEl(asOf, P) {
   if (!canSee("revenue")) return null;
   const y = Number(asOf.slice(0, 4)), m = asOf.slice(0, 7), mon = Number(m.slice(5)), monName = lbMonthLong(mon);
   if (goalsOld || (apiLevel && apiLevel < GOALS_API)) return isAdmin() ? h("section", { class: "goal goal-old", id: "revGoal" }, goalKicker("Company goal"),
@@ -10937,6 +11003,7 @@ function revGoalEl(asOf) {
     h("div", { class: "goal-head" }, goalKicker("Company goal"), edit));
   const body = h("div", { class: "goal-body" });
   out.append(body);
+  if (P) body.append(goalDaysEl(doc.goals, P));   // a Week or Dates: the days picked, first
   // the year: the goal, then each department's goal and what's left of it
   if (yg) {
     const total = (yg.r || 0) + (yg.c || 0) + (yg.p || 0), done = ys ? ys.cents : 0, left = total - done;
