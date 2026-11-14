@@ -2092,6 +2092,10 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 /* a tablet: five tabs share the width */
 @media (min-width: 601px) and (max-width: 940px) { .views.five { width: 100%; box-sizing: border-box; } .views.five .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 6px; gap: 6px; } }
 @media (min-width: 601px) and (max-width: 760px) { .views.five .view-btn svg { display: none; } }
+/* six tabs (Estimates too): the bar fills the width and the tabs share it until the window is wide enough for all */
+@media (min-width: 601px) and (max-width: 1240px) { .views.six { width: 100%; box-sizing: border-box; } .views.six .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 6px; gap: 6px; } }
+@media (min-width: 601px) and (max-width: 1060px) { .views.six .view-btn svg { display: none; } }
+@media (min-width: 601px) and (max-width: 800px) { .views.six .view-btn { font-size: .8rem; letter-spacing: 0; padding: 8px 3px; } }
 @media (max-width: 400px) { .step .lbl { display: none; } .sup-item { padding-right: 6px; } }
 /* a phone: the top bar's buttons (Ask, Report, Add truck, Settings) stay on one line with the name */
 @media (max-width: 430px) {
@@ -2136,6 +2140,71 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   #printReport h2 { font-size: 12pt; margin: 12pt 0 4pt; }
   #printReport ul { margin: 0; padding-left: 14pt; }
 }
+/* Estimates: tiles (approval rate by estimates and by dollars), by person, the list */
+.est { --mold: #7c3aed; }
+@media (prefers-color-scheme: dark) { .est { --mold: #b794f6; } }
+.est-tiles { display: grid; grid-template-columns: minmax(0, 1.25fr) repeat(var(--c, 3), minmax(0, 1fr)); gap: 10px; }
+.est-tiles.two-rows .est-all { grid-row: span 2; align-content: center; }
+.est-tiles.two-rows .est-all .est-rates b { font-size: clamp(1.7rem, 3vw, 2.4rem); }
+.est-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 11px 14px 12px; min-width: 0; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden; gap: 3px; align-content: start; transition: border-color .15s, box-shadow .15s; }
+.est-tile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.est-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow); }
+.est-tile.est-all { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface) 70%); }
+.est-tile small { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.est-rates { display: flex; gap: 14px; align-items: flex-end; margin: 2px 0 1px; }
+.est-rates > div { display: grid; min-width: 0; }
+.est-rates b { font-family: var(--font-display); font-size: clamp(1.35rem, 2.3vw, 1.9rem); font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.est-rates > div + div b { color: var(--ok); }
+.est-rates em { font-style: normal; font-size: .7rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.est-line { color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.est-line .est-open { font-style: normal; color: var(--soon); font-weight: 600; }
+.est-bar { display: flex; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 4px; box-shadow: inset 0 0 0 1px var(--line); }
+.est-bar i { display: block; height: 100%; } .est-bar i.ok { background: var(--ok); } .est-bar i.op { background: color-mix(in srgb, var(--soon) 55%, transparent); }
+.est-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--muted); }
+.est-dot.w { background: var(--accent); } .est-dot.m { background: var(--mold); } .est-dot.c { background: var(--clean); } .est-dot.p { background: var(--soon); } .est-dot.u { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
+.est-how { font-size: .78rem; margin: 0; }
+.est-people h3, .est-list h3 { margin: 0; font-size: 1.05rem; }
+.est-list h3 small { color: var(--muted); font-weight: 500; font-size: .8rem; }
+.est-ptable { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.est-ptable th { text-align: left; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.est-ptable td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.est-ptable .num { text-align: right; white-space: nowrap; }
+.est-ptable tbody tr { cursor: pointer; } .est-ptable tbody tr:hover { background: var(--surface-2); }
+.est-ptable tbody tr.on { background: var(--accent-soft); } .est-ptable td.muted { color: var(--muted); font-style: italic; }
+.est-people, .est-list { grid-template-columns: minmax(0, 1fr); }
+.est-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.est-stseg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .est-stseg::-webkit-scrollbar { display: none; } .est-stseg .seg-btn { flex: none; }
+.est-filters .seg-btn { padding: 6px 10px; font-size: .86rem; gap: 6px; }
+.est-n { font-style: normal; font-size: .72rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.est-filters select, .est-filters input[type="search"] { font: inherit; font-size: .9rem; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; }
+.est-filters input[type="search"] { flex: 1 1 200px; }
+.est-rows { display: grid; }
+.est-row { display: grid; grid-template-columns: 70px 60px minmax(0, 1fr) 140px 120px 136px 178px; gap: 14px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.est-row.est-hdr { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 4px; }
+.est-row:not(.est-hdr):hover { background: var(--surface-2); }
+.est-day, .est-no { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.est-cl { display: grid; min-width: 0; } .est-cl b, .est-cl small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .est-cl small { color: var(--muted); font-size: .76rem; }
+.est-chip { font-style: normal; display: inline-flex; align-items: center; font-size: .8rem; font-weight: 600; white-space: nowrap; }
+.est-kind, .est-who { font: inherit; font-size: .84rem; padding: 5px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100%; min-width: 0; }
+.est-kind.u { border-color: var(--accent); border-style: dashed; color: var(--accent); font-weight: 600; }
+.est-kind.m { border-left: 4px solid var(--mold); } .est-kind.w { border-left: 4px solid var(--accent); }
+.est-amt { display: grid; text-align: right; font-variant-numeric: tabular-nums; } .est-amt small { color: var(--muted); font-size: .72rem; line-height: 1.25; }
+.est-st { display: grid; } .est-st b { font-size: .84rem; } .est-st small { color: var(--muted); font-size: .74rem; white-space: nowrap; }
+.est-st.ok b { color: var(--ok); } .est-st.no b { color: var(--due); } .est-st.cx b { color: var(--muted); text-decoration: line-through; }
+.est-st.op b { color: var(--soon); } .est-st.op.slow small { color: var(--soon); font-weight: 600; } .est-st.op.late small { color: var(--due); font-weight: 700; }
+.est-in { min-width: 0; } .est-in .muted { color: var(--muted); font-style: italic; }
+@media (max-width: 1100px) { .est-row { grid-template-columns: 62px 54px minmax(0, 1fr) 124px 100px 118px 150px; gap: 10px; } }
+@media (max-width: 860px) {
+  .est-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "cl amt" "meta st" "grp in"; gap: 4px 10px; padding: 10px 2px; }
+  .est-row.est-hdr { display: none; }
+  .est-cl { grid-area: cl; } .est-amt { grid-area: amt; } .est-st { grid-area: st; text-align: right; } .est-grp { grid-area: grp; } .est-in { grid-area: in; text-align: right; }
+  .est-day { grid-area: meta; font-size: .78rem; } .est-no { grid-area: meta; font-size: .78rem; margin-left: 52px; }
+  .est-in .est-who { max-width: 170px; }
+  .est-tiles, .est-tiles.two-rows { grid-template-columns: 1fr 1fr; } .est-tiles .est-all, .est-tiles.two-rows .est-all { grid-column: 1 / -1; grid-row: auto; }
+  .est-filters .seg-btn { padding: 6px 8px; font-size: .82rem; gap: 4px; } .est-filters select { flex: 1 1 140px; }
+  .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(7), .est-ptable td:nth-child(7) { display: none; }
+}
+@media (max-width: 420px) { .est-tile { padding: 9px 10px; } .est-rates { gap: 10px; } .est-ptable { font-size: .82rem; } .est-ptable td, .est-ptable th { padding: 6px 4px; } }
 </style>
 </head>
 <body>
@@ -2177,6 +2246,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
       </button>
       <button type="button" class="view-btn" id="viewRevenue" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 17v-5M11 17V7M16 17v-8M21 17V4"/></svg>Operations
+      </button>
+      <button type="button" class="view-btn" id="viewEstimates" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 12.5l2 2 4-4.5"/></svg>Estimates
       </button>
       <button type="button" class="view-btn" id="viewOffice" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Office
@@ -2242,6 +2314,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
     <section class="lb" id="lbView" aria-label="Leaderboard" hidden></section>
     <section class="lb of" id="ofView" aria-label="Office" hidden></section>
     <section class="lb rev" id="revView" aria-label="Operations" hidden></section>
+    <section class="lb rev est" id="estView" aria-label="Estimates" hidden></section>
     <section class="lb rev" id="repView" aria-label="Repairs Payroll" hidden></section>
     <section class="lb rev cp" id="cpView" aria-label="Contractor Payroll" hidden></section>
     <section class="lb rev mkt" id="mktView" aria-label="Marketing" hidden></section>
@@ -4776,6 +4849,7 @@ async function refresh(quiet) {
   // (Office by itself only while nobody is working in this window: its boxes and menus aren't redrawn under a hand)
   if (view.tab === "office" && loaded && !dlg.open && !ofTypingNow() && !ofLoading && (!quiet || performance.now() - lbActiveAt > 15000)) ofLoad();
   if ((view.tab === "contractors" || (view.tab === "repairs" && canSee("contractors"))) && loaded && !dlg.open && !cpLoading) cpLoad();
+  if (view.tab === "estimates" && loaded && !dlg.open) estAuto();
   try {
     const out = await api("list");
     let roleChanged = false;
@@ -5171,7 +5245,7 @@ function showSignIn(message, mode) {
 
 function signOut(message) {
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
-  lbForget(); revForget(); repForget(); mktForget(); cpForget(); mktAsked = false;
+  lbForget(); revForget(); repForget(); mktForget(); cpForget(); estForget(); mktAsked = false;
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
@@ -7363,12 +7437,15 @@ noteSupplies(store.get(K_SUP));
 const userAccess = () => (session && Array.isArray(session.access) ? session.access : ["trucks"]);
 const canSee = sec => isAdmin() || userAccess().includes(sec);
 const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
+// what someone may see that isn't a checklist (the rest are checklists)
+const NOT_LISTS = ["trucks", "office", "revenue", "repairs", "marketing", "contractors", "estimates", "estimates-all", "payroll", "pricecheck"];
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
-  if (isAdmin() || userAccess().some(a => a !== "trucks" && a !== "office" && a !== "revenue" && a !== "repairs" && a !== "marketing" && a !== "contractors" && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
+  if (isAdmin() || userAccess().some(a => !NOT_LISTS.includes(a) && !LB_ACCESS_KEYS.includes(a))) out.push("supplies");
   if (canSeeLb()) out.push("leaderboard");
   if (canSee("revenue")) out.push("revenue");   // Operations
+  if (canSee("estimates") || canSee("estimates-all")) out.push("estimates");
   if (canSee("office")) out.push("office");
   if (canSee("marketing")) out.push("marketing");
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
@@ -7489,7 +7566,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = ["supplies", "leaderboard", "office", "revenue", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
+  view.tab = ["supplies", "leaderboard", "office", "revenue", "estimates", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
   if (view.tab === "leaderboard" || view.tab === "repairs" || view.tab === "contractors") view.lbSide = view.tab;
   if (view.tab === "trucks" || view.tab === "supplies") view.whSide = view.tab;
   if (sub) view.supTab = sub;
@@ -7504,7 +7581,8 @@ function applyTab() {
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
   const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs", mk = view.tab === "marketing", cp = view.tab === "contractors";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : rp ? "#repairs" : mk ? "#marketing" : cp ? "#contractors" : "";
+  const es = view.tab === "estimates";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : es ? "#estimates" : rp ? "#repairs" : mk ? "#marketing" : cp ? "#contractors" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
@@ -7518,17 +7596,20 @@ function applyTab() {
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
   $("viewRevenue").hidden = !nav.includes("revenue");
+  $("viewEstimates").hidden = !nav.includes("estimates");
   $("viewRepairs").hidden = !nav.includes("repairs");
   $("viewMarketing").hidden = !nav.includes("marketing");
   $("viewContractors").hidden = !nav.includes("contractors");
   if (!tabs.includes("revenue") && !tabs.includes("marketing") && revData) revForget();
   if (!tabs.includes("marketing") && mktData) mktForget();
   if (!tabs.includes("contractors") && cpData) cpForget();
+  if (!tabs.includes("estimates") && estData) estForget();
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
   $("ofView").hidden = !of;
   $("revView").hidden = !rv;
+  $("estView").hidden = !es;
   $("repView").hidden = !rp;
   $("mktView").hidden = !mk;
   $("cpView").hidden = !cp;
@@ -7539,6 +7620,7 @@ function applyTab() {
   $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rp && folded) || (cp && cpInLb())));
   $("viewOffice").setAttribute("aria-pressed", String(of));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
+  $("viewEstimates").setAttribute("aria-pressed", String(es));
   $("viewRepairs").setAttribute("aria-pressed", String(rp));
   $("viewMarketing").setAttribute("aria-pressed", String(mk));
   $("viewContractors").setAttribute("aria-pressed", String(cp));
@@ -7548,6 +7630,7 @@ function applyTab() {
   if (lb) { renderLeaderboard(); if (loaded && !lbLoading) lbLoad(); }
   if (of) { renderOffice(); if (loaded && !ofLoading) ofLoad(); }
   if (rv) { renderRevenue(); if (loaded) revLoad(); }
+  if (es) renderEstimates();
   if (rp) renderRevenue();
   if (mk) renderMarketing();
   if (cp) renderContractors();   // it loads what it needs
@@ -7558,6 +7641,7 @@ $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 $("viewWarehouse").addEventListener("click", () => { const t = allowedTabs(); setTab(t.includes(view.whSide) ? view.whSide : t.includes("trucks") ? "trucks" : "supplies"); });
 $("viewOffice").addEventListener("click", () => setTab("office"));
 $("viewRevenue").addEventListener("click", () => setTab("revenue"));
+$("viewEstimates").addEventListener("click", () => setTab("estimates"));
 // the bar at the top's height, so panels that stay in view while scrolling sit just under it
 (() => { const bar = document.querySelector(".topbar"), set = () => document.documentElement.style.setProperty("--top-h", `${bar ? bar.offsetHeight : 74}px`);
   set(); if (bar && window.ResizeObserver) new ResizeObserver(set).observe(bar); else addEventListener("resize", set); })();
@@ -8031,6 +8115,7 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
     apiLevel >= OF_API ? [["office", "Office"]] : [],
     apiLevel >= REV_API ? [["revenue", "Operations"]] : [],
+    apiLevel >= EST_API ? [["estimates", "Estimates (his own)"], ["estimates-all", "Estimates (all)"]] : [],
     apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : [],
     apiLevel >= MKT_API ? [["marketing", "Marketing"]] : [],
     apiLevel >= CP_API ? [["contractors", "Contractor Payroll"]] : []);
@@ -13464,6 +13549,296 @@ function mktImportDlg() {
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
 }
 
+/* ======================= Estimates ======================= */
+const EST_API = 56;                                     // the Google script version with Estimates
+const K_EST = "voda.est1", K_EST_VIEW = "voda.estView1";
+const EST_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates: "Dates" };
+// the groups: Restoration as water damage or mold (and the ones not sorted yet), Cleaning, Repairs, Other
+const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
+const EST_ST = { all: "All", open: "Open", approved: "Approved", declined: "Declined", canceled: "Canceled" };
+let estData = store.get(K_EST);                         // this year's: { year, estimates, years, all, readAt, done, connected }
+let estOther = {};                                      // other years' (looked at in this window)
+const estLoading = {};
+let estErr = "", estOld = false, estUsers = null, estShown = 100;
+const estSync = { busy: false, n: 0, err: "", tried: 0 };
+const estView = Object.assign({ per: "month", off: 0, from: "", to: "", grp: "all", st: "all", who: "", q: "" }, store.get(K_EST_VIEW) || {});
+const estSaveView = () => store.set(K_EST_VIEW, { per: estView.per, from: estView.from, to: estView.to, grp: estView.grp, st: estView.st, who: estView.who });
+const estCanSee = () => canSee("estimates") || canSee("estimates-all");
+const estGroup = e => (e.dept === "r" ? (e.kind === "water" ? "w" : e.kind === "mold" ? "m" : "u") : e.dept === "c" || e.dept === "p" ? e.dept : "o");
+/** What an estimate is worth: the option approved, else its largest. */
+const estValue = e => (e.st === "approved" ? e.appr || e.est : e.est);
+function estForget() { estData = null; estOther = {}; estUsers = null; store.del(K_EST); }
+const estDoc = y => (y === revThisYear() ? estData : estOther[y]) || null;
+async function estLoad(y) {
+  y = y || revThisYear();
+  if (!session || !estCanSee() || estLoading[y]) return;
+  estLoading[y] = true;
+  try {
+    const out = await api("estimates", { year: y });
+    const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false };
+    if (y === revThisYear()) { estData = doc; store.set(K_EST, doc); } else estOther[y] = doc;
+    estErr = ""; estOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { estLoading[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    estOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < EST_API);
+    estErr = estOld ? "" : errText(e, "Nothing");
+  } finally {
+    estLoading[y] = false;
+    if (view.tab === "estimates") renderEstimates();
+  }
+}
+/** The estimates created from..to (null while a year is still loading). */
+function estFor(from, to) {
+  const out = [];
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
+    const doc = estDoc(y);
+    if (!doc) { estLoad(y); return null; }
+    for (const e of doc.estimates) if (e.day >= from && e.day <= to) out.push(e);
+  }
+  return out;
+}
+/** Reads from Housecall Pro what changed (the first time: every estimate since January 1 of last year, a few
+ *  hundred a call), then the years on screen again. full: everything again. */
+async function estRun(full) {
+  if (estSync.busy || !session || !estCanSee() || !navigator.onLine) return;
+  Object.assign(estSync, { busy: true, n: 0, err: "", tried: Date.now() });
+  if (view.tab === "estimates") renderEstimates();
+  let page = 1, sort = "";
+  try {
+    for (let i = 0; i < 40; i++) {
+      const out = await api("estSync", Object.assign({ page }, sort ? { sort } : {}, full ? { full: true } : {}));
+      estSync.n += Number(out.read) || 0;
+      if (!out.next) break;
+      page = out.next; sort = out.by || "";
+      if (view.tab === "estimates") renderEstimates();
+    }
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { estSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    estSync.err = revErrText(e);
+  }
+  estSync.busy = false;
+  await Promise.all([revThisYear()].concat(Object.keys(estOther).map(Number)).map(y => estLoad(y)));
+  if (view.tab === "estimates") renderEstimates();
+}
+/** Opening the tab (or coming back to it): read Housecall Pro again when the last read is 10 minutes old. */
+function estAuto() {
+  const d = estData;
+  if (!d || !d.connected || estSync.busy || estSync.err || Date.now() - estSync.tried < 60e3) return;
+  if (!d.done || Date.now() - d.readAt > 10 * 60e3) setTimeout(() => estRun(), 0);
+}
+/** Admins: the people who can be put in charge (everyone signed up and on). */
+async function estUsersLoad() {
+  if (estUsers || !isAdmin()) return;
+  estUsers = [];
+  try {
+    const out = await api("users");
+    estUsers = (out.users || []).filter(u => u.status === "active").sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  } catch (e) { /* the names already on the estimates still show */ }
+  if (view.tab === "estimates") renderEstimates();
+}
+const estSeesEst = u => u.role === "admin" || (Array.isArray(u.access) && (u.access.includes("estimates") || u.access.includes("estimates-all")));
+/** Who's in charge (an admin), or water or mold (an admin or whoever's in charge of it). */
+async function estPut(e, patch) {
+  const was = Object.assign({}, e);
+  if (patch.who !== undefined) { const u = (estUsers || []).find(x => x.id === patch.who); e.who = patch.who; e.whoName = u ? u.name : ""; }
+  if (patch.kind !== undefined) e.kind = patch.kind;
+  renderEstimates();
+  try {
+    const out = await api("estPut", Object.assign({ id: e.id }, patch));
+    Object.assign(e, out.estimate || {});
+    if (estData && estDoc(Number(e.day.slice(0, 4))) === estData) store.set(K_EST, estData);
+    toast(patch.who !== undefined ? (e.whoName ? `${e.whoName} is in charge of #${e.n}` : `Nobody in charge of #${e.n}`) : `#${e.n}: ${e.kind === "mold" ? "Mold" : "Water damage"}`);
+  } catch (err) {
+    Object.assign(e, was);
+    toast(errText(err, "Not saved"));
+  }
+  renderEstimates();
+}
+/** Added up: estimates (canceled ones left out), approved, open, declined; dollars estimated and approved. */
+function estStats(list) {
+  const s = { n: 0, appr: 0, open: 0, decl: 0, canc: 0, val: 0, apprVal: 0 };
+  for (const e of list) {
+    if (e.st === "canceled") { s.canc++; continue; }
+    s.n++; s.val += estValue(e);
+    if (e.st === "approved") { s.appr++; s.apprVal += estValue(e); } else if (e.st === "open") s.open++; else s.decl++;
+  }
+  return s;
+}
+const estPct = (a, b) => (b ? `${Math.round(a / b * 100)}%` : "–");
+const estDayShort = (day, today) => { const d = lbDate(day); return `${MONTHS[d.getMonth()]} ${d.getDate()}${day.slice(0, 4) !== today.slice(0, 4) ? `, ${day.slice(0, 4)}` : ""}`; };
+const estAge = (day, today) => Math.max(0, Math.round((lbDate(today) - lbDate(day)) / 864e5));
+
+function renderEstimates() {
+  const box = $("estView");
+  if (!box || view.tab !== "estimates" || !session) return;
+  if (lbHoldForDate(box, renderEstimates)) return;
+  if (estOld || (apiLevel && apiLevel < EST_API && !estData)) {
+    box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Estimates needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
+    return;
+  }
+  if (!estData || estData.year !== revThisYear()) {
+    box.replaceChildren(estErr
+      ? h("p", { class: "dlg-err" }, estErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { estErr = ""; estLoad(); renderEstimates(); } }, "Try again"))
+      : h("p", { class: "loading", text: offline ? "Estimates needs a connection the first time. Try again when you're back online." : "Loading estimates…" }));
+    if (!estErr) estLoad();
+    return;
+  }
+  const doc = estData, admin = isAdmin(), all = doc.all, today = lbToday();
+  if (admin) estUsersLoad();
+  estAuto();
+  // the period: Day / Week / Month / Year with ‹ ›, or Dates (From – To)
+  const per = EST_PER[estView.per] ? estView.per : "month";
+  const off = Math.min(0, Number(estView.off) || 0);
+  let r;
+  if (per === "dates") {
+    let from = lbOkDay(estView.from, today) ? estView.from : `${today.slice(0, 7)}-01`, to2 = lbOkDay(estView.to, today) ? estView.to : today;
+    if (to2 < from) [from, to2] = [to2, from];
+    r = { from, to: to2, label: revSpanText(from, to2) };
+  } else r = ofRange(per, off);
+  const to = r.to > today ? today : r.to, len = revLen(r.from, r.to);
+  const redraw = () => { estShown = 100; estSaveView(); renderEstimates(); };
+  const step = n => {
+    if (per === "dates") { estView.from = lbAddDays(r.from, n * len); estView.to = lbAddDays(r.to, n * len); }
+    else estView.off = Math.min(0, off + n);
+    redraw();
+  };
+  const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; estView.from = from; estView.to = to2; redraw(); };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+    lbDateInput({ id, value, min: LB_FIRST_DAY, max: today, "aria-label": label }, onpick, LB_FIRST_DAY, today));
+  const title = secTitle("Estimates");
+  const readBtn = h("button", { class: "btn small", type: "button", id: "estReadBtn", disabled: estSync.busy || !doc.connected,
+    title: "Read what changed in Housecall Pro", onclick: () => { estSync.err = ""; estRun(); } }, "Read again");
+  const fullBtn = admin ? h("button", { class: "btn small ghost", type: "button", id: "estFullBtn", disabled: estSync.busy || !doc.connected,
+    title: "Read every estimate since January 1 of last year again (a minute or two)", onclick: () => { estSync.err = ""; estRun(true); } }, "Read all") : null;
+  const bar = h("div", { class: "lb-bar rev-bar-top" },
+    lbSeg(Object.entries(EST_PER), per, k => {
+      if (k === "dates" && per !== "dates") { estView.from = r.from; estView.to = to; }   // Dates starts from the period on screen
+      estView.per = k; estView.off = 0; redraw();
+    }, "Period"),
+    per === "dates"
+      ? h("div", { class: "lb-daybar lb-payrange", id: "estDates" },
+        h("button", { class: "btn small", type: "button", id: "estPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        dateBox("estFrom", r.from, "From", v => pick(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
+        dateBox("estTo", r.to, "To", v => pick(v < r.from ? v : r.from, v)),
+        h("button", { class: "btn small", type: "button", id: "estNext", "aria-label": "Later", disabled: r.to >= today, onclick: () => step(1) }, "›"))
+      : h("div", { class: "of-step" },
+        h("button", { class: "btn small", type: "button", id: "estPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        h("strong", { id: "estRangeLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
+        h("button", { class: "btn small", type: "button", id: "estNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    h("div", { class: "rev-tools" }, readBtn, fullBtn));
+  const status = h("p", { class: "lb-sub rev-status" + (estSync.busy ? " busy" : ""), id: "estStatus", role: "status" },
+    !doc.connected ? (admin ? "Housecall Pro isn't connected. Settings › Housecall Pro." : "Housecall Pro isn't connected right now. An admin can check it in Settings › Housecall Pro.")
+      : estSync.busy ? `Reading estimates from Housecall Pro${doc.done ? "" : " (the first time takes a minute or two)"}… ${estSync.n ? `${fmt(estSync.n)} so far` : ""}`
+        : doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)}` : "Not read from Housecall Pro yet.",
+    all ? null : h("span", { text: " · the estimates you're in charge of" }));
+  const err = estSync.err ? h("p", { class: "dlg-err", id: "estErr" }, estSync.err, " ",
+    h("button", { class: "btn small", type: "button", onclick: () => { estSync.err = ""; estRun(); } }, "Try again")) : null;
+  const head = [title ? h("div", { class: "lb-top" }, title) : null, bar, status, err].filter(Boolean);
+  const list = r.from > today ? [] : estFor(r.from, to);
+  if (!list) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` })); return; }
+  // the tiles: every estimate, then each group (approval rate by estimates and by dollars); a tile picks the list's group
+  const grpOf = new Map(list.map(e => [e, estGroup(e)]));
+  const groups = EST_GROUPS.filter(([k]) => !["u", "o"].includes(k) || list.some(e => grpOf.get(e) === k));
+  const grp = estView.grp === "all" || groups.some(([k]) => k === estView.grp) ? estView.grp : "all";
+  const tile = (k, name, items) => {
+    const s = estStats(items), on = grp === k;
+    return h("div", { class: "est-tile" + (k === "all" ? " est-all" : ""), "data-g": k, role: "button", tabindex: "0", "aria-pressed": String(on), title: on && k !== "all" ? "Show every group" : `Show ${name.toLowerCase()} only`,
+      onclick: () => { estView.grp = on ? "all" : k; redraw(); }, onkeydown: e => { if (e.key === "Enter") { estView.grp = on ? "all" : k; redraw(); } } },
+      h("small", null, k !== "all" ? h("i", { class: "est-dot " + k }) : null, k === "u" ? [h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: "Not sorted" })] : name),
+      h("div", { class: "est-rates" },
+        h("div", null, h("b", { text: estPct(s.appr, s.n) }), h("em", { text: "of estimates" })),
+        h("div", null, h("b", { text: estPct(s.apprVal, s.val) }), h("em", { text: "of dollars" }))),
+      h("span", { class: "est-line" }, `${fmt(s.appr)} approved of ${fmt(s.n)}`, s.open ? h("i", { class: "est-open", text: ` · ${fmt(s.open)} open` }) : null),
+      h("span", { class: "est-line" }, `${lbMoney(s.apprVal / 100)} of ${lbMoney(s.val / 100)}`),
+      h("div", { class: "est-bar", "aria-hidden": "true" }, h("i", { class: "ok", style: `width:${s.n ? s.appr / s.n * 100 : 0}%` }), h("i", { class: "op", style: `width:${s.n ? s.open / s.n * 100 : 0}%` })));
+  };
+  const tiles = h("div", { class: "est-tiles" + (groups.length > 3 ? " two-rows" : ""), id: "estTiles", style: `--c:${groups.length > 3 ? Math.ceil(groups.length / 2) : groups.length}` }, tile("all", "All estimates", list), groups.map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))));
+  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved).");
+  // by person (whoever sees them all)
+  const inGrp = grp === "all" ? list : list.filter(e => grpOf.get(e) === grp);
+  let people = null;
+  if (all) {
+    const by = new Map();
+    for (const e of inGrp) { const k = e.who || "-"; if (!by.has(k)) by.set(k, { name: e.who ? e.whoName || "?" : "Nobody yet", items: [] }); by.get(k).items.push(e); }
+    const rows = [...by.entries()].map(([k, v]) => [k, v.name, estStats(v.items)]).sort((a, b) => (a[0] === "-") - (b[0] === "-") || b[2].n - a[2].n || a[1].localeCompare(b[1]));
+    people = rows.length ? h("div", { class: "panel est-people" },
+      h("h3", { text: `By person in charge${grp === "all" ? "" : ` · ${EST_GROUPS.find(g => g[0] === grp)[1]}`}` }),
+      h("table", { class: "est-ptable", id: "estPeople" },
+        h("thead", null, h("tr", null, ["In charge", "Estimates", "Approved", "Open", "Rate", "Rate $", "Approved $"].map((t, i) => h("th", { class: i ? "num" : "", text: t })))),
+        h("tbody", null, rows.map(([k, name, s]) => h("tr", { "data-who": k, class: estView.who === k ? "on" : "", tabindex: "0", title: "Show only these",
+          onclick: () => { estView.who = estView.who === k ? "" : k; redraw(); }, onkeydown: ev => { if (ev.key === "Enter") { estView.who = estView.who === k ? "" : k; redraw(); } } },
+          h("td", { class: k === "-" ? "muted" : "" }, name), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }), h("td", { class: "num", text: fmt(s.open) }),
+          h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) }), h("td", { class: "num", text: lbMoney(s.apprVal / 100) })))))) : null;
+  }
+  // the list: filters (status, person, search), then the estimates, newest first
+  const who = all ? estView.who : "";
+  const q = String(estView.q || "").trim().toLowerCase();
+  const stOk = e => estView.st === "all" || e.st === estView.st;
+  const whoOk = e => !who || (who === "-" ? !e.who : e.who === who);
+  const qOk = e => !q || [e.client, e.n, e.addr, e.type, e.emps, e.whoName, e.lead].some(v => String(v || "").toLowerCase().includes(q));
+  const base = inGrp.filter(e => whoOk(e) && qOk(e));
+  const shown = base.filter(stOk).sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
+  const stCount = k => (k === "all" ? base.length : base.filter(e => e.st === k).length);
+  const whoSel = all ? h("select", { id: "estWho", "aria-label": "In charge", onchange: ev => { estView.who = ev.target.value; redraw(); } },
+    h("option", { value: "", text: "Everyone" }), h("option", { value: "-", text: "Nobody in charge yet" }),
+    [...new Map(list.filter(e => e.who).map(e => [e.who, e.whoName || "?"])).entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => h("option", { value: id, text: name }))) : null;
+  if (whoSel) whoSel.value = [...whoSel.options].some(o => o.value === who) ? who : "";
+  const search = h("input", { type: "search", id: "estFind", placeholder: "Client, estimate #, address…", value: estView.q || "", "aria-label": "Search estimates",
+    oninput: ev => { estView.q = ev.target.value; estShown = 100; const at = ev.target.selectionStart; renderEstimates(); const f = $("estFind"); if (f) { f.focus(); try { f.setSelectionRange(at, at); } catch (e) { /* not a text box */ } } } });
+  const filters = h("div", { class: "est-filters" },
+    h("div", { class: "seg est-stseg", role: "tablist", "aria-label": "Status" }, Object.entries(EST_ST).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "data-k": k, "aria-selected": String(estView.st === k),
+      onclick: () => { estView.st = k; redraw(); } }, t, h("i", { class: "est-n", text: fmt(stCount(k)) })))),
+    whoSel, search,
+    grp !== "all" || who || q || estView.st !== "all" ? h("button", { class: "btn small ghost", type: "button", id: "estClear", onclick: () => { Object.assign(estView, { grp: "all", st: "all", who: "", q: "" }); redraw(); } }, "Show all") : null);
+  const pickWho = e => {
+    const sel = h("select", { class: "est-who", "aria-label": `In charge of estimate ${e.n}`, onchange: ev => estPut(e, { who: ev.target.value }) },
+      h("option", { value: "", text: "— Pick someone —" }),
+      (estUsers || []).map(u => h("option", { value: u.id, text: u.name + (estSeesEst(u) ? "" : " (can't see Estimates yet)") })));
+    if (e.who && !(estUsers || []).some(u => u.id === e.who)) sel.append(h("option", { value: e.who, text: e.whoName || "?" }));
+    sel.value = e.who || "";
+    return sel;
+  };
+  const pickKind = e => {
+    const sel = h("select", { class: "est-kind " + estGroup(e), "aria-label": `Water or mold, estimate ${e.n}`, onchange: ev => estPut(e, { kind: ev.target.value }) },
+      e.kind ? null : h("option", { value: "", text: "Not sorted" }), h("option", { value: "water", text: "Water damage" }), h("option", { value: "mold", text: "Mold" }));
+    sel.value = e.kind || "";
+    return sel;
+  };
+  const grpName = e => { const g = estGroup(e); return g === "u" ? "Restoration" : EST_GROUPS.find(x => x[0] === g)[1]; };
+  const stEl = e => {
+    const dec = e.dec ? lbDayKey(new Date(e.dec)) : "";
+    if (e.st === "approved") return h("span", { class: "est-st ok" }, h("b", { text: "Approved" }), h("small", { text: [e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", dec ? estDayShort(dec, today) : ""].filter(Boolean).join(" · ") }));
+    if (e.st === "declined") return h("span", { class: "est-st no" }, h("b", { text: "Declined" }), h("small", { text: [e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", dec ? estDayShort(dec, today) : ""].filter(Boolean).join(" · ") }));
+    if (e.st === "canceled") return h("span", { class: "est-st cx" }, h("b", { text: "Canceled" }));
+    const age = estAge(e.day, today);
+    return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : "") }, h("b", { text: "Open" }), h("small", { text: age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}` }));
+  };
+  const row = e => {
+    const canKind = e.dept === "r" && (admin || (e.who && session && e.who === session.id));
+    const opts = Array.isArray(e.opts) ? e.opts : [];
+    return h("div", { class: "est-row", "data-id": e.id, "data-g": estGroup(e), "data-st": e.st },
+      h("span", { class: "est-day", text: estDayShort(e.day, today) }),
+      h("span", { class: "est-no", text: `#${e.n}` }),
+      h("span", { class: "est-cl" }, h("b", { text: e.client || "No name" }),
+        h("small", { text: [e.addr, e.emps ? `Housecall Pro: ${e.emps}` : ""].filter(Boolean).join(" · ") })),
+      h("span", { class: "est-grp" }, canKind ? pickKind(e) : h("i", { class: "est-chip " + estGroup(e) }, h("i", { class: "est-dot " + estGroup(e) }), grpName(e))),
+      h("span", { class: "est-amt" }, h("b", { text: lbMoney(estValue(e) / 100) }), opts.length > 1 ? h("small", { text: `${opts.length} options${e.st === "approved" && e.est !== e.appr ? `, up to ${lbMoney(e.est / 100)}` : ""}` }) : null),
+      stEl(e),
+      h("span", { class: "est-in" }, admin ? pickWho(e) : h("span", { class: e.whoName ? "" : "muted", text: e.whoName || "Nobody yet" })));
+  };
+  const more = shown.length - estShown;
+  const listBox = h("div", { class: "panel est-list" },
+    h("h3", null, `Estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
+    filters,
+    shown.length ? h("div", { class: "est-rows", id: "estRows" },
+      h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Created", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
+      shown.slice(0, estShown).map(row))
+      : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : "No estimates created in these days." }),
+    more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
+  box.replaceChildren(...head, tiles, how, people, listBox);
+}
+
 /* ======================= Office scorecards ======================= */
 const OF_API = 24;                                      // the Google script version with the Office section
 const OF_HIDE_API = 25;                                 // ... and with past-only numbers
@@ -14482,6 +14857,7 @@ else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
 else if (location.hash === "#leaderboard") { view.tab = "leaderboard"; saveView(); }
 else if (location.hash === "#office") { view.tab = "office"; saveView(); }
 else if (location.hash === "#revenue") { view.tab = "revenue"; saveView(); }
+else if (location.hash === "#estimates") { view.tab = "estimates"; saveView(); }
 else if (location.hash === "#repairs") { view.tab = "repairs"; saveView(); }
 else if (location.hash === "#marketing") { view.tab = "marketing"; saveView(); }
 else if (location.hash === "#contractors") { view.tab = "contractors"; saveView(); }

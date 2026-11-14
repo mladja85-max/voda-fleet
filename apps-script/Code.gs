@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 55;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 56;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -336,6 +336,15 @@ function doPost(e) {
         return json_(withLock_(function () { return priceCheck_(req, user); }));
       case "setPriceCheck":
         return json_(withLock_(function () { return setPriceCheck_(req); }));
+      case "estimates":
+        if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(estRead_(req.year, user));
+      case "estSync":
+        if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(estSync_(req, user));
+      case "estPut":
+        if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return estPut_(req, user); }));
       case "goals":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(goalsRead_(req.year));
@@ -2823,7 +2832,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || EST_ACCESS.indexOf(x) !== -1 || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -3976,6 +3985,192 @@ function repRead_(year) {
   });
   return { ok: true, year: Number(y), jobs: jobs, years: Object.keys(years).map(Number).sort(), dv: REP_DATA_VER };
 }
+/* ---- Estimates (a tab of its own): every estimate in Housecall Pro (Restoration: water damage or mold, Cleaning,
+   Repairs), when it was created, what it's for, whether the client approved it (or the office did) and when, and the
+   person in charge of following it up (picked in the app). One row an estimate on the Estimates tab. Housecall Pro
+   can't list estimates by the day they were created, only sort them by it: the first time they're read newest first,
+   page by page, back to January 1 of last year; after that only the ones changed since the last read. ---- */
+const EST_SHEET = "Estimates";
+const EST_COLS = ["Estimate id", "Estimate #", "Created", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
+  "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
+  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text"];
+const EST_ACCESS = ["estimates", "estimates-all"];   // sees the estimates he's in charge of; sees them all
+const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE";
+function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
+function estAll_(user) { return !!user && (user.role === "admin" || canSee_(user, "estimates-all")); }
+function estSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(EST_SHEET);
+  if (!s && !create) return null;
+  if (!s) {
+    s = ss.insertSheet(EST_SHEET);
+    s.getRange(1, 1, 1, EST_COLS.length).setValues([EST_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:C").setNumberFormat("@");
+  }
+  return s;
+}
+function estRows_(s) {
+  const out = {};
+  if (!s || s.getLastRow() < 2) return out;
+  const tz = Session.getScriptTimeZone();
+  s.getRange(2, 1, s.getLastRow() - 1, EST_COLS.length).getValues().forEach(function (r, i) {
+    const id = String(r[0] || "").trim();
+    if (!id) return;
+    r[2] = repDay_(r[2], tz);
+    [3, 11, 18, 19, 24].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
+    out[id] = r;
+  });
+  return out;
+}
+/** Water damage or mold, from what the estimate says (its job type first, then its options' names, then the rest);
+ *  "" when it can't tell (both, or neither). */
+function estKind_(type, names, text) {
+  const mold = /\bmou?ld|remediat|containment|antimicrob|mycotox|spores?\b/i, water = /\bwater|flood|leak|mitigat|dry(ing|[- ]?out)\b|dehu|extract|sewage|burst/i;
+  for (const t of [type, names, text]) {
+    const m = mold.test(t || ""), w = water.test(t || "");
+    if (m !== w) return m ? "mold" : "water";
+    if (m && w) return "";
+  }
+  return "";
+}
+/** An estimate from Housecall Pro as a row (what was typed in the app for it kept). */
+function estRow_(e, old, tz, at) {
+  const opts = Array.isArray(e.options) ? e.options : [];
+  const stOf = function (o) { const v = String((o && (o.approval_status || o.status)) || "").toLowerCase(); return /approv/.test(v) ? "approved" : /declin|reject/.test(v) ? "declined" : ""; };
+  const appr = opts.filter(function (o) { return stOf(o) === "approved"; }), decl = opts.filter(function (o) { return stOf(o) === "declined"; });
+  const ws = String(e.work_status || "");
+  const status = appr.length ? "approved" : /cancel/i.test(ws) ? "canceled" : opts.length && decl.length === opts.length ? "declined" : /copied|convert/i.test(ws) ? "approved" : "open";
+  const deciders = status === "approved" ? appr : status === "declined" ? decl : [];
+  const by = deciders.length ? (/^\s*pro\b/i.test(String(deciders[0].approval_status || "")) ? "office" : "client") : "";   // "pro approved": the office
+  const decided = deciders.map(function (o) { return String(o.approval_status_updated_at || ""); }).filter(Boolean).sort().pop() || "";
+  const cents = function (v) { return Math.round(Number(v) || 0); };
+  const total = opts.length ? Math.max.apply(null, opts.map(function (o) { return cents(o.total_amount); })) : cents(e.total_amount);
+  const approved = appr.reduce(function (n, o) { return n + cents(o.total_amount); }, 0) || (status === "approved" ? total : 0);
+  const ef = e.estimate_fields && typeof e.estimate_fields === "object" ? e.estimate_fields : {}, jf = e.job_fields && typeof e.job_fields === "object" ? e.job_fields : {};
+  const jt = ef.job_type || jf.job_type || null, type = String((jt && typeof jt === "object" ? jt.name : jt) || "").trim();
+  const bu = ef.business_unit || jf.business_unit || null, unit = String((bu && typeof bu === "object" ? bu.name : bu) || "").trim();
+  const names = opts.map(function (o) { return String(o.name || ""); }).join(" · ");
+  const notes = [].concat(Array.isArray(e.notes) ? e.notes : [], ...opts.map(function (o) { return Array.isArray(o.notes) ? o.notes : []; }))
+    .map(function (n) { return String((n && n.content) || n || ""); }).join(" ");
+  const tags = [].concat(Array.isArray(e.tags) ? e.tags : []).map(function (t) { return typeof t === "object" && t ? t.name : String(t); }).join(" ");
+  const text = [String(e.description || ""), opts.map(function (o) { return String(o.message_from_pro || ""); }).join(" "), notes, tags].join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
+  const dept = revDept_(type) !== "o" ? revDept_(type) : revDept_(unit);   // no job type: its business unit
+  const created = new Date(e.created_at || ""), day = isNaN(created.getTime()) ? "" : Utilities.formatDate(created, tz, "yyyy-MM-dd");
+  const emps = (Array.isArray(e.assigned_employees) ? e.assigned_employees : []).map(function (x) { return [x.first_name, x.last_name].filter(Boolean).join(" "); }).filter(Boolean).join(", ");
+  const a = e.address || {};
+  const row = [String(e.id), String(e.estimate_number || ""), day, String(e.created_at || ""), hcpClient_(e), [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), dept,
+    dept === "r" ? estKind_(type, names, text) : "", type, status, by, decided, total / 100, approved / 100,
+    JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
+    "", "", "", "", "", text];
+  if (old) for (let c = 20; c <= 24; c++) row[c] = old[c];   // who's in charge, a kind picked by hand: kept
+  return row;
+}
+/** A row as the app gets it. */
+function estOut_(r) {
+  let opts = [];
+  try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
+  return { id: String(r[0]), n: String(r[1] || ""), day: String(r[2] || ""), client: String(r[4] || ""), addr: String(r[5] || ""), dept: String(r[6] || "o"), autoKind: String(r[7] || ""),
+    kind: String(r[22] || r[7] || ""), type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
+    est: Math.round((Number(r[12]) || 0) * 100), appr: Math.round((Number(r[13]) || 0) * 100), opts: opts, ws: String(r[15] || ""), emps: String(r[16] || ""), lead: String(r[17] || ""),
+    who: String(r[20] || ""), whoName: String(r[21] || ""), typedBy: String(r[23] || "") };
+}
+/** A year's estimates (by the day each was created): all of them for an admin or someone who sees them all, else
+ *  only the ones he's in charge of; and whether the first read from Housecall Pro is done. */
+function estRead_(year, user) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const rows = estRows_(estSheet_(false)), all = estAll_(user), years = {};
+  const list = [];
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id];
+    if (r[2]) years[r[2].slice(0, 4)] = true;
+    if (String(r[2]).indexOf(y + "-") !== 0) return;
+    if (!all && String(r[20]) !== String(user.id)) return;
+    list.push(estOut_(r));
+  });
+  const P = PropertiesService.getScriptProperties();
+  return { ok: true, year: Number(y), estimates: list, years: Object.keys(years).map(Number).sort(), all: all, readAt: Number(P.getProperty(EST_AT)) || 0,
+    done: P.getProperty(EST_DONE) === "yes", connected: !!hcpKey_() };
+}
+/** Reads estimates from Housecall Pro into the tab, EST_PAGES pages a call from req.page ({ next } is the page to ask
+ *  for next, 0 when done; { by } goes back as sort). The first time (or full): newest first by the day created, back to
+ *  January 1 of last year. After that: the ones changed since the last read (a quarter hour's overlap), the most
+ *  recently changed first; if Housecall Pro doesn't sort them that way, every estimate created in the last 120 days. */
+function estSync_(req, user) {
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = Date.now();
+  if (!hcpKey_()) return { ok: false, error: "no_key" };
+  const backfill = P.getProperty(EST_DONE) !== "yes" || req.full === true;
+  const dayOf = function (v) { const d = new Date(v || 0); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, "yyyy-MM-dd"); };
+  const from = (new Date().getFullYear() - 1) + "-01-01", recent = dayOf(now - 120 * 864e5);
+  const since = (Number(P.getProperty(EST_AT)) || 0) - 15 * 60e3;
+  let by = backfill || req.sort === "created_at" ? "created_at" : "updated_at";   // (req.by is the signed-in person)
+  let page = Math.max(1, Math.floor(Number(req.page) || 1)), next = 0;
+  const got = [];
+  for (let n = 0; n < EST_PAGES; n++, page++) {
+    const r = hcpGet_("/estimates", { sort_by: by, sort_direction: "desc", page: page, page_size: 100 });
+    if (r.error) return { ok: false, error: r.error, status: r.status || 0 };
+    const list = Array.isArray(r.data && r.data.estimates) ? r.data.estimates : [];
+    if (by === "updated_at" && page === 1 && !list.every(function (e, i) { return !i || (Date.parse(list[i - 1].updated_at) || 0) >= (Date.parse(e.updated_at) || 0); })) {
+      by = "created_at"; page = 0; continue;   // not sorted by when they changed: the last 120 days instead
+    }
+    let older = false;
+    for (let i = 0; i < list.length && !older; i++) {
+      const e = list[i];
+      older = by === "created_at" ? dayOf(e.created_at) < (backfill ? from : recent) : (Date.parse(e.updated_at) || 0) < since;
+      if (!older) got.push(e);
+    }
+    next = older || !list.length || page >= (Number(r.data && r.data.total_pages) || 1) ? 0 : page + 1;
+    if (!next) break;
+  }
+  return withLock_(function () {
+    const s = estSheet_(true), rows = estRows_(s), at = new Date(now).toISOString();
+    let changed = 0;
+    got.forEach(function (e) {
+      if (!e || !e.id) return;
+      const row = estRow_(e, rows[String(e.id)], tz, at);
+      if (!row[2]) return;
+      rows[String(e.id)] = row; changed++;
+    });
+    const all = Object.keys(rows).map(function (id) { return rows[id]; })
+      .sort(function (a, b) { return a[2] < b[2] ? 1 : a[2] > b[2] ? -1 : String(a[1]) < String(b[1]) ? 1 : -1; });
+    if (all.length) {
+      if (s.getMaxRows() < all.length + 1) s.insertRowsAfter(s.getMaxRows(), all.length + 101 - s.getMaxRows());
+      s.getRange(2, 1, all.length, 3).setNumberFormat("@");
+      s.getRange(2, 1, all.length, EST_COLS.length).setValues(all);
+    }
+    if (!next) { if (backfill) P.setProperty(EST_DONE, "yes"); P.setProperty(EST_AT, String(now)); }
+    return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" };
+  });
+}
+/** Who's in charge of an estimate (an admin picks: any user, or nobody), and water or mold for a Restoration one (an
+ *  admin or the person in charge). */
+function estPut_(req, user) {
+  const s = estSheet_(false), rows = estRows_(s), id = String(req.id || ""), r = rows[id];
+  if (!r) return { ok: false, error: "gone" };
+  const admin = user.role === "admin", mine = String(r[20]) === String(user.id);
+  if (req.who !== undefined) {
+    if (!admin) return { ok: false, error: "not_allowed" };
+    const who = String(req.who || "");
+    if (who) {
+      const u = readUsers_(usersSheet_()).filter(function (x) { return x.u.id === who; })[0];
+      if (!u) return { ok: false, error: "bad_request" };
+      r[20] = who; r[21] = String(u.u.name || "").slice(0, 60);
+    } else { r[20] = ""; r[21] = ""; }
+  }
+  if (req.kind !== undefined) {
+    if (!admin && !mine) return { ok: false, error: "not_allowed" };
+    if (["", "water", "mold"].indexOf(String(req.kind)) === -1 || String(r[6]) !== "r") return { ok: false, error: "bad_request" };
+    r[22] = String(req.kind);
+  }
+  r[23] = String(user.name || "").slice(0, 60); r[24] = new Date().toISOString();
+  // its row on the tab: found by id (the tab keeps its order)
+  const ids = s.getRange(2, 1, s.getLastRow() - 1, 1).getValues().map(function (x) { return String(x[0]); });
+  const i = ids.indexOf(id);
+  if (i === -1) return { ok: false, error: "gone" };
+  s.getRange(i + 2, 1, 1, EST_COLS.length).setValues([r]);
+  return { ok: true, estimate: estOut_(r) };
+}
+
 /* ---- Price changes: a job's amount changed in Housecall Pro after the app saw it (a discount, a reduction, more work,
    a job from months ago edited). Every hour the script asks Housecall Pro for the jobs changed most recently and compares
    each one's amount with the last one the app saw (the Price watch tab, else the Revenue tab's day). A difference is a
