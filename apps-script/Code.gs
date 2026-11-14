@@ -4109,7 +4109,8 @@ function estOut_(r, lead) {
     kind: String(r[6]) === "r" ? String(r[7] || "") : "", type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
     est: Math.round((Number(r[12]) || 0) * 100), appr: Math.round((Number(r[13]) || 0) * 100), opts: opts, ws: String(r[15] || ""), emps: String(r[16] || ""), lead: String(r[17] || ""),
     inc: lead ? lead.name : "", incRole: lead ? lead.role : "", tags: String(r[26] || ""), hcpSt: String(r[27] || ""),
-    sent: String(r[9]) !== "open" || /sent|submit/i.test(String(r[27] || "")) };
+    // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email)
+    sent: String(r[9]) !== "open" || /sen[dt]|submit|fail/i.test(String(r[27] || "")) };
 }
 /** A year's estimates (by the day each was created): all of them for an admin or someone who sees them all, else
  *  only the ones he's in charge of in Housecall Pro; and whether the first read from Housecall Pro is done. */
