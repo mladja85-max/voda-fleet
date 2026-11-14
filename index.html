@@ -2201,7 +2201,16 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   .est-day { grid-area: meta; font-size: .78rem; } .est-no { grid-area: meta; font-size: .78rem; margin-left: 52px; }
   .est-tiles, .est-tiles.two-rows { grid-template-columns: 1fr 1fr; } .est-tiles .est-all, .est-tiles.two-rows .est-all { grid-column: 1 / -1; grid-row: auto; }
   .est-filters .seg-btn { padding: 6px 8px; font-size: .82rem; gap: 4px; } .est-filters select { flex: 1 1 140px; }
-  .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(8), .est-ptable td:nth-child(8) { display: none; }
+  /* by person: five columns that fit (In charge, Est., Not sent, Rate, Rate $), the name wraps */
+  .est-ptable { table-layout: fixed; }
+  .est-ptable th:nth-child(3), .est-ptable td:nth-child(3), .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(8), .est-ptable td:nth-child(8) { display: none; }
+  .est-ptable th:first-child { width: 38%; } .est-ptable th, .est-ptable th.num { white-space: normal; line-height: 1.2; vertical-align: bottom; }
+  .est-ptable td:first-child { overflow-wrap: anywhere; }
+  /* the status buttons: two rows of three, nothing sliding sideways */
+  .est-stseg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; overflow: visible; }
+  .est-stseg .seg-btn { justify-content: center; padding: 7px 4px; }
+  /* the tiles' lines wrap instead of cutting off "· 42 open · 39 not sent" */
+  .est-line { white-space: normal; }
 }
 @media (max-width: 420px) { .est-tile { padding: 9px 10px; } .est-rates { gap: 10px; } .est-ptable { font-size: .82rem; } .est-ptable td, .est-ptable th { padding: 6px 4px; } }
 /* Employees › Counts in: the lists someone counts in, quick picks */
@@ -13820,7 +13829,9 @@ function renderEstimates() {
     people = rows.length ? h("div", { class: "panel est-people" },
       h("h3", { text: `By person in charge${grp === "all" ? "" : ` · ${EST_GROUPS.find(g => g[0] === grp)[1]}`}` }),
       h("table", { class: "est-ptable", id: "estPeople" },
-        h("thead", null, h("tr", null, ["In charge", "Estimates", "Approved", "Open", "Not sent", "Rate", "Rate $", "Approved $"].map((t, i) => h("th", { class: i ? "num" : "", text: t })))),
+        // (a phone: shorter headings; Approved, Open and Approved $ left out so it fits the screen)
+        h("thead", null, h("tr", null, ["In charge", ["Estimates", "Est."], "Approved", "Open", "Not sent", "Rate", "Rate $", "Approved $"].map((t, i) =>
+          h("th", { class: i ? "num" : "" }, Array.isArray(t) ? [h("span", { class: "t-long", text: t[0] }), h("span", { class: "t-short", text: t[1] })] : t)))),
         h("tbody", null, rows.map(([k, name, s]) => h("tr", { "data-who": k, class: estView.who === k ? "on" : "", tabindex: "0", title: "Show only these",
           onclick: () => { estView.who = estView.who === k ? "" : k; redraw(); }, onkeydown: ev => { if (ev.key === "Enter") { estView.who = estView.who === k ? "" : k; redraw(); } } },
           h("td", { class: k === "-" ? "muted" : "" }, name), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }), h("td", { class: "num", text: fmt(s.open) }),
