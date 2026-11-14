@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 52;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 53;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -325,6 +325,12 @@ function doPost(e) {
       case "revSync":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
+      case "goals":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(goalsRead_(req.year));
+      case "goalsPut":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return goalsPut_(req); }));
       case "marketing":
         if (!canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(mktRead_());
@@ -3953,6 +3959,53 @@ function repRead_(year) {
     if (String(r[1]).indexOf(y + "-") === 0) jobs.push(repOut_(r));
   });
   return { ok: true, year: Number(y), jobs: jobs, years: Object.keys(years).map(Number).sort(), dv: REP_DATA_VER };
+}
+/* ---- Company goal (Operations): each year's goal for each department and each month's Super, Minimum and Bonus goals,
+   in cents, kept in Script Properties. Everyone who sees Revenue reads them; only an admin sets them. A month with no
+   goals of its own uses the last month before it that has some (the app shows that). ---- */
+const GOALS_KEY = "COMPANY_GOALS";
+function goalsDoc_() {
+  let d = {};
+  try { d = JSON.parse(PropertiesService.getScriptProperties().getProperty(GOALS_KEY) || "{}") || {}; } catch (e) { d = {}; }
+  return { years: d.years && typeof d.years === "object" ? d.years : {}, months: d.months && typeof d.months === "object" ? d.months : {} };
+}
+/** A goal in cents: a whole number from 0 to a billion dollars; blank is "no goal" (null); anything else is refused (undefined). */
+function goalCents_(v) {
+  if (v === null || v === "" || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 && n <= 1e11 ? Math.round(n) : undefined;
+}
+/** The goals, and what each day of the year paid the repair contractors (Monumental's share and specialty contractors,
+ *  from the Repairs tab): the Bonus goal counts the revenue without it. */
+function goalsRead_(year) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const rows = repRows_(repSheet_(false)), paid = {};
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id];
+    if (String(r[1]).indexOf(y + "-") !== 0 || r[13]) return;   // another year, or gone from Housecall Pro
+    const c = repCents_(r[16]) + repSplit_(r).mon;
+    if (c) paid[r[1]] = (paid[r[1]] || 0) + c;
+  });
+  return { ok: true, year: Number(y), goals: goalsDoc_(), contractors: paid };
+}
+/** Sets a year's department goals ({ year, depts: { r, c, p } }) and/or a month's ({ month, goals: { sup, min, bon } }). */
+function goalsPut_(req) {
+  const doc = goalsDoc_(), y = String(req.year || ""), m = String(req.month || "");
+  if (!y && !m) return { ok: false, error: "bad_request" };
+  if (y) {
+    if (!/^\d{4}$/.test(y) || !req.depts || typeof req.depts !== "object") return { ok: false, error: "bad_request" };
+    const d = {};
+    for (const k of ["r", "c", "p"]) { const v = goalCents_(req.depts[k]); if (v === undefined) return { ok: false, error: "bad_request" }; d[k] = v || 0; }
+    doc.years[y] = d;
+  }
+  if (m) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m) || !req.goals || typeof req.goals !== "object") return { ok: false, error: "bad_request" };
+    const g = {};
+    for (const k of ["sup", "min", "bon"]) { const v = goalCents_(req.goals[k]); if (v === undefined) return { ok: false, error: "bad_request" }; g[k] = v; }
+    doc.months[m] = g;
+  }
+  PropertiesService.getScriptProperties().setProperty(GOALS_KEY, JSON.stringify(doc));
+  return { ok: true, goals: doc };
 }
 /** The credit card fee in a list of line items (cents): lines named like "VODA - Credit Card Service Charge". */
 function repFeeOf_(items) {

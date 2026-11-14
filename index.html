@@ -919,6 +919,78 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
   .rev-aside { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
 }
+/* Operations: the company goal. Meant to catch the eye first: deep VODA blue, gold, big white numbers; a shine across it
+   and its bars filling when it's first drawn, and a slow gold glow (none for anyone who turned motion down). */
+.goal { --gold: #ffcc33; --gold2: #ff9f1a; --gw: rgba(255, 255, 255, .74);
+  position: relative; overflow: hidden; isolation: isolate; color: #fff; border-radius: 18px; padding: 16px 18px 18px; display: grid; gap: 12px;
+  background: radial-gradient(130% 70% at 100% 0%, rgba(255, 196, 40, .30), transparent 58%), radial-gradient(90% 60% at 0% 100%, rgba(80, 140, 255, .35), transparent 60%),
+    linear-gradient(160deg, #2458d6 0%, #163a9c 42%, #0b1d52 100%);
+  box-shadow: 0 0 0 1.5px rgba(255, 206, 70, .75), 0 16px 38px -14px rgba(14, 40, 120, .75), 0 0 34px -6px rgba(255, 190, 40, .45);
+  animation: goal-glow 3.8s ease-in-out infinite; }
+.goal::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-linear-gradient(115deg, rgba(255, 255, 255, .035) 0 2px, transparent 2px 14px); }
+.goal.goal-intro::after { content: ""; position: absolute; top: -20%; bottom: -20%; width: 45%; left: -60%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .38), transparent); transform: skewX(-18deg); animation: goal-shine 1.5s .35s ease-out 1 forwards; }
+.goal.goal-intro .goal-bar i { animation: goal-fill 1.3s .2s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes goal-shine { to { left: 130%; } }
+@keyframes goal-fill { from { width: 0; } }
+@keyframes goal-glow { 50% { box-shadow: 0 0 0 1.5px rgba(255, 214, 90, 1), 0 16px 38px -14px rgba(14, 40, 120, .75), 0 0 48px -4px rgba(255, 190, 40, .7); } }
+@media (prefers-reduced-motion: reduce) { .goal, .goal.goal-intro::after, .goal.goal-intro .goal-bar i { animation: none; } .goal.goal-intro::after { display: none; } }
+.goal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.goal-kicker { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.goal-ic { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #3a2400; background: radial-gradient(circle at 35% 30%, #fff1b8, var(--gold) 45%, var(--gold2));
+  box-shadow: 0 0 14px rgba(255, 196, 40, .8); } .goal-ic svg { width: 17px; height: 17px; }
+.goal-edit { all: unset; cursor: pointer; font-size: .78rem; font-weight: 700; padding: 5px 12px; border-radius: 999px; color: #fff; background: rgba(255, 255, 255, .14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35); }
+.goal-edit:hover, .goal-edit:focus-visible { background: rgba(255, 255, 255, .26); }
+.goal-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px 22px; }
+.goal-yr, .goal-mo { display: grid; gap: 7px; align-content: start; min-width: 0; }
+.goal-title { margin: 0; font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #fff; display: flex; align-items: baseline; gap: 8px; }
+.goal-title small { font-family: system-ui, sans-serif; font-size: .7rem; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--gw); }
+.goal-big { font-family: var(--font-display); font-size: clamp(2.3rem, 3vw, 2.9rem); font-weight: 800; line-height: 1; letter-spacing: .01em; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #fff 30%, #ffe28a); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 2px 10px rgba(255, 200, 60, .35)); }
+.goal-bar { display: block; height: 9px; border-radius: 999px; background: rgba(255, 255, 255, .16); overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .3); }
+.goal-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--gold2), var(--gold)); box-shadow: 0 0 12px rgba(255, 196, 40, .8); }
+.goal-bar.r i { background: linear-gradient(90deg, #5d8dff, #a9c4ff); box-shadow: 0 0 10px rgba(130, 170, 255, .7); }
+.goal-bar.c i { background: linear-gradient(90deg, #22b3a2, #7fe8da); box-shadow: 0 0 10px rgba(80, 220, 200, .6); }
+.goal-bar.p i { background: linear-gradient(90deg, #e08a12, #ffc861); box-shadow: 0 0 10px rgba(255, 180, 70, .6); }
+.goal-sub { margin: 0; font-size: .84rem; color: var(--gw); } .goal-sub b { color: #fff; font-variant-numeric: tabular-nums; }
+.goal-hit-t { color: var(--gold); font-weight: 800; }
+.goal-deps { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; align-items: baseline; margin-top: 4px; padding: 10px 12px 12px;
+  border-radius: 12px; background: rgba(4, 14, 48, .35); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+.goal-rl { font-size: .64rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--gw); } .goal-rl.r { text-align: right; }
+.goal-dn { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: .78rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #fff; white-space: nowrap; min-width: 0; }
+.goal-dn .rev-dot { flex: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
+.goal-dl { margin-top: 8px; text-align: right; }
+.goal-dl b { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--gold); white-space: nowrap; }
+.goal-dl.hit b { color: #8ff0b0; }
+.goal-deps .goal-bar { grid-column: 1 / -1; height: 7px; }
+.goal-dg { font-size: .74rem; color: var(--gw); white-space: nowrap; } .goal-dg b { color: #fff; font-variant-numeric: tabular-nums; }
+.goal-dp { font-size: .7rem; color: var(--gw); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; padding: 9px 12px; border-radius: 12px; background: rgba(255, 255, 255, .08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+.goal-row .goal-bar { grid-column: 1 / -1; }
+.goal-rn { font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+.goal-rg { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+.goal-rs { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: .8rem; color: var(--gw); }
+.goal-rs b { color: #fff; font-variant-numeric: tabular-nums; } .goal-rs em { font-style: normal; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+.goal-bon { grid-column: 1 / -1; font-size: .7rem; color: var(--gw); }
+.goal-row.sup { background: linear-gradient(90deg, rgba(255, 196, 40, .22), rgba(255, 255, 255, .06)); box-shadow: inset 0 0 0 1px rgba(255, 206, 70, .55); }
+.goal-row.hit { background: linear-gradient(90deg, rgba(60, 200, 120, .32), rgba(255, 196, 40, .18)); box-shadow: inset 0 0 0 1.5px rgba(140, 240, 170, .8), 0 0 18px rgba(120, 230, 160, .35); }
+.goal-mtd { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px 12px; margin-top: 2px; padding: 12px 14px; border-radius: 14px; color: #2a1a00;
+  background: linear-gradient(135deg, #fff3c2, var(--gold) 45%, var(--gold2)); box-shadow: 0 8px 22px -8px rgba(255, 170, 30, .8), inset 0 1px 0 rgba(255, 255, 255, .7); }
+.goal-mtd small { font-size: .82rem; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.goal-mtd b { justify-self: end; font-family: var(--font-display); font-size: clamp(2rem, 2.6vw, 2.5rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.goal-mtd span { grid-column: 1 / -1; justify-self: end; font-size: .74rem; font-weight: 600; opacity: .8; }
+.goal-lead { margin: 0; font-size: .9rem; color: var(--gw); }
+.goal-old p { margin: 0; font-size: .86rem; color: var(--gw); }
+.goal-dlg .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.goal-dlg h3 { margin: 14px 0 6px; font-size: 1rem; } .goal-dlg-total { margin: 4px 0 0; font-weight: 800; color: var(--accent); }
+@media (max-width: 560px) { .goal { padding: 14px 14px 16px; border-radius: 16px; } .goal-deps { padding: 8px 10px 10px; column-gap: 10px; } .goal-dlg .grid3 { grid-template-columns: 1fr; } }
+/* a wide screen: the goal in its own column, right of the panel, in the space beside the page */
+@media (min-width: 2040px) {
+  body[data-tab="revenue"] #revView.goal3 { max-width: none; width: 1768px; grid-template-columns: minmax(0, 1000px) 360px 360px; }
+  #revView.goal3 > .goal { position: sticky; top: calc(var(--top-h, 74px) + 12px); }
+}
 /* Operations: Accounts receivable (a tile on top of the panel on the right; a bar under the totals on a smaller screen) */
 .rev-ar { cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px; display: grid; gap: 4px; grid-template-columns: 1fr auto; }
 .rev-ar > * { grid-column: 1 / -1; }
@@ -10383,7 +10455,7 @@ const REV_CMP_YEARS = 5;                                // compare with up to 5 
 // a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
 const REV_DEPTS = [["r", "Restoration", "Rest."], ["c", "Cleaning", "Clean."], ["p", "Repairs", "Repairs"], ["o", "Other", "Other"]];
 const revThisYear = () => clockNow().getFullYear();
-function revForget() { revData = null; revOther = {}; store.del(K_REV); }
+function revForget() { revData = null; revOther = {}; store.del(K_REV); if (typeof goalsForget === "function") goalsForget(); }
 const revDoc = y => (y === revThisYear() ? revData : revOther[y]) || null;
 async function revLoad(y) {
   y = y || revThisYear();
@@ -10765,8 +10837,190 @@ function renderRevenue() {
             b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
       }));
   }
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, r.from > today ? null : [tiles, tilesWas, strip], arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)), ...(aside ? [aside] : []));
-  if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false), 0);
+  // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
+  const goal = revGoalEl(r.from > today ? today : to), slot = goal ? revGoalSlot() : "";
+  if (slot === "side") { if (aside) aside.prepend(goal); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, goal); }
+  box.classList.toggle("goal3", slot === "wide");
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, slot === "top" ? goal : null, r.from > today ? null : [tiles, tilesWas, strip], arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
+    ...(aside ? [aside] : []), ...(slot === "wide" ? [goal] : []));
+  if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
+}
+/** The days from..to never read from Housecall Pro (none while their year is loading), as [day, day] ranges. */
+function revUnread(from, to) {
+  const days = revDaysFor(from, to), out = [];
+  if (!days) return out;
+  for (let d = from < LB_FIRST_DAY ? LB_FIRST_DAY : from; d <= to; d = lbAddDays(d, 1)) if (!days[d] || !days[d][9]) out.push([d, d]);
+  return out;
+}
+
+/* ---- Company goal (Operations, beside Accounts receivable): the year's goal for each department and what's left of it
+   (Housecall Pro's revenue since Jan 1), and the month's Super, Minimum and Bonus goals against the month so far (MTD).
+   The Bonus goal counts the revenue without what the repair contractors are paid (Monumental's share and specialty
+   contractors, from Repairs Payroll). An admin sets the goals; everyone who sees Operations sees them. It follows the
+   period on screen: the year and the month of its last day (today at most). ---- */
+const GOALS_API = 53;                                   // the Google script that keeps the company goal
+const K_GOALS = "voda.goals1";
+const goalsDocs = {};                                   // year → { year, goals: { years, months }, contractors: { day: cents }, at }
+{ const g = store.get(K_GOALS); if (g && g.year && g.goals) goalsDocs[g.year] = Object.assign(g, { at: 0 }); }   // drawn at once, read again
+const goalsBusy = {}, goalsTried = {}, goalsRepAsked = {};
+let goalsOld = false, goalsIntro = true;
+const GOAL_DEPTS = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"]];
+const GOAL_MONTH = [["sup", "Super goal"], ["min", "Minimum goal"], ["bon", "Bonus goal"]];
+const GOAL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg>';
+function goalsForget() { for (const k of Object.keys(goalsDocs)) delete goalsDocs[k]; store.del(K_GOALS); goalsOld = false; }
+/** Reads the goals and the year's contractor pay (again after 10 minutes, or now: force). */
+async function goalsLoad(y, force) {
+  if (!session || !canSee("revenue") || goalsOld || (apiLevel && apiLevel < GOALS_API) || goalsBusy[y]) return;
+  const had = goalsDocs[y], now = Date.now();
+  if (!force && ((had && had.at && now - had.at < 10 * 60e3) || (goalsTried[y] && now - goalsTried[y] < 60e3))) return;
+  goalsBusy[y] = true; goalsTried[y] = now;
+  try {
+    const out = await api("goals", { year: y }), g = out.goals || {};
+    goalsDocs[y] = { year: y, goals: { years: g.years || {}, months: g.months || {} }, contractors: out.contractors || {}, at: Date.now() };
+    if (y === revThisYear()) store.set(K_GOALS, goalsDocs[y]);
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { goalsBusy[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    if (e && e.error === "bad_request" && (Number(e.api) || 0) < GOALS_API) goalsOld = true;   // the script is older than the goal
+  } finally {
+    goalsBusy[y] = false;
+    if (view.tab === "revenue") renderRevenue();
+  }
+}
+/** Someone who sees Repairs Payroll reads the month's repair jobs from Housecall Pro when they may have changed, so what
+ *  the contractors are paid is current; then the goals are read again with it. */
+async function goalsRepFresh(y, m) {
+  // not after Housecall Pro failed (nothing more asked until Read again / Try again), nor offline
+  if (!canSee("repairs") || revSync.err || repSync.err || !navigator.onLine || (goalsRepAsked[m] && performance.now() - goalsRepAsked[m] < 10 * 60e3)) return;
+  goalsRepAsked[m] = performance.now();
+  if (!repDoc(y)) await repLoad(y);
+  if (!repDoc(y)) return;
+  const was = repAsked[m];
+  await repEnsure([m]);
+  if (repAsked[m] !== was) goalsLoad(y, true);
+}
+/** A month's goals: its own, or else the last month before it that has some ({ sup, min, bon, from }). */
+function goalMonth(g, key) {
+  const k = Object.keys((g && g.months) || {}).filter(x => x <= key).sort().pop();
+  return k ? Object.assign({}, g.months[k], { from: k }) : null;
+}
+const goalPct = (done, goal) => (goal > 0 ? `${Math.floor(Math.max(0, done) / goal * 100)}%` : "–");
+const goalBar = (done, goal, cls) => h("span", { class: "goal-bar" + (cls ? " " + cls : ""), "aria-hidden": "true" },
+  h("i", { style: `width:${goal > 0 ? Math.max(0, Math.min(100, done / goal * 100)).toFixed(1) : 0}%` }));
+const goalKicker = text => { const i = h("span", { class: "goal-ic" }); i.innerHTML = GOAL_SVG; return h("span", { class: "goal-kicker" }, i, text); };
+/** Which spot the goal takes: its own column right of the panel (a wide screen), the top of that panel (a PC), or
+ *  under the period's numbers' heading (a smaller screen, a phone). */
+const GOAL_WIDE = "(min-width: 2040px)", GOAL_SIDE = "(min-width: 1400px)";
+const revGoalSlot = () => (matchMedia(GOAL_WIDE).matches ? "wide" : matchMedia(GOAL_SIDE).matches ? "side" : "top");
+for (const q of [GOAL_WIDE, GOAL_SIDE]) { const mq = matchMedia(q); const f = () => { if (view.tab === "revenue") renderRevenue(); }; if (mq.addEventListener) mq.addEventListener("change", f); }
+/** The goal, as of a day (the last day of the period on screen, today at most). */
+function revGoalEl(asOf) {
+  if (!canSee("revenue")) return null;
+  const y = Number(asOf.slice(0, 4)), m = asOf.slice(0, 7), mon = Number(m.slice(5)), monName = lbMonthLong(mon);
+  if (goalsOld || (apiLevel && apiLevel < GOALS_API)) return isAdmin() ? h("section", { class: "goal goal-old", id: "revGoal" }, goalKicker("Company goal"),
+    h("p", { text: "The company goal needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script, paste the latest Code.gs, then Deploy > Manage deployments > pencil > New version > Deploy." })) : null;
+  goalsLoad(y);
+  goalsRepFresh(y, m);
+  const doc = goalsDocs[y];
+  if (!doc) return null;
+  const yg = doc.goals.years[String(y)] || null, mg = goalMonth(doc.goals, m);
+  const edit = isAdmin() ? h("button", { class: "goal-edit", type: "button", id: "goalEdit", onclick: () => goalEdit(y, m) }, yg || mg ? "Edit" : "Set goals") : null;
+  if (!yg && !mg) return isAdmin() ? h("section", { class: "goal goal-empty", id: "revGoal" }, h("div", { class: "goal-head" }, goalKicker("Company goal"), edit),
+    h("p", { class: "goal-lead", text: `No goal for ${y} yet. Set the year's goal for each department and ${monName}'s Super, Minimum and Bonus goals.` })) : null;
+  const from = `${y}-01-01`, mFrom = `${m}-01`, days = revDaysFor(from, asOf);
+  const ys = days ? revSum(days, from, asOf) : null, ms = days ? revSum(days, mFrom, asOf) : null;
+  let contr = 0;
+  for (let d = mFrom; d <= asOf; d = lbAddDays(d, 1)) contr += Number(doc.contractors[d]) || 0;
+  const M = c => (ys ? lbMoney(c / 100) : "…");
+  const intro = goalsIntro && !!ys;   // the shine and the bars filling: once, the first time it's drawn with its numbers
+  if (ys) goalsIntro = false;
+  const out = h("section", { class: "goal" + (intro ? " goal-intro" : ""), id: "revGoal", "aria-label": "Company goal" },
+    h("div", { class: "goal-head" }, goalKicker("Company goal"), edit));
+  const body = h("div", { class: "goal-body" });
+  out.append(body);
+  // the year: the goal, then each department's goal and what's left of it
+  if (yg) {
+    const total = (yg.r || 0) + (yg.c || 0) + (yg.p || 0), done = ys ? ys.cents : 0, left = total - done;
+    body.append(h("div", { class: "goal-yr" },
+      h("h3", { class: "goal-title", text: `Goal ${y}` }),
+      h("b", { class: "goal-big", id: "goalYear", text: lbMoney(total / 100) }),
+      goalBar(done, total, "gold"),
+      h("p", { class: "goal-sub", id: "goalYearSub" }, h("b", { text: M(done) }), ` produced · ${ys ? goalPct(done, total) : "…"} · `,
+        left > 0 ? h("span", null, h("b", { text: M(left) }), " to go") : h("span", { class: "goal-hit-t", text: `✓ Reached${ys && left < 0 ? `, ${lbMoney(-left / 100)} over` : ""}` })),
+      // each department: what's left of its goal (the goal less what it produced since Jan 1), its bar, then its goal
+      h("div", { class: "goal-deps", id: "goalDeps" },
+        h("span", { class: "goal-rl", text: "By department" }), h("span", { class: "goal-rl r", text: "Left to goal" }),
+        GOAL_DEPTS.map(([k, name]) => {
+          const g = yg[k] || 0, d = ys ? ys[k][0] : 0, l = g - d, hit = !!ys && g > 0 && l <= 0;
+          return [h("span", { class: "goal-dn " + k }, h("i", { class: "rev-dot " + k }), name),
+            h("span", { class: "goal-dl" + (hit ? " hit" : ""), "data-k": k }, h("b", { text: !ys ? "…" : !g ? "–" : l > 0 ? lbMoney(l / 100) : "✓ Reached" })),
+            goalBar(d, g, k),
+            h("span", { class: "goal-dg", "data-k": k }, "Goal ", h("b", { text: lbMoney(g / 100) })),
+            h("small", { class: "goal-dp", title: `${name}: produced in ${y} so far` }, ys && g ? `${lbMoney(d / 100)} produced · ${goalPct(d, g)}` : "")];
+        }))));
+  }
+  // the month: Super, Minimum and Bonus against the month so far
+  const mo = h("div", { class: "goal-mo" }, h("h3", { class: "goal-title" }, `${monName} goal`,
+    mg && mg.from !== m ? h("small", { text: `same as ${lbMonthLong(Number(mg.from.slice(5)))}${mg.from.slice(0, 4) !== String(y) ? ` ${mg.from.slice(0, 4)}` : ""}` }) : null));
+  if (mg) for (const [k, label] of GOAL_MONTH) {
+    const g = mg[k];
+    if (g == null) continue;
+    const done = ms ? (k === "bon" ? ms.cents - contr : ms.cents) : 0, hit = !!ms && g > 0 && done >= g;
+    mo.append(h("div", { class: "goal-row " + k + (hit ? " hit" : ""), "data-k": k },
+      h("span", { class: "goal-rn", text: label }), h("b", { class: "goal-rg", text: lbMoney(g / 100) }),
+      goalBar(done, g, "gold"),
+      h("span", { class: "goal-rs" }, !ms ? "…" : hit ? h("span", { class: "goal-hit-t", text: "✓ Reached" }) : h("span", null, h("b", { text: lbMoney((g - done) / 100) }), " to go"), ms ? h("em", { text: goalPct(done, g) }) : null),
+      k === "bon" ? h("small", { class: "goal-bon", id: "goalBonus", text: ms ? `Counts ${lbMoney(done / 100)}: all revenue less ${lbMoney(contr / 100)} to the repair contractors` : "" }) : null));
+  }
+  else mo.append(h("p", { class: "goal-lead", text: isAdmin() ? `No goals for ${monName} yet: Edit to set them.` : `No goals for ${monName} yet.` }));
+  const whole = asOf >= `${m}-${String(lbDaysIn(m)).padStart(2, "0")}` && asOf < lbToday();
+  mo.append(h("div", { class: "goal-mtd", id: "goalMtd" }, h("small", { text: whole ? `${monName} total` : "MTD" }),
+    h("b", { text: ms ? lbMoney(ms.cents / 100) : "…" }), h("span", { text: revSpanText(mFrom, asOf) })));
+  body.append(mo);
+  return out;
+}
+/** Setting the goals (an admin): the year's goal for each department, and the month's Super, Minimum and Bonus. */
+function goalEdit(y, m) {
+  const doc = goalsDocs[y], g = doc ? doc.goals : { years: {}, months: {} };
+  const yg = g.years[String(y)] || null, mg = goalMonth(g, m), monName = `${lbMonthLong(Number(m.slice(5)))} ${y}`;
+  const err = h("p", { class: "dlg-err", role: "alert" }), totalEl = h("p", { class: "goal-dlg-total", id: "goalDlgTotal" });
+  const show = c => (c == null ? "" : (c / 100).toLocaleString("en-US", { maximumFractionDigits: 2 }));
+  const box = (id, label, c) => h("div", { class: "field" }, h("label", { for: id, text: label }),
+    h("input", { id, type: "text", inputmode: "decimal", autocomplete: "off", value: show(c), placeholder: "0", oninput: sum }));
+  function sum() {
+    const v = GOAL_DEPTS.map(([k]) => lbMoneyIn(($(`gd-${k}`) || {}).value || ""));
+    totalEl.textContent = v.some(Number.isNaN) ? "Amounts as numbers, like 2800000 or 2,800,000." : `Goal ${y}: ${lbMoney(v.reduce((n, x) => n + (x || 0), 0))}`;
+  }
+  openDialog(h("div", { class: "goal-dlg" },
+    h("h2", { text: "Company goal" }),
+    h("h3", { text: `${y}: each department's goal` }),
+    h("div", { class: "grid3" }, GOAL_DEPTS.map(([k, name]) => box(`gd-${k}`, `${name} $`, yg ? yg[k] : null))),
+    totalEl,
+    h("h3", { text: `${monName} goals` }),
+    h("p", { class: "meta", text: mg && mg.from !== m ? `${lbMonthLong(Number(m.slice(5)))} uses ${lbMonthLong(Number(mg.from.slice(5)))}'s goals now. Saving gives it its own; later months start with them until you change them.`
+      : "Later months start with these until you change them." }),
+    h("div", { class: "grid3" }, GOAL_MONTH.map(([k, name]) => box(`gm-${k}`, `${name} $`, mg ? mg[k] : null))),
+    h("p", { class: "hint", text: "The Bonus goal counts all the revenue less what the repair contractors are paid (Monumental's share and specialty contractors, from Repairs Payroll). Leave a goal blank to not use it." }),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "goalSave", text: "Save", onclick: async ev => {
+        const read = ids => { const o = {}; for (const [k] of ids[0]) { const v = lbMoneyIn($(`${ids[1]}-${k}`).value); if (Number.isNaN(v)) return null; o[k] = v == null ? null : Math.round(v * 100); } return o; };
+        const d = read([GOAL_DEPTS, "gd"]), gl = read([GOAL_MONTH, "gm"]);
+        if (!d || !gl) { err.textContent = "Amounts as numbers, like 550000 or 550,000."; return; }
+        const body = {};
+        if (yg || Object.values(d).some(v => v != null)) Object.assign(body, { year: String(y), depts: { r: d.r || 0, c: d.c || 0, p: d.p || 0 } });
+        if ((mg && mg.from === m) || Object.values(gl).some(v => v != null)) Object.assign(body, { month: m, goals: gl });
+        if (!body.year && !body.month) { err.textContent = "Type a goal first."; return; }
+        const b = ev.currentTarget; b.disabled = true; err.textContent = "";
+        try {
+          const out = await api("goalsPut", body);
+          for (const x of Object.values(goalsDocs)) x.goals = out.goals;
+          if (!goalsDocs[y]) goalsDocs[y] = { year: y, goals: out.goals, contractors: {}, at: 0 };
+          if (goalsDocs[revThisYear()]) store.set(K_GOALS, goalsDocs[revThisYear()]);
+          dlgDirty = false; closeDialog(); toast("Goals saved"); renderRevenue();
+        } catch (e) { err.textContent = errText(e, "The goal"); b.disabled = false; }
+      } })))));
+  sum();
 }
 
 /* ---- Accounts receivable: each day's unpaid visits (Housecall Pro's outstanding balance) ---- */
