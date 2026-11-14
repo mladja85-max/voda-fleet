@@ -923,7 +923,11 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar { cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px; display: grid; gap: 4px; grid-template-columns: 1fr auto; }
 .rev-ar > * { grid-column: 1 / -1; }
 .rev-ar > small { grid-row: 1; grid-column: 1; } .rev-ar > b { grid-row: 2; grid-column: 1; }
-.rev-ar-col { grid-row: 1 / 3; grid-column: 2 !important; display: grid; gap: 4px; align-content: start; text-align: right; }
+.rev-ar > .rev-ar-pct { grid-row: 3; grid-column: 1; }
+.rev-ar-pct { font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--due); }
+.rev-ar-col .rev-ar-pct { color: var(--accent); }
+.rev-ar-bar b .pct { font-style: normal; font-size: .72em; font-weight: 700; margin-left: 5px; opacity: .85; }
+.rev-ar-col { grid-row: 1 / 4; grid-column: 2 !important; display: grid; gap: 4px; align-content: start; text-align: right; }
 .rev-ar-col small { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
 .rev-ar-col b { font-family: var(--font-display); font-size: clamp(1.5rem, 2.2vw, 2rem); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent); }
 .rev-ar:hover, .rev-ar:focus-visible { border-color: color-mix(in srgb, var(--soon) 60%, var(--line)); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--soon) 15%, transparent); }
@@ -10716,11 +10720,16 @@ function renderRevenue() {
     // collected: what's been paid for the period's visits (deposits on visits still to come too), in VODA blue
     const colOk = apiLevel >= JOBS_API, colBusy = colOk && ar.colMissing > 0;
     const colText = k => (!colOk ? "–" : colBusy && !ar.col.t ? "…" : lbMoney(ar.col[k] / 100));
+    // the share of everything charged in the period that's still owed, and that's been paid (like each department's)
+    const arPct = busy && !ar.t[1] ? "" : revPct(ar.t[0], s.cents), colPct = colOk && !(colBusy && !ar.col.t) ? revPct(ar.col.t, s.cents) : "";
+    const ofCharged = `of ${lbMoney(s.cents / 100)} charged${arSpan ? ` · ${arSpan}` : ""}`;
     arCard = h("div", { class: "rev-ar", id: "revAr", role: "button", tabindex: "0", title: "Who still owes", onclick: () => arOpen("all"), onkeydown: e => { if (e.key === "Enter") arOpen("all"); } },
       h("small", { text: "Accounts receivable" }),
       h("b", { text: busy && !ar.t[1] ? "…" : lbMoney(ar.t[0] / 100) }),
+      h("span", { class: "rev-ar-pct", id: "revArPct", title: `Still owed, ${ofCharged}` }, arPct ? `${arPct} of charged` : ""),
       h("div", { class: "rev-ar-col", id: "revCol", title: colOk ? "Paid for this period's jobs" : "Update the Google script to see what's been collected" },
-        h("small", { text: "Collected" }), h("b", { text: colText("t") })),
+        h("small", { text: "Collected" }), h("b", { text: colText("t") }),
+        h("span", { class: "rev-ar-pct", id: "revColPct", title: `Paid, ${ofCharged}` }, colPct ? `${colPct} of charged` : "")),
       h("span", { class: "rev-ar-n", text: busy ? `Reading Housecall Pro… (${ar.t[1]} jobs so far)` : ar.t[1] ? `${revJobs(ar.t[1])} still owed · ${arSpan}` : `Nobody owes · ${arSpan}` }),
       ar.t[1] ? ageBar : null,
       ar.t[1] ? h("div", { class: "rev-ar-ages" }, REV_AGES.slice(1).map(([k, name]) => h("span", { "data-age": k }, h("i", { class: "a" + k }), `${name.replace(" days", "").replace("Up to ", "0–")} `, h("b", { text: revShort(ar.age[k][0]) })))) : null,
@@ -10732,8 +10741,8 @@ function renderRevenue() {
             h("em", { text: revJobs(ar[k][1]) }), h("small", { class: "pct pct-ar", title: "Share of what it charged that's still owed", text: revPct(ar[k][0], s[k][0]) }),
             h("small", { class: "pct pct-col", title: "Share of what it charged that's been paid", text: colOk && !(colBusy && !ar.col.t) ? revPct(ar.col[k], s[k][0]) : "" })))));
     arBar = h("button", { class: "rev-ar-bar", id: "revArBar", type: "button", onclick: () => arOpen("all") },
-      h("span", { class: "l" }, h("small", { text: "Accounts receivable" }), h("b", { text: busy && !ar.t[1] ? "…" : lbMoney(ar.t[0] / 100) })),
-      h("span", { class: "l col" }, h("small", { text: "Collected" }), h("b", { text: colText("t") })),
+      h("span", { class: "l" }, h("small", { text: "Accounts receivable" }), h("b", null, busy && !ar.t[1] ? "…" : lbMoney(ar.t[0] / 100), arPct ? h("em", { class: "pct", text: arPct }) : null)),
+      h("span", { class: "l col" }, h("small", { text: "Collected" }), h("b", null, colText("t"), colPct ? h("em", { class: "pct", text: colPct }) : null)),
       h("span", { class: "r", text: busy ? "Reading…" : ar.t[1] ? `${revJobs(ar.t[1])} · ${revShort(ar.age["60"][0] + ar.age["90"][0] + ar.age["91"][0])} over 30 days` : "Nobody owes" }), h("span", { class: "go", text: "›" }));
   }
   let aside = arCard ? h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable and average job" }, arCard) : null;
