@@ -13633,7 +13633,7 @@ let estData = store.get(K_EST);                         // this year's: { year, 
 let estOther = {};                                      // other years' (looked at in this window)
 const estLoading = {};
 let estErr = "", estOld = false, estShown = 100;
-const estSync = { busy: false, n: 0, err: "", tried: 0 };
+const estSync = { busy: false, n: 0, err: "", tried: 0, at: null };   // at: where a read that stopped picks up ({ page, sort, full })
 const estView = Object.assign({ per: "month", off: 0, from: "", to: "", grp: "all", st: "all", who: "", q: "" }, store.get(K_EST_VIEW) || {});
 const estSaveView = () => store.set(K_EST_VIEW, { per: estView.per, from: estView.from, to: estView.to, grp: estView.grp, st: estView.st, who: estView.who });
 const estCanSee = () => canSee("estimates") || canSee("estimates-all");
@@ -13647,7 +13647,7 @@ async function estLoad(y) {
   if (!session || !estCanSee() || estLoading[y]) return;
   estLoading[y] = true;
   try {
-    const out = await api("estimates", { year: y });
+    const out = await api("estimates", { year: y }, 90000);
     const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, me: out.me || "", readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false };
     if (y === revThisYear()) { estData = doc; store.set(K_EST, doc); } else estOther[y] = doc;
     estErr = ""; estOld = false;
@@ -13674,20 +13674,28 @@ function estFor(from, to) {
  *  hundred a call), then the years on screen again. full: everything again. */
 async function estRun(full) {
   if (estSync.busy || !session || !estCanSee() || !navigator.onLine) return;
-  Object.assign(estSync, { busy: true, n: 0, err: "", tried: Date.now() });
+  // a read that stopped (slow answer, lost connection) picks up where it was, unless a new full read is asked for
+  const from = full === undefined && estSync.at ? estSync.at : { page: 1, sort: "", full: !!full };
+  Object.assign(estSync, { busy: true, n: estSync.at && from === estSync.at ? estSync.n : 0, tried: Date.now() });
   if (view.tab === "estimates") renderEstimates();
-  let page = 1, sort = "";
+  let page = from.page, sort = from.sort;
   try {
     for (let i = 0; i < 40; i++) {
-      const out = await api("estSync", Object.assign({ page }, sort ? { sort } : {}, full ? { full: true } : {}));
+      // a batch can take a while (several pages from Housecall Pro, then the whole tab saved): up to ~3 minutes
+      const out = await api("estSync", Object.assign({ page }, sort ? { sort } : {}, from.full ? { full: true } : {}), 170000);
       estSync.n += Number(out.read) || 0;
-      if (!out.next) break;
+      estSync.err = "";
+      if (!out.next) { estSync.at = null; break; }
       page = out.next; sort = out.by || "";
+      estSync.at = { page, sort, full: from.full };
       if (view.tab === "estimates") renderEstimates();
     }
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { estSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
-    estSync.err = revErrText(e);
+    estSync.at = { page, sort, full: from.full };
+    estSync.err = e && (e.error === "network" || e.error === "busy" || e.error === "offline")
+      ? "Housecall Pro or the Google Sheet was slow to answer. What was read so far is saved; the app tries again by itself in a couple of minutes."
+      : revErrText(e);
   }
   estSync.busy = false;
   await Promise.all([revThisYear()].concat(Object.keys(estOther).map(Number)).map(y => estLoad(y)));
@@ -13696,8 +13704,9 @@ async function estRun(full) {
 /** Opening the tab (or coming back to it): read Housecall Pro again when the last read is 10 minutes old. */
 function estAuto() {
   const d = estData;
-  if (!d || !d.connected || estSync.busy || estSync.err || Date.now() - estSync.tried < 60e3) return;
-  if (!d.done || Date.now() - d.readAt > 10 * 60e3) setTimeout(() => estRun(), 0);
+  if (!d || !d.connected || estSync.busy || Date.now() - estSync.tried < (estSync.err ? 120e3 : 60e3)) return;
+  // a read that stopped: picks up again by itself after 2 minutes; otherwise when the last read is 10 minutes old
+  if (estSync.at || !d.done || Date.now() - d.readAt > 10 * 60e3) setTimeout(() => estRun(), 0);
 }
 /** Added up: estimates (canceled ones left out), approved, open, declined; dollars estimated and approved. */
 function estStats(list) {
@@ -13752,9 +13761,9 @@ function renderEstimates() {
     lbDateInput({ id, value, min: LB_FIRST_DAY, max: today, "aria-label": label }, onpick, LB_FIRST_DAY, today));
   const title = secTitle("Estimates");
   const readBtn = h("button", { class: "btn small", type: "button", id: "estReadBtn", disabled: estSync.busy || !doc.connected,
-    title: "Read what changed in Housecall Pro", onclick: () => { estSync.err = ""; estRun(); } }, "Read again");
+    title: "Read what changed in Housecall Pro", onclick: () => { estRun(); } }, "Read again");
   const fullBtn = admin ? h("button", { class: "btn small ghost", type: "button", id: "estFullBtn", disabled: estSync.busy || !doc.connected,
-    title: "Read every estimate since January 1 of last year again (a minute or two)", onclick: () => { estSync.err = ""; estRun(true); } }, "Read all") : null;
+    title: "Read every estimate since January 1 of last year again (a minute or two)", onclick: () => { estRun(true); } }, "Read all") : null;
   const bar = h("div", { class: "lb-bar rev-bar-top" },
     lbSeg(Object.entries(EST_PER), per, k => {
       if (k === "dates" && per !== "dates") { estView.from = r.from; estView.to = to; }   // Dates starts from the period on screen
@@ -13778,7 +13787,7 @@ function renderEstimates() {
     all ? null : h("span", { text: ` · the estimates you're in charge of in Housecall Pro (as ${doc.me || "you"})` }));
   const oldScript = apiLevel && apiLevel < EST_AUTO_API ? h("p", { class: "dlg-err", id: "estOldScript", text: "Update the Google script (paste the latest Code.gs, then Deploy › Manage deployments › New version) so Estimates reads who's in charge and the Water/Mold tags from Housecall Pro." }) : null;
   const err = estSync.err ? h("p", { class: "dlg-err", id: "estErr" }, estSync.err, " ",
-    h("button", { class: "btn small", type: "button", onclick: () => { estSync.err = ""; estRun(); } }, "Try again")) : null;
+    h("button", { class: "btn small", type: "button", onclick: () => { estRun(); } }, "Try again now")) : null;
   const head = [title ? h("div", { class: "lb-top" }, title) : null, bar, status, oldScript, err].filter(Boolean);
   const list = r.from > today ? [] : estFor(r.from, to);
   if (!list) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` })); return; }
