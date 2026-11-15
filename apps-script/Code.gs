@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 64;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 65;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4214,7 +4214,7 @@ const EST_COLS = ["Estimate id", "Estimate #", "Created", "Created at", "Client"
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
   "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro"];
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
-const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "3";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once
+const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "4";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
 function estAll_(user) { return !!user && (user.role === "admin" || canSee_(user, "estimates-all")); }
 function estSheet_(create) {
@@ -4285,7 +4285,7 @@ function estRow_(e, old, tz, at) {
   const a = e.address || {};
   const row = [String(e.id), String(e.estimate_number || ""), day, String(e.created_at || ""), hcpClient_(e), [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), dept,
     dept === "r" ? kind : "", type, status, by, decided, total / 100, approved / 100,
-    JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o), String(o.status || "").slice(0, 40)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
+    JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o), String(o.status || "").slice(0, 40), String(o.id || "").slice(0, 80)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
     "", "", "", "", "", text, tagList.join(", "), opts.map(function (o) { return String(o.status || ""); }).filter(Boolean).join(", ")];
   return row;
 }
