@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 59;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 60;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -345,6 +345,9 @@ function doPost(e) {
       case "estimates":
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(estRead_(req.year, user));
+      case "estReportsPut":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return estReportsPut_(req); }));
       case "estSync":
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(estSync_(req, user));
@@ -4215,8 +4218,31 @@ function estRead_(year, user) {
     list.push(estOut_(r, lead));
   });
   const P = PropertiesService.getScriptProperties();
-  return { ok: true, year: Number(y), estimates: list, years: Object.keys(years).map(Number).sort(), all: all, me: String(user.name || ""), readAt: Number(P.getProperty(EST_AT)) || 0,
+  return { ok: true, year: Number(y), estimates: list, years: Object.keys(years).map(Number).sort(), all: all, me: String(user.name || ""), reports: all ? estReports_() : {}, readAt: Number(P.getProperty(EST_AT)) || 0,
     done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V, connected: !!hcpKey_() };
+}
+/** Estimates › Reports: who's in charge of each department's report (a name), and the people with him (supervisors):
+ *  { p: { lead, team: [names] }, c: …, r: … }, kept in the script's settings. */
+function estReports_() {
+  let v = {};
+  try { v = JSON.parse(PropertiesService.getScriptProperties().getProperty("EST_REPORTS") || "{}"); } catch (e) { v = {}; }
+  const out = {};
+  ["r", "c", "p"].forEach(function (d) {
+    const x = v && v[d] && typeof v[d] === "object" ? v[d] : {};
+    const name = function (n) { return String(n || "").replace(/[^\p{L}\p{N} .'-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40); };
+    const team = (Array.isArray(x.team) ? x.team : []).map(name).filter(function (n, i, a) { return n && a.indexOf(n) === i; }).slice(0, 8);
+    if (name(x.lead) || team.length) out[d] = { lead: name(x.lead), team: team };
+  });
+  return out;
+}
+function estReportsPut_(req) {
+  const P = PropertiesService.getScriptProperties();
+  let v = {};
+  try { v = JSON.parse(P.getProperty("EST_REPORTS") || "{}"); } catch (e) { v = {}; }
+  if (["r", "c", "p"].indexOf(String(req.dept)) === -1) return { ok: false, error: "bad_request" };
+  v[req.dept] = { lead: String(req.lead || ""), team: Array.isArray(req.team) ? req.team.map(String) : [] };
+  P.setProperty("EST_REPORTS", JSON.stringify(v));
+  return { ok: true, reports: estReports_() };
 }
 /** Reads estimates from Housecall Pro into the tab, EST_PAGES pages a call from req.page ({ next } is the page to ask
  *  for next, 0 when done; { by } goes back as sort). The first time (or full): newest first by the day created, every
