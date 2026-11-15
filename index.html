@@ -1092,7 +1092,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 #rvJobsTable td.rv-pd { color: var(--accent); font-weight: 600; }
 #rvJobsTable tbody th { font-weight: 600; } #rvJobsTable .rv-sm { display: none; }
 #rvJobsTable th.rv-proj, #rvJobsTable th.rv-st { text-align: left; }
-#rvJobsTable td.rv-proj { text-align: left; white-space: normal; min-width: 10em; max-width: 18em; color: var(--muted); }
+#rvJobsTable td.rv-proj { text-align: left; white-space: normal; min-width: 9em; max-width: 16em; color: var(--muted); }
 #rvJobsTable td.rv-st { text-align: left; color: var(--muted); white-space: nowrap; }
 #rvJobsTable tr.later th, #rvJobsTable tr.later td.rv-proj { font-style: italic; }
 #rvJobsTable thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
@@ -1105,10 +1105,11 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 #rvUnpaidTable td.rv-age.mid { color: var(--soon); font-weight: 700; } #rvUnpaidTable td.rv-age.old { color: var(--due); font-weight: 700; }
 #rvUnpaidTable tbody th { font-weight: 600; } #rvUnpaidTable .rv-sm { display: none; }
 #rvUnpaidTable th.rv-proj { text-align: left; }
-#rvUnpaidTable td.rv-proj { text-align: left; white-space: normal; min-width: 10em; max-width: 18em; color: var(--muted); }
+#rvUnpaidTable td.rv-proj { text-align: left; white-space: normal; min-width: 9em; max-width: 16em; color: var(--muted); }
 .rv-seg .seg-btn .rev-dot { margin-right: 4px; }
 /* the AR window stays put: one height, near the top, whatever is picked; only the list scrolls (its headings stay) */
-dialog#dlg:has(.rv-unpaid) { width: min(1040px, calc(100% - 24px)); }
+dialog#dlg:has(.rv-unpaid) { width: min(1320px, calc(100% - 24px)); }   /* Jobs and Accounts receivable: every column without sliding sideways */
+#rvJobsTable tbody th, #rvUnpaidTable tbody th, #rvJobsTable tfoot th, #rvUnpaidTable tfoot th { white-space: normal; min-width: 8em; max-width: 15em; overflow-wrap: break-word; }   /* a long client name (and "129 jobs · 131 visits") wraps */
 dialog#dlg[open]:has(.rv-unpaid) { height: min(880px, calc(100% - 48px)); max-height: none; margin: 24px auto auto; overflow: hidden; display: flex; flex-direction: column; }
 dialog#dlg[open]:has(.rv-unpaid) > form.dlg { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 dialog#dlg[open] .rv-unpaid { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
