@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 63;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 64;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4250,8 +4250,9 @@ function estRows_(s, at) {
 /** Water damage or mold, from the estimate's tags in Housecall Pro (e.g. "Water Damage Cleanup", "Mold Remediation");
  *  "" when it has neither (or both). */
 function estKind_(tags) {
-  const m = tags.some(function (t) { return /mou?ld/i.test(t); }), w = tags.some(function (t) { return /water|flood/i.test(t); });
-  return m === w ? "" : m ? "mold" : "water";
+  const has = function (re) { return tags.some(function (t) { return re.test(t); }); };
+  const kinds = [has(/mou?ld/i) ? "mold" : "", has(/water|flood/i) ? "water" : "", has(/fire|smoke|soot/i) ? "fire" : ""].filter(Boolean);
+  return kinds.length === 1 ? kinds[0] : "";   // two kinds of tag: not sorted (counted once)
 }
 /** An estimate from Housecall Pro as a row (what was typed in the app for it kept). */
 function estRow_(e, old, tz, at) {
@@ -4278,7 +4279,7 @@ function estRow_(e, old, tz, at) {
   const text = [String(e.description || ""), opts.map(function (o) { return String(o.message_from_pro || ""); }).join(" "), notes].join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
   const kind = estKind_(tagList);
   let dept = revDept_(type) !== "o" ? revDept_(type) : revDept_(unit);   // no job type: its business unit
-  if (dept === "o" && kind) dept = "r";   // a Water or Mold tag: Restoration
+  if (dept === "o" && kind) dept = "r";   // a Water, Mold or Fire/Smoke tag: Restoration
   const created = new Date(e.created_at || ""), day = isNaN(created.getTime()) ? "" : Utilities.formatDate(created, tz, "yyyy-MM-dd");
   const emps = (Array.isArray(e.assigned_employees) ? e.assigned_employees : []).map(function (x) { return [x.first_name, x.last_name].filter(Boolean).join(" "); }).filter(Boolean).join(", ");
   const a = e.address || {};
@@ -4327,8 +4328,10 @@ function estIsMe_(user, name) {
 function estOut_(r, lead) {
   let opts = [];
   try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
-  return { id: String(r[0]), n: String(r[1] || ""), day: String(r[2] || ""), client: String(r[4] || ""), addr: String(r[5] || ""), dept: String(r[6] || "o"),
-    kind: String(r[6]) === "r" ? String(r[7] || "") : "", type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
+  const tagKind = r[26] ? estKind_(String(r[26]).split(", ")) : "";
+  const dept = String(r[6]) === "o" && tagKind ? "r" : String(r[6] || "o"), kind = dept === "r" ? (r[26] ? tagKind : String(r[7] || "")) : "";
+  return { id: String(r[0]), n: String(r[1] || ""), day: String(r[2] || ""), client: String(r[4] || ""), addr: String(r[5] || ""), dept: dept,
+    kind: kind, type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
     est: Math.round((Number(r[12]) || 0) * 100), appr: Math.round((Number(r[13]) || 0) * 100), opts: opts, ws: String(r[15] || ""), emps: String(r[16] || ""), lead: String(r[17] || ""),
     inc: lead ? lead.name : "", incRole: lead ? lead.role : "", tags: String(r[26] || ""), hcpSt: String(r[27] || ""),
     // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email)

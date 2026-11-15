@@ -2171,8 +2171,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   #printReport ul { margin: 0; padding-left: 14pt; }
 }
 /* Estimates: tiles (approval rate by estimates and by dollars), by person, the list */
-.est, .er, #printReport { --mold: #7c3aed; }
-@media (prefers-color-scheme: dark) { .est, .er { --mold: #b794f6; } }
+.est, .er, #printReport { --mold: #7c3aed; --fire: #c2410c; }
+@media (prefers-color-scheme: dark) { .est, .er { --mold: #b794f6; --fire: #fb8a4c; } }
+.est-dot.f { background: var(--fire); }
 .est-tiles { display: grid; grid-template-columns: minmax(0, 1.25fr) repeat(var(--c, 3), minmax(0, 1fr)); gap: 10px; }
 .est-tiles.two-rows .est-all { grid-row: span 2; align-content: center; }
 .est-tiles.two-rows .est-all .est-rates b { font-size: clamp(1.7rem, 3vw, 2.4rem); }
@@ -14125,7 +14126,7 @@ const EST_AUTO_API = 58;                                // ... and in charge fro
 const K_EST = "voda.est1", K_EST_VIEW = "voda.estView1";
 const EST_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates: "Dates" };
 // the groups: Restoration as water damage or mold (and the ones not sorted yet), Cleaning, Repairs, Other
-const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
+const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["f", "Fire/Smoke"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
 const EST_ST = { all: "All", open: "Open", notsent: "Not sent", approved: "Approved", declined: "Declined", canceled: "Canceled" };
 /** Open and not sent to the client yet (Housecall Pro: Scheduled, In progress, Completed; Sent, even a failed email, is sent). */
 const estNotSent = e => e.st === "open" && e.sent === false;
@@ -14160,7 +14161,7 @@ function estOwners(e) {
   return mine.length ? mine : [rep.lead];
 }
 const estCanSee = () => canSee("estimates") || canSee("estimates-all");
-const estGroup = e => (e.dept === "r" ? (e.kind === "water" ? "w" : e.kind === "mold" ? "m" : "u") : e.dept === "c" || e.dept === "p" ? e.dept : "o");
+const estGroup = e => (e.dept === "r" ? (e.kind === "water" ? "w" : e.kind === "mold" ? "m" : e.kind === "fire" ? "f" : "u") : e.dept === "c" || e.dept === "p" ? e.dept : "o");
 /** What an estimate is worth: the option approved, else its largest. */
 const estValue = e => (e.st === "approved" ? e.appr || e.est : e.est);
 function estForget() { estData = null; estOther = {}; store.del(K_EST); }
@@ -14354,10 +14355,10 @@ function renderEstimates() {
   // the departments in a row (Restoration, Cleaning, Repairs, Other: each with its In charge from Reports), then
   // Restoration's own row: water damage, mold, not sorted and its supervisors (the With people)
   const has = g => list.some(e => grpOf.get(e) === g);
-  const R_SUB = ["w", "m", "u"], inKey = (g, k) => k === g || (k === "r" && R_SUB.includes(g));
+  const R_SUB = ["w", "m", "f", "u"], inKey = (g, k) => k === g || (k === "r" && R_SUB.includes(g));
   const row1 = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]].filter(([k]) => k === "r" ? R_SUB.some(has) : k !== "o" || has("o"));
-  const row2 = [["w", "Water damage"], ["m", "Mold"], ["u", "Not sorted"]].filter(([k]) => k !== "u" || has("u"));
-  const keys = row1.concat(row2).map(([k]) => k), bases = ["w", "m", "u", "c", "p", "o"].filter(has);
+  const row2 = [["w", "Water damage"], ["m", "Mold"], ["f", "Fire/Smoke"], ["u", "Not sorted"]].filter(([k]) => k !== "u" || has("u"));
+  const keys = row1.concat(row2).map(([k]) => k), bases = ["w", "m", "f", "u", "c", "p", "o"].filter(has);
   const sel = (estView.grps || []).filter(k => keys.includes(k)), allOn = !sel.length;
   // a tile adds its group to the ones picked (or takes it off): Restoration takes the place of water damage, mold and
   // not sorted, and one of them of Restoration; all of them picked, or All estimates: every estimate again
@@ -14395,7 +14396,7 @@ function renderEstimates() {
       // water damage, mold, the supervisors, then the ones not sorted
       h("div", { class: "est-row2", id: "estRestRow", style: `--c:${subN}` }, row2.filter(([k]) => k !== "u").map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))), crew.map(crewTile),
         row2.filter(([k]) => k === "u").map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))))] : null);
-  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage or Mold: the estimate's tag in Housecall Pro. In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his. Tap tiles to pick any mix.");
+  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage, Mold or Fire/Smoke: the estimate's tag in Housecall Pro (two kinds of tag: not sorted). In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his. Tap tiles to pick any mix.");
   // the people (whoever sees them all): a tile each, under the groups; without names in Reports, a word on where to set them
   const inGrp = whoPicked || allOn ? list : list.filter(e => sel.some(k => inKey(grpOf.get(e), k)));
   const people = all && !crew.length && isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Add people under With in Reports (Restoration's supervisors, say) to get a tile for each of them here." }) : null;
@@ -14439,8 +14440,8 @@ function renderEstimates() {
       h("span", { class: "est-cl" }, h("b", { text: e.client || "No name" }),
         h("small", { text: e.addr })),
       // water or mold: the estimate's tag in Housecall Pro (locked); no tag: says so
-      h("span", { class: "est-grp", title: e.tags ? `Tags in Housecall Pro: ${e.tags}` : estGroup(e) === "u" ? "No Water or Mold tag on this estimate in Housecall Pro" : "" },
-        h("i", { class: "est-chip " + estGroup(e) }, h("i", { class: "est-dot " + estGroup(e) }), grpName(e)), estGroup(e) === "u" ? h("small", { class: "est-notag", text: "no Water/Mold tag" }) : null),
+      h("span", { class: "est-grp", title: e.tags ? `Tags in Housecall Pro: ${e.tags}` : estGroup(e) === "u" ? "No Water, Mold or Fire/Smoke tag on this estimate in Housecall Pro (or more than one)" : "" },
+        h("i", { class: "est-chip " + estGroup(e) }, h("i", { class: "est-dot " + estGroup(e) }), grpName(e)), estGroup(e) === "u" ? h("small", { class: "est-notag", text: "no Water/Mold/Fire tag" }) : null),
       h("span", { class: "est-amt" }, h("b", { text: lbMoney(estValue(e) / 100) }), opts.length > 1 ? h("small", { text: `${opts.length} options${e.st === "approved" && e.est !== e.appr ? `, up to ${lbMoney(e.est / 100)}` : ""}` }) : null),
       stEl(e),
       h("span", { class: "est-in" }, e.inc ? h("b", { text: e.inc }) : h("span", { class: "muted", text: "Nobody assigned" }),
@@ -14600,7 +14601,7 @@ function estReportEl(d, name) {
       h("td", { class: "num" }, h("b", { text: estPct(k.cur.appr, k.cur.n) })), h("td", { class: "num", text: lbMoney(k.likely / 100) })))));
   const people = estPeopleTable(R.people.map(([n, st]) => [n, n, st]), { id: "erPeople", cls: "er-table" });
   return h("div", { class: "er", "data-d": d }, head, tiles,
-    kinds ? [h("h4", { text: "Water damage and mold" }), kinds, h("small", { class: "er-note", text: "Created and rate: estimates made in these days. Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
+    kinds ? [h("h4", { text: "Water damage, mold and fire" }), kinds, h("small", { class: "er-note", text: "Created and rate: estimates made in these days. Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
     h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
     h("h4", { text: "Follow up first" }), fu, h("h4", { text: "By person in charge" }), R.people.length ? people : h("p", { class: "lb-sub", text: "No estimates created in these days." }));
 }
@@ -14636,11 +14637,11 @@ function estRepData(d, per, r, to, pv, all, today) {
   // Restoration: water damage, mold and the ones not sorted (a row only when it has something)
   let kinds = null;
   if (d === "r") {
-    kinds = [["w", "Water damage"], ["m", "Mold"], ["u", "Not sorted"]].map(([k, name]) => {
+    kinds = [["w", "Water damage"], ["m", "Mold"], ["f", "Fire/Smoke"], ["u", "Not sorted"]].map(([k, name]) => {
       const mine = dep.filter(e => estGroup(e) === k), x = mine.filter(e => e.st === "approved" && within(decDay(e), r.from, to));
       return { k, name, cur: estStats(mine.filter(e => within(e.day, r.from, to))), appr: { n: x.length, val: x.reduce((s, e) => s + estValue(e), 0) },
         likely: Math.round(open.filter(e => estGroup(e) === k).reduce((s, e) => s + e.est * e.p, 0)) };
-    }).filter(k => k.k !== "u" || k.cur.n || k.appr.n || k.likely);
+    }).filter(k => !["u", "f"].includes(k.k) || k.cur.n || k.appr.n || k.likely);
   }
   return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, daysLeft, fc, people, kinds };
 }
