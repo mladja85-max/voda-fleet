@@ -2228,6 +2228,14 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .lb-sum .lb-sn { min-width: min(7.5em, 40%); }   /* the name shortens last */
 .lb-sum .lb-sr { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lb-sum .lb-se { flex: 0 2 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; }
+/* receipts: read one into a service window */
+.rcpt-row { display: grid; gap: 8px; justify-items: start; }
+.rcpt-box:empty { display: none; }
+.rcpt-box { display: grid; gap: 6px; justify-items: start; width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 11px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.rcpt-box p { margin: 0; font-size: .9rem; }
+.rcpt-warn { color: var(--soon); font-weight: 600; }
+.rcpt-trucks { display: flex; flex-wrap: wrap; gap: 8px; }
+.rcpt-trucks small { color: var(--muted); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -2318,6 +2326,10 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg><span class="txt">Report</span>
         </button>
         <button type="button" id="shareReport" hidden>Share report</button>
+        <button class="btn" type="button" id="rcptTop" title="A service receipt (PDF or photo): the app finds the truck and fills in the service" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg><span class="txt">Receipt</span>
+        </button>
+        <input type="file" id="rcptTopFile" accept="application/pdf,.pdf,image/*" hidden>
         <button class="btn primary" type="button" id="addTruck" title="Add truck">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="txt">Add truck</span>
         </button>
@@ -6396,8 +6408,205 @@ function shopField(id, value) {
     h("datalist", { id: id + "-list" }, shops.map(x => h("option", { value: x }))));
 }
 
-/** Add, fix or delete one service record. Saving a flagged record marks it as checked. */
-function openServiceRecord(truckId, rec) {
+/* ---------- receipts: a service receipt (a PDF or a photo) fills in the service ---------- */
+const RCPT_API = 59;                                    // the Google script that reads receipts
+const RCPT_ERR = { not_receipt: "That isn't a PDF or a photo.", photo: "This photo can't be opened here. Take a screenshot of it (or a new photo) and use that.",
+  too_big: "That file is too big (over 10 MB)." };
+const rcptErrText = e => RCPT_ERR[e && e.error] || (e && e.error === "bad_request" && (Number(e.api) || 0) < RCPT_API ? "Reading receipts needs the newest Google script: paste the latest Code.gs, then Deploy › Manage deployments › New version." : errText(e, "Nothing"));
+/** A photo made smaller (Google reads it just as well and it sends fast); a PDF as it is: { name, data (base64) }. */
+async function rcptPrep(file) {
+  const pdf = /pdf/i.test(file.type) || /\.pdf$/i.test(file.name);
+  let blob = file;
+  if (!pdf) {
+    if (!/^image\//i.test(file.type) && !/\.(jpe?g|png|heic|heif|webp|gif)$/i.test(file.name)) throw { error: "not_receipt" };
+    try {
+      const bmp = await createImageBitmap(file), k = Math.min(1, 2200 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+      blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+      if (!blob) throw new Error("no jpeg");
+    } catch (e) { throw { error: "photo" }; }   // (an iPhone HEIC photo on a PC, say)
+  }
+  if (blob.size > 10 * 1024 * 1024) throw { error: "too_big" };
+  const data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1] || ""); fr.onerror = () => rej({ error: "photo" }); fr.readAsDataURL(blob); });
+  return { name: file.name || "Receipt", data };
+}
+/** Sends the receipt; Google reads it: { id, name, text, read, why, p (what the app found in it) }. */
+async function rcptRead(file) {
+  const got = await api("receiptRead", await rcptPrep(file), 120000);
+  got.p = rcptParse(got.text, todayIso());
+  return got;
+}
+const RCPT_MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const RCPT_CHAINS = ["Valvoline", "Jiffy Lube", "Take 5", "Firestone", "Pep Boys", "Midas", "Meineke", "Goodyear", "NTB", "Mavis", "Monro", "Discount Tire",
+  "Les Schwab", "Christian Brothers", "Grease Monkey", "Quick Lane", "Express Oil", "Precision Tune", "Tires Plus", "Sears Auto", "Walmart Auto", "Costco Tire", "Tire Kingdom"];
+// what was done, from the receipt's lines (the first that fits each line)
+const RCPT_KINDS = [["TM service", /truck ?mount|\bTM\b|prochem|hydramaster|sapphire|\bcds\b|blower|vacuum pump|pump oil/i],
+  ["Oil change", /\boil\b.*\b(change|filter|service)\b|\blube\b|\bLOF\b|full synthetic|synthetic blend|\b\d{1,2}w-?\d{2}\b|motor oil|oil (&|and) filter/i],
+  ["Tires", /\btires?\b|\btyres?\b|rotation|alignment|\btpms\b/i], ["Brakes", /brake|rotor|\bpads?\b|caliper/i], ["Inspection", /inspection|emission/i]];
+/** What a receipt's text says: { date, miles, total, tmHrs, shop, vin, types, oil, tm, work, summary }. */
+function rcptParse(text, today) {
+  const raw = String(text || "").replace(/\r/g, "");
+  const lines = raw.split("\n").map(x => x.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const num = s => Number(String(s).replace(/[$,\s]/g, ""));
+  const out = { date: "", miles: null, total: null, tmHrs: null, shop: "", vin: "", types: [], oil: false, tm: false, work: [], summary: "" };
+  // the day: on a line that says date (not due / next / expires), else the first one; a real day, not after today, within 2 years
+  const day = (y, m, d) => { y = Number(y); if (y < 100) y += 2000; const k = `${y}-${String(Number(m)).padStart(2, "0")}-${String(Number(d)).padStart(2, "0")}`;
+    return lbOkDay(k) && k <= today && k >= lbAddDays(today, -730) ? k : ""; };
+  const datesIn = s => { const f = []; let m;
+    const r1 = /\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/g; while ((m = r1.exec(s))) f.push(day(m[3], m[1], m[2]));
+    const r2 = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g; while ((m = r2.exec(s))) f.push(day(m[1], m[2], m[3]));
+    const r3 = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/gi; while ((m = r3.exec(s))) f.push(day(m[3], RCPT_MON.indexOf(m[1].slice(0, 3).toLowerCase()) + 1, m[2]));
+    return f.filter(Boolean); };
+  const notFuture = l => !/\b(due|next|expir|valid|until|recommend)/i.test(l);
+  out.date = lines.filter(l => /date/i.test(l) && notFuture(l)).flatMap(datesIn)[0] || lines.filter(notFuture).flatMap(datesIn)[0] || "";
+  // the miles: on a mileage / odometer line (or the line after it), not the next service's
+  const mi = [];
+  lines.forEach((l, i) => {
+    if (!/mileage|odometer|\bodo\b|\bmiles?\b|\bmi\b/i.test(l) || /next|due|recommend|every|interval|warrant|per mile/i.test(l)) return;
+    let found = (l.replace(/\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}/g, " ").match(/\b\d{1,3}(?:,\d{3})+\b(?!\.\d)|\b\d{3,7}\b(?![.,]\d)/g) || []);
+    if (!found.length && lines[i + 1]) found = lines[i + 1].match(/^\s*(\d{1,3}(?:,\d{3})+|\d{3,7})\b(?![.,]\d)/) || [];
+    found.forEach(x => { const n = num(x); if (n >= 100 && n < 2000000) mi.push(n); });
+  });
+  out.miles = mi.length ? Math.max(...mi) : null;
+  // the TM hrs, when the receipt says them
+  const hm = raw.match(/\b(?:tm|truck ?mount|engine)?\s*(?:hrs|hours|hour meter)\s*[:#]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d)?|\d{2,6}(?:\.\d)?)\b/i);
+  if (hm && /tm|truck ?mount|hour meter/i.test(hm[0])) out.tmHrs = num(hm[1]);
+  // the total: the last "total due / amount due / grand total…" line (else the last "total"), not the subtotal or tax
+  const money = s => (String(s).match(/\$\s?\d{1,3}(?:,\d{3})*\.\d{2}\b|\$\s?\d+\.\d{2}\b|\b\d{1,3}(?:,\d{3})*\.\d{2}\b|\b\d+\.\d{2}\b/g) || []).map(num);
+  const totalOf = re => { let v = null;
+    lines.forEach((l, i) => { if (!re.test(l) || /sub\s*-?\s*total|\btax|discount|saving|labor total|parts total|total (labor|parts)/i.test(l)) return;
+      const a = money(l), b = a.length ? a : money(lines[i + 1] || "").slice(0, 1); if (b.length) v = b[b.length - 1]; });
+    return v; };
+  out.total = totalOf(/grand total|total due|amount due|balance due|invoice total|total amount|amount paid|total paid|total charge/i);
+  if (out.total === null) out.total = totalOf(/\btotal\b/i);
+  // the VIN
+  const vin = (raw.toUpperCase().match(/\b[A-HJ-NPR-Z0-9]{17}\b/g) || []).find(v => /\d/.test(v) && /[A-Z]/.test(v));
+  if (vin) out.vin = vin;
+  // the shop: one the app already knows or a chain, else the first line that looks like a business name
+  const known = [...new Set(Object.values(svcCache).flatMap(c => (c.rows || []).map(x => x.shop)))].filter(Boolean);
+  const hit = known.concat(RCPT_CHAINS).find(x => x.length > 2 && raw.toLowerCase().includes(x.toLowerCase()));
+  if (hit) out.shop = hit;
+  else {
+    const l = lines.slice(0, 6).find(x => /[a-z]{3}/i.test(x) && x.length <= 40 && !/receipt|invoice|order|date|customer|page|thank|www\.|http|@|phone|tel\b|fax|repair order|work order|^\d/i.test(x));
+    if (l) out.shop = l.replace(/[^\w &'.-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  }
+  // what was done
+  const workRe = /replace|repair|install|labor|filter|wiper|battery|belt|coolant|fluid|flush|service|inspect/i;
+  lines.forEach((l, i) => {
+    if (/total|\btax\b|subtotal|balance|amount|payment|visa|mastercard|change due|cash|\bnext\b|\bdue\b|recommend|discount/i.test(l)) return;
+    if (i < 3 && !money(l).length) return;   // the shop's name and address at the top ("Valvoline Instant Oil Change")
+    const kind = RCPT_KINDS.find(([, re]) => re.test(l));
+    if (!kind && !workRe.test(l)) return;
+    const t = l.replace(/\$?\s?\d{1,3}(?:,\d{3})*\.\d{2}\b/g, "").replace(/\s{2,}/g, " ").replace(/[\s@x×*-]+$/i, "").trim();
+    if (t.length >= 3 && !out.work.includes(t)) out.work.push(t.slice(0, 80));
+    if (kind) {
+      const k = kind[0] === "TM service" && /repair|replace/i.test(l) ? "TM repair" : kind[0];
+      if (!out.types.includes(k)) out.types.push(k);
+    }
+  });
+  if (out.work.some(l => /repair|replace|install/i.test(l)) && !out.types.some(k => k !== "Oil change" && k !== "Inspection")) out.types.push("Repair");
+  out.work = out.work.slice(0, 8);
+  out.summary = out.work.join("; ").slice(0, 500);
+  out.oil = out.types.includes("Oil change");
+  out.tm = out.types.some(k => /^TM /.test(k));
+  return out;
+}
+const rcptNorm = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** Which truck a receipt is for: its VIN, then its plate, then (only one truck that close) its miles; else null. */
+function rcptTruck(p, text) {
+  const T = rcptNorm(text);
+  const vinOf = t => rcptNorm(t.vin || (t.gps && t.gps.vin));
+  if (p.vin) { const t = trucks.find(x => vinOf(x) === p.vin); if (t) return { t, by: "VIN" }; }
+  const byPlate = trucks.filter(x => rcptNorm(x.plate).length >= 4 && T.includes(rcptNorm(x.plate)));
+  if (byPlate.length === 1) return { t: byPlate[0], by: "plate" };
+  if (isNum(p.miles)) {
+    const near = trucks.filter(x => isNum(x.milesNow) && p.miles >= x.milesNow - 1500 && p.miles <= x.milesNow + 3000);
+    if (near.length === 1) return { t: near[0], by: "miles" };
+  }
+  return null;
+}
+/** The note at the top of a service window: what the receipt said (check it), anything that looks off, the receipt. */
+function rcptBox(t, got, reopen) {
+  const box = h("div", { class: "rcpt-box", id: "rcptBox" });
+  if (!got) return box;
+  box.dataset.id = got.id;
+  const p = got.p, found = [p.date ? `date ${lbDayText(p.date)}` : "", isNum(p.miles) ? `${fmt(p.miles)} mi` : "", isNum(p.tmHrs) ? `${fmt(p.tmHrs)} TM hrs` : "",
+    isNum(p.total) ? "$" + p.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "", p.shop, p.types.length ? p.types.join(", ") : ""].filter(Boolean);
+  const warn = [];
+  if (!got.read) warn.push(`Google couldn't read this receipt${got.why ? ` (${got.why})` : ""}. It's kept with the service; type what it says.`);
+  else if (!found.length) warn.push("Nothing on this receipt looked like a date, miles or a total. It's kept with the service; type what it says.");
+  else {
+    if (!p.date) warn.push("No date found on it: today is used. Change it if the service was another day.");
+    if (!isNum(p.miles)) warn.push("No miles found on it: type them in.");
+    if (!isNum(p.total)) warn.push("No total found on it: type the cost in.");
+  }
+  if (t && isNum(p.miles) && isNum(t.milesNow) && (p.miles > t.milesNow + 15000 || p.miles < (isNum(t.milesAtOil) ? t.milesAtOil : 0) - 1000)) warn.push(`Check the miles: ${label(t)} was at ${fmt(t.milesNow)} mi.`);
+  if (t && p.tm && progOf(t)) warn.push("It looks like truckmount work: tick which TM service was done.");
+  const other = t ? rcptTruck(p, got.text) : null;
+  const otherEl = other && other.t.id !== t.id ? h("p", { class: "rcpt-warn" }, `This receipt looks like it's for ${label(other.t)} (its ${other.by}). `,
+    h("button", { class: "btn small", type: "button", onclick: () => reopen(other.t, got) }, `Use ${label(other.t)}`)) : null;
+  box.append(
+    h("p", { class: "rcpt-got" }, h("b", { text: "From the receipt: " }), found.length ? found.join(" · ") : "nothing yet", ". Check it, then Save."),
+    ...warn.map(w => h("p", { class: "rcpt-warn", text: w })), otherEl || "",
+    h("button", { class: "btn small ghost", type: "button", onclick: () => rcptOpen(got.id) }, "Open receipt"));
+  return box;
+}
+/** The "Read a receipt" button inside a service window: picks a file, reads it, fills the window's boxes. */
+function rcptPick(onread) {
+  const input = h("input", { type: "file", class: "drop-in", accept: "application/pdf,.pdf,image/*", hidden: true, onchange: async e => {   // (drop-in: just the button, no drop box)
+    const f = e.target.files && e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    btn.disabled = true; btn.textContent = "Reading the receipt…";
+    try { onread(await rcptRead(f)); }
+    catch (er) { toast(rcptErrText(er)); }
+    finally { btn.disabled = false; btn.textContent = "Read a receipt"; }
+  } });
+  const btn = h("button", { class: "btn small rcpt-btn", type: "button", id: "rcptPick", title: "A PDF or a photo of the receipt: the app fills in what it says", onclick: () => input.click() }, "Read a receipt");
+  return h("span", { class: "rcpt-pick" }, btn, input);
+}
+/** A receipt kept with a service: opens it (a PDF or a photo) in a new tab. */
+async function rcptOpen(id) {
+  const w = window.open("", "_blank");
+  try {
+    const o = await api("receiptFile", { id }, 60000);
+    const bytes = Uint8Array.from(atob(o.data), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: o.mime || "application/pdf" }));
+    if (w) w.location.href = url; else window.open(url, "_blank");
+  } catch (e) { if (w) w.close(); toast(rcptErrText(e)); }
+}
+/** Trucks › Receipt: a receipt for any truck. The app finds the truck (VIN, plate, miles) or asks which, then opens Log oil
+ *  change / service (an oil change or a TM service: the countdowns restart) or Add service record (anything else),
+ *  filled in from it. */
+async function rcptStart(file) {
+  toast("Reading the receipt…");
+  let got;
+  try { got = await rcptRead(file); } catch (e) { toast(rcptErrText(e)); return; }
+  const go = t => (got.p.oil || got.p.tm ? openService(t.id, got) : openServiceRecord(t.id, null, got));
+  const m = rcptTruck(got.p, got.text);
+  if (m) { go(m.t); return; }
+  openDialog(h("h3", { id: "dlgTitle", text: "Which truck is this receipt for?" }),
+    h("p", { class: "hint", text: "The receipt didn't show the truck's VIN or plate, and its miles fit more than one truck (or none)." }),
+    rcptBox(null, got, () => {}),
+    h("div", { class: "rcpt-trucks" }, trucks.slice().sort((a, b) => label(a).localeCompare(label(b))).map(t =>
+      h("button", { class: "btn", type: "button", "data-truck": t.id, onclick: () => { closeDialog(); go(t); } }, label(t), isNum(t.milesNow) ? h("small", { text: ` ${fmt(t.milesNow)} mi` }) : null))),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }))));
+}
+/** Puts what a receipt said into a service window's boxes (only what it found; what's typed already is replaced). */
+function rcptFill(kind, got) {
+  const p = got.p, set = (id, v) => { const el = $(id); if (el && v !== null && v !== undefined && v !== "") el.value = String(v); };
+  const cost = isNum(p.total) ? p.total.toFixed(2) : "";
+  if (kind === "log") {
+    set("sv-date", p.date); set("sv-miles", p.miles); set("sv-shop", p.shop); set("sv-cost", cost); set("sv-hrs", p.tmHrs); set("sv-note", p.summary);
+    if (p.oil && $("sv-oil")) $("sv-oil").checked = true;
+  } else {
+    set("sr-date", p.date); set("sr-miles", p.miles); set("sr-shop", p.shop); set("sr-cost", cost); set("sr-hrs", p.tmHrs); set("sr-what", p.summary);
+    for (const k of p.types) { const b = dlg.querySelector(`input[name="sr-type"][value="${k}"]`); if (b) b.checked = true; }
+  }
+  dlgDirty = true;
+}
+
+/** Add, fix or delete one service record. Saving a flagged record marks it as checked. got: a receipt just read. */
+function openServiceRecord(truckId, rec, got) {
   const t = byId(truckId); if (!t) return;
   const isNew = !rec;
   const v = currentValues(t);
@@ -6406,9 +6615,15 @@ function openServiceRecord(truckId, rec) {
   const err = h("p", { class: "dlg-err", role: "alert" });
   const types = isNew ? [] : svcTypes(r);
   let armed = false;
+  // its receipt: read one (fills the boxes), or open the one kept with it
+  const reopen = (t2, g) => { closeDialog(); openServiceRecord(t2.id, null, g); };
+  let box = rcptBox(t, got, reopen);
+  const rcptRow = isAdmin() && !(rec && rec.receipt) ? h("div", { class: "rcpt-row" }, rcptPick(g => { const nb = rcptBox(t, g, reopen); box.replaceWith(nb); box = nb; rcptFill("rec", g); }), box)
+    : rec && rec.receipt ? h("div", { class: "rcpt-row" }, h("button", { class: "btn small", type: "button", id: "rcptOpen", onclick: () => rcptOpen(rec.receipt) }, "Open receipt")) : null;
   openDialog(
     h("h3", { id: "dlgTitle", text: `${isNew ? "Add service record" : "Service record"} · ${label(t)}` }),
     rec && rec.check ? h("p", { class: "svc-flag", id: "sr-flag", text: `Flagged: ${rec.check} Saving marks it as checked.` }) : null,
+    rcptRow,
     h("div", { class: "grid2" },
       textField("Date", "sr-date", isoDay(r.date) ? r.date : "", "date"),
       numField("Miles", "sr-miles", r.miles),
@@ -6441,11 +6656,13 @@ function openServiceRecord(truckId, rec) {
           if (date && !isoDay(date)) { err.textContent = "Pick a date, or leave it empty."; return; }
           let tps = [...dlg.querySelectorAll('input[name="sr-type"]:checked')].map(x => x.value);
           if (!tps.length) tps = svcGuessType(what);
+          if (date && date > todayIso()) { err.textContent = "The date is after today."; return; }
           const body = { id: isNew ? newSvcId() : rec.id, truckId, date, type: tps.join(", "), what: what.slice(0, 2000), miles, tmHrs: hrs,
-            shop: val("sr-shop").slice(0, 60), cost, payment: val("sr-pay").slice(0, 300) };
+            shop: val("sr-shop").slice(0, 60), cost, payment: val("sr-pay").slice(0, 300), receipt: (box && box.dataset.id) || (rec && rec.receipt) || "" };
           queueService(truckId, body, isNew ? "Service record added" : "Service record saved");
           closeDialog();
         } }))));
+  if (got) rcptFill("rec", got);
   if (!isAdmin()) lockDialog();
 }
 /** Technicians can open a record but not change it. */
@@ -6457,8 +6674,10 @@ function lockDialog() {
 }
 function svcErr(e) { return e && e.error === "bad_request" ? "The Google script needs updating first (see the yellow note at the top)." : errText(e, "Nothing"); }
 
-function openService(id) {
+function openService(id, got) {
   const t = byId(id); if (!t) return;
+  const reopen = (t2, g) => { closeDialog(); openService(t2.id, g); };
+  let box = rcptBox(t, got, reopen);
   const prog = progOf(t);
   const v = currentValues(t);
   const r = compute(t, safeNum(v.miles), safeNum(v.hrs));
@@ -6486,8 +6705,10 @@ function openService(id) {
 
   openDialog(
     h("h3", { id: "dlgTitle", text: `Log oil change / service · ${label(t)}` }),
+    h("div", { class: "rcpt-row" }, rcptPick(g => { const nb = rcptBox(t, g, reopen); box.replaceWith(nb); box = nb; rcptFill("log", g); }), box),
     h("p", { text: "Tick what was done. The countdowns restart from the miles and hours below." }),
     h("div", { class: "grid2" },
+      textField("Date of service", "sv-date", todayIso(), "date"),
       numField("Miles at service", "sv-miles", isNum(v.miles) ? v.miles : t.milesNow),
       prog ? numField("TM hrs at service", "sv-hrs", isNum(v.hrs) ? v.hrs : t.hrsNow, null, "decimal") : null),
     h("fieldset", null,
@@ -6513,6 +6734,8 @@ function openService(id) {
           if (!doOil && !level) { err.textContent = "Tick at least one thing that was done."; return; }
           const cost = parseNum(val("sv-cost").replace(/^\$/, ""));
           if (Number.isNaN(cost)) { err.textContent = "Cost should be a number, like 84.80."; return; }
+          const day = val("sv-date") || todayIso();
+          if (!isoDay(day) || day > todayIso()) { err.textContent = "Pick the day of the service (today or before)."; return; }
           const body = plain(t);
           const done = [];
           if (doOil) { body.milesAtOil = miles; if (t.tm === "cds") body.hrsAtOil = hrs; done.push("Truck oil change"); }
@@ -6530,12 +6753,13 @@ function openService(id) {
           if (hrsChecked) { body.hrsAt = body.readingAt; body.hrsBy = body.readingBy; }
           try {
             saveTruck(t, body, { kind: "service", miles, hrs: prog ? hrs : null, items: done, note: val("sv-note").slice(0, 500),
-              shop: val("sv-shop").slice(0, 60), cost: isNum(cost) ? cost : null, hrsChecked }, `Logged for ${label(t)}: ${done.join(", ")}`);
+              shop: val("sv-shop").slice(0, 60), cost: isNum(cost) ? cost : null, hrsChecked, date: day, receipt: (box && box.dataset.id) || "" }, `Logged for ${label(t)}: ${done.join(", ")}`);
             delete drafts[t.id]; saveDrafts();
             closeDialog();
             renderAll();
           } catch (e) { err.textContent = failText(e, "Nothing"); }
         } }))));
+  if (got) rcptFill("log", got);
 }
 
 /** What an edit changed, for the truck's history: name, plate, unit, driver and color by name, anything else as "Truck details edited". */
@@ -7278,6 +7502,8 @@ $("shareReport").addEventListener("click", async () => {
   }
 });
 $("addTruck").addEventListener("click", () => openEdit(null));
+$("rcptTop").addEventListener("click", () => $("rcptTopFile").click());
+$("rcptTopFile").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) rcptStart(f); });
 $("gpsWarn").addEventListener("click", () => {
   const g = gpsHealth || {};
   const last = g.lastOk ? `${fmtWhen(g.lastOk)} ${fmtTime(new Date(g.lastOk))}` : "never";
@@ -7658,6 +7884,7 @@ function applyTab() {
   $("viewContractors").setAttribute("aria-pressed", String(cp));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
+  $("rcptTop").hidden = !trk || !isAdmin();
   renderSupplies();
   if (lb) { renderLeaderboard(); if (loaded && !lbLoading) lbLoad(); }
   if (of) { renderOffice(); if (loaded && !ofLoading) ofLoad(); }
