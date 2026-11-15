@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 61;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 62;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4176,7 +4176,7 @@ const EST_SHEET = "Estimates";
 const EST_COLS = ["Estimate id", "Estimate #", "Created", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
   "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro"];
-const EST_ACCESS = ["estimates", "estimates-all"];   // sees the estimates he's in charge of; sees them all
+const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
 const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "3";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
 function estAll_(user) { return !!user && (user.role === "admin" || canSee_(user, "estimates-all")); }
@@ -4298,7 +4298,8 @@ function estOut_(r, lead) {
     sent: String(r[9]) !== "open" || /sen[dt]|submit|fail/i.test(String(r[27] || "")) };
 }
 /** A year's estimates (by the day each was created): all of them for an admin or someone who sees them all, else
- *  only the ones he's in charge of in Housecall Pro; and whether the first read from Housecall Pro is done. */
+ *  every one he's assigned to in Housecall Pro (his whole part: a supervisor's tile on Estimates), whoever's in charge;
+ *  and whether the first read from Housecall Pro is done. */
 function estRead_(year, user) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
   const rows = estRows_(estSheet_(false)), all = estAll_(user), years = {}, roster = estRoster_();
@@ -4308,7 +4309,7 @@ function estRead_(year, user) {
     if (r[2]) years[r[2].slice(0, 4)] = true;
     if (String(r[2]).indexOf(y + "-") !== 0) return;
     const lead = estLead_(r[16], roster);
-    if (!all && !(lead && estIsMe_(user, lead.name))) return;
+    if (!all && !String(r[16] || "").split(", ").some(function (n) { return estIsMe_(user, n); })) return;
     list.push(estOut_(r, lead));
   });
   const P = PropertiesService.getScriptProperties();

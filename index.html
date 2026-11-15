@@ -14276,7 +14276,7 @@ function renderEstimates() {
     !doc.connected ? (admin ? "Housecall Pro isn't connected. Settings › Housecall Pro." : "Housecall Pro isn't connected right now. An admin can check it in Settings › Housecall Pro.")
       : estSync.busy ? `Reading estimates from Housecall Pro${doc.done ? "" : " (every estimate it has: the first time takes a few minutes)"}… ${estSync.n ? `${fmt(estSync.n)} so far` : ""}`
         : doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)}` : "Not read from Housecall Pro yet.",
-    all ? null : h("span", { text: ` · the estimates you're in charge of in Housecall Pro (as ${doc.me || "you"})` }));
+    all ? null : h("span", { text: ` · every estimate you're assigned to in Housecall Pro (as ${doc.me || "you"})` }));
   const oldScript = apiLevel && apiLevel < EST_AUTO_API ? h("p", { class: "dlg-err", id: "estOldScript", text: "Update the Google script (paste the latest Code.gs, then Deploy › Manage deployments › New version) so Estimates reads who's in charge and the Water/Mold tags from Housecall Pro." }) : null;
   const err = estSync.err ? h("p", { class: "dlg-err", id: "estErr" }, estSync.err, " ",
     h("button", { class: "btn small", type: "button", onclick: () => { estRun(); } }, "Try again now")) : null;
