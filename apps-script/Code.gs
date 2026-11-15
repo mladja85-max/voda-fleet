@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 58;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 59;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -279,6 +279,12 @@ function doPost(e) {
         return json_(withLock_(function () { return svcSave_(req); }));
       case "deleteService":
         return json_(withLock_(function () { return svcDelete_(req); }));
+      case "receiptRead":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(rcptRead_(req));
+      case "receiptFile":
+        if (!canSee_(user, "trucks")) return json_({ ok: false, error: "not_allowed" });
+        return json_(rcptFile_(req));
       case "setShop":
         return json_(setShop_(req));
       case "supplies":
@@ -845,7 +851,7 @@ function techSaveHours_(req, found) {
 
 const SVC_SHEET = "Service";
 const SVC_IMPORT = "Service import";
-const SVC_COLS = ["id", "truckId", "truck", "date", "type", "what", "miles", "tmHrs", "shop", "cost", "payment", "check", "source", "updatedAt", "by"];
+const SVC_COLS = ["id", "truckId", "truck", "date", "type", "what", "miles", "tmHrs", "shop", "cost", "payment", "check", "source", "updatedAt", "by", "receipt"];
 const SVC_NUM = ["miles", "tmHrs", "cost"];
 const SVC_TYPES = ["Oil change", "TM service", "TM repair", "Tires", "Brakes", "Inspection", "Repair", "Other"];
 
@@ -861,6 +867,12 @@ function svcSheet_() {
     SVC_COLS.forEach(function (c, i) {
       if (SVC_NUM.indexOf(c) === -1) s.getRange(2, i + 1, Math.max(s.getMaxRows() - 1, 1), 1).setNumberFormat("@");
     });
+  }
+  // a tab made before receipts were kept: its heading for them
+  if (s.getMaxColumns() < SVC_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), SVC_COLS.length - s.getMaxColumns());
+  if (String(s.getRange(1, SVC_COLS.length, 1, 1).getValues()[0][0]) !== "receipt") {
+    s.getRange(1, SVC_COLS.length, 1, 1).setValues([["receipt"]]).setFontWeight("bold");
+    s.getRange(2, SVC_COLS.length, Math.max(s.getMaxRows() - 1, 1), 1).setNumberFormat("@");
   }
   svcMergeImport_(s);
   return s;
@@ -947,7 +959,8 @@ function svcClean_(raw) {
     miles: num_(raw.miles), tmHrs: num_(raw.tmHrs), cost: num_(raw.cost),
     shop: String(raw.shop || "").trim().slice(0, 60),
     payment: String(raw.payment || "").trim().slice(0, 300),
-    check: "", source: "", updatedAt: "", by: ""
+    check: "", source: "", updatedAt: "", by: "",
+    receipt: /^[A-Za-z0-9_-]{10,200}$/.test(String(raw.receipt || "")) ? String(raw.receipt) : ""   // its receipt in the private Drive folder
   };
 }
 
@@ -991,6 +1004,76 @@ function svcDelete_(req) {
   return { ok: true };
 }
 
+/* ---- Receipts: a truck's service receipt (a PDF or a photo) read by Google's own text reading (the file is turned into
+   a Google Doc for a moment, its text taken, the Doc thrown away), kept in a private Drive folder and linked to its
+   service record. The app fills the service from the text; someone checks it and saves. ---- */
+const RCPT_FOLDER = "VODA Hub receipts", RCPT_MAX = 10 * 1024 * 1024;
+function rcptFolder_() {
+  const P = PropertiesService.getScriptProperties(), id = P.getProperty("RCPT_FOLDER_ID");
+  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* made again below */ } }
+  const f = DriveApp.createFolder(RCPT_FOLDER);
+  P.setProperty("RCPT_FOLDER_ID", f.getId());
+  return f;
+}
+/** A receipt this script put in that folder, or null: nothing else in the Drive can be opened through the app. */
+function rcptFileOk_(id) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(id || ""))) return null;
+  try {
+    const f = DriveApp.getFileById(String(id)), home = rcptFolder_().getId(), it = f.getParents();
+    if (f.isTrashed()) return null;
+    while (it.hasNext()) if (it.next().getId() === home) return f;
+  } catch (e) { /* not there */ }
+  return null;
+}
+/** What kind of file the bytes are: a PDF, a JPEG or a PNG photo (what Google can read), else "". */
+function rcptKind_(b) {
+  if (b[0] === 37 && b[1] === 80 && b[2] === 68 && b[3] === 70) return "application/pdf";   // %PDF
+  if ((b[0] & 255) === 0xFF && (b[1] & 255) === 0xD8) return "image/jpeg";
+  if ((b[0] & 255) === 0x89 && b[1] === 80 && b[2] === 78 && b[3] === 71) return "image/png";
+  return "";
+}
+/** The text on a receipt: Drive turns the file into a Google Doc (reading the photo or PDF), the text is exported, and
+ *  the Doc goes in the trash. */
+function rcptOcr_(blob) {
+  const token = ScriptApp.getOAuthToken(), auth = { Authorization: "Bearer " + token }, b = "voda" + Utilities.getUuid().replace(/-/g, "");
+  const head = "--" + b + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify({ name: "VODA receipt (reading)", mimeType: "application/vnd.google-apps.document" }) +
+    "\r\n--" + b + "\r\nContent-Type: " + blob.getContentType() + "\r\n\r\n";
+  const payload = Utilities.newBlob(head).getBytes().concat(blob.getBytes(), Utilities.newBlob("\r\n--" + b + "--").getBytes());
+  const up = UrlFetchApp.fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=en&fields=id",
+    { method: "post", contentType: "multipart/related; boundary=" + b, payload: payload, headers: auth, muteHttpExceptions: true });
+  if (up.getResponseCode() >= 300) throw new Error("Google couldn't read it (" + up.getResponseCode() + ")");
+  const id = JSON.parse(up.getContentText()).id;
+  try {
+    const t = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(id) + "/export?mimeType=text%2Fplain", { headers: auth, muteHttpExceptions: true });
+    if (t.getResponseCode() >= 300) throw new Error("Google couldn't read it (" + t.getResponseCode() + ")");
+    return t.getContentText();
+  } finally { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) { /* gone already */ } }
+}
+/** A receipt from the app: { name, data (base64) } → { id (kept in the folder), text (what it says; "" if Google couldn't
+ *  read it) }. */
+function rcptRead_(req) {
+  let bytes;
+  try { bytes = Utilities.base64Decode(String(req.data || "")); } catch (e) { return { ok: false, error: "bad_request" }; }
+  if (!bytes || !bytes.length) return { ok: false, error: "bad_request" };
+  if (bytes.length > RCPT_MAX) return { ok: false, error: "too_big" };
+  const kind = rcptKind_(bytes);
+  if (!kind) return { ok: false, error: "not_receipt" };
+  const ext = kind === "application/pdf" ? ".pdf" : kind === "image/png" ? ".png" : ".jpg";
+  let name = String(req.name || "").replace(/[\\/:*?"<>|]+/g, " ").replace(/\.[A-Za-z0-9]{2,5}$/, "").trim().slice(0, 100) || "Receipt";
+  name = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd") + " " + name + ext;
+  const f = rcptFolder_().createFile(Utilities.newBlob(bytes, kind, name));
+  let text = "", why = "";
+  try { text = String(rcptOcr_(f.getBlob()) || ""); } catch (e) { why = String(e && e.message || e).slice(0, 200); }
+  return { ok: true, id: f.getId(), name: name, text: text.replace(/﻿/g, "").slice(0, 20000), read: !why, why: why };
+}
+/** A receipt to look at: { name, mime, data (base64) }. */
+function rcptFile_(req) {
+  const f = rcptFileOk_(req.id);
+  if (!f) return { ok: false, error: "gone" };
+  const blob = f.getBlob();
+  return { ok: true, name: f.getName(), mime: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
+}
+
 /** "Log oil change / service" in the app also writes a service record. */
 function svcFromLog_(t, log, by) {
   const items = Array.isArray(log.items) ? log.items.map(String) : [];
@@ -1000,10 +1083,13 @@ function svcFromLog_(t, log, by) {
     if (k && types.indexOf(k) === -1) types.push(k);
   });
   const note = String(log.note || "").trim();
+  // the day of the service: from its receipt when there is one (it may be logged days later), else today
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(log.date || "")) && String(log.date) <= today ? String(log.date) : today;
   const rec = svcClean_({
-    date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"),
+    date: day,
     truckId: t.id, type: types.join(", "), what: items.join(", ") + (note ? " - " + note : ""),
-    miles: log.miles, tmHrs: log.hrs, shop: log.shop, cost: log.cost
+    miles: log.miles, tmHrs: log.hrs, shop: log.shop, cost: log.cost, receipt: log.receipt
   });
   rec.truck = t.unit;
   rec.source = "Logged service";
