@@ -146,6 +146,7 @@ button { font: inherit; color: inherit; }
   .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
   body .sup, body .lb { max-width: 1000px; width: 100%; }
   body[data-tab="leaderboard"][data-lbtab="payroll"] .lb, body[data-tab="leaderboard"][data-lbtab="enter"] .lb { max-width: none; }
+  body[data-tab="estimates"] #estView { max-width: 1320px; }   /* Estimates: By person in charge's 11 columns without sliding sideways */
   /* Enter numbers: three cards a row across the whole page (from the same left edge) */
   body[data-lbtab="enter"] .lb-enter, body[data-lbtab="enter"] .lb-enter:has(.lb-jobs) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   /* the buttons sit next to the title instead of across the screen; Employees first, so it doesn't move when
@@ -2198,6 +2199,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-ptable .num { text-align: right; white-space: nowrap; }
 .est-pwrap { overflow-x: auto; max-width: 100%; } .est-pwrap th, .est-pwrap td:first-child { white-space: nowrap; }
 .est-pwrap .g { border-left: 1px solid var(--line); }
+@media (min-width: 861px) and (max-width: 1399px) { .est-ptable th, .est-ptable td { padding-left: 6px; padding-right: 6px; } .est-pwrap th.g, .est-pwrap td.g { padding-left: 9px; } }   /* a smaller PC: still no sliding */
 .est-pwrap th:first-child, .est-pwrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); }   /* the names stay put when it scrolls sideways */
 .est-pwrap .est-ptable tbody tr:hover td:first-child { background: linear-gradient(var(--surface-2), var(--surface-2)), var(--surface); }
 .est-pwrap tr.on td:first-child { background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface); } .est-pwrap th.g, .est-pwrap td.g { padding-left: 12px; }
