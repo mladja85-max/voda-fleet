@@ -1083,9 +1083,20 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-bar .r { margin-left: auto; text-align: right; font-size: .8rem; color: var(--muted); } .rev-ar-bar .go { font-size: 1.4rem; color: var(--muted); }
 @media (max-width: 1399px) { .rev-ar { display: none; } .rev-ar-bar { display: flex; } }
 .rv-unpaid-body { display: flex; flex-direction: column; gap: 10px; }
+/* Operations: invoices not sent (a row under the tiles; each department opens its list) */
+.rev-unsent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rev-unsent .ru-h { display: grid; margin-right: 2px; } .ru-h small { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); } .ru-h em { font-style: normal; font-size: .72rem; color: var(--muted); }
+.ru-d { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); font-size: .86rem; font-weight: 600; }
+.ru-d:hover, .ru-d:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.ru-d b { font-family: var(--font-display); font-size: 1.15rem; color: var(--due); font-variant-numeric: tabular-nums; } .ru-d.zero b { color: var(--ok); } .ru-d .amt { font-size: .8rem; font-weight: 500; color: var(--muted); }
+.ru-at { display: grid; justify-items: start; } .ru-again { all: unset; cursor: pointer; font-style: normal; font-weight: 700; color: var(--accent); } .ru-again:hover, .ru-again:focus-visible { text-decoration: underline; } .ru-err { color: var(--due); }
+.ru-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; } .ru-top p { margin: 0; }
+@media (max-width: 760px) { .rev-unsent { display: grid; grid-template-columns: 1fr 1fr; } .rev-unsent .ru-h { grid-column: 1 / -1; }
+  .ru-d { min-width: 0; padding: 6px 8px; flex-wrap: wrap; gap: 2px 6px; } .ru-d .amt { flex-basis: 100%; padding-left: 15px; } }
 .rv-seg { flex-wrap: wrap; width: fit-content; max-width: 100%; }
 .rv-seg .seg-btn em { font-style: normal; font-weight: 600; opacity: .8; }
 #rvUnpaidTable td.rv-owes { font-weight: 700; color: color-mix(in srgb, var(--soon) 72%, var(--ink)); }
+#rvUnsentTable td.rv-owes { font-weight: 700; color: color-mix(in srgb, var(--soon) 72%, var(--ink)); }
 .rev-open { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
 .rev-open:hover, .rev-open:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
 #rvJobsTable td.rv-owes { font-weight: 700; color: var(--due); } #rvJobsTable td.rv-owes.zero { color: var(--muted); font-weight: 500; }
@@ -1103,13 +1114,17 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   #rvJobsTable tbody th { white-space: normal; }
 }
 #rvUnpaidTable td.rv-age.mid { color: var(--soon); font-weight: 700; } #rvUnpaidTable td.rv-age.old { color: var(--due); font-weight: 700; }
+#rvUnsentTable td.rv-age.mid { color: var(--soon); font-weight: 700; } #rvUnsentTable td.rv-age.old { color: var(--due); font-weight: 700; }
 #rvUnpaidTable tbody th { font-weight: 600; } #rvUnpaidTable .rv-sm { display: none; }
+#rvUnsentTable tbody th { font-weight: 600; } #rvUnsentTable .rv-sm { display: none; }
 #rvUnpaidTable th.rv-proj { text-align: left; }
+#rvUnsentTable th.rv-proj { text-align: left; }
 #rvUnpaidTable td.rv-proj { text-align: left; white-space: normal; min-width: 9em; max-width: 16em; color: var(--muted); }
+#rvUnsentTable td.rv-proj { text-align: left; white-space: normal; min-width: 9em; max-width: 16em; color: var(--muted); }
 .rv-seg .seg-btn .rev-dot { margin-right: 4px; }
 /* the AR window stays put: one height, near the top, whatever is picked; only the list scrolls (its headings stay) */
 dialog#dlg:has(.rv-unpaid) { width: min(1320px, calc(100% - 24px)); }   /* Jobs and Accounts receivable: every column without sliding sideways */
-#rvJobsTable tbody th, #rvUnpaidTable tbody th, #rvJobsTable tfoot th, #rvUnpaidTable tfoot th { white-space: normal; min-width: 8em; max-width: 15em; overflow-wrap: break-word; }   /* a long client name (and "129 jobs · 131 visits") wraps */
+#rvJobsTable tbody th, #rvUnpaidTable tbody th, #rvUnsentTable tbody th, #rvJobsTable tfoot th, #rvUnpaidTable tfoot th, #rvUnsentTable tfoot th { white-space: normal; min-width: 8em; max-width: 15em; overflow-wrap: break-word; }   /* a long client name (and "129 jobs · 131 visits") wraps */
 dialog#dlg[open]:has(.rv-unpaid) { height: min(880px, calc(100% - 48px)); max-height: none; margin: 24px auto auto; overflow: hidden; display: flex; flex-direction: column; }
 dialog#dlg[open]:has(.rv-unpaid) > form.dlg { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 dialog#dlg[open] .rv-unpaid { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -1117,13 +1132,19 @@ dialog#dlg[open] .rv-unpaid > h3, dialog#dlg[open] .rv-unpaid > p { margin: 0; }
 dialog#dlg[open] .rv-unpaid .rv-unpaid-body { flex: 1; min-height: 0; }
 dialog#dlg[open] .rv-unpaid .rv-unpaid-body > .lb-scroll { flex: 1; min-height: 0; overflow: auto; }
 #rvUnpaidTable thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+#rvUnsentTable thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
 #rvUnpaidTable tfoot th, #rvUnpaidTable tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--surface); box-shadow: inset 0 1px 0 var(--line); }
+#rvUnsentTable tfoot th, #rvUnsentTable tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--surface); box-shadow: inset 0 1px 0 var(--line); }
 @media (max-width: 760px) { dialog#dlg[open]:has(.rv-unpaid) { height: calc(100% - 24px); margin: 12px auto auto; } }
 @media (max-width: 760px) {
   #rvUnpaidTable .rv-inv, #rvUnpaidTable .rv-ch, #rvUnpaidTable .rv-pd, #rvUnpaidTable .rv-dep, #rvUnpaidTable .rv-proj { display: none; }
+  #rvUnsentTable .rv-inv, #rvUnsentTable .rv-ch, #rvUnsentTable .rv-pd, #rvUnsentTable .rv-dep, #rvUnsentTable .rv-proj { display: none; }
   #rvUnpaidTable .rv-sm { display: block; color: var(--muted); font-size: .72rem; font-weight: 500; }
+  #rvUnsentTable .rv-sm { display: block; color: var(--muted); font-size: .72rem; font-weight: 500; }
   #rvUnpaidTable tbody th { white-space: normal; }
+  #rvUnsentTable tbody th { white-space: normal; }
   #rvUnpaidTable th, #rvUnpaidTable td { padding: 6px 4px; }
+  #rvUnsentTable th, #rvUnsentTable td { padding: 6px 4px; }
   .rv-seg .seg-btn { font-size: .78rem; padding: 6px 8px; }
 }
 /* Marketing: the period's totals, then where clients came from (new clients, Repeat, Referrals) */
@@ -6364,7 +6385,7 @@ function openDialog(...content) {
   const a = document.activeElement;
   if (touch && a && dlg.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) form.focus({ preventScroll: true });
 }
-function closeDialog() { if (dlg.open) { dlgClosing = true; dlg.close(); } dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; dlgStack.length = 0; }
+function closeDialog() { if (dlg.open) { dlgClosing = true; dlg.close(); } dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; unsentRedraw = null; dlgStack.length = 0; }
 /* ---- file pickers: a box to drag files onto (a computer) or tap to choose (a phone); the input inside keeps its id and
    what it does, and the box shows the files chosen ---- */
 const DROP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>';
@@ -11524,9 +11545,11 @@ function renderRevenue() {
   const goal = revGoalEl(r.from > today ? today : to, goalDays), slot = goal ? revGoalSlot() : "";
   if (slot === "side") { if (aside) aside.prepend(goal); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, goal); }
   box.classList.toggle("goal3", slot === "wide");
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? goal : null, r.from > today ? null : [tiles, tilesWas, strip], arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? goal : null, r.from > today ? null : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [goal] : []));
   if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
+  // after the days on screen are read (their jobs tell each invoice's department)
+  if (canSee("revenue")) setTimeout(() => { if (!revSync.busy) unsentLoad(false); }, 0);
 }
 /** The days from..to never read from Housecall Pro (none while their year is loading), as [day, day] ranges. */
 function revUnread(from, to) {
@@ -11984,6 +12007,89 @@ function revArDlg(dep, from0, to0) {
     box,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
   draw();
+}
+
+/* Operations: invoices not sent. Finished jobs whose invoice still owes and was never sent to the client (Housecall Pro's
+   Invoices › Unsent), read by the Google script when Operations opens (every 5 minutes at most) and kept on the phone:
+   a row under the tiles (Restoration, Cleaning, Repairs: how many and what they're for), each opening the list. */
+const UNSENT_API = 61;
+let unsentDoc = store.get("voda.unsent") || null;          // { items, at, src, more }
+const unsentSt = { busy: false, err: "", t: 0 };
+let unsentRedraw = null;                                  // the open list, drawn again when a read comes in
+const unsentOf = k => ((unsentDoc && unsentDoc.items) || []).filter(x => k === "all" || (x.dep || "o") === k);
+function unsentPaint() {
+  const el = $("revUnsent");
+  if (el) el.replaceWith(unsentEl());
+  if (unsentRedraw && dlg.open) unsentRedraw();
+}
+async function unsentLoad(force) {
+  if (!session || !canSee("revenue") || unsentSt.busy || (apiLevel && apiLevel < UNSENT_API)) return;
+  if (!force && Date.now() - unsentSt.t < 5 * 60 * 1000) return;
+  if (!navigator.onLine) return;
+  unsentSt.busy = true; unsentSt.err = ""; unsentPaint();
+  try {
+    const out = await api("unsentRead", { force: !!force }, 170000);
+    unsentDoc = { items: Array.isArray(out.items) ? out.items : [], at: out.at || new Date().toISOString(), src: out.src || "", more: !!out.more };
+    store.set("voda.unsent", unsentDoc);
+  } catch (e) { unsentSt.err = revErrText(e); }
+  finally { unsentSt.busy = false; unsentSt.t = Date.now(); unsentPaint(); }
+}
+/** The row under the tiles. */
+function unsentEl() {
+  if (apiLevel && apiLevel < UNSENT_API) return isAdmin() ? h("p", { class: "rev-unsent-old meta", id: "revUnsent", text: "Invoices not sent: update the Google script (paste the latest Code.gs, then Deploy › Manage deployments › New version)." }) : h("span", { id: "revUnsent", hidden: true });
+  const have = !!unsentDoc;
+  const deps = REV_DEPTS.filter(([k]) => k !== "o" || unsentOf("o").length);
+  return h("div", { class: "rev-unsent", id: "revUnsent" },
+    h("span", { class: "ru-h" }, h("small", { text: "Invoices not sent" }),
+      h("em", { class: "ru-at" }, unsentSt.busy ? "Checking Housecall Pro…" : unsentSt.err ? h("span", { class: "ru-err", text: unsentSt.err }) : have ? `Finished jobs · checked ${revReadText(unsentDoc.at)}` : "Finished jobs",
+        !unsentSt.busy ? h("button", { class: "ru-again", type: "button", id: "revUnsentAgain", onclick: () => unsentLoad(true) }, unsentSt.err ? "Try again" : "Check now") : null)),
+    deps.map(([k, name, short]) => { const xs = unsentOf(k), due = xs.reduce((n, x) => n + (Number(x.due) || 0), 0);
+      return h("button", { class: "ru-d" + (have && !xs.length ? " zero" : ""), type: "button", "data-k": k, "aria-label": `${name}: ${xs.length} invoices not sent`, onclick: () => unsentDlg(k) },
+        h("i", { class: "rev-dot " + k }), h("span", { class: "nm" }, h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short })), h("b", { text: have ? (xs.length ? fmt(xs.length) : "✓") : "…" }),
+        have && xs.length ? h("span", { class: "amt", text: lbMoney(due / 100) }) : null); }),
+    );
+}
+/** The list: every invoice not sent (a department, or all of them), the oldest first: client, project, invoice, the
+ *  job's day, days since, department, the invoice and what's still due. */
+function unsentDlg(dep) {
+  const st = { dep: dep || "all" };
+  const box = h("div", { class: "rv-unpaid-body" });
+  const draw = () => {
+    const today = lbToday();
+    const all = unsentOf("all").map(x => Object.assign({}, x, { dep: "rcp".includes(x.dep) ? x.dep : "o", age: x.day ? Math.round((lbDate(today) - lbDate(x.day)) / 864e5) : null }));
+    const byDep = k => all.filter(x => k === "all" || x.dep === k), sum = list => list.reduce((n, x) => n + (Number(x.due) || 0), 0);
+    const deps = [["all", "All"]].concat(REV_DEPTS.filter(([k]) => k !== "o" || all.some(x => x.dep === "o")).map(([k, name]) => [k, name]));
+    const shown = byDep(st.dep);
+    const dayText = d => { if (!d) return "–"; const x = lbDate(d), old = d.slice(0, 4) !== today.slice(0, 4);
+      return [h("span", { class: "t-long", text: `${MONTHS[x.getMonth()]} ${x.getDate()}${old ? `, ${d.slice(0, 4)}` : ""}` }), h("span", { class: "t-short", text: `${x.getMonth() + 1}/${x.getDate()}${old ? `/${d.slice(2, 4)}` : ""}` })]; };
+    const status = unsentSt.busy ? "Checking Housecall Pro…" : unsentSt.err ? unsentSt.err : unsentDoc ? `Checked ${revReadText(unsentDoc.at)}.` : "Not checked yet.";
+    box.replaceChildren(...[
+      h("div", { class: "ru-top" }, h("p", { class: "meta" + (unsentSt.busy ? " rev-status busy" : ""), id: "rvUnsentStatus", text: status + (unsentDoc && unsentDoc.src === "jobs" ? " (Read job by job: Housecall Pro's invoice list couldn't be read.)" : "") + (unsentDoc && unsentDoc.more ? " Only the first ones are shown." : "") }),
+        !unsentSt.busy ? h("button", { class: "btn small", type: "button", id: "rvUnsentAgain", onclick: () => unsentLoad(true) }, "Check again") : null),
+      h("div", { class: "seg rv-seg", role: "tablist", "aria-label": "Department" }, deps.map(([k, name]) =>
+        h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(k === st.dep), onclick: () => { st.dep = k; draw(); } },
+          k !== "all" ? h("i", { class: "rev-dot " + k }) : null, name, h("em", { text: ` ${fmt(byDep(k).length)}` })))),
+      shown.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "rvUnsentTable" },
+        h("thead", null, h("tr", null, h("th", { text: "Client" }), h("th", { class: "rv-proj", text: "Project" }), h("th", { class: "rv-inv", text: "Invoice" }), h("th", { text: "Day" }), h("th", { text: "Days" }),
+          h("th", { class: "rv-dep", text: "Department" }), h("th", { class: "rv-ch", text: "Invoice $" }), h("th", { text: "Due" }))),
+        h("tbody", null, shown.map(x => h("tr", { "data-job": x.id || "", "data-inv": x.inv || "", "data-dep": x.dep },
+          h("th", null, x.client || "–", h("small", { class: "rv-sm", text: [x.proj, x.inv && `#${x.inv}`].filter(Boolean).join(" · ") })),
+          h("td", { class: "rv-proj", text: x.proj || (x.id ? "–" : "Job not found in Housecall Pro") }), h("td", { class: "rv-inv", text: x.inv ? `#${x.inv}` : "–" }), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("td", { class: "rv-age " + (x.age > 30 ? "old" : x.age > 7 ? "mid" : ""), text: x.age === null ? "–" : String(x.age) }),
+          h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
+          h("td", { class: "rv-ch", text: lbCash((Number(x.amt) || 0) / 100) }), h("td", { class: "rv-owes", text: lbCash((Number(x.due) || 0) / 100) })))),
+        h("tfoot", null, h("tr", null, h("th", { text: `${shown.length} invoice${shown.length === 1 ? "" : "s"}` }), h("td", { class: "rv-proj" }), h("td", { class: "rv-inv" }), h("td", { class: "rv-day" }), h("td"), h("td", { class: "rv-dep" }),
+          h("td", { class: "rv-ch", text: lbCash(shown.reduce((n, x) => n + (Number(x.amt) || 0), 0) / 100) }), h("td", { class: "rv-owes", text: lbCash(sum(shown) / 100) })))))
+        : h("p", { class: "meta", id: "rvUnsentNone", text: unsentDoc ? "✓ Every finished job's invoice has been sent." : "" })].filter(Boolean));
+  };
+  unsentRedraw = draw;
+  openDialog(h("div", { class: "rp-dlg rv-unpaid rv-unsent" },
+    h("h3", { id: "dlgTitle", text: "Invoices not sent" }),
+    h("p", { class: "hint", id: "rvUnsentSpan", text: "Finished jobs whose invoice still owes and hasn't been sent to the client (Housecall Pro's Invoices › Unsent), the oldest first. Day: the job's day; Days: since then." }),
+    box,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
+  draw();
+  if (!unsentDoc) unsentLoad(false);
 }
 
 /** A tile's jobs: every visit of from..to (canceled left out) for a department or all of them, by day: client, project,
