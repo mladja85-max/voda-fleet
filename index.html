@@ -14172,6 +14172,8 @@ function estOwners(e) {
   return mine.length ? mine : [rep.lead];
 }
 const estCanSee = () => canSee("estimates") || canSee("estimates-all");
+/** Housecall Pro's page for an estimate is its option's ("est_…"): the approved one, else the first (none read yet: ""). */
+const estOptId = e => { const o = Array.isArray(e.opts) ? e.opts : [], a = o.find(x => x && x[2] === "approved") || o[0]; return a && a[4] ? String(a[4]) : ""; };
 const estGroup = e => (e.dept === "r" ? (e.kind === "water" ? "w" : e.kind === "mold" ? "m" : e.kind === "fire" ? "f" : "u") : e.dept === "c" || e.dept === "p" ? e.dept : "o");
 /** What an estimate is worth: the option approved, else its largest. */
 const estValue = e => (e.st === "approved" ? e.appr || e.est : e.est);
@@ -14447,7 +14449,7 @@ function renderEstimates() {
     const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);
     return h("div", { class: "est-row", "data-id": e.id, "data-g": estGroup(e), "data-st": e.st },
       h("span", { class: "est-day", text: estDayShort(e.day, today) }),
-      h("span", { class: "est-no" }, hcpLink("est", e.id, `#${e.n}`)),
+      h("span", { class: "est-no" }, hcpLink("est", estOptId(e), `#${e.n}`)),
       h("span", { class: "est-cl" }, h("b", { text: e.client || "No name" }),
         h("small", { text: e.addr })),
       // water or mold: the estimate's tag in Housecall Pro (locked); no tag: says so
@@ -14601,7 +14603,7 @@ function estReportEl(d, name) {
     F.follow.length ? h("table", { class: "er-table" },
       h("thead", null, h("tr", null, ["Client", "#", "Age", "$", "Chance", "In charge"].map((x, i) => h("th", { class: i >= 2 && i <= 4 ? "num" : "", text: x })))),
       h("tbody", null, F.follow.map(e => h("tr", null, h("td", null, d === "r" ? h("i", { class: "est-dot " + estGroup(e), title: (EST_GROUPS.find(g => g[0] === estGroup(e)) || [])[1] }) : null, h("b", { text: e.client || "No name" }), estNotSent(e) ? h("small", { class: "est-ns", text: " not sent" }) : null),
-        h("td", null, hcpLink("est", e.id, `#${e.n}`)), h("td", { class: "num", text: `${fmt(e.age)} d` }), h("td", { class: "num", text: lbMoney(e.est / 100) }), h("td", { class: "num", text: `${Math.round(e.p * 100)}%` }),
+        h("td", null, hcpLink("est", estOptId(e), `#${e.n}`)), h("td", { class: "num", text: `${fmt(e.age)} d` }), h("td", { class: "num", text: lbMoney(e.est / 100) }), h("td", { class: "num", text: `${Math.round(e.p * 100)}%` }),
         h("td", { text: estOwners(e).filter(x => x !== "-").join(", ") || "–" })))))
       : h("p", { class: "lb-sub", text: "No open estimates worth chasing right now." }));
   // Restoration: water damage and mold apart (and the ones not sorted yet)
