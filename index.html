@@ -2203,7 +2203,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   .est-filters .seg-btn { padding: 6px 8px; font-size: .82rem; gap: 4px; } .est-filters select { flex: 1 1 140px; }
   /* by person: five columns that fit (In charge, Est., Not sent, Rate, Rate $), the name wraps */
   .est-ptable { table-layout: fixed; }
-  .est-ptable th:nth-child(3), .est-ptable td:nth-child(3), .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(8), .est-ptable td:nth-child(8) { display: none; }
+  .est-ptable th:nth-child(3), .est-ptable td:nth-child(3), .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(8), .est-ptable td:nth-child(8), .est-ptable th:nth-child(9), .est-ptable td:nth-child(9) { display: none; }
   .est-ptable th:first-child { width: 38%; } .est-ptable th, .est-ptable th.num { white-space: normal; line-height: 1.2; vertical-align: bottom; }
   .est-ptable td:first-child { overflow-wrap: anywhere; }
   /* the status buttons: two rows of three, nothing sliding sideways */
@@ -2276,7 +2276,8 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .er-pipe, .er-fu { display: grid; gap: 6px; } .er-kn { white-space: nowrap; }
 @media (max-width: 700px) { .er-tiles { grid-template-columns: 1fr 1fr; } .er-table { font-size: .8rem; } .er-table td, .er-table th { padding: 5px 3px; }
   #erFollow th:nth-child(2), #erFollow td:nth-child(2), #erFollow th:nth-child(6), #erFollow td:nth-child(6) { display: none; }
-  #erKinds th:nth-child(3), #erKinds td:nth-child(3), #erKinds th:nth-child(5), #erKinds td:nth-child(5) { display: none; } }
+  #erKinds th:nth-child(3), #erKinds td:nth-child(3), #erKinds th:nth-child(5), #erKinds td:nth-child(5) { display: none; }
+  #erPeople th:nth-child(5), #erPeople td:nth-child(5), #erPeople th:nth-child(7), #erPeople td:nth-child(7) { display: none; } }
 @media print {
   #printReport.pr-est { color: #000; } #printReport.pr-est .er { gap: 6pt; }
   #printReport.pr-est .er-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; }
@@ -14147,14 +14148,14 @@ function renderEstimates() {
     people = rows.length ? h("div", { class: "panel est-people" },
       h("h3", { text: `By person in charge${grp === "all" ? "" : ` · ${EST_GROUPS.find(g => g[0] === grp)[1]}`}` }),
       h("table", { class: "est-ptable", id: "estPeople" },
-        // (a phone: shorter headings; Approved, Open and Approved $ left out so it fits the screen)
-        h("thead", null, h("tr", null, ["In charge", ["Estimates", "Est."], "Approved", "Open", "Not sent", "Rate", "Rate $", "Approved $"].map((t, i) =>
+        // (a phone: shorter headings; Approved, Open, Estimated $ and Approved $ left out so it fits the screen)
+        h("thead", null, h("tr", null, ["In charge", ["Estimates", "Est."], "Approved", "Open", "Not sent", "Rate", "Rate $", "Estimated $", "Approved $"].map((t, i) =>
           h("th", { class: i ? "num" : "" }, Array.isArray(t) ? [h("span", { class: "t-long", text: t[0] }), h("span", { class: "t-short", text: t[1] })] : t)))),
         h("tbody", null, rows.map(([k, name, s]) => h("tr", { "data-who": k, class: estView.who === k ? "on" : "", tabindex: "0", title: "Show only these",
           onclick: () => { estView.who = estView.who === k ? "" : k; redraw(); }, onkeydown: ev => { if (ev.key === "Enter") { estView.who = estView.who === k ? "" : k; redraw(); } } },
           h("td", { class: k === "-" ? "muted" : "" }, name), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }), h("td", { class: "num", text: fmt(s.open) }),
           h("td", { class: "num" + (s.ns ? " est-ns" : ""), text: fmt(s.ns) }),
-          h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) }), h("td", { class: "num", text: lbMoney(s.apprVal / 100) })))))) : null;
+          h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) }), h("td", { class: "num", text: lbMoney(s.val / 100) }), h("td", { class: "num", text: lbMoney(s.apprVal / 100) })))))) : null;
   }
   // the list: filters (status, person, search), then the estimates, newest first
   const who = all ? estView.who : "";
@@ -14355,9 +14356,10 @@ function estReportEl(d, name) {
       h("td", { class: "num", text: fmt(k.cur.n) }), h("td", { class: "num", text: lbMoney(k.cur.val / 100) }), h("td", { class: "num", text: fmt(k.appr.n) }), h("td", { class: "num", text: lbMoney(k.appr.val / 100) }),
       h("td", { class: "num" }, h("b", { text: estPct(k.cur.appr, k.cur.n) })), h("td", { class: "num", text: lbMoney(k.likely / 100) })))));
   const people = h("table", { class: "er-table", id: "erPeople" },
-    h("thead", null, h("tr", null, ["In charge", "Created", "Approved", "Rate", "Rate $"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
+    h("thead", null, h("tr", null, ["In charge", "Created", "Approved", "Rate", "Rate $", "$ estimated", "$ approved"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
     h("tbody", null, R.people.map(([n, s]) => h("tr", null, h("td", { text: n }), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }),
-      h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) })))));
+      h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) }),
+      h("td", { class: "num", text: lbMoney(s.val / 100) }), h("td", { class: "num", text: lbMoney(s.apprVal / 100) })))));
   return h("div", { class: "er", "data-d": d }, head, tiles,
     kinds ? [h("h4", { text: "Water damage and mold" }), kinds, h("small", { class: "er-note", text: "Created and rate: estimates made in these days. Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
     h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
