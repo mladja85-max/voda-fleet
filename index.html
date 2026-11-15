@@ -2141,8 +2141,8 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   #printReport ul { margin: 0; padding-left: 14pt; }
 }
 /* Estimates: tiles (approval rate by estimates and by dollars), by person, the list */
-.est { --mold: #7c3aed; }
-@media (prefers-color-scheme: dark) { .est { --mold: #b794f6; } }
+.est, .er, #printReport { --mold: #7c3aed; }
+@media (prefers-color-scheme: dark) { .est, .er { --mold: #b794f6; } }
 .est-tiles { display: grid; grid-template-columns: minmax(0, 1.25fr) repeat(var(--c, 3), minmax(0, 1fr)); gap: 10px; }
 .est-tiles.two-rows .est-all { grid-row: span 2; align-content: center; }
 .est-tiles.two-rows .est-all .est-rates b { font-size: clamp(1.7rem, 3vw, 2.4rem); }
@@ -2246,9 +2246,8 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 /* Estimates › Reports */
 .er-list { display: grid; gap: 10px; }
 .er-dept { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
-.er-dept.later { opacity: .7; }
 .er-open { all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
-.er-open:disabled { cursor: default; } .er-open:not(:disabled):hover { border-color: var(--accent); }
+.er-open:hover { border-color: var(--accent); }
 .er-name { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
 .er-who { grid-column: 1; font-size: .84rem; color: var(--muted); } .er-go { grid-row: 1 / span 2; grid-column: 2; font-size: 1.6rem; color: var(--accent); }
 .er-edit { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
@@ -2274,16 +2273,17 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .er-table { width: 100%; border-collapse: collapse; font-size: .88rem; font-variant-numeric: tabular-nums; }
 .er-table th { text-align: left; font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
 .er-table td { padding: 6px; border-bottom: 1px solid var(--line); } .er-table .num { text-align: right; white-space: nowrap; }
-.er-pipe, .er-fu { display: grid; gap: 6px; }
+.er-pipe, .er-fu { display: grid; gap: 6px; } .er-kn { white-space: nowrap; }
 @media (max-width: 700px) { .er-tiles { grid-template-columns: 1fr 1fr; } .er-table { font-size: .8rem; } .er-table td, .er-table th { padding: 5px 3px; }
-  #erFollow th:nth-child(2), #erFollow td:nth-child(2), #erFollow th:nth-child(6), #erFollow td:nth-child(6) { display: none; } }
+  #erFollow th:nth-child(2), #erFollow td:nth-child(2), #erFollow th:nth-child(6), #erFollow td:nth-child(6) { display: none; }
+  #erKinds th:nth-child(3), #erKinds td:nth-child(3), #erKinds th:nth-child(5), #erKinds td:nth-child(5) { display: none; } }
 @media print {
   #printReport.pr-est { color: #000; } #printReport.pr-est .er { gap: 6pt; }
   #printReport.pr-est .er-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; }
   #printReport.pr-est .er-tile, #printReport.pr-est .er-goal { border: 1px solid #999; border-radius: 6pt; padding: 5pt 7pt; break-inside: avoid; }
   #printReport.pr-est .er-tile b { font-size: 16pt; } #printReport.pr-est h4 { font-size: 10pt; margin: 8pt 0 2pt; }
   #printReport.pr-est .goal-bar { display: block; height: 5pt; border: 1px solid #999; } #printReport.pr-est .goal-bar i { display: block; height: 100%; background: #555; }
-  #printReport.pr-est th.num { text-align: right; } #printReport.pr-est h4 { break-after: avoid; } #printReport.pr-est .er-table tr { break-inside: avoid; }
+  #printReport.pr-est .est-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; } #printReport.pr-est th.num { text-align: right; } #printReport.pr-est h4 { break-after: avoid; } #printReport.pr-est .er-table tr { break-inside: avoid; }
   #printReport.pr-est .er-table td, #printReport.pr-est .er-table th { padding: 2.5pt 5pt; } #printReport.pr-est .er-note { font-size: 8pt; }
 }
 </style>
@@ -14221,7 +14221,6 @@ function renderEstimates() {
    age were approved later); the ones to follow up; by person. Printable. ---- */
 const EST_REP_API = 60;                                 // the Google script that keeps who's in charge of each report
 const EST_REP_DEPTS = [["p", "Repairs"], ["c", "Cleaning"], ["r", "Restoration"]];
-const EST_REP_READY = ["p"];                            // the reports built so far (Cleaning and Restoration next)
 const EST_REP_PER = { week: "Week", month: "Month", year: "Year" };
 const EST_AGES = [[0, "0–7 days"], [8, "8–30 days"], [31, "31–60 days"], [61, "61–120 days"], [121, "Over 120 days"]];
 const estRepView = Object.assign({ per: "week", off: 0 }, store.get("voda.estRep") || {});
@@ -14258,7 +14257,7 @@ function estReportsDlg() {
   const doc = estData;
   if (!doc) return;
   const row = ([d, name]) => {
-    const o = estRepOwner(d), ready = EST_REP_READY.includes(d);
+    const o = estRepOwner(d);
     const lead = h("input", { type: "text", class: "er-lead", "data-nodirty": "1", value: o.lead || "", placeholder: "Name", maxlength: "40", "aria-label": `${name}: in charge` });
     const team = h("input", { type: "text", class: "er-team", "data-nodirty": "1", value: (o.team || []).join(", "), placeholder: "Names, with commas", maxlength: "200", "aria-label": `${name}: with` });
     const save = h("button", { class: "btn small", type: "button", onclick: async () => {
@@ -14267,11 +14266,11 @@ function estReportsDlg() {
       try { const out = await api("estReportsPut", { dept: d, lead: lead.value.trim(), team: team.value.split(",").map(x => x.trim()).filter(Boolean) }); estData.reports = out.reports || {}; store.set(K_EST, estData); toast(`${name}: saved`); estReportsDlg(); }
       catch (e) { toast(errText(e, "Nothing")); } finally { save.disabled = false; }
     } }, "Save");
-    return h("div", { class: "er-dept" + (ready ? "" : " later"), "data-d": d },
-      h("button", { class: "er-open", type: "button", disabled: !ready, onclick: () => estReportOpen(d) },
+    return h("div", { class: "er-dept", "data-d": d },
+      h("button", { class: "er-open", type: "button", onclick: () => estReportOpen(d) },
         h("span", { class: "er-name" }, h("i", { class: "est-dot " + (d === "r" ? "w" : d) }), `${name} report`),
-        h("span", { class: "er-who", text: ready ? [o.lead, ...(o.team || [])].filter(Boolean).join(" · ") || (isAdmin() ? "Set who's in charge below" : "") : "Next: after Repairs" }),
-        ready ? h("span", { class: "er-go", "aria-hidden": "true", text: "›" }) : null),
+        h("span", { class: "er-who", text: [o.lead, ...(o.team || [])].filter(Boolean).join(" · ") || (isAdmin() ? "Set who's in charge below" : "") }),
+        h("span", { class: "er-go", "aria-hidden": "true", text: "›" })),
       isAdmin() ? h("div", { class: "er-edit" }, h("label", null, h("span", { text: "In charge" }), lead), h("label", null, h("span", { text: "With" }), team), save) : null);
   };
   openDialog(h("h3", { id: "dlgTitle", text: "Reports" }),
@@ -14345,15 +14344,23 @@ function estReportEl(d, name) {
   const fu = h("div", { class: "er-fu", id: "erFollow" },
     F.follow.length ? h("table", { class: "er-table" },
       h("thead", null, h("tr", null, ["Client", "#", "Age", "$", "Chance", "In charge"].map((x, i) => h("th", { class: i >= 2 && i <= 4 ? "num" : "", text: x })))),
-      h("tbody", null, F.follow.map(e => h("tr", null, h("td", null, h("b", { text: e.client || "No name" }), estNotSent(e) ? h("small", { class: "est-ns", text: " not sent" }) : null),
+      h("tbody", null, F.follow.map(e => h("tr", null, h("td", null, d === "r" ? h("i", { class: "est-dot " + estGroup(e), title: (EST_GROUPS.find(g => g[0] === estGroup(e)) || [])[1] }) : null, h("b", { text: e.client || "No name" }), estNotSent(e) ? h("small", { class: "est-ns", text: " not sent" }) : null),
         h("td", { text: `#${e.n}` }), h("td", { class: "num", text: `${fmt(e.age)} d` }), h("td", { class: "num", text: lbMoney(e.est / 100) }), h("td", { class: "num", text: `${Math.round(e.p * 100)}%` }),
         h("td", { text: e.inc || "–" })))))
       : h("p", { class: "lb-sub", text: "No open estimates worth chasing right now." }));
+  // Restoration: water damage and mold apart (and the ones not sorted yet)
+  const kinds = R.kinds && h("table", { class: "er-table", id: "erKinds" },
+    h("thead", null, h("tr", null, ["", "Created", "$ estimated", "Approved", "$ approved", "Rate", "Likely"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
+    h("tbody", null, R.kinds.map(k => h("tr", { "data-k": k.k }, h("td", { class: "er-kn" }, h("i", { class: "est-dot " + k.k }), h("b", null, k.k === "w" ? [h("span", { class: "t-long", text: k.name }), h("span", { class: "t-short", text: "Water" })] : k.name)),
+      h("td", { class: "num", text: fmt(k.cur.n) }), h("td", { class: "num", text: lbMoney(k.cur.val / 100) }), h("td", { class: "num", text: fmt(k.appr.n) }), h("td", { class: "num", text: lbMoney(k.appr.val / 100) }),
+      h("td", { class: "num" }, h("b", { text: estPct(k.cur.appr, k.cur.n) })), h("td", { class: "num", text: lbMoney(k.likely / 100) })))));
   const people = h("table", { class: "er-table", id: "erPeople" },
     h("thead", null, h("tr", null, ["In charge", "Created", "Approved", "Rate", "Rate $"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
     h("tbody", null, R.people.map(([n, s]) => h("tr", null, h("td", { text: n }), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }),
       h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) })))));
-  return h("div", { class: "er", "data-d": d }, head, tiles, h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
+  return h("div", { class: "er", "data-d": d }, head, tiles,
+    kinds ? [h("h4", { text: "Water damage and mold" }), kinds, h("small", { class: "er-note", text: "Created and rate: estimates made in these days. Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
+    h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
     h("h4", { text: "Follow up first" }), fu, h("h4", { text: "By person in charge" }), R.people.length ? people : h("p", { class: "lb-sub", text: "No estimates created in these days." }));
 }
 /** The numbers of a department's report. */
@@ -14385,7 +14392,16 @@ function estRepData(d, per, r, to, pv, all, today) {
   const by = new Map();
   for (const e of dep.filter(x => within(x.day, r.from, to))) { const k = e.inc || "Nobody assigned"; if (!by.has(k)) by.set(k, []); by.get(k).push(e); }
   const people = [...by.entries()].map(([k, xs]) => [k, estStats(xs)]).sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]));
-  return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, daysLeft, fc, people };
+  // Restoration: water damage, mold and the ones not sorted (a row only when it has something)
+  let kinds = null;
+  if (d === "r") {
+    kinds = [["w", "Water damage"], ["m", "Mold"], ["u", "Not sorted"]].map(([k, name]) => {
+      const mine = dep.filter(e => estGroup(e) === k), x = mine.filter(e => e.st === "approved" && within(decDay(e), r.from, to));
+      return { k, name, cur: estStats(mine.filter(e => within(e.day, r.from, to))), appr: { n: x.length, val: x.reduce((s, e) => s + estValue(e), 0) },
+        likely: Math.round(open.filter(e => estGroup(e) === k).reduce((s, e) => s + e.est * e.p, 0)) };
+    }).filter(k => k.k !== "u" || k.cur.n || k.appr.n || k.likely);
+  }
+  return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, daysLeft, fc, people, kinds };
 }
 /** The report on paper (or a PDF: Print › Save as PDF). */
 function estReportPrint(d, name) {
@@ -14395,6 +14411,7 @@ function estReportPrint(d, name) {
   const o = estRepOwner(d), label = ($("erLabel") || {}).textContent || "";
   const copy = src.cloneNode(true);
   copy.querySelectorAll(".er-head .lb-bar, button").forEach(x => x.remove());
+  copy.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));   // the window keeps its own
   box.replaceChildren(h("h1", { text: `${name} report · ${EST_REP_PER[per]}` }),
     h("p", { class: "pr-sub", text: [label, o.lead ? `In charge: ${o.lead}${(o.team || []).length ? ` with ${o.team.join(", ")}` : ""}` : "", `Printed ${lbDayText(lbToday())}`].filter(Boolean).join(" · ") }),
     copy);
