@@ -3524,6 +3524,14 @@ function lbTable(rows, metrics) {
   return rows.map((x, i) => Object.assign({}, x, { ranks: ranks[x.team], score: scores[i], place: places[i] }))
     .sort((a, b) => a.place - b.place || b.values.revenue - a.values.revenue || a.team.localeCompare(b.team));
 }
+/** The whole company: every team with the score from its own unit's ranking (Cleaning's or Restoration's), the lowest
+ *  first whatever the unit; equal scores share the place, the most revenue listed first. */
+function lbCompany(rows, metrics) {
+  const all = LB_GROUPS.flatMap(g => lbTable(rows.filter(x => x.group === g), metrics));
+  const places = lbRanks(all.map(x => x.score), true, true);
+  return all.map((x, i) => Object.assign({}, x, { place: places[i] }))
+    .sort((a, b) => a.place - b.place || b.values.revenue - a.values.revenue || a.team.localeCompare(b.team));
+}
 /** Standings for a month (1-12) and the year to date through that month. Both rank the teams that had a truck that
  *  month, in that month's unit; the year to date adds up each of them since January 1, counting only the months the
  *  team was on the board (a team that took over a truck in September counts from September). */
@@ -3546,7 +3554,7 @@ function lbStandings(records, year, month) {
   const build = (rows, metrics) => ({
     Cleaning: lbTable(rows.filter(x => x.group === "Cleaning"), metrics),
     Restoration: lbTable(rows.filter(x => x.group === "Restoration"), metrics),
-    Company: lbTable(rows, metrics) });
+    Company: lbCompany(rows, metrics) });
   return { key, month: build(monthRows, LB_MONTH_METRICS), ytd: build(ytdRows, LB_YTD_METRICS) };
 }
 /** The newest month of `year` with numbers for a team on the board, or 0. */
@@ -8956,7 +8964,7 @@ function lbRankingEl(per, month, week, agg) {
   if (week) body = lbWeekRank(week, group);
   else if (agg) {   // From – To: the same six numbers as a month, added up over the days picked
     const all = Object.entries(agg).map(([team, s]) => ({ team, group: s.group, values: lbMetrics(s) }));
-    const rows = lbTable(group === "Company" ? all : all.filter(x => x.group === group), LB_MONTH_METRICS);
+    const rows = group === "Company" ? lbCompany(all, LB_MONTH_METRICS) : lbTable(all.filter(x => x.group === group), LB_MONTH_METRICS);
     body = rows.length ? h("ol", { class: "lb-list", id: "lbList" }, rows.map(x => lbRowEl(x, LB_MONTH_METRICS, key)))
       : h("p", { class: "meta", id: "lbList", text: `No ${group === "Company" ? "" : group + " "}teams on a truck on those days.` });
   }
@@ -9097,8 +9105,10 @@ function lbWeekRank(start, group) {
   if (!list.length) return h("p", { class: "meta", id: "lbWeek", text: all.length ? `No ${group} trucks on the leaderboard that week.`
     : `Nothing typed for the week of ${lbWeekText(start)}${start === lbThisMonday() ? " yet" : ""}. A week is ranked from the trucks' days under Production.` });
   const max = Math.max(1, ...list.map(r => r.revenue));
-  const ranks = lbRanks(list.map(r => r.revenue));
-  return h("ol", { class: "lb-list", id: "lbWeek" }, list.map((r, i) => [ranks[i], r]).sort((a, b) => a[0] - b[0] || a[1].team.localeCompare(b[1].team)).map(([p, r]) =>
+  // a unit: on revenue; the whole company: each team's place in its own unit (its #1s first, the most revenue first)
+  const unitPlace = new Map(LB_GROUPS.flatMap(g => { const xs = list.filter(r => r.group === g), rk = lbRanks(xs.map(r => r.revenue)); return xs.map((r, i) => [r, rk[i]]); }));
+  const ranks = group === "Company" ? list.map(r => unitPlace.get(r)) : lbRanks(list.map(r => r.revenue));
+  return h("ol", { class: "lb-list", id: "lbWeek" }, list.map((r, i) => [ranks[i], r]).sort((a, b) => a[0] - b[0] || b[1].revenue - a[1].revenue || a[1].team.localeCompare(b[1].team)).map(([p, r]) =>
     h("li", { class: `lb-row p${p}`, "data-team": r.team }, h("div", { class: "lb-wrow" },
       h("span", { class: "lb-place", "aria-label": `Place ${p}`, text: String(p) }),
       h("span", { class: "lb-name" }, h("strong", { text: r.team }), group === "Company" ? h("span", { class: `lb-unit ${r.group}`, text: r.group }) : null),
@@ -9108,7 +9118,7 @@ function lbWeekRank(start, group) {
 }
 function lbHowEl() {
   return h("details", { class: "panel lb-how" }, h("summary", { text: "How the ranking works" }),
-    h("p", { text: "Teams are ranked inside Cleaning, inside Restoration, and across the whole company, the same way the 5. Revenue per truck sheet did it." }),
+    h("p", { text: "Teams are ranked inside Cleaning and inside Restoration, the same way the 5. Revenue per truck sheet did it. The whole company lists every team by the score from its own unit, the lowest first whatever the unit (equal scores share the place); a week, by each team's place in its own unit." }),
     h("p", { text: "A month: per job, daily per truck, total revenue, sale per job, technician sales and reviews. Year to date (from January 1): technician sales, total revenue, per job, daily per truck and reviews. A week (Week to date, Last week) is ranked on its revenue alone. Days typed in From and To (From – To) are ranked like a month, on the same six numbers added up over those days (a month's 5-star reviews typed as one total, from before reviews were typed by day, count only when that whole month is picked)." }),
     h("p", { text: "On each number the best team gets 1, the next 2, and so on (a tie shares the number). Those add up to the score: the lowest score is #1. Equal scores share the place and the next team takes the next number (1, 1, 2)." }),
     h("p", { text: `Per job = revenue ÷ jobs. Daily per truck = revenue ÷ work days. Technician sales = up sale + add-on + additional service${lbRugsLast() ? " (and rugs in plant up to its last sale)" : ""}. Sale per job = technician sales ÷ the technician's jobs. Reviews are 5-star reviews only. A team counts only in the months it's on the board (Teams), so a team that took over a truck later in the year counts from that month.` }),
