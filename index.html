@@ -2176,8 +2176,13 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-tile { position: relative; }
 .est-tile.picked { border-width: 2px; padding: 10px 13px 11px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), var(--shadow); }
 .est-tile.picked small { padding-right: 24px; }
-.est-crew { display: grid; grid-template-columns: repeat(var(--c, 5), minmax(0, 1fr)); gap: 10px; } .est-person small { color: var(--ink); } .est-pd { color: var(--muted); font-weight: 600; }
-@media (max-width: 860px) { .est-crew { grid-template-columns: 1fr 1fr; } .est-pd { display: none; } }   /* a phone: the dot says the department */ .est-check { position: absolute; top: 8px; right: 10px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .8rem; font-weight: 800; }
+/* the tiles: the departments in a row (each with its In charge), then Restoration's row (water, mold, not sorted, its supervisors) */
+.est-tiles2 { display: grid; gap: 10px; }
+.est-row1 { display: grid; grid-template-columns: minmax(0, 1.25fr) repeat(var(--c, 3), minmax(0, 1fr)); gap: 10px; }
+.est-row2 { display: grid; grid-template-columns: repeat(var(--c, 5), minmax(0, 1fr)); gap: 10px; }
+.est-sublbl { margin: 6px 0 -2px; font-size: .74rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); }
+.est-person small { color: var(--ink); } .est-pd { color: var(--muted); font-weight: 600; }
+@media (max-width: 860px) { .est-row1, .est-row2 { grid-template-columns: 1fr 1fr; } .est-row1 .est-all { grid-column: 1 / -1; } .est-tile .est-pd { display: none; } } .est-check { position: absolute; top: 8px; right: 10px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .8rem; font-weight: 800; }
 .est-tile.est-all { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface) 70%); }
 .est-tile small { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .est-rates { display: flex; gap: 14px; align-items: flex-end; margin: 2px 0 1px; }
@@ -14080,12 +14085,13 @@ const estSaveView = () => store.set(K_EST_VIEW, { per: estView.per, from: estVie
  *  one under With: the estimates he's assigned to in Housecall Pro; In charge: all the rest). A department with no names
  *  there (and Other): whoever's in charge in Housecall Pro ("-": nobody). An estimate two of them are on goes to both. */
 const estNameHit = (emp, t) => { const a = String(emp).toLowerCase().trim(), b = String(t).toLowerCase().trim(); return b.length >= 3 && a.startsWith(b); };   // "Jeff" is Jeffrey Escobar
-/** The people with a tile on Estimates: Repairs, Cleaning, then Restoration; each department's With people, then its
- *  In charge (Reports' names): [[name, dept]]. */
+/** The people with a tile on Estimates: each department's With people in Reports (Restoration's, then Cleaning's, then
+ *  Repairs'): the estimates they're assigned to. Its In charge has the rest, so the department's tiles are his.
+ *  [[name, dept]]. */
 function estCrew() {
   const out = [], seen = new Set(), reps = (estData && estData.reports) || {};
-  for (const d of ["p", "c", "r"]) { const rep = reps[d];
-    if (rep && rep.lead) for (const n of (rep.team || []).concat(rep.lead)) if (n && !seen.has(n)) { seen.add(n); out.push([n, d]); } }
+  for (const d of ["r", "c", "p"]) { const rep = reps[d];
+    if (rep && rep.lead) for (const n of rep.team || []) if (n && !seen.has(n)) { seen.add(n); out.push([n, d]); } }
   return out;
 }
 function estOwners(e) {
@@ -14287,20 +14293,31 @@ function renderEstimates() {
   }
   // the tiles: every estimate, then each group (approval rate by estimates and by dollars); a tile picks the list's group
   const grpOf = new Map(list.map(e => [e, estGroup(e)]));
-  const groups = EST_GROUPS.filter(([k]) => !["u", "o"].includes(k) || list.some(e => grpOf.get(e) === k));
-  const sel = (estView.grps || []).filter(k => groups.some(([g]) => g === k)), allOn = !sel.length;
-  // a tile adds its group to the ones picked (or takes it off); All estimates: every group again
-  const pickGrp = k => { estView.grps = k === "all" ? [] : sel.includes(k) ? sel.filter(x => x !== k) : sel.concat(k);
-    if (estView.grps.length >= groups.length) estView.grps = []; estView.who = ""; redraw(); };
+  // the departments in a row (Restoration, Cleaning, Repairs, Other: each with its In charge from Reports), then
+  // Restoration's own row: water damage, mold, not sorted and its supervisors (the With people)
+  const has = g => list.some(e => grpOf.get(e) === g);
+  const R_SUB = ["w", "m", "u"], inKey = (g, k) => k === g || (k === "r" && R_SUB.includes(g));
+  const row1 = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]].filter(([k]) => k === "r" ? R_SUB.some(has) : k !== "o" || has("o"));
+  const row2 = [["w", "Water damage"], ["m", "Mold"], ["u", "Not sorted"]].filter(([k]) => k !== "u" || has("u"));
+  const keys = row1.concat(row2).map(([k]) => k), bases = ["w", "m", "u", "c", "p", "o"].filter(has);
+  const sel = (estView.grps || []).filter(k => keys.includes(k)), allOn = !sel.length;
+  // a tile adds its group to the ones picked (or takes it off): Restoration takes the place of water damage, mold and
+  // not sorted, and one of them of Restoration; all of them picked, or All estimates: every estimate again
+  const pickGrp = k => {
+    let next = k === "all" ? [] : sel.includes(k) ? sel.filter(x => x !== k) : k === "r" ? sel.filter(x => !R_SUB.includes(x)).concat("r") : R_SUB.includes(k) ? sel.filter(x => x !== "r").concat(k) : sel.concat(k);
+    if (bases.every(g => next.some(x => inKey(g, x)))) next = [];
+    estView.grps = next; estView.who = ""; redraw();
+  };
   const ownersOf = new Map(all ? list.map(e => [e, estOwners(e)]) : []);
   const crew = all ? estCrew() : [], whoPicked = all && crew.some(([n]) => n === estView.who) ? estView.who : "";
+  const leadOf = d => (all && estData && estData.reports && estData.reports[d] && estData.reports[d].lead) || "";
   const tile = (k, name, items) => {
-    const s = estStats(items), on = k === "all" ? allOn && !whoPicked : sel.includes(k);
+    const s = estStats(items), on = k === "all" ? allOn && !whoPicked : sel.includes(k), lead = ["r", "c", "p"].includes(k) ? leadOf(k) : "";
     return h("div", { class: "est-tile" + (k === "all" ? " est-all" : "") + (on && k !== "all" ? " picked" : ""), "data-g": k, role: "button", tabindex: "0", "aria-pressed": String(on),
       title: k === "all" ? "Show every group" : on ? `Take ${name.toLowerCase()} off` : `Add ${name.toLowerCase()}`,
       onclick: () => pickGrp(k), onkeydown: e => { if (e.key === "Enter") pickGrp(k); } },
       on && k !== "all" ? h("span", { class: "est-check", "aria-hidden": "true", text: "✓" }) : null,
-      h("small", null, k !== "all" ? h("i", { class: "est-dot " + k }) : null, k === "u" ? [h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: "Not sorted" })] : name),
+      h("small", null, k !== "all" ? h("i", { class: "est-dot " + (k === "r" ? "w" : k) }) : null, name, lead ? h("span", { class: "est-pd", text: ` · ${lead}` }) : null),
       ...estTileBody(s));
   };
   // a person's tile (Reports' names): his estimates in these days; a tap shows only his and clears the groups
@@ -14310,15 +14327,18 @@ function renderEstimates() {
     return h("div", { class: "est-tile est-person" + (on ? " picked" : ""), "data-who": name, "data-d": d, role: "button", tabindex: "0", "aria-pressed": String(on),
       title: on ? "Show everyone's" : `Show ${name}'s only`, onclick: pick, onkeydown: e => { if (e.key === "Enter") pick(); } },
       on ? h("span", { class: "est-check", "aria-hidden": "true", text: "✓" }) : null,
-      h("small", null, h("i", { class: "est-dot " + (d === "r" ? "w" : d) }), name, h("span", { class: "est-pd", text: ` · ${dn}` })),
+      h("small", null, h("i", { class: "est-dot " + (d === "r" ? "w" : d) }), name, h("span", { class: "est-pd", text: d === "r" ? " · supervisor" : ` · ${dn}` })),
       ...estTileBody(s));
   };
-  const tiles = h("div", { class: "est-tiles" + (groups.length > 3 ? " two-rows" : ""), id: "estTiles", style: `--c:${groups.length > 3 ? Math.ceil(groups.length / 2) : groups.length}` }, tile("all", "All estimates", list), groups.map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))));
-  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage or Mold: the estimate's tag in Housecall Pro. In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). The people's tiles: each department's people from Reports (the ones under With get the estimates they're assigned to in Housecall Pro; its In charge gets the rest); tap one to see only his. Tap group tiles to pick any mix of groups.");
+  const subN = row2.length + crew.length;
+  const tiles = h("div", { class: "est-tiles2", id: "estTiles" },
+    h("div", { class: "est-row1", style: `--c:${row1.length}` }, tile("all", "All estimates", list), row1.map(([k, name]) => tile(k, name, list.filter(e => inKey(grpOf.get(e), k))))),
+    row1.some(([k]) => k === "r") ? [h("p", { class: "est-sublbl" }, h("i", { class: "est-dot w" }), "Restoration", leadOf("r") ? h("span", { class: "est-pd", text: ` · ${leadOf("r")}` }) : null),
+      h("div", { class: "est-row2", id: "estRestRow", style: `--c:${subN}` }, row2.map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))), crew.map(crewTile))] : null);
+  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage or Mold: the estimate's tag in Housecall Pro. In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his. Tap tiles to pick any mix.");
   // the people (whoever sees them all): a tile each, under the groups; without names in Reports, a word on where to set them
-  const inGrp = whoPicked || allOn ? list : list.filter(e => sel.includes(grpOf.get(e)));
-  const people = !all ? null : crew.length ? h("div", { class: "est-crew", id: "estCrew", style: `--c:${crew.length}` }, crew.map(crewTile))
-    : isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Set each department's people in Reports (In charge, With) to get a tile for each of them here." }) : null;
+  const inGrp = whoPicked || allOn ? list : list.filter(e => sel.some(k => inKey(grpOf.get(e), k)));
+  const people = all && !crew.length && isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Add people under With in Reports (Restoration's supervisors, say) to get a tile for each of them here." }) : null;
   // the list: filters (status, person, search), then the estimates, newest first
   const ownerNames = all ? [...new Set(inGrp.flatMap(e => ownersOf.get(e)))] : [];   // the people of the groups picked
   const who = all && ownerNames.includes(estView.who) ? estView.who : "";
