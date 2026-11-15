@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 65;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 66;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -792,10 +792,10 @@ function saveUser_(req) {
 /** Admin: Payroll on or off for an admin ({ id, on }). Only an admin who sees Payroll can switch it, for himself or
  *  another admin; while no admin sees it yet, any admin can switch it on (the first time). Nobody switches himself off,
  *  so there's always someone who can. Technicians never see Payroll. */
-function setPayroll_(req) { return setAdminFlag_(req, PAYROLL); }
+function setPayroll_(req) { return setAdminFlag_(req, PAYROLL, true); }
 /** A per-admin switch (VODA Payroll, checking price changes): an admin who has it switches it for the others; the first
  *  time, any admin can switch it on (for himself or another admin). */
-function setAdminFlag_(req, FLAG) {
+function setAdminFlag_(req, FLAG, ownerAny) {
   const s = usersSheet_();
   const all = readUsers_(s);
   const x = all.filter(function (y) { return y.u.id === String(req.id || ""); })[0];
@@ -804,8 +804,10 @@ function setAdminFlag_(req, FLAG) {
   const has = function (u) { return u.role === "admin" && u.status === "active" && parseAccess_(u.access).indexOf(FLAG) !== -1; };
   const anyone = all.some(function (y) { return has(y.u); });
   const me = all.filter(function (y) { return y.u.id === req.user.id; })[0];
-  if (anyone ? !(me && has(me.u)) : !req.on) return { ok: false, error: "not_allowed" };
-  if (!req.on && x.u.id === req.user.id) return { ok: false, error: "self" };
+  // the owner of Settings switches it for anyone, himself too (off and back on): there's always someone who can
+  const owner = ownerAny && settingsOwner_() && req.user.id === settingsOwner_();
+  if (!owner && (anyone ? !(me && has(me.u)) : !req.on)) return { ok: false, error: "not_allowed" };
+  if (!owner && !req.on && x.u.id === req.user.id) return { ok: false, error: "self" };
   const access = parseAccess_(x.u.access).filter(function (a) { return a !== FLAG; });
   if (req.on) access.push(FLAG);
   if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
