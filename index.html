@@ -146,6 +146,7 @@ button { font: inherit; color: inherit; }
   .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
   body .sup, body .lb { max-width: 1000px; width: 100%; }
   body[data-tab="leaderboard"][data-lbtab="payroll"] .lb, body[data-tab="leaderboard"][data-lbtab="enter"] .lb { max-width: none; }
+  body[data-tab="estimates"] #estView { max-width: 1320px; }   /* Estimates: By person in charge's 11 columns without sliding sideways */
   /* Enter numbers: three cards a row across the whole page (from the same left edge) */
   body[data-lbtab="enter"] .lb-enter, body[data-lbtab="enter"] .lb-enter:has(.lb-jobs) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   /* the buttons sit next to the title instead of across the screen; Employees first, so it doesn't move when
@@ -2174,7 +2175,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow); }
 .est-tile { position: relative; }
 .est-tile.picked { border-width: 2px; padding: 10px 13px 11px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), var(--shadow); }
-.est-tile.picked small { padding-right: 24px; } .est-check { position: absolute; top: 8px; right: 10px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .8rem; font-weight: 800; }
+.est-tile.picked small { padding-right: 24px; }
+.est-crew { display: grid; grid-template-columns: repeat(var(--c, 5), minmax(0, 1fr)); gap: 10px; } .est-person small { color: var(--ink); } .est-pd { color: var(--muted); font-weight: 600; }
+@media (max-width: 860px) { .est-crew { grid-template-columns: 1fr 1fr; } .est-pd { display: none; } }   /* a phone: the dot says the department */ .est-check { position: absolute; top: 8px; right: 10px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .8rem; font-weight: 800; }
 .est-tile.est-all { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface) 70%); }
 .est-tile small { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .est-rates { display: flex; gap: 14px; align-items: flex-end; margin: 2px 0 1px; }
@@ -2198,6 +2201,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-ptable .num { text-align: right; white-space: nowrap; }
 .est-pwrap { overflow-x: auto; max-width: 100%; } .est-pwrap th, .est-pwrap td:first-child { white-space: nowrap; }
 .est-pwrap .g { border-left: 1px solid var(--line); }
+@media (min-width: 861px) and (max-width: 1399px) { .est-ptable th, .est-ptable td { padding-left: 6px; padding-right: 6px; } .est-pwrap th.g, .est-pwrap td.g { padding-left: 9px; } }   /* a smaller PC: still no sliding */
 .est-pwrap th:first-child, .est-pwrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); }   /* the names stay put when it scrolls sideways */
 .est-pwrap .est-ptable tbody tr:hover td:first-child { background: linear-gradient(var(--surface-2), var(--surface-2)), var(--surface); }
 .est-pwrap tr.on td:first-child { background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface); } .est-pwrap th.g, .est-pwrap td.g { padding-left: 12px; }
@@ -14076,6 +14080,14 @@ const estSaveView = () => store.set(K_EST_VIEW, { per: estView.per, from: estVie
  *  one under With: the estimates he's assigned to in Housecall Pro; In charge: all the rest). A department with no names
  *  there (and Other): whoever's in charge in Housecall Pro ("-": nobody). An estimate two of them are on goes to both. */
 const estNameHit = (emp, t) => { const a = String(emp).toLowerCase().trim(), b = String(t).toLowerCase().trim(); return b.length >= 3 && a.startsWith(b); };   // "Jeff" is Jeffrey Escobar
+/** The people with a tile on Estimates: Repairs, Cleaning, then Restoration; each department's With people, then its
+ *  In charge (Reports' names): [[name, dept]]. */
+function estCrew() {
+  const out = [], seen = new Set(), reps = (estData && estData.reports) || {};
+  for (const d of ["p", "c", "r"]) { const rep = reps[d];
+    if (rep && rep.lead) for (const n of (rep.team || []).concat(rep.lead)) if (n && !seen.has(n)) { seen.add(n); out.push([n, d]); } }
+  return out;
+}
 function estOwners(e) {
   const d = ["r", "c", "p"].includes(e.dept) ? e.dept : "", rep = d && estData && estData.reports ? estData.reports[d] : null;
   if (!rep || !rep.lead) return [e.inc || "-"];
@@ -14168,6 +14180,15 @@ function estStats(list) {
   return s;
 }
 const estPct = (a, b) => (b ? `${Math.round(a / b * 100)}%` : "–");
+/** A tile's numbers: approval rate by estimates and by dollars, approved of all (open, not sent), dollars, the bar. */
+const estTileBody = s => [
+      h("div", { class: "est-rates" },
+        h("div", null, h("b", { text: estPct(s.appr, s.n) }), h("em", { text: "of estimates" })),
+        h("div", null, h("b", { text: estPct(s.apprVal, s.val) }), h("em", { text: "of dollars" }))),
+      h("span", { class: "est-line" }, `${fmt(s.appr)} approved of ${fmt(s.n)}`, s.open ? h("i", { class: "est-open", text: ` · ${fmt(s.open)} open` }) : null,
+        s.ns ? h("i", { class: "est-ns", text: ` · ${fmt(s.ns)} not sent` }) : null),
+      h("span", { class: "est-line" }, `${lbMoney(s.apprVal / 100)} of ${lbMoney(s.val / 100)}`),
+      h("div", { class: "est-bar", "aria-hidden": "true" }, h("i", { class: "ok", style: `width:${s.n ? s.appr / s.n * 100 : 0}%` }), h("i", { class: "op", style: `width:${s.n ? s.open / s.n * 100 : 0}%` }))];
 /** By person in charge: estimates, approved, open and not sent, each as a count and dollars (and approved and open as a
  *  share of the estimates, and not sent too). rows: [key, name, estStats]; pick(key) makes a row a filter. A phone scrolls it sideways
  *  with the names held in place. */
@@ -14270,37 +14291,34 @@ function renderEstimates() {
   const sel = (estView.grps || []).filter(k => groups.some(([g]) => g === k)), allOn = !sel.length;
   // a tile adds its group to the ones picked (or takes it off); All estimates: every group again
   const pickGrp = k => { estView.grps = k === "all" ? [] : sel.includes(k) ? sel.filter(x => x !== k) : sel.concat(k);
-    if (estView.grps.length >= groups.length) estView.grps = []; redraw(); };
+    if (estView.grps.length >= groups.length) estView.grps = []; estView.who = ""; redraw(); };
+  const ownersOf = new Map(all ? list.map(e => [e, estOwners(e)]) : []);
+  const crew = all ? estCrew() : [], whoPicked = all && crew.some(([n]) => n === estView.who) ? estView.who : "";
   const tile = (k, name, items) => {
-    const s = estStats(items), on = k === "all" ? allOn : sel.includes(k);
+    const s = estStats(items), on = k === "all" ? allOn && !whoPicked : sel.includes(k);
     return h("div", { class: "est-tile" + (k === "all" ? " est-all" : "") + (on && k !== "all" ? " picked" : ""), "data-g": k, role: "button", tabindex: "0", "aria-pressed": String(on),
       title: k === "all" ? "Show every group" : on ? `Take ${name.toLowerCase()} off` : `Add ${name.toLowerCase()}`,
       onclick: () => pickGrp(k), onkeydown: e => { if (e.key === "Enter") pickGrp(k); } },
       on && k !== "all" ? h("span", { class: "est-check", "aria-hidden": "true", text: "✓" }) : null,
       h("small", null, k !== "all" ? h("i", { class: "est-dot " + k }) : null, k === "u" ? [h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: "Not sorted" })] : name),
-      h("div", { class: "est-rates" },
-        h("div", null, h("b", { text: estPct(s.appr, s.n) }), h("em", { text: "of estimates" })),
-        h("div", null, h("b", { text: estPct(s.apprVal, s.val) }), h("em", { text: "of dollars" }))),
-      h("span", { class: "est-line" }, `${fmt(s.appr)} approved of ${fmt(s.n)}`, s.open ? h("i", { class: "est-open", text: ` · ${fmt(s.open)} open` }) : null,
-        s.ns ? h("i", { class: "est-ns", text: ` · ${fmt(s.ns)} not sent` }) : null),
-      h("span", { class: "est-line" }, `${lbMoney(s.apprVal / 100)} of ${lbMoney(s.val / 100)}`),
-      h("div", { class: "est-bar", "aria-hidden": "true" }, h("i", { class: "ok", style: `width:${s.n ? s.appr / s.n * 100 : 0}%` }), h("i", { class: "op", style: `width:${s.n ? s.open / s.n * 100 : 0}%` })));
+      ...estTileBody(s));
+  };
+  // a person's tile (Reports' names): his estimates in these days; a tap shows only his and clears the groups
+  const crewTile = ([name, d]) => {
+    const s = estStats(list.filter(e => ownersOf.get(e).includes(name))), on = whoPicked === name, dn = (EST_REP_DEPTS.find(x => x[0] === d) || [, ""])[1];
+    const pick = () => { estView.who = on ? "" : name; estView.grps = []; redraw(); };
+    return h("div", { class: "est-tile est-person" + (on ? " picked" : ""), "data-who": name, "data-d": d, role: "button", tabindex: "0", "aria-pressed": String(on),
+      title: on ? "Show everyone's" : `Show ${name}'s only`, onclick: pick, onkeydown: e => { if (e.key === "Enter") pick(); } },
+      on ? h("span", { class: "est-check", "aria-hidden": "true", text: "✓" }) : null,
+      h("small", null, h("i", { class: "est-dot " + (d === "r" ? "w" : d) }), name, h("span", { class: "est-pd", text: ` · ${dn}` })),
+      ...estTileBody(s));
   };
   const tiles = h("div", { class: "est-tiles" + (groups.length > 3 ? " two-rows" : ""), id: "estTiles", style: `--c:${groups.length > 3 ? Math.ceil(groups.length / 2) : groups.length}` }, tile("all", "All estimates", list), groups.map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))));
-  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage or Mold: the estimate's tag in Housecall Pro. In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). By person in charge: each department's people from Reports (the ones under With get the estimates they're assigned to in Housecall Pro; its In charge gets the rest). Tap tiles to pick any mix of groups.");
-  // by person (whoever sees them all)
-  const inGrp = allOn ? list : list.filter(e => sel.includes(grpOf.get(e)));
-  const grpNames = allOn ? "" : sel.map(k => (EST_GROUPS.find(g => g[0] === k) || [, k])[1]).join(" + ");
-  const ownersOf = new Map(all ? list.map(e => [e, estOwners(e)]) : []);
-  let people = null;
-  if (all) {
-    const by = new Map();
-    for (const e of inGrp) for (const k of ownersOf.get(e)) { if (!by.has(k)) by.set(k, { name: k === "-" ? "Nobody assigned in Housecall Pro" : k, items: [] }); by.get(k).items.push(e); }
-    const rows = [...by.entries()].map(([k, v]) => [k, v.name, estStats(v.items)]).sort((a, b) => (a[0] === "-") - (b[0] === "-") || b[2].n - a[2].n || a[1].localeCompare(b[1]));
-    people = rows.length ? h("div", { class: "panel est-people" },
-      h("h3", { text: `By person in charge${grpNames ? ` · ${grpNames}` : ""}` }),
-      estPeopleTable(rows, { id: "estPeople", cls: "est-ptable", sel: estView.who, pick: k => { estView.who = estView.who === k ? "" : k; redraw(); } })) : null;
-  }
+  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage or Mold: the estimate's tag in Housecall Pro. In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). The people's tiles: each department's people from Reports (the ones under With get the estimates they're assigned to in Housecall Pro; its In charge gets the rest); tap one to see only his. Tap group tiles to pick any mix of groups.");
+  // the people (whoever sees them all): a tile each, under the groups; without names in Reports, a word on where to set them
+  const inGrp = whoPicked || allOn ? list : list.filter(e => sel.includes(grpOf.get(e)));
+  const people = !all ? null : crew.length ? h("div", { class: "est-crew", id: "estCrew", style: `--c:${crew.length}` }, crew.map(crewTile))
+    : isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Set each department's people in Reports (In charge, With) to get a tile for each of them here." }) : null;
   // the list: filters (status, person, search), then the estimates, newest first
   const ownerNames = all ? [...new Set(inGrp.flatMap(e => ownersOf.get(e)))] : [];   // the people of the groups picked
   const who = all && ownerNames.includes(estView.who) ? estView.who : "";
@@ -14311,7 +14329,7 @@ function renderEstimates() {
   const base = inGrp.filter(e => whoOk(e) && qOk(e));
   const shown = base.filter(stOk).sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
   const stCount = k => (k === "all" ? base.length : k === "notsent" ? base.filter(estNotSent).length : base.filter(e => e.st === k).length);
-  const whoSel = all ? h("select", { id: "estWho", "aria-label": "In charge", onchange: ev => { estView.who = ev.target.value; redraw(); } },
+  const whoSel = all ? h("select", { id: "estWho", "aria-label": "In charge", onchange: ev => { estView.who = ev.target.value; if (crew.some(([n]) => n === estView.who)) estView.grps = []; redraw(); } },
     h("option", { value: "", text: "Everyone" }), ownerNames.includes("-") ? h("option", { value: "-", text: "Nobody assigned" }) : null,
     ownerNames.filter(n => n !== "-").sort((a, b) => a.localeCompare(b)).map(name => h("option", { value: name, text: name }))) : null;
   if (whoSel) whoSel.value = [...whoSel.options].some(o => o.value === who) ? who : "";
@@ -14358,7 +14376,7 @@ function renderEstimates() {
       : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates created in these days."
         : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
-  box.replaceChildren(...head, tiles, how, people, listBox);
+  box.replaceChildren(...[...head, tiles, people, how, listBox].filter(Boolean));
 }
 
 /* ---- Estimates › Reports: a department's report for the meeting (a week, a month or a year): estimates created and
