@@ -1087,6 +1087,8 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-bar .r { margin-left: auto; text-align: right; font-size: .8rem; color: var(--muted); } .rev-ar-bar .go { font-size: 1.4rem; color: var(--muted); }
 @media (max-width: 1399px) { .rev-ar { display: none; } .rev-ar-bar { display: flex; } }
 .rv-unpaid-body { display: flex; flex-direction: column; gap: 10px; }
+.hcp-link { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 3px; } .hcp-link:hover { text-decoration-style: solid; }
+@media print { .hcp-link { color: inherit; text-decoration: none; } }
 .st-own { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); } .st-own p { margin: 0; }
 .tag.st-owner { background: var(--accent-soft); color: var(--accent); }
 .acc .chip-btn:disabled { cursor: default; opacity: .75; }
@@ -12061,8 +12063,8 @@ function revArDlg(dep, from0, to0) {
         h("thead", null, h("tr", null, h("th", { text: "Client" }), h("th", { class: "rv-proj", text: "Project" }), h("th", { class: "rv-inv", text: "Job" }), h("th", { text: "Day" }), h("th", { class: "rv-dep", text: "Department" }),
           h("th", { class: "rv-ch", text: "Charged" }), h("th", { class: "rv-pd", text: "Paid" }), h("th", { text: "Owes" }), h("th", { text: "Days" }))),
         h("tbody", null, shown.map(x => h("tr", { "data-job": x.id, "data-age": revAgeOf(x.age), "data-dep": x.dep },
-          h("th", null, x.client || "–", h("small", { class: "rv-sm", text: [x.proj, `#${x.inv}`].filter(Boolean).join(" · ") })),
-          h("td", { class: "rv-proj", text: x.proj || "–" }), h("td", { class: "rv-inv", text: `#${x.inv}` }), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("th", null, x.client || "–", h("small", { class: "rv-sm" }, rvSmall(x.id, x.inv, [x.proj, x.inv && "#"]))),
+          h("td", { class: "rv-proj", text: x.proj || "–" }), h("td", { class: "rv-inv" }, hcpLink("job", x.id, `#${x.inv}`)), h("td", { class: "rv-day" }, dayText(x.day)),
           h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
           h("td", { class: "rv-ch", text: lbCash(x.c / 100) }), h("td", { class: "rv-pd", text: lbCash(Math.max(0, x.c - x.owes) / 100) }),
           h("td", { class: "rv-owes", text: lbCash(x.owes / 100) }), h("td", { class: "rv-age " + (x.age > 60 ? "old" : x.age > 30 ? "mid" : ""), text: String(x.age) })))),
@@ -12144,8 +12146,8 @@ function unsentDlg(dep) {
         h("thead", null, h("tr", null, h("th", { text: "Client" }), h("th", { class: "rv-proj", text: "Project" }), h("th", { class: "rv-inv", text: "Invoice" }), h("th", { text: "Day" }), h("th", { text: "Days" }),
           h("th", { class: "rv-dep", text: "Department" }), h("th", { class: "rv-ch", text: "Invoice $" }), h("th", { text: "Due" }))),
         h("tbody", null, shown.map(x => h("tr", { "data-job": x.id || "", "data-inv": x.inv || "", "data-dep": x.dep },
-          h("th", null, x.client || "–", h("small", { class: "rv-sm", text: [x.proj, x.inv && `#${x.inv}`].filter(Boolean).join(" · ") })),
-          h("td", { class: "rv-proj", text: x.proj || (x.id ? "–" : "Job not found in Housecall Pro") }), h("td", { class: "rv-inv", text: x.inv ? `#${x.inv}` : "–" }), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("th", null, x.client || "–", h("small", { class: "rv-sm" }, rvSmall(x.id, x.inv, [x.proj, x.inv && "#"]))),
+          h("td", { class: "rv-proj", text: x.proj || (x.id ? "–" : "Job not found in Housecall Pro") }), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
           h("td", { class: "rv-age " + (x.age > 30 ? "old" : x.age > 7 ? "mid" : ""), text: x.age === null ? "–" : String(x.age) }),
           h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
           h("td", { class: "rv-ch", text: lbCash((Number(x.amt) || 0) / 100) }), h("td", { class: "rv-owes", text: lbCash((Number(x.due) || 0) / 100) })))),
@@ -12163,6 +12165,15 @@ function unsentDlg(dep) {
   if (!unsentDoc) unsentLoad(false);
 }
 
+/** A link that opens an estimate or a job (its invoice) in Housecall Pro, in a new tab; just the text without its id. */
+const HCP_WEB = "https://pro.housecallpro.com/app/";
+function hcpLink(kind, id, text) {
+  if (!id || !/^[A-Za-z0-9_-]{4,80}$/.test(String(id))) return text;
+  return h("a", { class: "hcp-link", href: `${HCP_WEB}${kind === "est" ? "estimates" : "jobs"}/${encodeURIComponent(id)}`, target: "_blank", rel: "noopener noreferrer",
+    title: "Open in Housecall Pro", onclick: ev => ev.stopPropagation() }, text);
+}
+/** "project · #1234 · Complete" for a phone, the number a link to the job in Housecall Pro. */
+const rvSmall = (id, inv, parts) => { const out = []; parts.filter(Boolean).forEach((t, i) => { if (i) out.push(" · "); out.push(t === "#" ? hcpLink("job", id, `#${inv}`) : t); }); return out; };
 /** A tile's jobs: every visit of from..to (canceled left out) for a department or all of them, by day: client, project,
  *  job, day, department, charged, paid, owes, status. Read from Housecall Pro with each day (the Jobs column). */
 const revStatus = ws => { const t = String(ws || "").replace(/\s*(un)?rated$/i, "").trim(); return t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : "–"; };
@@ -12200,8 +12211,8 @@ function revJobsDlg(dep, from, to0) {
         h("thead", null, h("tr", null, h("th", { text: "Client" }), h("th", { class: "rv-proj", text: "Project" }), h("th", { class: "rv-inv", text: "Job" }), h("th", { text: "Day" }), h("th", { class: "rv-dep", text: "Department" }),
           h("th", { class: "rv-ch", text: "Charged" }), h("th", { class: "rv-pd", text: "Paid" }), h("th", { text: "Owes" }), h("th", { class: "rv-st", text: "Status" }))),
         h("tbody", null, shown.map(x => h("tr", { "data-job": x.id, "data-dep": x.dep, class: x.first ? "" : "later" },
-          h("th", null, x.client || "–", h("small", { class: "rv-sm", text: [x.proj, x.inv && `#${x.inv}`, revStatus(x.ws)].filter(Boolean).join(" · ") })),
-          h("td", { class: "rv-proj", text: (x.proj || "–") + (x.first ? "" : " (a later visit)") }), h("td", { class: "rv-inv", text: x.inv ? `#${x.inv}` : "–" }), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("th", null, x.client || "–", h("small", { class: "rv-sm" }, rvSmall(x.id, x.inv, [x.proj, x.inv && "#", revStatus(x.ws)]))),
+          h("td", { class: "rv-proj", text: (x.proj || "–") + (x.first ? "" : " (a later visit)") }), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
           h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
           h("td", { class: "rv-ch", text: lbCash(x.c / 100) }), h("td", { class: "rv-pd", text: lbCash(paid(x) / 100) }),
           h("td", { class: "rv-owes" + (x.owes ? "" : " zero"), text: lbCash(x.owes / 100) }), h("td", { class: "rv-st", text: revStatus(x.ws) })))),
@@ -14436,7 +14447,7 @@ function renderEstimates() {
     const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);
     return h("div", { class: "est-row", "data-id": e.id, "data-g": estGroup(e), "data-st": e.st },
       h("span", { class: "est-day", text: estDayShort(e.day, today) }),
-      h("span", { class: "est-no", text: `#${e.n}` }),
+      h("span", { class: "est-no" }, hcpLink("est", e.id, `#${e.n}`)),
       h("span", { class: "est-cl" }, h("b", { text: e.client || "No name" }),
         h("small", { text: e.addr })),
       // water or mold: the estimate's tag in Housecall Pro (locked); no tag: says so
@@ -14590,7 +14601,7 @@ function estReportEl(d, name) {
     F.follow.length ? h("table", { class: "er-table" },
       h("thead", null, h("tr", null, ["Client", "#", "Age", "$", "Chance", "In charge"].map((x, i) => h("th", { class: i >= 2 && i <= 4 ? "num" : "", text: x })))),
       h("tbody", null, F.follow.map(e => h("tr", null, h("td", null, d === "r" ? h("i", { class: "est-dot " + estGroup(e), title: (EST_GROUPS.find(g => g[0] === estGroup(e)) || [])[1] }) : null, h("b", { text: e.client || "No name" }), estNotSent(e) ? h("small", { class: "est-ns", text: " not sent" }) : null),
-        h("td", { text: `#${e.n}` }), h("td", { class: "num", text: `${fmt(e.age)} d` }), h("td", { class: "num", text: lbMoney(e.est / 100) }), h("td", { class: "num", text: `${Math.round(e.p * 100)}%` }),
+        h("td", null, hcpLink("est", e.id, `#${e.n}`)), h("td", { class: "num", text: `${fmt(e.age)} d` }), h("td", { class: "num", text: lbMoney(e.est / 100) }), h("td", { class: "num", text: `${Math.round(e.p * 100)}%` }),
         h("td", { text: estOwners(e).filter(x => x !== "-").join(", ") || "–" })))))
       : h("p", { class: "lb-sub", text: "No open estimates worth chasing right now." }));
   // Restoration: water damage and mold apart (and the ones not sorted yet)
