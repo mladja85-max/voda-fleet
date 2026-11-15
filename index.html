@@ -7468,6 +7468,7 @@ function openSettings() {
 }
 
 const ST_API = 63;                                       // the Google script version with Settings' owner
+const ST_PAY_API = 66;                                   // ... who switches VODA Payroll for himself too
 /** Can I change Settings (Users and invites)? Its owner and whoever he lets; nobody owns them yet: every admin. */
 function stCan() {
   const o = session && session.owner;
@@ -7519,10 +7520,10 @@ async function openUsers() {
     const access = Array.isArray(u.access) ? u.access.slice() : ["trucks"];
     // Payroll: only admins switched on see it; an admin who sees it switches it for the others (the first time: anyone)
     const hasPay = Array.isArray(u.access) && u.access.includes("payroll");
-    const canPay = apiLevel >= PAY_API && u.status !== "invited" && (payMe ? !me : !payAny);
+    const canPay = apiLevel >= PAY_API && u.status !== "invited" && (apiLevel >= ST_PAY_API && owner && session.id === owner ? true : payMe ? !me : !payAny);   // the owner of Settings: anyone, himself too
     const pay = u.role !== "admin" || apiLevel < PAY_API ? null
       : canPay ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "payroll", id: "pay-" + (u.username || u.id), "aria-pressed": String(hasPay),
-          onclick: async () => { const out = await call("setPayroll", { id: u.id, on: !hasPay }, me ? "VODA Payroll is on for you: Leaderboard > VODA Payroll" : `${u.name} ${hasPay ? "no longer sees" : "now sees"} VODA Payroll`); if (out && me) refresh(true); } }, me ? "Turn on VODA Payroll for me" : "VODA Payroll")
+          onclick: async () => { const out = await call("setPayroll", { id: u.id, on: !hasPay }, me ? (hasPay ? "VODA Payroll is off for you (tap it again to see it)" : "VODA Payroll is on for you: Leaderboard > VODA Payroll") : `${u.name} ${hasPay ? "no longer sees" : "now sees"} VODA Payroll`); if (out && me) refresh(true); } }, me && !hasPay && !payAny ? "Turn on VODA Payroll for me" : "VODA Payroll")
       : h("span", { class: "user-meta", text: hasPay ? "Sees VODA Payroll" : "No VODA Payroll" });
     // Price changes: only admins switched on mark them checked. A tap on the chip switches it on or off (✓ = on): an admin
     // who sees VODA Payroll or checks price changes can, for anyone (himself too); the first time, any admin
