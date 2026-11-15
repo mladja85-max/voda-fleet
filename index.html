@@ -1216,6 +1216,7 @@ dialog#dlg[open] .rv-unpaid .rv-unpaid-body > .lb-scroll { flex: 1; min-height: 
 .mkt-sp #mktSpNewName { text-align: left; }
 .mkt-impsum { margin-top: 8px; }
 dialog#dlg:has(.mkt-dlg) { width: min(620px, calc(100% - 24px)); }
+dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: room for its tables on a PC */
 @media (max-width: 760px) {
   .mkt-sp { grid-template-columns: minmax(0, 1fr) 7.5em; }
   .mkt-lead { grid-template-columns: minmax(0, 1fr); gap: 4px; }
@@ -2170,6 +2171,11 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-ptable th { text-align: left; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .est-ptable td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
 .est-ptable .num { text-align: right; white-space: nowrap; }
+.est-pwrap { overflow-x: auto; max-width: 100%; } .est-pwrap th, .est-pwrap td:first-child { white-space: nowrap; }
+.est-pwrap .g { border-left: 1px solid var(--line); }
+.est-pwrap th:first-child, .est-pwrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); }   /* the names stay put when it scrolls sideways */
+.est-pwrap .est-ptable tbody tr:hover td:first-child { background: linear-gradient(var(--surface-2), var(--surface-2)), var(--surface); }
+.est-pwrap tr.on td:first-child { background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface); } .est-pwrap th.g, .est-pwrap td.g { padding-left: 12px; }
 .est-ptable tbody tr { cursor: pointer; } .est-ptable tbody tr:hover { background: var(--surface-2); }
 .est-ptable tbody tr.on { background: var(--accent-soft); } .est-ptable td.muted { color: var(--muted); font-style: italic; }
 .est-people, .est-list { grid-template-columns: minmax(0, 1fr); }
@@ -2201,11 +2207,8 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   .est-day { grid-area: meta; font-size: .78rem; } .est-no { grid-area: meta; font-size: .78rem; margin-left: 52px; }
   .est-tiles, .est-tiles.two-rows { grid-template-columns: 1fr 1fr; } .est-tiles .est-all, .est-tiles.two-rows .est-all { grid-column: 1 / -1; grid-row: auto; }
   .est-filters .seg-btn { padding: 6px 8px; font-size: .82rem; gap: 4px; } .est-filters select { flex: 1 1 140px; }
-  /* by person: five columns that fit (In charge, Est., Not sent, Rate, Rate $), the name wraps */
-  .est-ptable { table-layout: fixed; }
-  .est-ptable th:nth-child(3), .est-ptable td:nth-child(3), .est-ptable th:nth-child(4), .est-ptable td:nth-child(4), .est-ptable th:nth-child(8), .est-ptable td:nth-child(8), .est-ptable th:nth-child(9), .est-ptable td:nth-child(9) { display: none; }
-  .est-ptable th:first-child { width: 38%; } .est-ptable th, .est-ptable th.num { white-space: normal; line-height: 1.2; vertical-align: bottom; }
-  .est-ptable td:first-child { overflow-wrap: anywhere; }
+  /* by person: scrolls sideways (the names stay put, and wrap) */
+  .est-pwrap th:first-child, .est-pwrap td:first-child { min-width: 112px; max-width: 132px; white-space: normal; overflow-wrap: anywhere; box-shadow: 1px 0 0 var(--line); }
   /* the status buttons: two rows of three, nothing sliding sideways */
   .est-stseg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; overflow: visible; }
   .est-stseg .seg-btn { justify-content: center; padding: 7px 4px; }
@@ -2277,13 +2280,14 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 @media (max-width: 700px) { .er-tiles { grid-template-columns: 1fr 1fr; } .er-table { font-size: .8rem; } .er-table td, .er-table th { padding: 5px 3px; }
   #erFollow th:nth-child(2), #erFollow td:nth-child(2), #erFollow th:nth-child(6), #erFollow td:nth-child(6) { display: none; }
   #erKinds th:nth-child(3), #erKinds td:nth-child(3), #erKinds th:nth-child(5), #erKinds td:nth-child(5) { display: none; }
-  #erPeople th:nth-child(5), #erPeople td:nth-child(5), #erPeople th:nth-child(7), #erPeople td:nth-child(7) { display: none; } }
+ }
 @media print {
   #printReport.pr-est { color: #000; } #printReport.pr-est .er { gap: 6pt; }
   #printReport.pr-est .er-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; }
   #printReport.pr-est .er-tile, #printReport.pr-est .er-goal { border: 1px solid #999; border-radius: 6pt; padding: 5pt 7pt; break-inside: avoid; }
   #printReport.pr-est .er-tile b { font-size: 16pt; } #printReport.pr-est h4 { font-size: 10pt; margin: 8pt 0 2pt; }
   #printReport.pr-est .goal-bar { display: block; height: 5pt; border: 1px solid #999; } #printReport.pr-est .goal-bar i { display: block; height: 100%; background: #555; }
+  #printReport .est-pwrap { overflow: visible; } #printReport .est-pwrap th, #printReport .est-pwrap td { position: static; box-shadow: none; }
   #printReport.pr-est .est-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; } #printReport.pr-est th.num { text-align: right; } #printReport.pr-est h4 { break-after: avoid; } #printReport.pr-est .er-table tr { break-inside: avoid; }
   #printReport.pr-est .er-table td, #printReport.pr-est .er-table th { padding: 2.5pt 5pt; } #printReport.pr-est .er-note { font-size: 8pt; }
 }
@@ -14030,15 +14034,32 @@ function estAuto() {
 }
 /** Added up: estimates (canceled ones left out), approved, open, declined; dollars estimated and approved. */
 function estStats(list) {
-  const s = { n: 0, appr: 0, open: 0, ns: 0, decl: 0, canc: 0, val: 0, apprVal: 0 };
+  const s = { n: 0, appr: 0, open: 0, ns: 0, decl: 0, canc: 0, val: 0, apprVal: 0, openVal: 0, nsVal: 0 };
   for (const e of list) {
     if (e.st === "canceled") { s.canc++; continue; }
-    s.n++; s.val += estValue(e);
-    if (e.st === "approved") { s.appr++; s.apprVal += estValue(e); } else if (e.st === "open") { s.open++; if (estNotSent(e)) s.ns++; } else s.decl++;
+    const v = estValue(e);
+    s.n++; s.val += v;
+    if (e.st === "approved") { s.appr++; s.apprVal += v; } else if (e.st === "open") { s.open++; s.openVal += v; if (estNotSent(e)) { s.ns++; s.nsVal += v; } } else s.decl++;
   }
   return s;
 }
 const estPct = (a, b) => (b ? `${Math.round(a / b * 100)}%` : "–");
+/** By person in charge: estimates, approved, open and not sent, each as a count and dollars (and approved and open as a
+ *  share of the estimates, and not sent too). rows: [key, name, estStats]; pick(key) makes a row a filter. A phone scrolls it sideways
+ *  with the names held in place. */
+const EST_PCOLS = [["Estimates #", "g"], ["Estimates $"], ["Approved #", "g"], ["Approved $"], ["Approved %"], ["Open #", "g"], ["Open $"], ["Open %"], ["Not sent #", "g"], ["Not sent $"], ["Not sent %"]];
+function estPeopleTable(rows, { id, cls, pick, sel } = {}) {
+  const td = (text, c, bold) => h("td", { class: "num" + (c ? " " + c : "") }, bold ? h("b", { text }) : text);
+  return h("div", { class: "est-pwrap" }, h("table", { class: cls, id },
+    h("thead", null, h("tr", null, h("th", { text: "In charge" }), EST_PCOLS.map(([t, g]) => h("th", { class: "num" + (g ? " g" : ""), text: t })))),
+    h("tbody", null, rows.map(([k, name, s]) => h("tr", pick ? { "data-who": k, class: sel === k ? "on" : "", tabindex: "0", title: "Show only these",
+      onclick: () => pick(k), onkeydown: ev => { if (ev.key === "Enter") pick(k); } } : { "data-who": k },
+      h("td", { class: k === "-" ? "muted" : "" }, name),
+      td(fmt(s.n), "g"), td(lbMoney(s.val / 100)),
+      td(fmt(s.appr), "g"), td(lbMoney(s.apprVal / 100)), td(estPct(s.appr, s.n), "", true),
+      td(fmt(s.open), "g"), td(lbMoney(s.openVal / 100)), td(estPct(s.open, s.n)),
+      td(fmt(s.ns), "g" + (s.ns ? " est-ns" : "")), td(lbMoney(s.nsVal / 100), s.ns ? "est-ns" : ""), td(estPct(s.ns, s.n), s.ns ? "est-ns" : ""))))));
+}
 const estDayShort = (day, today) => { const d = lbDate(day); return `${MONTHS[d.getMonth()]} ${d.getDate()}${day.slice(0, 4) !== today.slice(0, 4) ? `, ${day.slice(0, 4)}` : ""}`; };
 const estAge = (day, today) => Math.max(0, Math.round((lbDate(today) - lbDate(day)) / 864e5));
 
@@ -14147,15 +14168,7 @@ function renderEstimates() {
     const rows = [...by.entries()].map(([k, v]) => [k, v.name, estStats(v.items)]).sort((a, b) => (a[0] === "-") - (b[0] === "-") || b[2].n - a[2].n || a[1].localeCompare(b[1]));
     people = rows.length ? h("div", { class: "panel est-people" },
       h("h3", { text: `By person in charge${grp === "all" ? "" : ` · ${EST_GROUPS.find(g => g[0] === grp)[1]}`}` }),
-      h("table", { class: "est-ptable", id: "estPeople" },
-        // (a phone: shorter headings; Approved, Open, Estimated $ and Approved $ left out so it fits the screen)
-        h("thead", null, h("tr", null, ["In charge", ["Estimates", "Est."], "Approved", "Open", "Not sent", "Rate", "Rate $", "Estimated $", "Approved $"].map((t, i) =>
-          h("th", { class: i ? "num" : "" }, Array.isArray(t) ? [h("span", { class: "t-long", text: t[0] }), h("span", { class: "t-short", text: t[1] })] : t)))),
-        h("tbody", null, rows.map(([k, name, s]) => h("tr", { "data-who": k, class: estView.who === k ? "on" : "", tabindex: "0", title: "Show only these",
-          onclick: () => { estView.who = estView.who === k ? "" : k; redraw(); }, onkeydown: ev => { if (ev.key === "Enter") { estView.who = estView.who === k ? "" : k; redraw(); } } },
-          h("td", { class: k === "-" ? "muted" : "" }, name), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }), h("td", { class: "num", text: fmt(s.open) }),
-          h("td", { class: "num" + (s.ns ? " est-ns" : ""), text: fmt(s.ns) }),
-          h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) }), h("td", { class: "num", text: lbMoney(s.val / 100) }), h("td", { class: "num", text: lbMoney(s.apprVal / 100) })))))) : null;
+      estPeopleTable(rows, { id: "estPeople", cls: "est-ptable", sel: estView.who, pick: k => { estView.who = estView.who === k ? "" : k; redraw(); } })) : null;
   }
   // the list: filters (status, person, search), then the estimates, newest first
   const who = all ? estView.who : "";
@@ -14355,11 +14368,7 @@ function estReportEl(d, name) {
     h("tbody", null, R.kinds.map(k => h("tr", { "data-k": k.k }, h("td", { class: "er-kn" }, h("i", { class: "est-dot " + k.k }), h("b", null, k.k === "w" ? [h("span", { class: "t-long", text: k.name }), h("span", { class: "t-short", text: "Water" })] : k.name)),
       h("td", { class: "num", text: fmt(k.cur.n) }), h("td", { class: "num", text: lbMoney(k.cur.val / 100) }), h("td", { class: "num", text: fmt(k.appr.n) }), h("td", { class: "num", text: lbMoney(k.appr.val / 100) }),
       h("td", { class: "num" }, h("b", { text: estPct(k.cur.appr, k.cur.n) })), h("td", { class: "num", text: lbMoney(k.likely / 100) })))));
-  const people = h("table", { class: "er-table", id: "erPeople" },
-    h("thead", null, h("tr", null, ["In charge", "Created", "Approved", "Rate", "Rate $", "$ estimated", "$ approved"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
-    h("tbody", null, R.people.map(([n, s]) => h("tr", null, h("td", { text: n }), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }),
-      h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) }),
-      h("td", { class: "num", text: lbMoney(s.val / 100) }), h("td", { class: "num", text: lbMoney(s.apprVal / 100) })))));
+  const people = estPeopleTable(R.people.map(([n, st]) => [n, n, st]), { id: "erPeople", cls: "er-table" });
   return h("div", { class: "er", "data-d": d }, head, tiles,
     kinds ? [h("h4", { text: "Water damage and mold" }), kinds, h("small", { class: "er-note", text: "Created and rate: estimates made in these days. Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
     h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
