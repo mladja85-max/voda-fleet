@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 60;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 61;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -331,6 +331,9 @@ function doPost(e) {
       case "revSync":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
+      case "unsentRead":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(unsentRead_(req));
       case "priceList":
         if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(priceList_(user, false));
@@ -3766,6 +3769,97 @@ function revOut_(row) {
   const src = parse(row[12]), unpaid = parse(row[13]), jobs = parse(row[14]);
   return row.slice(1, 10).concat([Date.parse(row[10]) || 0, row[11], src && typeof src === "object" && !Array.isArray(src) ? src : null, Array.isArray(unpaid) ? unpaid : null,
     Array.isArray(jobs) ? jobs : null]);
+}
+// Invoices not sent (Operations): finished jobs whose invoice still owes and was never sent to the client, as Housecall
+// Pro's Invoices › Unsent has them. Read when the app asks (kept 5 minutes, so phones opening Operations together read
+// once): the invoices with something still due since January 1 of last year (/invoices), the ones with no "sent", each
+// matched to its job for the department, client and day (the Revenue tab's jobs, else read from Housecall Pro); only
+// finished jobs count. When /invoices can't be read, the Revenue tab's finished jobs that still owe have their invoices
+// read one by one instead (/jobs/{id}/invoices).
+const UNSENT_CACHE = "unsent_v1", UNSENT_PAGES = 20, UNSENT_JOBS = 80, UNSENT_ALT = 300;
+/** The Revenue tab's jobs (every day read), by job id and by job #: the latest visit of each. */
+function unsentJobs_() {
+  const rows = revRows_(revSheet_(false)), byId = {}, byInv = {};
+  Object.keys(rows).sort().forEach(function (d) {
+    let js = null;
+    try { js = JSON.parse(rows[d][14] || "null"); } catch (e) { js = null; }
+    if (!Array.isArray(js)) return;
+    js.forEach(function (x) {
+      const j = { id: String(x[0] || ""), inv: String(x[1] || ""), client: String(x[2] || ""), dep: "rcp".indexOf(String(x[3] || "")) >= 0 && x[3] ? String(x[3]) : "o",
+        c: Number(x[4]) || 0, owes: Number(x[5]) || 0, proj: String(x[6] || ""), ws: String(x[7] || ""), day: d };
+      if (j.id) byId[j.id] = j;
+      if (j.inv) byInv[j.inv] = j;
+    });
+  });
+  return { byId: byId, byInv: byInv };
+}
+const unsentDone_ = ws => /^complete/i.test(String(ws || "").trim());   // finished (rated or not)
+const unsentList_ = d => (Array.isArray(d) ? d : d && Array.isArray(d.invoices) ? d.invoices : d && Array.isArray(d.data) ? d.data : []);
+/** An invoice that still owes, was never sent and isn't canceled. */
+function unsentOpen_(i) {
+  return !!i && (Number(i.due_amount) || 0) > 0 && !i.sent_at && !/cancel|void|paid/i.test(String(i.status || ""));
+}
+/** A job read from Housecall Pro, as the Revenue tab keeps one. */
+function unsentJobFrom_(job, tz) {
+  const t = hcpJobType_(job), at = new Date((job.work_timestamps && job.work_timestamps.completed_at) || (job.schedule && job.schedule.scheduled_start) || "");
+  return { id: String(job.id || ""), inv: String(job.invoice_number || ""), client: hcpClient_(job), dep: revDept_(t), c: Number(job.total_amount) || 0,
+    owes: Number(job.outstanding_balance) || 0, proj: String(job.description || t || "").replace(/\s+/g, " ").trim().slice(0, 80), ws: String(job.work_status || "").slice(0, 30),
+    day: isNaN(at.getTime()) ? "" : Utilities.formatDate(at, tz, "yyyy-MM-dd") };
+}
+/** One line of the list: { id (job), inv (invoice #), client, dep, amt ¢, due ¢, proj, ws, day }. */
+function unsentItem_(i, j) {
+  return { id: j ? j.id : String(i.job_id || ""), inv: String(i.invoice_number || (j && j.inv) || ""), client: (j && j.client) || "", dep: j ? j.dep : "o",
+    amt: Math.round(Number(i.amount) || 0), due: Math.round(Number(i.due_amount) || 0), proj: j ? j.proj : "", ws: j ? j.ws : "", day: (j && j.day) || "" };
+}
+function unsentRead_(req) {
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  if (!req.force && cache) { try { const c = cache.get(UNSENT_CACHE); if (c) return Object.assign(JSON.parse(c), { cached: true }); } catch (e) { /* read it again */ } }
+  if (!hcpKey_()) return { ok: false, error: "no_key" };
+  const tz = Session.getScriptTimeZone(), J = unsentJobs_(), since = (new Date().getFullYear() - 1) + "-01-01";
+  let items = [], src = "invoices", more = false;
+  // the invoices with something still due, page by page
+  const open = [];
+  let failed = null;
+  for (let page = 1; page <= UNSENT_PAGES; page++) {
+    const r = hcpGet_("/invoices", { amount_due_min: 1, created_at_min: hcpDayStart_(since), page: page, page_size: 100 });
+    if (r.error) { failed = r; break; }
+    const got = unsentList_(r.data);
+    got.forEach(function (i) { if (unsentOpen_(i)) open.push(i); });
+    const total = Number(r.data && r.data.total_pages) || 0;
+    if (!got.length || page >= total) break;
+    if (page === UNSENT_PAGES) more = true;
+  }
+  if (failed && failed.error !== "hcp_http") return { ok: false, error: failed.error, status: failed.status || 0 };
+  if (!failed) {
+    // each one's job: from the Revenue tab, else read from Housecall Pro (up to UNSENT_JOBS)
+    const find = function (i) {
+      const id = String(i.job_id || (i.job && i.job.id) || ""), n = String(i.invoice_number || "");
+      return (id && J.byId[id]) || J.byInv[n] || J.byInv[n.replace(/-\d+$/, "")] || J.byInv[n.replace(/-\d+$/, "") + "-1"] || null;
+    };
+    const ask = [];
+    open.forEach(function (i) { const id = String(i.job_id || (i.job && i.job.id) || ""); if (!find(i) && id && ask.indexOf(id) < 0 && ask.length < UNSENT_JOBS) ask.push(id); });
+    hcpGetAll_(ask.map(function (id) { return { path: "/jobs/" + encodeURIComponent(id) }; })).forEach(function (r) {
+      const job = r && !r.error && r.data ? (r.data.job || r.data) : null;
+      if (job && job.id) J.byId[String(job.id)] = unsentJobFrom_(job, tz);
+    });
+    open.forEach(function (i) { const j = find(i); if (!j || unsentDone_(j.ws)) items.push(unsentItem_(i, j)); });
+  } else {
+    // /invoices can't be read: the finished jobs that still owe (Revenue tab), their invoices one by one
+    src = "jobs";
+    const cand = Object.keys(J.byId).map(function (k) { return J.byId[k]; }).filter(function (j) { return j.owes > 0 && unsentDone_(j.ws) && j.day >= since; })
+      .sort(function (a, b) { return a.day < b.day ? 1 : -1; });
+    if (cand.length > UNSENT_ALT) more = true;
+    const list = cand.slice(0, UNSENT_ALT);
+    hcpGetAll_(list.map(function (j) { return { path: "/jobs/" + encodeURIComponent(j.id) + "/invoices" }; })).forEach(function (r, k) {
+      if (!r || r.error) return;
+      unsentList_(r.data).forEach(function (i) { if (unsentOpen_(i)) items.push(unsentItem_(i, list[k])); });
+    });
+  }
+  items.sort(function (a, b) { return (a.day || "9") < (b.day || "9") ? -1 : (a.day || "9") > (b.day || "9") ? 1 : b.due - a.due; });
+  const out = { ok: true, at: new Date().toISOString(), src: src, more: more, items: items.slice(0, 500) };
+  if (cache) { try { cache.put(UNSENT_CACHE, JSON.stringify(out), 300); } catch (e) { /* too big to keep: read again next time */ } }
+  return out;
 }
 /** Clients' names and projects in Unpaid go only to those who see Operations (Marketing alone gets the amounts). */
 function revPrivate_(out, user) {
