@@ -39,6 +39,7 @@
   --soon-bg: #fcefd3;
   --due: #c0281a;
   --due-bg: #fde6e3;
+  --est-all: #2b3566; --est-p: #c97a10;   /* Estimates' tiles: All estimates navy, Repairs amber */
   --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 2px 10px rgba(16, 24, 40, .06);
   --radius: 14px;
   --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -50,6 +51,7 @@
     --bg: #0c1117; --surface: #151d27; --surface-2: #19222d; --ink: #e7ecf2; --muted: #9babbc; --line: #273241;
     --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45; --clean: #4fd1c0; --clean-bg: #12302c;
     --ok: #55c57f; --ok-bg: #12301f; --soon: #f0b54d; --soon-bg: #372a10; --due: #ff8072; --due-bg: #3d1814;
+    --est-all: #a9b4e8; --est-p: #f0b54d;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
     color-scheme: dark;
   }
@@ -58,6 +60,7 @@
   --bg: #0c1117; --surface: #151d27; --surface-2: #19222d; --ink: #e7ecf2; --muted: #9babbc; --line: #273241;
   --accent: #7ea6ff; --accent-ink: #0b1320; --accent-soft: #1b2a45; --clean: #4fd1c0; --clean-bg: #12302c;
   --ok: #55c57f; --ok-bg: #12301f; --soon: #f0b54d; --soon-bg: #372a10; --due: #ff8072; --due-bg: #3d1814;
+  --est-all: #a9b4e8; --est-p: #f0b54d;
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
   color-scheme: dark;
 }
@@ -2176,6 +2179,18 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-tile { position: relative; }
 .est-tile.picked { border-width: 2px; padding: 10px 13px 11px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), var(--shadow); }
 .est-tile.picked small { padding-right: 24px; }
+/* the tiles' colors (a soft tint, like Operations): All estimates navy, Restoration blue (its row a lighter blue),
+   Cleaning green, Repairs amber; a picked tile keeps its color, a little stronger */
+#estTiles .est-tile { --tc: var(--accent); }
+#estTiles .est-all { --tc: var(--est-all); } #estTiles .est-tile[data-g=c] { --tc: var(--ok); } #estTiles .est-tile[data-g=p] { --tc: var(--est-p); }
+#estTiles .est-all, #estTiles .est-tile[data-g=r], #estTiles .est-tile[data-g=c], #estTiles .est-tile[data-g=p] { background: color-mix(in srgb, var(--tc) 9%, var(--surface)); border-color: color-mix(in srgb, var(--tc) 32%, var(--line)); }
+#estTiles .est-tile[data-g=p]:not(.picked) { background: color-mix(in srgb, var(--tc) 13%, var(--surface)); }   /* amber is light: a little more of it */
+#estRestRow .est-tile { background: color-mix(in srgb, var(--tc) 4%, var(--surface)); border-color: color-mix(in srgb, var(--tc) 20%, var(--line)); }
+#estTiles .est-all > small, #estTiles .est-tile[data-g=r] > small, #estTiles .est-tile[data-g=c] > small, #estTiles .est-tile[data-g=p] > small { color: color-mix(in srgb, var(--tc) 85%, var(--ink)); }
+#estTiles .est-tile[data-g=c] .est-dot, #estTiles .est-tile[data-g=p] .est-dot { background: var(--tc); }
+#estTiles .est-tile[aria-pressed="true"] { border-color: var(--tc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tc) 35%, transparent), var(--shadow); }
+#estTiles .est-tile.picked { background: color-mix(in srgb, var(--tc) 16%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 30%, transparent), var(--shadow); }
+#estTiles .est-check { background: var(--tc); color: var(--surface); }
 /* the tiles: the departments in a row (each with its In charge), then Restoration's row (water, mold, not sorted, its supervisors) */
 .est-tiles2 { display: grid; gap: 10px; }
 .est-row1 { display: grid; grid-template-columns: minmax(0, 1.25fr) repeat(var(--c, 3), minmax(0, 1fr)); gap: 10px; }
@@ -7418,7 +7433,7 @@ function openSettings() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Settings" }),
     h("div", { class: "st-me" }, h("span", { class: "st-av", "aria-hidden": "true", text: (name[0] || "?").toUpperCase() }),
-      h("span", null, h("b", { text: name }), h("small", { text: `${session && session.username ? "@" + session.username + " · " : ""}${isAdmin() ? "Admin" : "Technician"}` }))),
+      h("span", null, h("b", { text: name }), h("small", { text: `${session && session.username ? "@" + session.username + " · " : ""}${isAdmin() ? "Admin" : "Non-admin"}` }))),
     team.length ? h("p", { class: "st-grp", text: "Team and pay" }) : null,
     team.length ? h("div", { class: "st-list", id: "st-team" }, team) : null,
     isAdmin() && apiLevel >= HCP_API ? h("p", { class: "st-grp", text: "Connections" }) : null,
@@ -7467,8 +7482,8 @@ async function openUsers() {
   const row = u => {
     const me = session && u.id === session.id;
     const status = u.status === "invited" ? `Invite not used yet (code works until ${fmtWhen(u.inviteUntil)})` : u.status === "disabled" ? "Turned off" : `Last sign-in: ${fmtAt(u.lastLogin)}`;
-    const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => call("saveUser", { id: u.id, role: e.target.value }, `${u.name} is now ${e.target.value === "admin" ? "an Admin" : "a Technician"}`) },
-      h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
+    const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => call("saveUser", { id: u.id, role: e.target.value }, `${u.name} is now ${e.target.value === "admin" ? "an Admin" : "a Non-admin"}`) },
+      h("option", { value: "tech", text: "Non-admin" }), h("option", { value: "admin", text: "Admin" }));
     role.value = u.role;
     const access = Array.isArray(u.access) ? u.access.slice() : ["trucks"];
     // Payroll: only admins switched on see it; an admin who sees it switches it for the others (the first time: anyone)
@@ -7525,12 +7540,12 @@ async function openUsers() {
   const inviteAccess = ["trucks"];
   const inviteChips = apiLevel >= SUP_API ? accessChips(inviteAccess, () => {}, "u-acc") : null;
   const roleSel = h("select", { id: "u-role", onchange: () => { if (inviteChips) inviteChips.hidden = roleSel.value === "admin"; } },
-    h("option", { value: "tech", text: "Technician" }), h("option", { value: "admin", text: "Admin" }));
+    h("option", { value: "tech", text: "Non-admin" }), h("option", { value: "admin", text: "Admin" }));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
     h("p", { text: apiLevel >= SUP_API
-      ? "Admins see and do everything. Technicians see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "")
-      : "Admins can do everything. Technicians can view everything and update only TM hours on truckmount trucks." }),
+      ? "Admins see and do everything. Non-admins see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "")
+      : "Admins can do everything. Non-admins can view everything and update only TM hours on truckmount trucks." }),
     h("fieldset", null, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
         h("div", { class: "field" }, h("label", { for: "u-name", text: "Their name" }), h("input", { id: "u-name", type: "text", maxlength: "40", autocomplete: "off", placeholder: "Joe" })),
