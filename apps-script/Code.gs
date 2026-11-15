@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 62;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 63;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -237,17 +237,20 @@ function doPost(e) {
     if (req.action === "login") return json_(withLock_(function () { return login_(req); }));
     const user = authUser_(req.token);
     if (!user) return json_({ ok: false, error: "signed_out" });
-    if (ADMIN_ACTIONS.indexOf(req.action) !== -1 && user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+    if (SETTINGS_ACTIONS.indexOf(req.action) !== -1 ? !canChangeSettings_(user) : req.action === "users" ? user.role !== "admin" && !canChangeSettings_(user)
+      : ADMIN_ACTIONS.indexOf(req.action) !== -1 && user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
     if (TRUCK_ACTIONS.indexOf(req.action) !== -1 && !canSee_(user, "trucks")) return json_({ ok: false, error: "not_allowed" });
     req.user = user;
     req.by = user.name;   // every change is stamped with the signed-in person, whatever the app sends
     switch (req.action) {
       case "me":
-        return json_({ ok: true, user: publicUser_(user) });
+        return json_({ ok: true, user: publicUser_(user), settings: canChangeSettings_(user), owner: settingsOwner_() });
       case "changePasscode":
         return json_(withLock_(function () { return changePasscode_(req); }));
       case "users":
-        return json_({ ok: true, users: readUsers_(usersSheet_()).map(function (x) { return publicUser_(x.u); }) });
+        return json_({ ok: true, owner: settingsOwner_(), users: readUsers_(usersSheet_()).map(function (x) { return publicUser_(x.u); }) });
+      case "settingsOwner":
+        return json_(withLock_(function () { return settingsOwnerPut_(req); }));
       case "invite":
         return json_(withLock_(function () { return invite_(req); }));
       case "saveUser":
@@ -263,7 +266,7 @@ function doPost(e) {
         if (seesTrucks) { try { gps = gpsForApp_(trucks); } catch (e) { gps = null; } }   // GPS details never stop the list from loading
         let supplies = null;
         try { supplies = suppliesForApp_(false, user); } catch (e) { supplies = null; }   // nor do the checklists
-        return json_({ ok: true, trucks: trucks, gps: gps, supplies: supplies, me: publicUser_(user), serverTime: new Date().toISOString() });
+        return json_({ ok: true, trucks: trucks, gps: gps, supplies: supplies, me: Object.assign(publicUser_(user), { owner: settingsOwner_() }), serverTime: new Date().toISOString() });
       }
       case "saveTruck":
         return json_(withLock_(function () { return saveTruck_(req); }));
@@ -758,6 +761,7 @@ function saveUser_(req) {
   const x = all.filter(function (y) { return y.u.id === String(req.id || ""); })[0];
   if (!x) return { ok: false, error: "gone" };
   if (x.u.id === req.user.id) return { ok: false, error: "self" };
+  if (x.u.id === settingsOwner_()) return { ok: false, error: "owner" };
   if (req.remove) {
     if (x.u.status !== "invited") return { ok: false, error: "bad_request" };
     s.deleteRow(x.rowIndex);
@@ -773,6 +777,7 @@ function saveUser_(req) {
     const access = cleanAccess_(req.access);
     if (!access) return { ok: false, error: "bad_request" };
     if (parseAccess_(x.u.access).indexOf(PRICE_CHECK) !== -1) access.push(PRICE_CHECK);   // switched only with setPriceCheck
+    if (parseAccess_(x.u.access).indexOf(SETTINGS) !== -1) access.push(SETTINGS);         // ... and Settings only by its owner
     if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   }
   if (x.u.role !== role || x.u.status !== status) {
@@ -812,6 +817,7 @@ function resetUser_(req) {
   const s = usersSheet_();
   const x = readUsers_(s).filter(function (y) { return y.u.id === String(req.id || ""); })[0];
   if (!x) return { ok: false, error: "gone" };
+  if (x.u.id === settingsOwner_() && req.user.id !== x.u.id) return { ok: false, error: "owner" };
   if (x.u.status === "disabled") return { ok: false, error: "bad_request" };
   const code = newInvite_(x.u);
   writeUser_(s, x.rowIndex, x.u);
@@ -2909,6 +2915,37 @@ function supplyEmailTest() {
 const ACCESS_DEFAULT = ["trucks"];
 const PRICE_CHECK = "pricecheck";   // an admin who marks Housecall Pro price changes checked (switched per admin, like Payroll)
 const PAYROLL = "payroll";   // an admin who sees Leaderboard > Payroll (switched per admin, see setPayroll_)
+// Settings (Users and invites: who signs in, roles, what each sees, invites, passcode resets, turning accounts off, and
+// the VODA Payroll and price-change switches): its owner (Script Property SETTINGS_OWNER, a user id) and whoever he
+// lets change them (SETTINGS in their access). Until someone owns them, every admin can, as before; the first admin to
+// take them owns them (delete the property in Apps Script to start over).
+const SETTINGS = "settings", SETTINGS_ACTIONS = ["invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck"];   // the list itself: admins and them
+function settingsOwner_() { return String(PropertiesService.getScriptProperties().getProperty("SETTINGS_OWNER") || ""); }
+function canChangeSettings_(user) {
+  if (!user) return false;
+  const owner = settingsOwner_();
+  if (!owner) return user.role === "admin";
+  return user.id === owner || parseAccess_(user.access).indexOf(SETTINGS) !== -1;
+}
+/** { claim: true }: an admin takes Settings while nobody owns them. { id, on }: the owner lets someone change them (or
+ *  not). Never the owner himself. */
+function settingsOwnerPut_(req) {
+  const P = PropertiesService.getScriptProperties(), owner = settingsOwner_();
+  if (req.claim) {
+    if (owner) return { ok: false, error: "taken" };
+    if (req.user.role !== "admin") return { ok: false, error: "not_allowed" };
+    P.setProperty("SETTINGS_OWNER", req.user.id);
+    return { ok: true, owner: req.user.id };
+  }
+  if (!owner || req.user.id !== owner) return { ok: false, error: "not_allowed" };
+  const s = usersSheet_(), x = readUsers_(s).filter(function (y) { return y.u.id === String(req.id || ""); })[0];
+  if (!x) return { ok: false, error: "gone" };
+  if (x.u.id === owner) return { ok: false, error: "self" };
+  const access = parseAccess_(x.u.access).filter(function (a) { return a !== SETTINGS; });
+  if (req.on) access.push(SETTINGS);
+  if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }   // his phone picks it up at the next refresh
+  return { ok: true, owner: owner, user: publicUser_(x.u) };
+}
 function parseAccess_(s) {
   s = String(s === null || s === undefined ? "" : s).trim();
   if (!s) return ACCESS_DEFAULT.slice();

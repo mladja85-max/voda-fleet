@@ -1087,6 +1087,9 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-bar .r { margin-left: auto; text-align: right; font-size: .8rem; color: var(--muted); } .rev-ar-bar .go { font-size: 1.4rem; color: var(--muted); }
 @media (max-width: 1399px) { .rev-ar { display: none; } .rev-ar-bar { display: flex; } }
 .rv-unpaid-body { display: flex; flex-direction: column; gap: 10px; }
+.st-own { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); } .st-own p { margin: 0; }
+.tag.st-owner { background: var(--accent-soft); color: var(--accent); }
+.acc .chip-btn:disabled { cursor: default; opacity: .75; }
 /* Operations: invoices not sent (a row under the tiles; each department opens its list) */
 .rev-unsent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .rev-unsent .ru-h { display: grid; margin-right: 2px; } .ru-h small { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); } .ru-h em { font-style: normal; font-size: .72rem; color: var(--muted); }
@@ -5004,7 +5007,7 @@ async function refresh(quiet) {
     if (out.me) {
       const access = Array.isArray(out.me.access) ? out.me.access : ["trucks"];
       roleChanged = session.role !== out.me.role || JSON.stringify(session.access || ["trucks"]) !== JSON.stringify(access);
-      Object.assign(session, { name: out.me.name, role: out.me.role, username: out.me.username, access });
+      Object.assign(session, { name: out.me.name, role: out.me.role, username: out.me.username, access, owner: out.me.owner || "" });
       store.set(K_SESSION, session);
     }
     trucks = sortTrucks(out.trucks || []);
@@ -7424,7 +7427,7 @@ function openSettings() {
   };
   const lbOk = !apiLevel || apiLevel >= LB_API;
   const team = [
-    isAdmin() ? stRow("st-users", "users", "Users and invites", "Who can sign in and what each one sees", openUsers) : null,
+    isAdmin() || stCan() ? stRow("st-users", "users", "Users and invites", stCan() ? "Who can sign in and what each one sees" : "Who can sign in (only the owner of Settings changes it)", openUsers) : null,
     canEditLb() && lbOk ? stRow("st-emp", "emp", "Employees", "Who's on the leaderboard, their unit and role", ev => stWithLb(ev.currentTarget, () => openLbTeams())) : null,
     canSeePayroll() && lbOk ? stRow("st-rates", "pay", "Pay rates", "Everyone's day rate and commissions", ev => stWithLb(ev.currentTarget, () => openPayRates())) : null,
     canSeePayroll() && lbOk ? stRow("st-jobs", "hist", "Job history", "Every job and every change, to download", ev => stWithLb(ev.currentTarget, () => openJobHistory(lbPayView().r))) : null,
@@ -7453,7 +7456,14 @@ function openSettings() {
   $("st-passrow").setAttribute("aria-expanded", "false");
 }
 
-/** Admin: everyone's account, invites, roles, turning accounts off, and passcode resets. */
+const ST_API = 63;                                       // the Google script version with Settings' owner
+/** Can I change Settings (Users and invites)? Its owner and whoever he lets; nobody owns them yet: every admin. */
+function stCan() {
+  const o = session && session.owner;
+  return apiLevel && apiLevel < ST_API || !o ? isAdmin() : session.id === o || (session.access || []).includes("settings");
+}
+/** Admin: everyone's account, invites, roles, turning accounts off, and passcode resets (only the owner of Settings and
+ *  whoever he lets change them; the other admins see the list). */
 async function openUsers() {
   const err = h("p", { class: "dlg-err", role: "alert" });
   const listBox = h("div", { style: "display:grid;gap:8px" }, h("p", { class: "meta", text: "Loading…" }));
@@ -7475,12 +7485,22 @@ async function openUsers() {
   const call = async (action, data, okMsg) => {
     err.textContent = "";
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(); return out; }
-    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
+    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
+      : e && e.error === "not_allowed" && !["setPayroll", "setPriceCheck"].includes(action) ? "Only the owner of Settings and the people he picks can change that." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
       : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
   const fmtAt = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "never";
+  let owner = "", can = stCan();
   const row = u => {
     const me = session && u.id === session.id;
+    const isOwner = !!owner && u.id === owner, hasSt = Array.isArray(u.access) && u.access.includes("settings");
+    // Settings: the owner lets someone change them (or not); the others see who can
+    const st = apiLevel < ST_API || !owner || u.status === "invited" ? null
+      : isOwner ? h("span", { class: "tag st-owner", text: "Owns Settings" })
+      : session.id === owner ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "settings", id: "st-" + (u.username || u.id), "aria-pressed": String(hasSt),
+          title: hasSt ? "Tap to take it away" : "Tap to let them change Settings",
+          onclick: () => call("settingsOwner", { id: u.id, on: !hasSt }, `${u.name} ${hasSt ? "can't change Settings any more" : "can change Settings now"}`) }, "Changes settings")
+      : hasSt ? h("span", { class: "user-meta", text: "Changes settings" }) : null;
     const status = u.status === "invited" ? `Invite not used yet (code works until ${fmtWhen(u.inviteUntil)})` : u.status === "disabled" ? "Turned off" : `Last sign-in: ${fmtAt(u.lastLogin)}`;
     const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => call("saveUser", { id: u.id, role: e.target.value }, `${u.name} is now ${e.target.value === "admin" ? "an Admin" : "a Non-admin"}`) },
       h("option", { value: "tech", text: "Non-admin" }), h("option", { value: "admin", text: "Admin" }));
@@ -7502,7 +7522,8 @@ async function openUsers() {
           title: hasPc ? "Tap to switch off" : "Tap to switch on",
           onclick: () => call("setPriceCheck", { id: u.id, on: !hasPc }, `${me ? "You" : u.name} ${hasPc ? "no longer check" + (me ? "" : "s") : "now check" + (me ? "" : "s")} price changes`) }, "Checks price changes")
       : h("span", { class: "user-meta", text: hasPc ? "Checks price changes" : "Doesn't check price changes" });
-    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }), pay, pc)
+    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }), can ? pay : null, can ? pc : null)
+      : !can ? (() => { const c = accessChips(access.filter(a => a !== "pricecheck"), () => {}, "acc-" + (u.username || u.id)); c.querySelectorAll("button").forEach(b => { b.disabled = true; }); return c; })()
       : apiLevel >= SUP_API ? [accessChips(access.filter(a => a !== "pricecheck"), async (next, name, on) => {
           const out = await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
           if (!out) load();
@@ -7512,10 +7533,10 @@ async function openUsers() {
           hasPc && !access.includes("revenue") ? h("span", { class: "user-meta warn", text: "Tick Operations too, so they see them." }) : null) : null] : null;
     return h("div", { class: "user-row", "data-user": u.username || u.name },
       h("div", { class: "user-top" }, h("strong", { text: u.name }), u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
-        u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null),
+        u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null, st),
       h("span", { class: "user-meta", text: status }),
       sees,
-      me ? null : h("div", { class: "user-acts" }, role,
+      me || !can || isOwner ? null : h("div", { class: "user-acts" }, role,
         u.status === "invited"
           ? [h("button", { class: "btn small", type: "button", text: "New code", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, false); } }),
              h("button", { class: "btn small ghost danger", type: "button", text: "Cancel invite", onclick: () => call("saveUser", { id: u.id, remove: true }, "Invite cancelled") })]
@@ -7529,7 +7550,16 @@ async function openUsers() {
   const load = async () => {
     try {
       const out = await api("users");
+      owner = String(out.owner || ""); session.owner = owner; store.set(K_SESSION, session); can = stCan();
       const users = (out.users || []).slice().sort((a, b) => (a.status === "invited") - (b.status === "invited") || String(a.name).localeCompare(String(b.name)));
+      const ownerName = (users.find(u => u.id === owner) || {}).name || "";
+      stBox.replaceChildren(...(apiLevel < ST_API ? [] : !owner
+        ? [h("p", { class: "meta", text: "Nobody owns Settings yet, so every admin can change them. Take them and only you, and the people you pick, can." }),
+           isAdmin() ? h("button", { class: "btn small primary", type: "button", id: "stClaim", onclick: async () => {
+             if (!confirm("Make you the owner of Settings? Only you, and the people you pick, will change users and what each one sees.")) return;
+             const r = await call("settingsOwner", { claim: true }, "You own Settings now"); if (r) refresh(true); } }, "Make me the owner") : null]
+        : [h("p", { class: "meta", id: "stWho", text: `${ownerName || "The owner"} owns Settings: only ${session.id === owner ? "you" : ownerName || "the owner"} and the people ${session.id === owner ? "you tap Changes settings on" : "he picks"} change users and what each one sees.${can ? "" : " You can see them here."}` })]));
+      inviteBox.hidden = !can;
       const pays = u => u.role === "admin" && u.status === "active" && Array.isArray(u.access) && u.access.includes("payroll");
       payAny = users.some(pays); payMe = users.some(u => session && u.id === session.id && pays(u));
       const pcs = u => u.status === "active" && Array.isArray(u.access) && u.access.includes("pricecheck");
@@ -7537,6 +7567,8 @@ async function openUsers() {
       listBox.replaceChildren(...users.map(row));
     } catch (e) { listBox.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Nothing") })); }
   };
+  const stBox = h("div", { class: "st-own", id: "stOwn" });
+  let inviteBox = null;
   const inviteAccess = ["trucks"];
   const inviteChips = apiLevel >= SUP_API ? accessChips(inviteAccess, () => {}, "u-acc") : null;
   const roleSel = h("select", { id: "u-role", onchange: () => { if (inviteChips) inviteChips.hidden = roleSel.value === "admin"; } },
@@ -7546,7 +7578,8 @@ async function openUsers() {
     h("p", { text: apiLevel >= SUP_API
       ? "Admins see and do everything. Non-admins see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "")
       : "Admins can do everything. Non-admins can view everything and update only TM hours on truckmount trucks." }),
-    h("fieldset", null, h("legend", { text: "Invite someone" }),
+    stBox,
+    inviteBox = h("fieldset", { hidden: !can }, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
         h("div", { class: "field" }, h("label", { for: "u-name", text: "Their name" }), h("input", { id: "u-name", type: "text", maxlength: "40", autocomplete: "off", placeholder: "Joe" })),
         h("div", { class: "field" }, h("label", { for: "u-role", text: "Role" }), roleSel)),
