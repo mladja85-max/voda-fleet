@@ -2243,6 +2243,49 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   border-radius: 12px; background: rgba(4, 14, 48, .45); box-shadow: inset 0 0 0 1px rgba(255, 214, 90, .45); }
 .goal-split .goal-bar { grid-column: 1 / -1; height: 7px; }
 .goal-split-how { grid-column: 1 / -1; margin-top: 6px; font-size: .68rem; color: var(--gw); }
+/* Estimates › Reports */
+.er-list { display: grid; gap: 10px; }
+.er-dept { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.er-dept.later { opacity: .7; }
+.er-open { all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.er-open:disabled { cursor: default; } .er-open:not(:disabled):hover { border-color: var(--accent); }
+.er-name { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.er-who { grid-column: 1; font-size: .84rem; color: var(--muted); } .er-go { grid-row: 1 / span 2; grid-column: 2; font-size: 1.6rem; color: var(--accent); }
+.er-edit { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.er-edit label { display: grid; gap: 3px; flex: 1 1 150px; font-size: .74rem; font-weight: 700; color: var(--muted); }
+.er-edit input { font: inherit; font-size: .9rem; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; }
+.er { display: grid; gap: 10px; }
+.er h4 { margin: 8px 0 0; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.er-head { display: grid; gap: 8px; } .er-sub { margin: 0; color: var(--muted); font-size: .9rem; }
+.er-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.er-tile { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.er-tile small { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.er-tile b { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.er-tile span { font-size: .78rem; color: var(--muted); }
+.er-tile .er-vs { font-size: .76rem; font-weight: 700; color: var(--muted); text-transform: none; letter-spacing: 0; } .er-tile .er-vs.up { color: var(--ok); } .er-tile .er-vs.down { color: var(--due); }
+.er-goals { display: grid; gap: 8px; }
+.er-goal { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; align-items: baseline; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.er-goal .goal-bar { grid-column: 1 / -1; height: 8px; background: var(--surface-2); }
+.er-gn { font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; } .er-goal > b { font-variant-numeric: tabular-nums; }
+.er-gs { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: .84rem; color: var(--muted); } .er-gs b { color: var(--ink); } .er-gs em { font-style: normal; font-weight: 800; color: var(--ink); }
+.er-goal.sup { border-style: dashed; }
+.er-note { font-size: .74rem; color: var(--muted); }
+.er-big { margin: 0; font-size: .95rem; } .er-big b { font-family: var(--font-display); font-size: 1.5rem; color: var(--ok); }
+.er-table { width: 100%; border-collapse: collapse; font-size: .88rem; font-variant-numeric: tabular-nums; }
+.er-table th { text-align: left; font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.er-table td { padding: 6px; border-bottom: 1px solid var(--line); } .er-table .num { text-align: right; white-space: nowrap; }
+.er-pipe, .er-fu { display: grid; gap: 6px; }
+@media (max-width: 700px) { .er-tiles { grid-template-columns: 1fr 1fr; } .er-table { font-size: .8rem; } .er-table td, .er-table th { padding: 5px 3px; }
+  #erFollow th:nth-child(2), #erFollow td:nth-child(2), #erFollow th:nth-child(6), #erFollow td:nth-child(6) { display: none; } }
+@media print {
+  #printReport.pr-est { color: #000; } #printReport.pr-est .er { gap: 6pt; }
+  #printReport.pr-est .er-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; }
+  #printReport.pr-est .er-tile, #printReport.pr-est .er-goal { border: 1px solid #999; border-radius: 6pt; padding: 5pt 7pt; break-inside: avoid; }
+  #printReport.pr-est .er-tile b { font-size: 16pt; } #printReport.pr-est h4 { font-size: 10pt; margin: 8pt 0 2pt; }
+  #printReport.pr-est .goal-bar { display: block; height: 5pt; border: 1px solid #999; } #printReport.pr-est .goal-bar i { display: block; height: 100%; background: #555; }
+  #printReport.pr-est th.num { text-align: right; } #printReport.pr-est h4 { break-after: avoid; } #printReport.pr-est .er-table tr { break-inside: avoid; }
+  #printReport.pr-est .er-table td, #printReport.pr-est .er-table th { padding: 2.5pt 5pt; } #printReport.pr-est .er-note { font-size: 8pt; }
+}
 </style>
 </head>
 <body>
@@ -11112,6 +11155,7 @@ async function revLoad(y) {
 /** Whichever screen shows Housecall Pro's days. */
 function revRedraw() {
   if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing();
+  if (estRepRedraw && dlg.open) estRepRedraw();
   if (revUnpaidRedraw && dlg.open) revUnpaidRedraw();
 }
 /** Every day from..to touches (null while a year is still loading). */
@@ -11628,6 +11672,7 @@ async function goalsLoad(y, force) {
   } finally {
     goalsBusy[y] = false;
     if (view.tab === "revenue") renderRevenue();
+    if (estRepRedraw && dlg.open) estRepRedraw();
   }
 }
 /** Someone who sees Repairs Payroll reads the month's repair jobs from Housecall Pro when they may have changed, so what
@@ -13921,7 +13966,7 @@ async function estLoad(y) {
   estLoading[y] = true;
   try {
     const out = await api("estimates", { year: y }, 90000);
-    const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, me: out.me || "", readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false };
+    const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, me: out.me || "", reports: out.reports || {}, readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false };
     if (y === revThisYear()) { estData = doc; store.set(K_EST, doc); } else estOther[y] = doc;
     estErr = ""; estOld = false;
   } catch (e) {
@@ -13931,6 +13976,7 @@ async function estLoad(y) {
   } finally {
     estLoading[y] = false;
     if (view.tab === "estimates") renderEstimates();
+    if (estRepRedraw) estRepRedraw();
   }
 }
 /** The estimates created from..to (null while a year is still loading). */
@@ -14052,7 +14098,7 @@ function renderEstimates() {
         h("button", { class: "btn small", type: "button", id: "estPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
         h("strong", { id: "estRangeLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
         h("button", { class: "btn small", type: "button", id: "estNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
-    h("div", { class: "rev-tools" }, readBtn, fullBtn));
+    h("div", { class: "rev-tools" }, all ? h("button", { class: "btn small primary", type: "button", id: "estRepBtn", onclick: () => estReportsDlg() }, "Reports") : null, readBtn, fullBtn));
   const status = h("p", { class: "lb-sub rev-status" + (estSync.busy ? " busy" : ""), id: "estStatus", role: "status" },
     !doc.connected ? (admin ? "Housecall Pro isn't connected. Settings › Housecall Pro." : "Housecall Pro isn't connected right now. An admin can check it in Settings › Housecall Pro.")
       : estSync.busy ? `Reading estimates from Housecall Pro${doc.done ? "" : " (every estimate it has: the first time takes a few minutes)"}… ${estSync.n ? `${fmt(estSync.n)} so far` : ""}`
@@ -14167,6 +14213,193 @@ function renderEstimates() {
         : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
   box.replaceChildren(...head, tiles, how, people, listBox);
+}
+
+/* ---- Estimates › Reports: a department's report for the meeting (a week, a month or a year): estimates created and
+   approved, the approval rate, what the department produced and how far it is from its goal, each against the period
+   before; what the open estimates are likely to bring (their age: how often, in the past, estimates still open at that
+   age were approved later); the ones to follow up; by person. Printable. ---- */
+const EST_REP_API = 60;                                 // the Google script that keeps who's in charge of each report
+const EST_REP_DEPTS = [["p", "Repairs"], ["c", "Cleaning"], ["r", "Restoration"]];
+const EST_REP_READY = ["p"];                            // the reports built so far (Cleaning and Restoration next)
+const EST_REP_PER = { week: "Week", month: "Month", year: "Year" };
+const EST_AGES = [[0, "0–7 days"], [8, "8–30 days"], [31, "31–60 days"], [61, "61–120 days"], [121, "Over 120 days"]];
+const estRepView = Object.assign({ per: "week", off: 0 }, store.get("voda.estRep") || {});
+let estRepRedraw = null;                                // the report on screen, drawn again when its data comes in
+/** The period before, up to the same point (a week, a month or a year so far against the same days of the one before). */
+function estRepPrev(per, r, to) {
+  const p = ofRange(per, (Number(estRepView.off) || 0) - 1);
+  if (to >= r.to) return { from: p.from, to: p.to, label: p.label };
+  if (per === "week") return { from: p.from, to: lbAddDays(p.from, revLen(r.from, to) - 1), label: p.label };
+  if (per === "month") { const dd = Math.min(Number(to.slice(8)), lbDaysIn(p.from.slice(0, 7))); return { from: p.from, to: `${p.from.slice(0, 7)}-${String(dd).padStart(2, "0")}`, label: p.label }; }
+  return { from: p.from, to: revShift(to, 1, "year"), label: p.label };
+}
+/** How often an estimate still open at each age was approved later: from the department's estimates old enough to know
+ *  (created at least 60 days past that age), the ones still open at that age, and of them the ones approved after. */
+function estChances(dep, today) {
+  const decAge = e => (e.dec ? Math.round((lbDate(lbDayKey(new Date(e.dec))) - lbDate(e.day)) / 864e5) : null);
+  return EST_AGES.map(([a, label]) => {
+    let n = 0, ok = 0;
+    for (const e of dep) {
+      if (e.st === "canceled" || estAge(e.day, today) < a + 60) continue;
+      if (e.st === "open") { n++; continue; }
+      const da = decAge(e);
+      if (da === null || da < a) continue;
+      n++; if (e.st === "approved") ok++;
+    }
+    return { a, label, n, p: n ? ok / n : 0 };
+  });
+}
+const estChanceOf = (ch, age) => ch.filter(x => x.a <= age).pop();
+/** Who's in charge of a department's report (and who's with him). */
+const estRepOwner = d => ((estData && estData.reports) || {})[d] || { lead: "", team: [] };
+/** Estimates › Reports: the departments (and who's in charge of each); an admin sets the names. */
+function estReportsDlg() {
+  const doc = estData;
+  if (!doc) return;
+  const row = ([d, name]) => {
+    const o = estRepOwner(d), ready = EST_REP_READY.includes(d);
+    const lead = h("input", { type: "text", class: "er-lead", "data-nodirty": "1", value: o.lead || "", placeholder: "Name", maxlength: "40", "aria-label": `${name}: in charge` });
+    const team = h("input", { type: "text", class: "er-team", "data-nodirty": "1", value: (o.team || []).join(", "), placeholder: "Names, with commas", maxlength: "200", "aria-label": `${name}: with` });
+    const save = h("button", { class: "btn small", type: "button", onclick: async () => {
+      if (apiLevel && apiLevel < EST_REP_API) { toast("Update the Google script first (paste the latest Code.gs, then Deploy › Manage deployments › New version)."); return; }
+      save.disabled = true;
+      try { const out = await api("estReportsPut", { dept: d, lead: lead.value.trim(), team: team.value.split(",").map(x => x.trim()).filter(Boolean) }); estData.reports = out.reports || {}; store.set(K_EST, estData); toast(`${name}: saved`); estReportsDlg(); }
+      catch (e) { toast(errText(e, "Nothing")); } finally { save.disabled = false; }
+    } }, "Save");
+    return h("div", { class: "er-dept" + (ready ? "" : " later"), "data-d": d },
+      h("button", { class: "er-open", type: "button", disabled: !ready, onclick: () => estReportOpen(d) },
+        h("span", { class: "er-name" }, h("i", { class: "est-dot " + (d === "r" ? "w" : d) }), `${name} report`),
+        h("span", { class: "er-who", text: ready ? [o.lead, ...(o.team || [])].filter(Boolean).join(" · ") || (isAdmin() ? "Set who's in charge below" : "") : "Next: after Repairs" }),
+        ready ? h("span", { class: "er-go", "aria-hidden": "true", text: "›" }) : null),
+      isAdmin() ? h("div", { class: "er-edit" }, h("label", null, h("span", { text: "In charge" }), lead), h("label", null, h("span", { text: "With" }), team), save) : null);
+  };
+  openDialog(h("h3", { id: "dlgTitle", text: "Reports" }),
+    h("p", { class: "hint", text: "A department's estimates for the meeting: a week, a month or a year; what was created, approved and produced, the goal, what the open estimates are likely to bring, and who to follow up." }),
+    h("div", { class: "er-list" }, EST_REP_DEPTS.map(row)),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
+}
+/** A department's report (a window over Reports: Back goes back to them). */
+function estReportOpen(d) {
+  const name = EST_REP_DEPTS.find(x => x[0] === d)[1];
+  const draw = first => {
+    // drawn again only while it's the window on screen (not after it's closed or another one opened)
+    const t = dlg.querySelector("#dlgTitle");
+    if (!first && (!dlg.open || !t || t.textContent !== `${name} report`)) { estRepRedraw = null; return; }
+    openDialog(h("h3", { id: "dlgTitle", text: `${name} report` }), estReportEl(d, name),
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
+  };
+  estRepRedraw = () => draw(false);
+  draw(true);
+}
+function estReportEl(d, name) {
+  const per = EST_REP_PER[estRepView.per] ? estRepView.per : "week", off = Math.min(0, Number(estRepView.off) || 0);
+  const today = lbToday(), r = ofRange(per, off), to = r.to > today ? today : r.to, pv = estRepPrev(per, r, to);
+  const o = estRepOwner(d);
+  const set = (k, v) => { estRepView[k] = v; if (k === "per") estRepView.off = 0; store.set("voda.estRep", { per: estRepView.per, off: estRepView.off }); estRepRedraw && estRepRedraw(); };
+  const head = h("div", { class: "er-head" },
+    h("p", { class: "er-sub" }, [o.lead ? `In charge: ${o.lead}` : "", (o.team || []).length ? `with ${o.team.join(", ")}` : ""].filter(Boolean).join(" · ") || "All the department's estimates"),
+    h("div", { class: "lb-bar" },
+      lbSeg(Object.entries(EST_REP_PER), per, k => set("per", k), "Period"),
+      h("div", { class: "of-step" },
+        h("button", { class: "btn small", type: "button", id: "erPrev", "aria-label": "Earlier", onclick: () => set("off", off - 1) }, "‹"),
+        h("strong", { id: "erLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
+        h("button", { class: "btn small", type: "button", id: "erNext", "aria-label": "Later", disabled: off >= 0, onclick: () => set("off", off + 1) }, "›")),
+      h("button", { class: "btn small", type: "button", id: "erPrint", onclick: () => estReportPrint(d, name) }, "PDF / Print")));
+  if (r.from > today) return h("div", { class: "er" }, head, h("p", { class: "lb-sub", text: "These days haven't come yet." }));
+  // the estimates: the period, the one before, and two years for how old estimates do
+  const histFrom = `${Number(today.slice(0, 4)) - 1}-01-01`, from = [r.from, pv.from, histFrom].sort()[0];
+  const all = estFor(from, today);
+  if (!all) return h("div", { class: "er" }, head, h("p", { class: "loading", text: "Loading the estimates…" }));
+  const R = estRepData(d, per, r, to, pv, all, today);
+  const poss = /s$/.test(name) ? `${name}'` : `${name}'s`;   // Repairs' goal, Cleaning's goal
+  const vs = (now, then, money) => { const c = revChange(now, then); return h("small", { class: "er-vs " + c.cls, title: `${pv.label}: ${money ? lbMoney(then / 100) : fmt(then)}` }, `${c.text} vs ${per === "week" ? "last week" : per === "month" ? "last month" : "last year"}`); };
+  const pct = (a, b) => (b ? Math.round(a / b * 100) : null);
+  const tile = (label, big, sub, vsEl) => h("div", { class: "er-tile" }, h("small", { text: label }), h("b", { text: big }), sub ? h("span", { text: sub }) : null, vsEl || null);
+  const tiles = h("div", { class: "er-tiles", id: "erTiles" },
+    tile("Created", fmt(R.cur.n), `${lbMoney(R.cur.val / 100)} estimated`, vs(R.cur.n, R.prev.n)),
+    tile("Approved", fmt(R.appr.n), `${lbMoney(R.appr.val / 100)} (approved in these days)`, vs(R.appr.val, R.pappr.val, true)),
+    tile("Approval rate", pct(R.cur.appr, R.cur.n) === null ? "–" : `${pct(R.cur.appr, R.cur.n)}%`, pct(R.cur.apprVal, R.cur.val) === null ? "None created in these days" : `${pct(R.cur.apprVal, R.cur.val)}% of dollars · of the ones created`,
+      vs(pct(R.cur.appr, R.cur.n) || 0, pct(R.prev.appr, R.prev.n) || 0)),
+    tile("Produced", R.prod === null ? "…" : lbMoney(R.prod / 100), `${name} revenue (Operations)`, R.prod === null || R.pprod === null ? null : vs(R.prod, R.pprod, true)));
+  // the goal: the department's part of the Minimum goal (the Super as the stretch); a year: its year goal
+  const goalEl = (() => {
+    if (!R.goal) return h("p", { class: "lb-sub", text: "No goal set for these days (Operations › Company goal)." });
+    const line = (label, g, cls) => { const left = g - (R.prod || 0), done = R.prod || 0;
+      return h("div", { class: "er-goal " + cls }, h("span", { class: "er-gn", text: label }), h("b", { text: lbMoney(g / 100) }), goalBar(done, g, cls === "sup" ? "gold" : d),
+        h("span", { class: "er-gs" }, R.prod === null ? "…" : left > 0 ? h("span", null, h("b", { text: lbMoney(left / 100) }), " to go", R.daysLeft ? ` · ${lbMoney(left / R.daysLeft / 100)} a working day` : "") : h("span", { class: "goal-hit-t", text: "✓ Reached" }),
+          h("em", { text: goalPct(done, g) }))); };
+    return h("div", { class: "er-goals", id: "erGoal" },
+      per === "year" ? line(`${r.label} goal`, R.goal.year, "min") : [line("Minimum goal (its part)", R.goal.min, "min"), R.goal.sup ? line("Super goal (stretch)", R.goal.sup, "sup") : null],
+      h("small", { class: "er-note", text: per === "year" ? `${poss} goal for the year (Operations › Company goal).` : `${poss} part: ${Math.round(R.goal.share * 100)}% of the company's goal for these days (its share of the year's goal).${R.daysLeft ? ` ${fmt(R.daysLeft)} working days left.` : ""}` }));
+  })();
+  // what the open estimates are likely to bring
+  const F = R.fc;
+  const pipe = h("div", { class: "er-pipe", id: "erPipe" },
+    h("p", { class: "er-big" }, "Likely to close: ", h("b", { text: lbMoney(F.likely / 100) }), ` of ${lbMoney(F.open / 100)} open (${fmt(F.n)} estimates)`),
+    h("table", { class: "er-table" },
+      h("thead", null, h("tr", null, ["Age", "Open", "$ open", "Chance", "Likely"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
+      h("tbody", null, F.rows.map(x => h("tr", null, h("td", { text: x.label }), h("td", { class: "num", text: fmt(x.n) }), h("td", { class: "num", text: lbMoney(x.val / 100) }),
+        h("td", { class: "num", title: `${fmt(x.hist)} past estimates` }, x.hist ? `${Math.round(x.p * 100)}%` : "–"), h("td", { class: "num" }, h("b", { text: lbMoney(x.likely / 100) })))))),
+    h("small", { class: "er-note", text: `Chance: of ${poss} estimates since January 1 of last year still open at that age, how many were approved later. Newer estimates close more often; the older, the less.` }));
+  const fu = h("div", { class: "er-fu", id: "erFollow" },
+    F.follow.length ? h("table", { class: "er-table" },
+      h("thead", null, h("tr", null, ["Client", "#", "Age", "$", "Chance", "In charge"].map((x, i) => h("th", { class: i >= 2 && i <= 4 ? "num" : "", text: x })))),
+      h("tbody", null, F.follow.map(e => h("tr", null, h("td", null, h("b", { text: e.client || "No name" }), estNotSent(e) ? h("small", { class: "est-ns", text: " not sent" }) : null),
+        h("td", { text: `#${e.n}` }), h("td", { class: "num", text: `${fmt(e.age)} d` }), h("td", { class: "num", text: lbMoney(e.est / 100) }), h("td", { class: "num", text: `${Math.round(e.p * 100)}%` }),
+        h("td", { text: e.inc || "–" })))))
+      : h("p", { class: "lb-sub", text: "No open estimates worth chasing right now." }));
+  const people = h("table", { class: "er-table", id: "erPeople" },
+    h("thead", null, h("tr", null, ["In charge", "Created", "Approved", "Rate", "Rate $"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
+    h("tbody", null, R.people.map(([n, s]) => h("tr", null, h("td", { text: n }), h("td", { class: "num", text: fmt(s.n) }), h("td", { class: "num", text: fmt(s.appr) }),
+      h("td", { class: "num" }, h("b", { text: estPct(s.appr, s.n) })), h("td", { class: "num", text: estPct(s.apprVal, s.val) })))));
+  return h("div", { class: "er", "data-d": d }, head, tiles, h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
+    h("h4", { text: "Follow up first" }), fu, h("h4", { text: "By person in charge" }), R.people.length ? people : h("p", { class: "lb-sub", text: "No estimates created in these days." }));
+}
+/** The numbers of a department's report. */
+function estRepData(d, per, r, to, pv, all, today) {
+  const dep = all.filter(e => e.dept === d), within = (x, a, b) => x >= a && x <= b;
+  const cur = estStats(dep.filter(e => within(e.day, r.from, to))), prev = estStats(dep.filter(e => within(e.day, pv.from, pv.to)));
+  const decDay = e => (e.dec ? lbDayKey(new Date(e.dec)) : "");
+  const apprIn = (a, b) => { const x = dep.filter(e => e.st === "approved" && within(decDay(e), a, b)); return { n: x.length, val: x.reduce((s, e) => s + estValue(e), 0) }; };
+  // produced: the department's revenue on Operations (read from Housecall Pro when it's old)
+  const prodOf = (a, b) => { const days = revDaysFor(a, b); return days ? revSum(days, a, b)[d][0] : null; };
+  if (canSee("revenue")) revEnsure([[r.from, to], [pv.from, pv.to]]);
+  // the goal
+  const y = Number(r.from.slice(0, 4)), G = goalsDocs[y];
+  goalsLoad(y);
+  let goal = null;
+  if (G) {
+    const yg = G.goals.years[String(y)] || null, sh = goalShares(yg, null)[d];
+    if (per === "year") goal = yg && yg[d] ? { year: yg[d], share: sh } : null;
+    else { const g = goalForDays(G.goals, r.from, r.to); goal = g.miss.has("min") ? null : { min: Math.round(g.min * sh), sup: g.miss.has("sup") ? 0 : Math.round(g.sup * sh), share: sh }; }
+  }
+  const daysLeft = r.to >= today && r.from <= today ? goalWorkDays(lbAddDays(today, 1), r.to) : 0;
+  // the open estimates: each one's chance from its age
+  const ch = estChances(dep, today), open = dep.filter(e => e.st === "open").map(e => { const age = estAge(e.day, today), c = estChanceOf(ch, age); return Object.assign({}, e, { age, p: c.p }); });
+  const rows = ch.map((c, i) => { const hi = (EST_AGES[i + 1] || [1e9])[0], xs = open.filter(e => e.age >= c.a && e.age < hi);
+    return { label: c.label, n: xs.length, val: xs.reduce((s, e) => s + e.est, 0), p: c.p, hist: c.n, likely: Math.round(xs.reduce((s, e) => s + e.est * c.p, 0)) }; });
+  const fc = { n: open.length, open: open.reduce((s, e) => s + e.est, 0), likely: rows.reduce((s, x) => s + x.likely, 0), rows,
+    follow: open.filter(e => e.p >= 0.05 && e.est > 0).sort((a, b) => b.est * b.p - a.est * a.p).slice(0, 8) };
+  // by person (created in these days)
+  const by = new Map();
+  for (const e of dep.filter(x => within(x.day, r.from, to))) { const k = e.inc || "Nobody assigned"; if (!by.has(k)) by.set(k, []); by.get(k).push(e); }
+  const people = [...by.entries()].map(([k, xs]) => [k, estStats(xs)]).sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]));
+  return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, daysLeft, fc, people };
+}
+/** The report on paper (or a PDF: Print › Save as PDF). */
+function estReportPrint(d, name) {
+  const box = $("printReport"), src = dlg.querySelector(".er");
+  if (!box || !src) return;
+  const per = EST_REP_PER[estRepView.per] ? estRepView.per : "week";
+  const o = estRepOwner(d), label = ($("erLabel") || {}).textContent || "";
+  const copy = src.cloneNode(true);
+  copy.querySelectorAll(".er-head .lb-bar, button").forEach(x => x.remove());
+  box.replaceChildren(h("h1", { text: `${name} report · ${EST_REP_PER[per]}` }),
+    h("p", { class: "pr-sub", text: [label, o.lead ? `In charge: ${o.lead}${(o.team || []).length ? ` with ${o.team.join(", ")}` : ""}` : "", `Printed ${lbDayText(lbToday())}`].filter(Boolean).join(" · ") }),
+    copy);
+  box.classList.add("pr-est");
+  setTimeout(() => { try { window.print(); } catch (e) { toast("Printing isn't available here."); } finally { setTimeout(() => box.classList.remove("pr-est"), 1000); } }, 60);
 }
 
 /* ======================= Office scorecards ======================= */
