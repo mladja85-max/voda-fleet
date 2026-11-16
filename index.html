@@ -2301,6 +2301,15 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   border-radius: 12px; background: rgba(4, 14, 48, .45); box-shadow: inset 0 0 0 1px rgba(255, 214, 90, .45); }
 .goal-split .goal-bar { grid-column: 1 / -1; height: 7px; }
 .goal-split-how { grid-column: 1 / -1; margin-top: 6px; font-size: .68rem; color: var(--gw); }
+/* the part and a day's worth: one line across the box (the day's worth drops under it if they don't fit) */
+.goal-dline { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 10px; }
+.goal-dline .goal-dp { margin-left: auto; }
+.goal-split-hr { grid-column: 1 / -1; height: 1px; margin: 10px 0 0; background: rgba(255, 214, 90, .45); }
+.goal-split .goal-dn.tot { margin-top: 6px; color: var(--gold); letter-spacing: .1em; }
+.goal-split .goal-dl.tot { margin-top: 6px; }
+.goal-split-oth { grid-column: 1 / -1; font-size: .7rem; color: #fff; opacity: .85; }
+.goal-mtd em { grid-column: 1 / -1; justify-self: end; font-style: normal; font-size: .8rem; font-weight: 700; }
+.goal-mtd em strong { font-weight: 900; font-variant-numeric: tabular-nums; }
 /* Estimates › Reports */
 .er-list { display: grid; gap: 10px; }
 .er-dept { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
@@ -11868,21 +11877,43 @@ function goalShares(yg, ys) {
   const by = src => { const t = GOAL_DEPTS.reduce((n, [k]) => n + Math.max(0, src(k)), 0); return t > 0 ? Object.fromEntries(GOAL_DEPTS.map(([k]) => [k, Math.max(0, src(k)) / t])) : null; };
   return (yg && by(k => yg[k] || 0)) || (ys && by(k => ys[k][0])) || Object.fromEntries(GOAL_DEPTS.map(([k]) => [k, 1 / 3]));
 }
-/** A month goal opened: each department's part of it, what it produced, what's left, and a working day's worth. */
+/** How much of Repairs' revenue the Bonus counts: what's left after the repair contractors are paid, as a % (30% when
+ *  they're paid 70%); null with no repair revenue. */
+const goalRepPct = (ms, contr) => (ms.p[0] > 0 ? Math.round((ms.p[0] - contr) / ms.p[0] * 100) : null);
+/** A month goal opened: each department's part of it, what it produced, what's left, and a working day's worth; then the
+ *  total, so the rows add up to the goal (the Bonus: Repairs only what's left after the contractors; the Super and
+ *  Minimum: all of it). */
 function goalSplitEl(k, goal, ms, contr, shares, daysLeft, year) {
+  const bon = k === "bon";
   const parts = GOAL_DEPTS.map(([d, name]) => {
-    const g = Math.round(goal * shares[d]), done = d === "p" && k === "bon" ? ms.p[0] - contr : ms[d][0], left = g - done;
+    const g = Math.round(goal * shares[d]), done = d === "p" && bon ? ms.p[0] - contr : ms[d][0], left = g - done;
     return { d, name, g, done, left };
   });
+  const counted = ms.cents - (bon ? contr : 0), left = goal - counted, rp = goalRepPct(ms, contr);
+  // what the department rows don't show but the total counts: Other jobs (no department), a department past its part
+  const why = [];
+  if (ms.o[0]) why.push(`${lbMoney(ms.o[0] / 100)} from Other jobs (a Job type with no department${ms.other.size ? `: ${[...ms.other].join(", ")}` : ""})`);
+  for (const x of parts) if (x.left < 0 && left > 0) why.push(`${x.name}'s ${lbMoney(-x.left / 100)} over its part`);
   return h("div", { class: "goal-split " + k, id: "goalSplit", "data-k": k },
     h("span", { class: "goal-rl", text: "Left to produce" }), h("span", { class: "goal-rl r", text: daysLeft ? `${fmt(daysLeft)} working day${daysLeft === 1 ? "" : "s"} left` : "" }),
     parts.map(x => [h("span", { class: "goal-dn " + x.d }, h("i", { class: "rev-dot " + x.d }), x.name),
       h("span", { class: "goal-dl" + (x.left <= 0 ? " hit" : ""), "data-d": x.d }, h("b", { text: x.left > 0 ? lbMoney(x.left / 100) : "✓ Reached" })),
       goalBar(x.done, x.g, x.d),
-      h("span", { class: "goal-dg" }, "Part ", h("b", { text: lbMoney(x.g / 100) }), ` · ${k === "bon" && x.d === "p" ? "counts" : "produced"} `, h("b", { text: lbMoney(x.done / 100) })),
-      h("small", { class: "goal-dp" }, x.left > 0 && daysLeft ? `${lbMoney(x.left / daysLeft / 100)} a day` : goalPct(x.done, x.g))]),
+      h("span", { class: "goal-dline" },
+        h("span", { class: "goal-dg" }, "Part ", h("b", { text: lbMoney(x.g / 100) }), ` · ${bon && x.d === "p" ? "counts" : "produced"} `, h("b", { text: lbMoney(x.done / 100) })),
+        h("small", { class: "goal-dp" }, x.left > 0 && daysLeft ? `${lbMoney(x.left / daysLeft / 100)} a day` : goalPct(x.done, x.g)))]),
+    // the total: the parts add up to the goal, and what counts plus what's left is the goal
+    h("i", { class: "goal-split-hr", "aria-hidden": "true" }),
+    h("span", { class: "goal-dn tot" }, "Total"),
+    h("span", { class: "goal-dl tot" + (left <= 0 ? " hit" : ""), id: "goalSplitTot" }, h("b", { text: left > 0 ? lbMoney(left / 100) : "✓ Reached" })),
+    goalBar(counted, goal, "gold"),
+    h("span", { class: "goal-dline" },
+      h("span", { class: "goal-dg", id: "goalSplitSum" }, "Goal ", h("b", { text: lbMoney(goal / 100) }), ` · ${bon ? "counts" : "produced"} `, h("b", { text: lbMoney(counted / 100) })),
+      h("small", { class: "goal-dp" }, left > 0 && daysLeft ? `${lbMoney(left / daysLeft / 100)} a day` : goalPct(counted, goal))),
+    why.length ? h("small", { class: "goal-split-oth", id: "goalSplitOther", text: `The total also counts ${why.join(" and ")}.` }) : null,
     h("small", { class: "goal-split-how", text: `Each department's part: its share of the ${year ? `${year} goal` : "year's production"} (${GOAL_DEPTS.map(([d, n]) => `${n} ${Math.round(shares[d] * 100)}%`).join(", ")}).`
-      + (k === "bon" ? " Repairs counts its revenue less what the repair contractors are paid." : "") }));
+      + (bon ? ` Repairs counts ${rp != null ? `${rp}%: ` : ""}its revenue${rp != null ? ` (${lbMoney(ms.p[0] / 100)})` : ""} less what the repair contractors are paid${contr ? ` (${lbMoney(contr / 100)})` : ""}.`
+        : " Repairs counts all of its revenue, the repair contractors' share too.") }));
 }
 function revGoalEl(asOf, P) {
   if (!canSee("revenue")) return null;
@@ -11952,8 +11983,11 @@ function revGoalEl(asOf, P) {
   }
   else mo.append(h("p", { class: "goal-lead", text: isAdmin() ? `No goals for ${monName} yet: Edit to set them.` : `No goals for ${monName} yet.` }));
   const whole = asOf >= `${m}-${String(lbDaysIn(m)).padStart(2, "0")}` && asOf < lbToday();
+  // MTD is all the revenue (Repairs at 100%: the Super and Minimum goals); the Bonus open, what counts toward it too
+  const bonOpen = goalOpen === "bon" && !!ms && !!mg && mg.bon != null, rp = ms ? goalRepPct(ms, contr) : null;
   mo.append(h("div", { class: "goal-mtd", id: "goalMtd" }, h("small", { text: whole ? `${monName} total` : "MTD" }),
-    h("b", { text: ms ? lbMoney(ms.cents / 100) : "…" }), h("span", { text: revSpanText(mFrom, asOf) })));
+    h("b", { text: ms ? lbMoney(ms.cents / 100) : "…" }), h("span", { text: revSpanText(mFrom, asOf) + (bonOpen ? " · all revenue" : "") }),
+    bonOpen ? h("em", { id: "goalMtdBon" }, "Toward the Bonus ", h("strong", { text: lbMoney((ms.cents - contr) / 100) }), rp != null ? ` · Repairs at ${rp}%` : "") : null));
   body.append(mo);
   return out;
 }
