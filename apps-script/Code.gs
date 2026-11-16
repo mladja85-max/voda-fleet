@@ -55,6 +55,16 @@
  * Once a truck is renewed, put the new date in the app (Edit truck) and it drops off the email.
  * To stop it: pick "paperworkEmailStop" and click Run.
  *
+ * REBUILD CALENDAR (optional)
+ * Every Repairs estimate approved in Housecall Pro goes on the vendors' Google calendar on the day it was approved,
+ * 6 to 7 AM, in red: "APPROVED - NEED TO SCHEDULE - <city> - <client>", with its address. To turn it on:
+ * 1. Project Settings > Script Properties > Add script property. Property: REBUILD_CALENDAR_ID   Value: the calendar's
+ *    Calendar ID (Google Calendar > the calendar's Settings > Integrate calendar). The calendar must be this account's,
+ *    or shared with it with "Make changes to events".
+ * 2. Pick "rebuildCalendarSetup" and click Run. Approve the calendar permission. It checks every 15 minutes from then on,
+ *    for estimates approved from that day (REBUILD_CALENDAR_FROM; change it to an earlier yyyy-MM-dd to add earlier ones).
+ * The "Rebuild calendar" tab lists each one put on the calendar. Delete its trigger (Triggers, left side) to stop it.
+ *
  * ONE STEP GPS MILEAGE (optional)
  * 1. Project Settings (gear, left side) > Script Properties > Add script property.
  *    Property: ONESTEP_API_KEY   Value: your One Step GPS API key.   Save script properties.
@@ -126,7 +136,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 69;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 70;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4230,7 +4240,7 @@ function repRead_(year) {
 const EST_SHEET = "Estimates";
 const EST_COLS = ["Estimate id", "Estimate #", "Day (scheduled, else created)", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
-  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for"];
+  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for", "Address", "State"];
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
 const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "5";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once; 5: the day it was scheduled for, read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
@@ -4260,6 +4270,7 @@ function estRows_(s, at) {
     if (!id) return;
     r[2] = repDay_(r[2], tz);
     [3, 11, 18, 19, 24, 28].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
+    if (r.length > 29) r[29] = String(r[29] || ""), r[30] = String(r[30] || "");
     out[id] = r;
     if (at) at[id] = i + 2;
   });
@@ -4271,6 +4282,13 @@ function estKind_(tags) {
   const has = function (re) { return tags.some(function (t) { return re.test(t); }); };
   const kinds = [has(/mou?ld/i) ? "mold" : "", has(/water|flood/i) ? "water" : "", has(/fire|smoke|soot/i) ? "fire" : ""].filter(Boolean);
   return kinds.length === 1 ? kinds[0] : "";   // two kinds of tag: not sorted (counted once)
+}
+/** The estimate's whole address, the way a calendar or a map reads it: "1220 N Fillmore St PH10, Arlington, VA 22201". */
+function estAddress_(a) {
+  a = a || {};
+  const t = function (v) { return String(v || "").replace(/\s+/g, " ").trim(); };
+  const street = [t(a.street), t(a.street_line_2)].filter(Boolean).join(" "), stz = [t(a.state), t(a.zip)].filter(Boolean).join(" ");
+  return [street, t(a.city), stz].filter(Boolean).join(", ").slice(0, 200);
 }
 /** When an estimate was scheduled for in Housecall Pro (its Schedule: the visit), or "" when it has none: the
  *  estimate's own schedule, else the first of its options'. */
@@ -4313,7 +4331,8 @@ function estRow_(e, old, tz, at) {
   const row = [String(e.id), String(e.estimate_number || ""), day, String(e.created_at || ""), hcpClient_(e), [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), dept,
     dept === "r" ? kind : "", type, status, by, decided, total / 100, approved / 100,
     JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o), String(o.status || "").slice(0, 40), String(o.id || "").slice(0, 80)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
-    "", "", "", "", "", text, tagList.join(", "), opts.map(function (o) { return String(o.status || ""); }).filter(Boolean).join(", "), sched];
+    "", "", "", "", "", text, tagList.join(", "), opts.map(function (o) { return String(o.status || ""); }).filter(Boolean).join(", "), sched,
+    estAddress_(a), String(a.state || "").trim().slice(0, 20)];
   return row;
 }
 /** Who's in charge of an estimate: of the people assigned to it in Housecall Pro, the one with the highest role in
@@ -4474,6 +4493,104 @@ function estSync_(req, user) {
     return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
   });
 }
+/* ---- The rebuild calendar: every Repairs estimate approved in Housecall Pro (by the client or the office) goes on the
+   vendors' calendar once, on the day it was approved, 6 to 7 AM, in red, titled "APPROVED - NEED TO SCHEDULE - <city> -
+   <client>", with its address. The calendar: Script Property REBUILD_CALENDAR_ID (its Calendar ID, from the calendar's
+   Settings > Integrate calendar; the "VODA rebuilds" calendar shared with the vendor). Only estimates approved on or after
+   REBUILD_CALENDAR_FROM (yyyy-MM-dd; set to the day it's turned on). Turn it on once from the editor: Run >
+   rebuildCalendarSetup (Google asks for the calendar permission; then every 15 minutes it reads what changed in Housecall
+   Pro and books). No longer approved: its event's title gets "CANCELED - " in front (the vendor may have renamed it);
+   approved again: taken off. The "Rebuild calendar" tab keeps each one booked. ---- */
+const RB_SHEET = "Rebuild calendar";
+const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title"];
+const RB_TITLE = "APPROVED - NEED TO SCHEDULE - ", RB_CANCEL = "CANCELED - ", RB_HOUR = 6;
+function rbSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(RB_SHEET);
+  if (!s) { s = ss.insertSheet(RB_SHEET); s.getRange(1, 1, 1, RB_COLS.length).setValues([RB_COLS]).setFontWeight("bold"); s.setFrozenRows(1); }
+  return s;
+}
+/** Each estimate booked: by estimate id, { row (its row on the tab), rec }. */
+function rbRead_(s) {
+  const out = {};
+  if (s.getLastRow() < 2) return out;
+  s.getRange(2, 1, s.getLastRow() - 1, RB_COLS.length).getValues().forEach(function (r, i) {
+    const id = String(r[0] || "").trim();
+    if (id) out[id] = { row: i + 2, rec: { event: String(r[4] || ""), status: String(r[6] || "") } };
+  });
+  return out;
+}
+/** The city in the title: the estimate's city, "Washington DC" for DC. */
+function rbPlace_(r) {
+  const city = String(r[5] || "").split(", ").pop().trim(), st = String(r[30] || "").trim().toUpperCase();
+  return st === "DC" && city && !/\bDC$/i.test(city) ? city + " DC" : city;
+}
+const rbMoney_ = function (dollars) { return "$" + String(Math.round(Number(dollars) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+/** Puts what's newly approved on the calendar, and marks what's no longer approved. */
+function rebuildBook_() {
+  const P = PropertiesService.getScriptProperties(), id = String(P.getProperty("REBUILD_CALENDAR_ID") || "").trim();
+  if (!id) return { ok: false, error: "no_calendar" };
+  const cal = CalendarApp.getCalendarById(id);
+  if (!cal) return { ok: false, error: "no_access" };
+  const tz = Session.getScriptTimeZone(), today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  let from = String(P.getProperty("REBUILD_CALENDAR_FROM") || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) { from = today; P.setProperty("REBUILD_CALENDAR_FROM", from); }
+  const rows = estRows_(estSheet_(false)), s = rbSheet_(), have = rbRead_(s), now = new Date().toISOString();
+  const out = { ok: true, booked: 0, canceled: 0, back: 0, from: from };
+  Object.keys(rows).forEach(function (eid) {
+    const r = rows[eid], x = have[eid], approved = String(r[9]) === "approved";
+    if (String(r[6]) !== "p") return;   // Repairs only
+    if (!x) {
+      if (!approved) return;
+      const day = r[11] && !isNaN(Date.parse(r[11])) ? Utilities.formatDate(new Date(r[11]), tz, "yyyy-MM-dd") : today;
+      if (day < from) return;
+      let opts = [];
+      try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
+      const opt = opts.filter(function (o) { return o[2] === "approved"; })[0] || opts[0] || [];
+      const title = (RB_TITLE + rbPlace_(r) + " - " + String(r[4] || "No name")).slice(0, 250), addr = String(r[29] || r[5] || "");
+      const desc = ["Estimate #" + r[1] + ": " + rbMoney_(r[13] || r[12]) + ", approved " + Utilities.formatDate(new Date(day + "T12:00:00Z"), "UTC", "EEE MMM d") + (r[10] ? " by the " + r[10] : ""),
+        addr, opt[4] ? "Open in Housecall Pro: https://pro.housecallpro.com/app/estimates/" + opt[4] : "", "", "Put here by VODA Hub."].filter(function (l, i) { return l || i === 3; }).join("\n");
+      const start = Utilities.parseDate(day + " " + String(RB_HOUR).padStart(2, "0") + ":00", tz, "yyyy-MM-dd HH:mm");
+      const ev = cal.createEvent(title, start, new Date(start.getTime() + 3600e3), { location: addr, description: desc });
+      try { ev.setColor(CalendarApp.EventColor.RED); } catch (e) { /* the color is a nicety */ }
+      appendRows_(s, RB_COLS.length, [[eid, String(r[1]), String(r[4] || ""), day, ev.getId(), now, "booked", title]]);
+      out.booked++;
+      return;
+    }
+    // booked before: no longer approved, or approved again
+    const ev = x.rec.event ? cal.getEventById(x.rec.event) : null;
+    if (x.rec.status === "booked" && !approved) {
+      if (ev && ev.getTitle().indexOf(RB_CANCEL) !== 0) ev.setTitle((RB_CANCEL + ev.getTitle()).slice(0, 250));
+      s.getRange(x.row, 7).setValues([["canceled"]]); out.canceled++;
+    } else if (x.rec.status === "canceled" && approved) {
+      if (ev && ev.getTitle().indexOf(RB_CANCEL) === 0) ev.setTitle(ev.getTitle().slice(RB_CANCEL.length));
+      s.getRange(x.row, 7).setValues([["booked"]]); out.back++;
+    }
+  });
+  return out;
+}
+/** Every 15 minutes (rebuildCalendarSetup turns it on): what changed in Housecall Pro, then the calendar. */
+function rebuildCalendarTick() {
+  try {
+    const t0 = Date.now();
+    let page = 1;
+    for (let i = 0; i < 30 && Date.now() - t0 < 240e3; i++) { const r = estSync_({ page: page }, null); if (!r || !r.ok || !r.next) break; page = r.next; }
+  } catch (e) { /* Housecall Pro not answering: book from what's on the tab */ }
+  return withLock_(rebuildBook_);
+}
+/** Run once from the script editor (Run > rebuildCalendarSetup) after adding REBUILD_CALENDAR_ID in Project Settings >
+ *  Script Properties: Google asks for the calendar permission, the 15-minute check is turned on, and it runs once now. */
+function rebuildCalendarSetup() {
+  const P = PropertiesService.getScriptProperties(), id = String(P.getProperty("REBUILD_CALENDAR_ID") || "").trim();
+  if (!id) { Logger.log("First add REBUILD_CALENDAR_ID in Project Settings > Script Properties: the calendar's ID, from its Settings > Integrate calendar."); return; }
+  const cal = CalendarApp.getCalendarById(id);
+  if (!cal) { Logger.log("This Google account can't open that calendar. Check the ID, and that the calendar is this account's or shared with it (Make changes to events)."); return; }
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "rebuildCalendarTick") ScriptApp.deleteTrigger(tr); });
+  ScriptApp.newTrigger("rebuildCalendarTick").timeBased().everyMinutes(15).create();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(P.getProperty("REBUILD_CALENDAR_FROM") || ""))) P.setProperty("REBUILD_CALENDAR_FROM", Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"));
+  Logger.log("On: every 15 minutes, Repairs estimates approved from " + P.getProperty("REBUILD_CALENDAR_FROM") + " on go on \"" + cal.getName() + "\". " + JSON.stringify(rebuildCalendarTick()));
+}
+
 /* ---- Price changes: a job's amount changed in Housecall Pro after the app saw it (a discount, a reduction, more work,
    a job from months ago edited), more than a day after the job (see PRICE_SETTLE_MS). Every hour the script asks Housecall Pro for the jobs changed most recently and compares
    each one's amount with the last one the app saw (the Price watch tab, else the Revenue tab's day). A difference is a
@@ -5559,7 +5676,7 @@ function backupNow() {
 // text so nothing in it can turn into a formula.
 
 const MOVE_TAB = "Move settings";
-const MOVE_JOBS = ["gpsSync", "tmCheckEmail", "paperworkEmail", "backupNow"];
+const MOVE_JOBS = ["gpsSync", "tmCheckEmail", "paperworkEmail", "backupNow", "rebuildCalendarTick"];
 
 /** Old sheet: save the settings and jobs, stop the jobs, and pause this copy of the app. */
 function moveOut() {
@@ -5636,4 +5753,5 @@ function moveJob_(name) {
   else if (name === "tmCheckEmail") tmCheckSchedule_();
   else if (name === "paperworkEmail") ScriptApp.newTrigger("paperworkEmail").timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(7).create();
   else if (name === "backupNow") backupSchedule_();
+  else if (name === "rebuildCalendarTick") ScriptApp.newTrigger("rebuildCalendarTick").timeBased().everyMinutes(15).create();
 }
