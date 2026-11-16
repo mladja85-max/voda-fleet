@@ -578,6 +578,12 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .step input { width: 46px; height: 38px; text-align: center; font: inherit; font-weight: 700; font-size: 1.1rem; border-radius: 10px; border: 1.5px solid var(--soon); background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums; padding: 0; }
 .step input:focus { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--soon) 30%, transparent); }
 .sup-note textarea { min-height: 62px; resize: vertical; }
+/* Something else: the typed thing under its row */
+.sup-item.sup-oth { flex-wrap: wrap; }
+.sup-oth-text { flex: 1 1 100%; margin: 0 0 10px 40px; min-width: 0; height: 44px; padding: 0 12px; font: inherit; font-size: 1rem; font-weight: 600; color: var(--ink);
+  background: var(--surface); border: 1.5px solid var(--soon); border-radius: 10px; }
+.sup-oth-text:focus { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--soon) 30%, transparent); }
+.step button:disabled { opacity: .4; cursor: default; }
 .sup-bar { position: sticky; bottom: 10px; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; box-shadow: 0 6px 24px rgba(16, 24, 40, .16); }
 .sup-bar.on { border-color: var(--soon); }
 .sup-bar .sum { font-weight: 700; margin-right: auto; }
@@ -615,6 +621,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .ord-row .st { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 7px; border-radius: 999px; margin-right: 6px; }
 .st.received { background: var(--ok-bg); color: var(--ok); }
 .st.removed { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.st.other { background: var(--soon-bg); color: var(--soon); }
 .sup-empty { text-align: center; }
 .sl-step { display: flex; align-items: center; gap: 6px; }
 .sl-acts { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -7148,7 +7155,7 @@ function askProducts() {
   const lists = new Map(((supplies && supplies.lists) || []).map(l => [l.id, l.name]));
   for (const r of (supplies && supplies.requests) || []) {
     if (r.status === "Removed" || !r.reportedAt || r.reportedAt < cut) continue;
-    const k = r.productId || r.product, x = by.get(k) || { name: r.product, list: lists.get(r.list) || "", container: r.container, times: 0, qty: 0 };
+    const k = r.productId === SUP_OTHER ? "other:" + String(r.product).toLowerCase() : r.productId || r.product, x = by.get(k) || { name: r.product, list: lists.get(r.list) || "", container: r.container, times: 0, qty: 0 };
     x.times++; x.qty += Number(r.qty) || 0; by.set(k, x);
   }
   if (!supplies) return { none: "The checklists haven't loaded yet. Try again in a moment." };
@@ -7830,8 +7837,12 @@ let supDraft = Object.assign({ items: {}, note: "" }, store.get(K_SUPDRAFT) || {
 if (!supDraft.items || typeof supDraft.items !== "object") supDraft.items = {};
 if (!supDraft.notes || typeof supDraft.notes !== "object") supDraft.notes = {};   // a note per checklist
 if (supDraft.note) { supDraft.notes[DEFAULT_LIST] = supDraft.notes[DEFAULT_LIST] || supDraft.note; delete supDraft.note; }
+if (!supDraft.other || typeof supDraft.other !== "object") supDraft.other = {};   // "Something else" per checklist: { text, qty }
 const SEC_COLORS = ["#2f7a3f", "#1f4fbf", "#c2571a", "#b4233a", "#7c3aed", "#0d9488", "#92400e", "#475569"];   // the paper's colored blocks, then more
 const supOk = () => apiLevel >= SUP_API;
+// Something else: one thing that isn't on the checklist, typed in, sent with the list (the script keeps it as "other")
+const SUP_OTHER = "other", SUP_OTHER_API = 68, SUP_OTHER_COLOR = "#475569", SUP_OTHER_MAX = 120;
+const supOtherOk = () => apiLevel >= SUP_OTHER_API;
 const OPEN = r => r.status === "To order" || r.status === "Ordered";
 function saveSupDraft() { store.set(K_SUPDRAFT, supDraft); }
 function noteSupplies(s) {
@@ -7908,7 +7919,9 @@ function supApply(s, job) {
     if (open) Object.assign(open, rec);
     else s.requests.unshift(Object.assign({ id: `tmp-${d.checkId}-${p.id}`, productId: p.id, product: p.name, container: p.container, section: p.section, status: "To order", list }, rec));
   }
-  if (!s.checks.some(c => c.id === d.checkId)) s.checks.unshift({ id: d.checkId, at: job.at, by: job.by, missing: d.items.length, note: d.note || "", list, pending: true });
+  if (d.other && d.other.text) s.requests.unshift({ id: `tmp-${d.checkId}-${SUP_OTHER}`, productId: SUP_OTHER, product: d.other.text, container: "", section: "Not on the list",
+    status: "To order", list, qty: d.other.qty, reportedAt: job.at, reportedBy: job.by, checkId: d.checkId, pending: true });
+  if (!s.checks.some(c => c.id === d.checkId)) s.checks.unshift({ id: d.checkId, at: job.at, by: job.by, missing: d.items.length + (d.other && d.other.text ? 1 : 0), note: d.note || "", list, pending: true });
 }
 /** What's on screen: the sheet's copy plus any lists not sent yet. */
 function supNow() {
@@ -7958,12 +7971,20 @@ function supSetQty(id, qty) {
   if (qty) supDraft.items[id] = qty; else delete supDraft.items[id];
   saveSupDraft();
 }
+/** Something else typed on this checklist, ready to send ({ text, qty }), or null (not ticked, or nothing typed). */
+function supOtherIn(sc) {
+  const o = supOtherOk() ? supDraft.other[sc.list.id] : null, text = o ? String(o.text || "").replace(/\s+/g, " ").trim().slice(0, SUP_OTHER_MAX) : "";
+  return text ? { text, qty: Math.max(1, Math.min(999, Math.round(o.qty) || 1)) } : null;
+}
+/** How many things are marked to send: the items, and Something else. */
+const supCount = sc => supMarkedIn(sc).length + (supOtherIn(sc) ? 1 : 0);
 /** A list that couldn't be sent: its marks go back on the checklist (anything marked since stays as it is). */
 function supRestoreDraft(job) {
   const d = job && job.draft;
   if (!d) return;
   for (const [k, q] of Object.entries(d.items || {})) if (!supDraft.items[k]) supDraft.items[k] = q;
   const list = (job.data && job.data.list) || DEFAULT_LIST;
+  if (job.data && job.data.other && job.data.other.text && !(supDraft.other[list] && String(supDraft.other[list].text || "").trim())) supDraft.other[list] = Object.assign({}, job.data.other);
   if (!supDraft.notes[list] && job.data && job.data.note) supDraft.notes[list] = job.data.note;
   saveSupDraft();
 }
@@ -8107,7 +8128,7 @@ function renderSupplies() {
   const tab = supTabNow(sc);
   view.supTab = tab;   // stays put while things change underneath (an admin's list emptying out, say)
   const toOrder = sc.requests.filter(r => r.status === "To order").length;
-  const marked = supMarkedIn(sc).length;
+  const marked = supCount(sc);
   const seg = (key, text, n, hot) => h("button", { class: "seg-btn", type: "button", role: "tab", id: "supTab-" + key, "aria-selected": String(tab === key),
     onclick: () => { view.supTab = key; saveView(); renderSupplies(); window.scrollTo(0, 0); } },
     text, n ? h("span", { class: "n" + (hot ? " hot" : ""), text: String(n) }) : null);
@@ -8160,6 +8181,7 @@ function supCheckBody(sc) {
           cnt ? h("span", { class: "cnt on", text: `${cnt} marked` }) : null),
         h("ul", { class: "sup-list" }, g.items.map(p => supItem(p, openOf(p.id), lastOf[p.id]))));
     }),
+    supOtherOk() ? supOtherEl(sc) : isAdmin() && apiLevel ? h("p", { class: "meta", id: "supOtherOld", text: "Something else (a thing not on the checklist, typed in) needs the newest Google script: paste the latest Code.gs, then Deploy › Manage deployments › pencil › New version › Deploy." }) : null,
     h("div", { class: "field sup-note" },
       h("label", { for: "supNote", text: "Note for the office (optional)" }),
       h("textarea", { id: "supNote", rows: "2", maxlength: "500", placeholder: "Anything else, like “need it before Friday”", value: supDraft.notes[sc.list.id] || "",
@@ -8170,6 +8192,7 @@ function supCheckBody(sc) {
         ["Check", "tap what's missing or low, set how many we need, then Send list. It goes straight on this checklist's order list."],
         ["Last ordered", "every item shows when it was last ordered and how many, and whether it has arrived. The Order list has the full dates."],
         ["Already on the list", "an item waiting to be ordered can't be marked again by a technician, and only an admin can change or remove anything on the order list. Once it's ordered, it can be sent again if more is needed."],
+        ["Something else", "need something that isn't on the checklist? Tick Something else at the bottom, type what it is and set how many. It goes on the order list with the rest."],
         ["Nothing missing", "tap Checked: nothing missing, so the office knows it was checked."],
         ["No signal", "the list waits on this phone and sends itself when you're back online."],
         ["Admins", "Order list: tap Ordered when you place the order and Received when it arrives. Share copies the list for a text or email to the supplier. + New checklist and Edit checklist build them; Settings > Users and invites chooses who sees each one."],
@@ -8207,14 +8230,44 @@ function supItem(p, open, last) {
       input,
       h("button", { type: "button", id: "sa-" + p.id, "aria-label": `One more ${p.name}`, text: "+", onclick: () => { supSetQty(p.id, (supDraft.items[p.id] || 0) + 1); supRerender(); } })) : null);
 }
+/** Something else: one thing that isn't on the checklist. Tick it, type what it is, set how many. */
+function supOtherEl(sc) {
+  const id = sc.list.id, o = supDraft.other[id] || null, on = !!o, qty = on ? Math.max(1, Math.round(o.qty) || 1) : 0;
+  const setQty = q => { supDraft.other[id].qty = Math.max(1, Math.min(999, Math.round(q) || 1)); saveSupDraft(); };
+  const tap = h("button", { class: "sup-tap", type: "button", id: "spOther", "aria-pressed": String(on), "aria-controls": on ? "soText" : null,
+    onclick: () => {
+      if (on) delete supDraft.other[id]; else supDraft.other[id] = { text: "", qty: 1 };
+      saveSupDraft(); supRerender();
+      if (!on) { const t = $("soText"); if (t) t.focus(); }
+    } },
+    h("span", { class: "sup-box", "aria-hidden": "true" }),
+    h("span", { class: "sup-name", text: "Something else" }),
+    h("span", { class: "sup-sub" }, h("span", { text: on ? "Type what we need below" : "Not on this checklist? Tick it and type it" })));
+  if (on) tap.querySelector(".sup-box").innerHTML = CHECK_SVG;
+  return h("section", { class: "sup-sec sup-other", id: "supOther", style: secTheme(SUP_OTHER_COLOR) },
+    h("div", { class: "sup-sec-head" }, h("h3", { text: "Not on the list" }), on && supOtherIn(sc) ? h("span", { class: "cnt on", text: "1 marked" }) : null),
+    h("ul", { class: "sup-list" }, h("li", { class: "sup-item sup-oth" + (on ? " marked" : ""), "data-p": SUP_OTHER }, tap,
+      on ? h("div", { class: "step" },
+        h("span", { class: "lbl", text: "Need" }),
+        h("button", { type: "button", id: "smOther", "aria-label": "One less", text: "−", disabled: qty <= 1, onclick: () => { setQty(qty - 1); supRerender(); } }),
+        h("input", { id: "sqOther", type: "text", inputmode: "numeric", pattern: "[0-9]*", maxlength: "3", value: String(qty), "aria-label": "How many",
+          onfocus: e => e.target.select(),
+          oninput: e => { const v = parseInt(e.target.value.replace(/\D/g, ""), 10); if (v > 0) setQty(v); },
+          onchange: e => { e.target.value = String((supDraft.other[id] || {}).qty || 1); } }),
+        h("button", { type: "button", id: "saOther", "aria-label": "One more", text: "+", onclick: () => { setQty(qty + 1); supRerender(); } })) : null,
+      on ? h("input", { class: "sup-oth-text", id: "soText", type: "text", maxlength: String(SUP_OTHER_MAX), autocomplete: "off", enterkeyhint: "done",
+        "aria-label": "What do we need?", placeholder: "What do we need? Like blue painter's tape", value: o.text || "",
+        oninput: e => { supDraft.other[id].text = e.target.value; saveSupDraft(); supBarUpdate(); } }) : null)));
+}
 function supBar(sc) {
-  const n = supMarkedIn(sc).length;
+  const n = supCount(sc);
   return h("div", { class: "sup-bar" + (n ? " on" : " plain"), id: "supBar" }, ...(n
     ? [h("span", { class: "sum", text: `${n} item${n === 1 ? "" : "s"} marked` }),
        h("button", { class: "btn ghost", type: "button", id: "supClear", text: "Clear", onclick: ev => {
          const b = ev.currentTarget;
          if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to clear"; return; }
          for (const p of sc.products) delete supDraft.items[p.id];
+         delete supDraft.other[sc.list.id];
          saveSupDraft(); supRerender();
        } }),
        h("button", { class: "btn primary", type: "button", id: "supSend", text: "Send list", onclick: () => supSend(sc, false) })]
@@ -8227,23 +8280,26 @@ function supBarUpdate() {
   const sc = supScope(s, L);
   const bar = $("supBar");
   if (bar) bar.replaceWith(supBar(sc));
-  const n = supMarkedIn(sc).length, t = $("supTab-check");
+  const n = supCount(sc), t = $("supTab-check");
   if (t) t.replaceChildren("Checklist", ...(n ? [h("span", { class: "n", text: String(n) })] : []));
+  const c = document.querySelector("#supOther .sup-sec-head"), on = !!supOtherIn(sc), cnt = c && c.querySelector(".cnt");
+  if (c && on && !cnt) c.append(h("span", { class: "cnt on", text: "1 marked" })); else if (cnt && !on) cnt.remove();
 }
 function supSend(sc, nothing) {
   if (!session) return;
   if (!supOk()) { toast("Checklists need the Google script updated first (see the note at the top)."); return; }
-  const marked = supMarkedIn(sc);
+  const marked = supMarkedIn(sc), other = nothing ? null : supOtherIn(sc);
   const items = nothing ? [] : marked.map(([productId, qty]) => ({ productId, qty }));
-  if (!nothing && !items.length) return;
-  const list = sc.list.id;
+  if (!nothing && !items.length && !other) return;
+  const list = sc.list.id, n = items.length + (other ? 1 : 0);
   const checkId = "c-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   const note = String(supDraft.notes[list] || "").trim().slice(0, 500);
   enqueue({ action: "supplyReport", key: "sup:" + checkId, at: new Date().toISOString(), by: session.name, admin: isAdmin(),
-    data: { checkId, list, items, note }, draft: { items: Object.fromEntries(marked) },
-    okMsg: nothing ? `${sc.list.name}: saved, nothing missing` : `Sent: ${items.length} item${items.length === 1 ? "" : "s"} on the ${sc.list.name} order list` });
+    data: Object.assign({ checkId, list, items, note }, other ? { other } : {}), draft: { items: Object.fromEntries(marked) },
+    okMsg: nothing ? `${sc.list.name}: saved, nothing missing` : `Sent: ${n} item${n === 1 ? "" : "s"} on the ${sc.list.name} order list` });
   for (const [id] of marked) delete supDraft.items[id];
   delete supDraft.notes[list];
+  delete supDraft.other[list];
   saveSupDraft();
   store.set("voda.supSent", true);   // the how-to line has done its job on this phone
   if (!navigator.onLine) toast("No signal. The list will send itself when you're back online.");
@@ -8302,7 +8358,8 @@ function ordRow(r, admin) {
   const tapToChange = admin && open && !r.pending;   // admins: tap the line to change how many or remove it
   return h("li", { class: "ord-row" + (r.pending ? " pending" : "") + (act ? " has-act" : "") + (tapToChange ? " tappable" : ""), "data-r": r.id,
     onclick: tapToChange ? () => openSupLine(r.id) : null },
-    h("span", { class: "ord-name" }, r.status === "Received" || r.status === "Removed" ? h("span", { class: "st " + r.status.toLowerCase(), text: r.status }) : null, r.product),
+    h("span", { class: "ord-name" }, r.status === "Received" || r.status === "Removed" ? h("span", { class: "st " + r.status.toLowerCase(), text: r.status }) : null,
+      r.productId === SUP_OTHER ? h("span", { class: "st other", text: "Not on the list" }) : null, r.product),
     h("span", { class: "ord-qty", text: supQty(r.qty, r.container) }),
     h("span", { class: "ord-meta", text: meta }),
     act ? h("span", { class: "ord-act" }, act) : null);
