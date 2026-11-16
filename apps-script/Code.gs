@@ -57,8 +57,9 @@
  *
  * REBUILD CALENDAR (optional)
  * Every Repairs estimate approved in Housecall Pro goes on the vendors' Google calendar on the day it was approved,
- * 6 to 7 AM, in red: "APPROVED - NEED TO SCHEDULE - <city> - <client>", with its address, the client's phone, and in
- * bold "Approved is $x" and "Monumental 70% is $y" (REBUILD_VENDOR and REBUILD_SHARE change the name and the %). To turn it on:
+ * 6 to 7 AM, in red: "APPROVED - NEED TO SCHEDULE - <city> - <client>", with its address, the client's phone, the
+ * estimate's Private notes, and in bold "Approved is $x" and "Monumental 70% is $y" (REBUILD_VENDOR and REBUILD_SHARE
+ * change the name and the %). Notes written later are added above the amounts (checked once an hour for a month). To turn it on:
  * 1. In Google Calendar, make a calendar called "VODA rebuilds" in this account (Settings > Add calendar > Create new
  *    calendar) and share it with the vendor. The setup finds it by that name and keeps its ID (REBUILD_CALENDAR_ID).
  *    Another calendar: put its Calendar ID (its Settings > Integrate calendar) in REBUILD_CALENDAR_ID instead; it must be
@@ -138,7 +139,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 71;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 72;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4505,7 +4506,8 @@ function estSync_(req, user) {
 }
 /* ---- The rebuild calendar: every Repairs estimate approved in Housecall Pro (by the client or the office) goes on the
    vendors' calendar once, on the day it was approved, 6 to 7 AM, in red, titled "APPROVED - NEED TO SCHEDULE - <city> -
-   <client>", at its address, with the client's phone and, in bold, what was approved and the vendor's share (Script
+   <client>", at its address, with the client's phone, the estimate's Private notes (new ones added later: rbNotesLater_)
+   and, in bold, what was approved and the vendor's share (Script
    Properties REBUILD_VENDOR, default Monumental, and REBUILD_SHARE, default 70%). The calendar: Script Property REBUILD_CALENDAR_ID (its Calendar ID, from the calendar's
    Settings > Integrate calendar; the "VODA rebuilds" calendar shared with the vendor). Only estimates approved on or after
    REBUILD_CALENDAR_FROM (yyyy-MM-dd; set to the day it's turned on). Turn it on once from the editor: Run >
@@ -4513,12 +4515,14 @@ function estSync_(req, user) {
    Pro and books). No longer approved: its event's title gets "CANCELED - " in front (the vendor may have renamed it);
    approved again: taken off. The "Rebuild calendar" tab keeps each one booked. ---- */
 const RB_SHEET = "Rebuild calendar";
-const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title"];
+const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title", "Notes added", "Notes checked at"];
+const RB_NOTES_EVERY = 60 * 60e3, RB_NOTES_DAYS = 30, RB_NOTES_PER_RUN = 20;   // new Private notes: each estimate looked at once an hour, for a month, 20 a run
 const RB_TITLE = "APPROVED - NEED TO SCHEDULE - ", RB_CANCEL = "CANCELED - ", RB_HOUR = 6, RB_NAME = "VODA rebuilds";
 function rbSheet_() {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(RB_SHEET);
-  if (!s) { s = ss.insertSheet(RB_SHEET); s.getRange(1, 1, 1, RB_COLS.length).setValues([RB_COLS]).setFontWeight("bold"); s.setFrozenRows(1); }
+  if (!s) { s = ss.insertSheet(RB_SHEET); s.setFrozenRows(1); }
+  s.getRange(1, 1, 1, RB_COLS.length).setValues([RB_COLS]).setFontWeight("bold");   // (newer columns added to an older tab)
   return s;
 }
 /** Each estimate booked: by estimate id, { row (its row on the tab), rec }. */
@@ -4527,14 +4531,38 @@ function rbRead_(s) {
   if (s.getLastRow() < 2) return out;
   s.getRange(2, 1, s.getLastRow() - 1, RB_COLS.length).getValues().forEach(function (r, i) {
     const id = String(r[0] || "").trim();
-    if (id) out[id] = { row: i + 2, rec: { event: String(r[4] || ""), status: String(r[6] || "") } };
+    let keys = [];
+    try { keys = JSON.parse(String(r[8] || "[]")); } catch (e) { keys = []; }
+    const at = r[9] instanceof Date ? r[9].getTime() : Date.parse(String(r[9] || "")) || 0;
+    const day = r[3] instanceof Date ? Utilities.formatDate(r[3], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(r[3] || "");
+    if (id) out[id] = { row: i + 2, rec: { event: String(r[4] || ""), status: String(r[6] || ""), day: day, keys: Array.isArray(keys) ? keys.map(String) : [], checked: at } };
   });
   return out;
 }
-/** The city in the title: the estimate's city, "Washington DC" for DC. */
-function rbPlace_(r) {
-  const city = String(r[5] || "").split(", ").slice(1).pop() || "", st = String(r[30] || "").trim().toUpperCase();
+/** The city in the title: the estimate's city, "Washington DC" for DC (st: its state, when the tab has none). */
+function rbPlace_(r, st) {
+  const city = String(r[5] || "").split(", ").slice(1).pop() || "";
+  st = String(st || r[30] || "").trim().toUpperCase();
   return st === "DC" && city && !/\bDC$/i.test(city) ? city + " DC" : city;
+}
+/** The estimate's Private notes (and its options'), in Housecall Pro's order, once each: [{ k (its id), c (its text) }]. */
+function rbNotes_(e) {
+  const out = [], seen = {};
+  const all = [].concat(Array.isArray(e && e.notes) ? e.notes : []);
+  (Array.isArray(e && e.options) ? e.options : []).forEach(function (o) { if (o && Array.isArray(o.notes)) Array.prototype.push.apply(all, o.notes); });
+  all.forEach(function (n) {
+    const c = String((n && typeof n === "object" ? n.content : n) || "").replace(/\r/g, "").trim(), k = String((n && typeof n === "object" && n.id) || c);
+    if (c && !seen[k]) { seen[k] = true; out.push({ k: k, c: c }); }
+  });
+  return out;
+}
+/** A note as calendar text: its own line breaks kept. */
+function rbNoteHtml_(c) { return String(c).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>"); }
+/** What a description says, without its formatting (to tell whether a note is in it already). */
+function rbPlain_(html) { return String(html || "").replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim(); }
+/** One estimate from Housecall Pro, or null. */
+function rbEstimate_(eid) {
+  try { const g = hcpGet_("/estimates/" + encodeURIComponent(eid), {}); return g && !g.error && g.data ? (g.data.estimate || g.data) : null; } catch (e) { return null; }
 }
 /** "$1,605.84" */
 function rbMoney_(dollars) { const c = Math.round((Number(dollars) || 0) * 100); return "$" + String(Math.floor(c / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + String(c % 100).padStart(2, "0"); }
@@ -4556,15 +4584,21 @@ function rebuildBook_() {
       if (!approved) return;
       const day = r[11] && !isNaN(Date.parse(r[11])) ? Utilities.formatDate(new Date(r[11]), tz, "yyyy-MM-dd") : today;
       if (day < from) return;
-      const title = (RB_TITLE + rbPlace_(r) + " - " + String(r[4] || "No name")).slice(0, 250), addr = String(r[29] || r[5] || "");
-      // the client's phone, then what was approved and the vendor's share, in bold (as typed by hand before)
+      // the estimate from Housecall Pro now: its Private notes, and the whole address, state and phone when the tab has
+      // none (an estimate read before they were kept there)
+      const e = rbEstimate_(eid), notes = e ? rbNotes_(e) : [];
+      let addr = String(r[29] || ""), st = String(r[30] || ""), phone = String(r[31] || "");
+      if (e) { addr = addr || estAddress_(e.address); st = st || String((e.address && e.address.state) || ""); phone = phone || estPhone_(e.customer); }
+      addr = addr || String(r[5] || "");
+      const title = (RB_TITLE + rbPlace_(r, st) + " - " + String(r[4] || "No name")).slice(0, 250);
+      // the client's phone, its Private notes, then what was approved and the vendor's share, in bold (as typed by hand before)
       const amt = Number(r[13]) || Number(r[12]) || 0, vendor = String(P.getProperty("REBUILD_VENDOR") || "").trim() || "Monumental";
       const share = Number(P.getProperty("REBUILD_SHARE")) > 0 && Number(P.getProperty("REBUILD_SHARE")) <= 100 ? Number(P.getProperty("REBUILD_SHARE")) : 70;
-      const desc = (r[31] ? String(r[31]) + "<br><br>" : "") + "<b>Approved is " + rbMoney_(amt) + "</b><br><b>" + vendor + " " + share + "% is " + rbMoney_(amt * share / 100) + "</b>";
+      const desc = (phone ? phone + "<br><br>" : "") + notes.map(function (n) { return rbNoteHtml_(n.c) + "<br><br>"; }).join("") + "<b>Approved is " + rbMoney_(amt) + "</b><br><b>" + vendor + " " + share + "% is " + rbMoney_(amt * share / 100) + "</b>";
       const start = Utilities.parseDate(day + " " + String(RB_HOUR).padStart(2, "0") + ":00", tz, "yyyy-MM-dd HH:mm");
       const ev = cal.createEvent(title, start, new Date(start.getTime() + 3600e3), { location: addr, description: desc });
       try { ev.setColor(CalendarApp.EventColor.RED); } catch (e) { /* the color is a nicety */ }
-      appendRows_(s, RB_COLS.length, [[eid, String(r[1]), String(r[4] || ""), day, ev.getId(), now, "booked", title]]);
+      appendRows_(s, RB_COLS.length, [[eid, String(r[1]), String(r[4] || ""), day, ev.getId(), now, "booked", title, JSON.stringify(notes.map(function (n) { return n.k; })), now]]);
       out.booked++;
       return;
     }
@@ -4576,9 +4610,37 @@ function rebuildBook_() {
     } else if (x.rec.status === "canceled" && approved) {
       if (ev && ev.getTitle().indexOf(RB_CANCEL) === 0) ev.setTitle(ev.getTitle().slice(RB_CANCEL.length));
       s.getRange(x.row, 7).setValues([["booked"]]); out.back++;
-    }
+    } else if (x.rec.status === "booked" && approved) rbNotesLater_(x, r, eid, ev, s, out, today);
   });
   return out;
+}
+/** Private notes written after it went on the calendar (and, for one booked before the phone and the whole address were
+ *  kept, those too): once an hour for a month after it was approved, Housecall Pro is asked for the estimate; each new
+ *  note goes in above the amounts (at the end if they were taken out). Only adds: anything typed on the calendar stays;
+ *  a note already in the description isn't added again. */
+function rbNotesLater_(x, r, eid, ev, s, out, today) {
+  if (!ev || (out.checked || 0) >= RB_NOTES_PER_RUN || Date.now() - x.rec.checked < RB_NOTES_EVERY) return;
+  const dayMs = Date.parse(x.rec.day + "T12:00:00Z");
+  if (dayMs && Date.parse(today + "T12:00:00Z") - dayMs > RB_NOTES_DAYS * 864e5) return;
+  out.checked = (out.checked || 0) + 1;
+  const e = rbEstimate_(eid), now = new Date().toISOString();
+  if (!e) return;
+  const keys = x.rec.keys.slice(), fresh = rbNotes_(e).filter(function (n) { return keys.indexOf(n.k) === -1; });
+  let desc = String(ev.getDescription() || ""), plain = rbPlain_(desc), changed = false;
+  const add = [];
+  fresh.forEach(function (n) { keys.push(n.k); if (plain.indexOf(rbPlain_(rbNoteHtml_(n.c))) === -1) add.push(rbNoteHtml_(n.c) + "<br><br>"); });
+  if (add.length) {
+    const at = desc.search(/(<b>)?\s*Approved is /i);
+    desc = at === -1 ? desc + (desc ? "<br><br>" : "") + add.join("").replace(/<br><br>$/, "") : desc.slice(0, at) + add.join("") + desc.slice(at);
+    changed = true;
+  }
+  // the phone and the whole address, when it was booked without them
+  const phone = String(r[31] || "") || estPhone_(e.customer), addr = String(r[29] || "") || estAddress_(e.address);
+  if (phone && rbPlain_(desc).indexOf(phone) === -1) { desc = phone + "<br><br>" + desc; changed = true; }
+  if (changed) ev.setDescription(desc);
+  if (addr && typeof ev.getLocation === "function" && ev.getLocation() === String(r[5] || "")) ev.setLocation(addr);
+  s.getRange(x.row, 9, 1, 2).setValues([[JSON.stringify(keys), now]]);
+  if (add.length) out.notes = (out.notes || 0) + add.length;
 }
 /** Every 15 minutes (rebuildCalendarSetup turns it on): what changed in Housecall Pro, then the calendar. */
 function rebuildCalendarTick() {
