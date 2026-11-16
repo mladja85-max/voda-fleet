@@ -57,7 +57,8 @@
  *
  * REBUILD CALENDAR (optional)
  * Every Repairs estimate approved in Housecall Pro goes on the vendors' Google calendar on the day it was approved,
- * 6 to 7 AM, in red: "APPROVED - NEED TO SCHEDULE - <city> - <client>", with its address. To turn it on:
+ * 6 to 7 AM, in red: "APPROVED - NEED TO SCHEDULE - <city> - <client>", with its address, the client's phone, and in
+ * bold "Approved is $x" and "Monumental 70% is $y" (REBUILD_VENDOR and REBUILD_SHARE change the name and the %). To turn it on:
  * 1. Project Settings > Script Properties > Add script property. Property: REBUILD_CALENDAR_ID   Value: the calendar's
  *    Calendar ID (Google Calendar > the calendar's Settings > Integrate calendar). The calendar must be this account's,
  *    or shared with it with "Make changes to events".
@@ -4240,7 +4241,7 @@ function repRead_(year) {
 const EST_SHEET = "Estimates";
 const EST_COLS = ["Estimate id", "Estimate #", "Day (scheduled, else created)", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
-  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for", "Address", "State"];
+  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for", "Address", "State", "Phone"];
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
 const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "5";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once; 5: the day it was scheduled for, read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
@@ -4270,7 +4271,7 @@ function estRows_(s, at) {
     if (!id) return;
     r[2] = repDay_(r[2], tz);
     [3, 11, 18, 19, 24, 28].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
-    if (r.length > 29) r[29] = String(r[29] || ""), r[30] = String(r[30] || "");
+    for (let c = 29; c < 32 && c < r.length; c++) r[c] = String(r[c] || "");
     out[id] = r;
     if (at) at[id] = i + 2;
   });
@@ -4283,12 +4284,20 @@ function estKind_(tags) {
   const kinds = [has(/mou?ld/i) ? "mold" : "", has(/water|flood/i) ? "water" : "", has(/fire|smoke|soot/i) ? "fire" : ""].filter(Boolean);
   return kinds.length === 1 ? kinds[0] : "";   // two kinds of tag: not sorted (counted once)
 }
-/** The estimate's whole address, the way a calendar or a map reads it: "1220 N Fillmore St PH10, Arlington, VA 22201". */
+/** The estimate's whole address, the way it's written on a calendar: "445 M St NW Unit 2 Washington, DC 20001". */
 function estAddress_(a) {
   a = a || {};
   const t = function (v) { return String(v || "").replace(/\s+/g, " ").trim(); };
-  const street = [t(a.street), t(a.street_line_2)].filter(Boolean).join(" "), stz = [t(a.state), t(a.zip)].filter(Boolean).join(" ");
-  return [street, t(a.city), stz].filter(Boolean).join(", ").slice(0, 200);
+  const line = [t(a.street), t(a.street_line_2), t(a.city)].filter(Boolean).join(" "), stz = [t(a.state), t(a.zip)].filter(Boolean).join(" ");
+  return [line, stz].filter(Boolean).join(", ").slice(0, 200);
+}
+/** The client's phone: mobile, else home, else work; "(843) 267-7909". */
+function estPhone_(cu) {
+  cu = cu || {};
+  const raw = String(cu.mobile_number || cu.home_number || cu.work_number || "").trim();
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
+  return d.length === 10 ? "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6) : raw.slice(0, 30);
 }
 /** When an estimate was scheduled for in Housecall Pro (its Schedule: the visit), or "" when it has none: the
  *  estimate's own schedule, else the first of its options'. */
@@ -4332,7 +4341,7 @@ function estRow_(e, old, tz, at) {
     dept === "r" ? kind : "", type, status, by, decided, total / 100, approved / 100,
     JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o), String(o.status || "").slice(0, 40), String(o.id || "").slice(0, 80)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
     "", "", "", "", "", text, tagList.join(", "), opts.map(function (o) { return String(o.status || ""); }).filter(Boolean).join(", "), sched,
-    estAddress_(a), String(a.state || "").trim().slice(0, 20)];
+    estAddress_(a), String(a.state || "").trim().slice(0, 20), estPhone_(e.customer)];
   return row;
 }
 /** Who's in charge of an estimate: of the people assigned to it in Housecall Pro, the one with the highest role in
@@ -4495,7 +4504,8 @@ function estSync_(req, user) {
 }
 /* ---- The rebuild calendar: every Repairs estimate approved in Housecall Pro (by the client or the office) goes on the
    vendors' calendar once, on the day it was approved, 6 to 7 AM, in red, titled "APPROVED - NEED TO SCHEDULE - <city> -
-   <client>", with its address. The calendar: Script Property REBUILD_CALENDAR_ID (its Calendar ID, from the calendar's
+   <client>", at its address, with the client's phone and, in bold, what was approved and the vendor's share (Script
+   Properties REBUILD_VENDOR, default Monumental, and REBUILD_SHARE, default 70%). The calendar: Script Property REBUILD_CALENDAR_ID (its Calendar ID, from the calendar's
    Settings > Integrate calendar; the "VODA rebuilds" calendar shared with the vendor). Only estimates approved on or after
    REBUILD_CALENDAR_FROM (yyyy-MM-dd; set to the day it's turned on). Turn it on once from the editor: Run >
    rebuildCalendarSetup (Google asks for the calendar permission; then every 15 minutes it reads what changed in Housecall
@@ -4522,10 +4532,11 @@ function rbRead_(s) {
 }
 /** The city in the title: the estimate's city, "Washington DC" for DC. */
 function rbPlace_(r) {
-  const city = String(r[5] || "").split(", ").pop().trim(), st = String(r[30] || "").trim().toUpperCase();
+  const city = String(r[5] || "").split(", ").slice(1).pop() || "", st = String(r[30] || "").trim().toUpperCase();
   return st === "DC" && city && !/\bDC$/i.test(city) ? city + " DC" : city;
 }
-const rbMoney_ = function (dollars) { return "$" + String(Math.round(Number(dollars) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+/** "$1,605.84" */
+function rbMoney_(dollars) { const c = Math.round((Number(dollars) || 0) * 100); return "$" + String(Math.floor(c / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + String(c % 100).padStart(2, "0"); }
 /** Puts what's newly approved on the calendar, and marks what's no longer approved. */
 function rebuildBook_() {
   const P = PropertiesService.getScriptProperties(), id = String(P.getProperty("REBUILD_CALENDAR_ID") || "").trim();
@@ -4544,12 +4555,11 @@ function rebuildBook_() {
       if (!approved) return;
       const day = r[11] && !isNaN(Date.parse(r[11])) ? Utilities.formatDate(new Date(r[11]), tz, "yyyy-MM-dd") : today;
       if (day < from) return;
-      let opts = [];
-      try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
-      const opt = opts.filter(function (o) { return o[2] === "approved"; })[0] || opts[0] || [];
       const title = (RB_TITLE + rbPlace_(r) + " - " + String(r[4] || "No name")).slice(0, 250), addr = String(r[29] || r[5] || "");
-      const desc = ["Estimate #" + r[1] + ": " + rbMoney_(r[13] || r[12]) + ", approved " + Utilities.formatDate(new Date(day + "T12:00:00Z"), "UTC", "EEE MMM d") + (r[10] ? " by the " + r[10] : ""),
-        addr, opt[4] ? "Open in Housecall Pro: https://pro.housecallpro.com/app/estimates/" + opt[4] : "", "", "Put here by VODA Hub."].filter(function (l, i) { return l || i === 3; }).join("\n");
+      // the client's phone, then what was approved and the vendor's share, in bold (as typed by hand before)
+      const amt = Number(r[13]) || Number(r[12]) || 0, vendor = String(P.getProperty("REBUILD_VENDOR") || "").trim() || "Monumental";
+      const share = Number(P.getProperty("REBUILD_SHARE")) > 0 && Number(P.getProperty("REBUILD_SHARE")) <= 100 ? Number(P.getProperty("REBUILD_SHARE")) : 70;
+      const desc = (r[31] ? String(r[31]) + "<br><br>" : "") + "<b>Approved is " + rbMoney_(amt) + "</b><br><b>" + vendor + " " + share + "% is " + rbMoney_(amt * share / 100) + "</b>";
       const start = Utilities.parseDate(day + " " + String(RB_HOUR).padStart(2, "0") + ":00", tz, "yyyy-MM-dd HH:mm");
       const ev = cal.createEvent(title, start, new Date(start.getTime() + 3600e3), { location: addr, description: desc });
       try { ev.setColor(CalendarApp.EventColor.RED); } catch (e) { /* the color is a nicety */ }
