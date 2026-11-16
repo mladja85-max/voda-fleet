@@ -1980,6 +1980,19 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .lb-dl-opt:active:not(:disabled) strong, .lb-dl-opt:active:not(:disabled) span { color: var(--accent-ink); }
 .lb-dl-opt:disabled { opacity: .5; cursor: progress; }
 .lb-dl-status { font-weight: 600; color: var(--ink) !important; }
+/* which slides go in the download */
+.lb-dl-pick { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.lb-dl-pick summary { cursor: pointer; padding: 10px 14px; font-weight: 600; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.lb-dl-pick summary b { color: var(--accent); }
+.lb-dl-pick-how { margin-left: auto; font-size: .8rem; font-weight: 500; color: var(--muted); }
+.lb-dl-pick[open] .lb-dl-pick-how { display: none; }
+.lb-dl-pick-tools { display: flex; gap: 6px; padding: 0 12px 6px; }
+.lb-dl-slides { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 10px; padding: 0 12px 12px; }
+.lb-dl-slide { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 8px; cursor: pointer; font-size: .92rem; min-width: 0; }
+.lb-dl-slide:hover { background: var(--surface-2); }
+.lb-dl-slide input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+.lb-dl-slide .n { flex: none; min-width: 1.4em; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 700; text-align: right; }
+.lb-dl-slide span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .lb-dl-status:empty { display: none; }
 .lbs-dots { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .lbs-dots button { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 99px; background: rgba(255, 255, 255, .25); }
@@ -15708,64 +15721,101 @@ function lbFileDate() {
   const d = clockNow();
   return `${lbMonthLong(d.getMonth() + 1).slice(0, 3)} ${d.getDate()} ${d.getFullYear()}`;
 }
+/** A slide's name: its heading, with "this month" or "year to date" when its two kinds share a heading (and it doesn't say so). */
+function lbSlideLabel(node) {
+  const head = node.querySelector("h2, h1"), kick = node.querySelector(".lbs-kicker");
+  const when = kick && /year to date/i.test(kick.textContent) ? " year to date" : kick && /month to date/i.test(kick.textContent) ? " this month" : "";
+  const name = head ? Array.from(head.childNodes, c => (c.nodeName === "BR" ? " " : c.textContent)).join("") : "VODA Leaderboard";
+  return (name + (/\b(week|month|year)\b/i.test(name) ? "" : when)) // "Revenue this month" says it already
+    .replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+}
+const K_LB_DL_OFF = "voda.lbDlOff";                     // the slides left out of the downloads (by name), remembered
 function openLbDownload() {
   const s = lbShowState;
   if (!s) return;
   const status = h("p", { class: "lb-dl-status", id: "lbDlStatus", role: "status" });
+  // the slides, each with its name (a second one with the same name: "#2"), and which are left out
+  const seen = {};
+  const all = s.slides.map((f, i) => { const label = lbSlideLabel(f()); seen[label] = (seen[label] || 0) + 1; return { i, label, key: seen[label] > 1 ? `${label} #${seen[label]}` : label }; });
+  const off = new Set((store.get(K_LB_DL_OFF) || []).filter(k => all.some(x => x.key === k)));
+  const chosen = () => all.filter(x => !off.has(x.key));
+  const hint = h("p", { class: "hint", id: "lbDlHint" }), vtext = h("span", { id: "lbDlVideoTxt" });
+  const count = () => {
+    const n = chosen().length;
+    hint.textContent = n === all.length ? `All ${all.length} slides with the numbers you see now, sized for a TV (1920 × 1080).`
+      : `${n} of ${all.length} slides (the ones ticked below), with the numbers you see now, sized for a TV (1920 × 1080).`;
+    vtext.textContent = `Each slide for ${LB_SLIDE_SECS} seconds (${lbVideoSecs(n)} seconds in all), as an MP4. Plays on almost any TV from a USB stick, or cast it from your phone.`;
+    [$("lbDlPdf"), $("lbDlPics"), $("lbDlVideo")].forEach(b => { if (b && !busy) b.disabled = !n; });
+    const sum = $("lbDlPickSum");
+    if (sum) sum.textContent = n === all.length ? "all" : `${n} of ${all.length}`;
+  };
+  const save = () => { store.set(K_LB_DL_OFF, [...off]); count(); };
+  const boxes = all.map(x => h("label", { class: "lb-dl-slide" },
+    h("input", { type: "checkbox", id: `lbDlS${x.i}`, "data-i": String(x.i), checked: !off.has(x.key), onchange: e => { if (e.target.checked) off.delete(x.key); else off.add(x.key); save(); } }),
+    h("span", { class: "n", text: String(x.i + 1) }), h("span", { text: x.label })));
+  const setAll = on => { for (const x of all) { if (on) off.delete(x.key); else off.add(x.key); } boxes.forEach(l => { l.querySelector("input").checked = on; }); save(); };
+  const pick = h("details", { class: "lb-dl-pick", id: "lbDlPick", open: off.size > 0 },
+    h("summary", null, "Slides: ", h("b", { id: "lbDlPickSum" }), h("span", { class: "lb-dl-pick-how", text: "tap to pick which" })),
+    h("div", { class: "lb-dl-pick-tools" },
+      h("button", { class: "btn small ghost", type: "button", id: "lbDlAll", text: "All", onclick: () => setAll(true) }),
+      h("button", { class: "btn small ghost", type: "button", id: "lbDlNone", text: "None", onclick: () => setAll(false) })),
+    h("div", { class: "lb-dl-slides" }, boxes));
   let busy = false;
   const make = kind => async () => {
     if (busy) return;
+    const list = chosen();
+    if (!list.length) { status.textContent = "Tick at least one slide."; return; }
     busy = true;
     const btns = [$("lbDlPdf"), $("lbDlPics"), $("lbDlVideo")];
     btns.forEach(b => { b.disabled = true; });
-    const base = `VODA Leaderboard ${lbFileDate()}`;
+    boxes.forEach(l => { l.querySelector("input").disabled = true; });
+    const base = `VODA Leaderboard ${lbFileDate()}`, slides = list.map(x => s.slides[x.i]), of = list.length === all.length ? "" : ` of ${all.length}`;
     try {
       status.textContent = "Getting ready…";
       const fonts = await lbFontCss();
       if (kind === "video") {
         const say = t => { if (!$("lbDlStatus")) return false; status.textContent = t; return true; };
-        const v = await lbVideo(s.slides, fonts, say);
+        const v = await lbVideo(slides, fonts, say);
         if (!v) return; // closed
         const vname = `${base}.${v.ext}`;
         downloadFile(vname, v.data, v.type);
-        status.textContent = `Downloaded “${vname}” (${lbVideoSecs(s.slides.length)} seconds, ${s.slides.length} slides).`;
+        status.textContent = `Downloaded “${vname}” (${lbVideoSecs(slides.length)} seconds, ${slides.length}${of} slides).`;
         return;
       }
       const pics = [];
-      for (let i = 0; i < s.slides.length; i++) {
+      for (let k = 0; k < list.length; k++) {
         if (!$("lbDlStatus")) return; // closed
-        status.textContent = `Making slide ${i + 1} of ${s.slides.length}…`;
-        const node = s.slides[i]();
-        const head = node.querySelector("h2, h1"), kick = node.querySelector(".lbs-kicker");
-        const when = kick && /year to date/i.test(kick.textContent) ? " year to date" : kick && /month to date/i.test(kick.textContent) ? " this month" : "";
-        const label = ((head ? Array.from(head.childNodes, c => (c.nodeName === "BR" ? " " : c.textContent)).join("") : "VODA Leaderboard") + when)
-          .replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
-        pics.push({ name: `${String(i + 1).padStart(2, "0")} ${label}.jpg`, data: await lbSlidePicture(node, fonts) });
+        status.textContent = `Making slide ${k + 1} of ${list.length}…`;
+        // numbered in the order they'll show (a TV plays pictures by name)
+        pics.push({ name: `${String(k + 1).padStart(2, "0")} ${list[k].label}.jpg`, data: await lbSlidePicture(slides[k](), fonts) });
       }
       const name = kind === "pdf" ? `${base}.pdf` : `${base} pictures.zip`;
       const data = kind === "pdf" ? lbPdf(pics.map(p => p.data), LB_PIC_W, LB_PIC_H, base)
         : lbZip(pics.map(p => ({ name: `${base}/${p.name}`, data: p.data })), clockNow());
       downloadFile(name, data, kind === "pdf" ? "application/pdf" : "application/zip");
-      status.textContent = `Downloaded “${name}” (${s.slides.length} slides).`;
+      status.textContent = `Downloaded “${name}” (${list.length}${of} slides).`;
     } catch (e) {
       status.textContent = `Couldn't make the file: ${(e && e.message) || e}`;
     } finally {
       busy = false;
       btns.forEach(b => { if (b) b.disabled = false; });
+      boxes.forEach(l => { l.querySelector("input").disabled = false; });
+      count();
     }
   };
   openDialog(
     h("h3", { id: "dlgTitle", text: "Download for the TV" }),
-    h("p", { class: "hint", text: `All ${s.slides.length} slides with the numbers you see now, sized for a TV (1920 × 1080).` }),
+    hint, pick,
     h("div", { class: "lb-dl-opts" },
       h("button", { class: "lb-dl-opt", type: "button", id: "lbDlPdf", onclick: make("pdf") },
-        h("strong", { text: "PDF" }), h("span", { text: "One file with every slide. Best for a laptop or computer on the TV, or to cast from your phone." })),
+        h("strong", { text: "PDF" }), h("span", { text: "One file with the slides. Best for a laptop or computer on the TV, or to cast from your phone." })),
       h("button", { class: "lb-dl-opt", type: "button", id: "lbDlPics", onclick: make("zip") },
         h("strong", { text: "Pictures" }), h("span", { text: "One picture per slide (JPG), in a .zip. Best for a USB stick: most TVs play pictures as a slideshow." })),
       h("button", { class: "lb-dl-opt", type: "button", id: "lbDlVideo", onclick: make("video") },
-        h("strong", { text: "Video" }), h("span", { text: `Every slide for ${LB_SLIDE_SECS} seconds (${lbVideoSecs(s.slides.length)} seconds in all), as an MP4. Plays on almost any TV from a USB stick, or cast it from your phone.` }))),
+        h("strong", { text: "Video" }), vtext)),
     status,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", id: "lbDlClose", text: "Close", onclick: () => closeDialog() }))));
+  count();
 }
 $("lbsDownload").addEventListener("click", () => openLbDownload());
 $("lbsPrev").addEventListener("click", () => lbShowState && lbShowState.go(lbShowState.i - 1));
