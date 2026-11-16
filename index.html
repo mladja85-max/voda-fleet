@@ -2342,6 +2342,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .er-gn { font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; } .er-goal > b { font-variant-numeric: tabular-nums; }
 .er-gs { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: .84rem; color: var(--muted); } .er-gs b { color: var(--ink); } .er-gs em { font-style: normal; font-weight: 800; color: var(--ink); }
 .er-goal.sup { border-style: dashed; }
+.er-bon { grid-column: 1 / -1; font-size: .76rem; color: var(--muted); }
 .er-note { font-size: .74rem; color: var(--muted); }
 .er-big { margin: 0; font-size: .95rem; } .er-big b { font-family: var(--font-display); font-size: 1.5rem; color: var(--ok); }
 .er-table { width: 100%; border-collapse: collapse; font-size: .88rem; font-variant-numeric: tabular-nums; }
@@ -14662,25 +14663,39 @@ function estReportEl(d, name) {
   if (!all) return h("div", { class: "er" }, head, h("p", { class: "loading", text: "Loading the estimates…" }));
   const R = estRepData(d, per, r, to, pv, all, today);
   const poss = /s$/.test(name) ? `${name}'` : `${name}'s`;   // Repairs' goal, Cleaning's goal
-  const vs = (now, then, money) => { const c = revChange(now, then); return h("small", { class: "er-vs " + c.cls, title: `${pv.label}: ${money ? lbMoney(then / 100) : fmt(then)}` }, `${c.text} vs ${per === "week" ? "last week" : per === "month" ? "last month" : "last year"}`); };
+  // against the period before: a count or dollars (money: "in $" when the big number is a count), or a rate in points
+  const vsWhen = `vs ${per === "week" ? "last week" : per === "month" ? "last month" : "last year"}`;
+  const vs = (now, then, money, say$) => { const c = revChange(now, then); return h("small", { class: "er-vs " + c.cls, title: `${pv.label}: ${money ? lbMoney(then / 100) : fmt(then)}` }, `${c.text}${say$ && c.text !== "–" && c.text !== "new" ? " in $" : ""} ${vsWhen}`); };
+  const vsPts = (now, then) => {
+    if (now === null && then === null) return h("small", { class: "er-vs", text: `– ${vsWhen}` });
+    if (then === null) return h("small", { class: "er-vs up", text: `new ${vsWhen}` });
+    const d0 = (now || 0) - then;
+    return h("small", { class: "er-vs " + (d0 > 0 ? "up" : d0 < 0 ? "down" : ""), title: `${pv.label}: ${then}%` }, `${d0 > 0 ? "▲ " : d0 < 0 ? "▼ " : ""}${Math.abs(d0)} point${Math.abs(d0) === 1 ? "" : "s"} ${vsWhen}`);
+  };
   const pct = (a, b) => (b ? Math.round(a / b * 100) : null);
   const tile = (label, big, sub, vsEl) => h("div", { class: "er-tile" }, h("small", { text: label }), h("b", { text: big }), sub ? h("span", { text: sub }) : null, vsEl || null);
   const tiles = h("div", { class: "er-tiles", id: "erTiles" },
     tile("Created", fmt(R.cur.n), `${lbMoney(R.cur.val / 100)} estimated`, vs(R.cur.n, R.prev.n)),
-    tile("Approved", fmt(R.appr.n), `${lbMoney(R.appr.val / 100)} (approved in these days)`, vs(R.appr.val, R.pappr.val, true)),
+    tile("Approved", fmt(R.appr.n), `${lbMoney(R.appr.val / 100)} (approved in these days)`, vs(R.appr.val, R.pappr.val, true, true)),
     tile("Approval rate", pct(R.cur.appr, R.cur.n) === null ? "–" : `${pct(R.cur.appr, R.cur.n)}%`, pct(R.cur.apprVal, R.cur.val) === null ? "None created in these days" : `${pct(R.cur.apprVal, R.cur.val)}% of dollars · of the ones created`,
-      vs(pct(R.cur.appr, R.cur.n) || 0, pct(R.prev.appr, R.prev.n) || 0)),
+      vsPts(pct(R.cur.appr, R.cur.n), pct(R.prev.appr, R.prev.n))),
     tile("Produced", R.prod === null ? "…" : lbMoney(R.prod / 100), `${name} revenue (Operations)`, R.prod === null || R.pprod === null ? null : vs(R.prod, R.pprod, true)));
-  // the goal: the department's part of the Minimum goal (the Super as the stretch); a year: its year goal
+  // the goal: the department's part of the Minimum goal (the Super as the stretch) and of the Bonus (Repairs: its revenue
+  // less what the repair contractors are paid); a year: its year goal
   const goalEl = (() => {
     if (!R.goal) return h("p", { class: "lb-sub", text: "No goal set for these days (Operations › Company goal)." });
-    const line = (label, g, cls) => { const left = g - (R.prod || 0), done = R.prod || 0;
-      return h("div", { class: "er-goal " + cls }, h("span", { class: "er-gn", text: label }), h("b", { text: lbMoney(g / 100) }), goalBar(done, g, cls === "sup" ? "gold" : d),
-        h("span", { class: "er-gs" }, R.prod === null ? "…" : left > 0 ? h("span", null, h("b", { text: lbMoney(left / 100) }), " to go", R.daysLeft ? ` · ${lbMoney(left / R.daysLeft / 100)} a working day` : "") : h("span", { class: "goal-hit-t", text: "✓ Reached" }),
-          h("em", { text: goalPct(done, g) }))); };
+    const line = (label, g, cls, done0, sub) => { const done = done0 || 0, left = g - done;
+      return h("div", { class: "er-goal " + cls, "data-k": cls }, h("span", { class: "er-gn", text: label }), h("b", { text: lbMoney(g / 100) }), goalBar(done, g, cls === "sup" ? "gold" : d),
+        h("span", { class: "er-gs" }, done0 === null ? "…" : left > 0 ? h("span", null, h("b", { text: lbMoney(left / 100) }), " to go", R.daysLeft ? ` · ${lbMoney(left / R.daysLeft / 100)} a working day` : "") : h("span", { class: "goal-hit-t", text: "✓ Reached" }),
+          h("em", { text: goalPct(done, g) })),
+        sub ? h("small", { class: "er-bon", text: sub }) : null); };
+    const bonDone = R.prod === null || R.contr === null ? null : R.prod - R.contr, rp = bonDone !== null && R.prod > 0 ? Math.round(bonDone / R.prod * 100) : null;
+    const bonSub = d === "p" && bonDone !== null ? `Counts ${lbMoney(bonDone / 100)}: ${lbMoney(R.prod / 100)} less ${lbMoney(R.contr / 100)} to the repair contractors${rp !== null ? ` (${rp}%)` : ""}` : "";
     return h("div", { class: "er-goals", id: "erGoal" },
-      per === "year" ? line(`${r.label} goal`, R.goal.year, "min") : [line("Minimum goal (its part)", R.goal.min, "min"), R.goal.sup ? line("Super goal (stretch)", R.goal.sup, "sup") : null],
-      h("small", { class: "er-note", text: per === "year" ? `${poss} goal for the year (Operations › Company goal).` : `${poss} part: ${Math.round(R.goal.share * 100)}% of the company's goal for these days (its share of the year's goal).${R.daysLeft ? ` ${fmt(R.daysLeft)} working days left.` : ""}` }));
+      per === "year" ? line(`${r.label} goal`, R.goal.year, "min", R.prod) : [line("Minimum goal (its part)", R.goal.min, "min", R.prod), R.goal.sup ? line("Super goal (stretch)", R.goal.sup, "sup", R.prod) : null,
+        R.goal.bon ? line("Bonus goal (its part)", R.goal.bon, "bon", bonDone, bonSub) : null],
+      h("small", { class: "er-note", text: per === "year" ? `${poss} goal for the year (Operations › Company goal).` : `${poss} part: ${Math.round(R.goal.share * 100)}% of the company's goal for these days (its share of the year's goal).${R.daysLeft ? ` ${fmt(R.daysLeft)} working days left.` : ""}`
+        + (per !== "year" && d === "p" && R.goal.bon ? " Repairs counts all of its revenue toward the Minimum and Super, and only what's left after the repair contractors are paid toward the Bonus." : "") }));
   })();
   // what the open estimates are likely to bring
   const F = R.fc;
@@ -14726,7 +14741,14 @@ function estRepData(d, per, r, to, pv, all, today) {
   if (G) {
     const yg = G.goals.years[String(y)] || null, sh = goalShares(yg, null)[d];
     if (per === "year") goal = yg && yg[d] ? { year: yg[d], share: sh } : null;
-    else { const g = goalForDays(G.goals, r.from, r.to); goal = g.miss.has("min") ? null : { min: Math.round(g.min * sh), sup: g.miss.has("sup") ? 0 : Math.round(g.sup * sh), share: sh }; }
+    else { const g = goalForDays(G.goals, r.from, r.to); goal = g.miss.has("min") ? null : { min: Math.round(g.min * sh), sup: g.miss.has("sup") ? 0 : Math.round(g.sup * sh), bon: g.miss.has("bon") ? 0 : Math.round(g.bon * sh), share: sh }; }
+  }
+  // what the repair contractors were paid in these days (the Bonus counts Repairs less it); null while a year loads
+  let contr = 0;
+  if (d === "p") for (let x = r.from; x <= to; x = lbAddDays(x, 1)) {
+    const cd = goalsDocs[Number(x.slice(0, 4))];
+    if (!cd) { if (x.slice(0, 4) !== r.from.slice(0, 4)) goalsLoad(Number(x.slice(0, 4))); contr = null; break; }
+    contr += Number(cd.contractors[x]) || 0;
   }
   const daysLeft = r.to >= today && r.from <= today ? goalWorkDays(lbAddDays(today, 1), r.to) : 0;
   // the open estimates: each one's chance from its age
@@ -14748,7 +14770,7 @@ function estRepData(d, per, r, to, pv, all, today) {
         likely: Math.round(open.filter(e => estGroup(e) === k).reduce((s, e) => s + e.est * e.p, 0)) };
     }).filter(k => !["u", "f"].includes(k.k) || k.cur.n || k.appr.n || k.likely);
   }
-  return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, daysLeft, fc, people, kinds };
+  return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, contr, daysLeft, fc, people, kinds };
 }
 /** The report on paper (or a PDF: Print › Save as PDF). */
 function estReportPrint(d, name) {
