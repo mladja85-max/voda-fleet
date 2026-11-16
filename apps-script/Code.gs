@@ -59,9 +59,10 @@
  * Every Repairs estimate approved in Housecall Pro goes on the vendors' Google calendar on the day it was approved,
  * 6 to 7 AM, in red: "APPROVED - NEED TO SCHEDULE - <city> - <client>", with its address, the client's phone, and in
  * bold "Approved is $x" and "Monumental 70% is $y" (REBUILD_VENDOR and REBUILD_SHARE change the name and the %). To turn it on:
- * 1. Project Settings > Script Properties > Add script property. Property: REBUILD_CALENDAR_ID   Value: the calendar's
- *    Calendar ID (Google Calendar > the calendar's Settings > Integrate calendar). The calendar must be this account's,
- *    or shared with it with "Make changes to events".
+ * 1. In Google Calendar, make a calendar called "VODA rebuilds" in this account (Settings > Add calendar > Create new
+ *    calendar) and share it with the vendor. The setup finds it by that name and keeps its ID (REBUILD_CALENDAR_ID).
+ *    Another calendar: put its Calendar ID (its Settings > Integrate calendar) in REBUILD_CALENDAR_ID instead; it must be
+ *    this account's, or shared with it with "Make changes to events".
  * 2. Pick "rebuildCalendarSetup" and click Run. Approve the calendar permission. It checks every 15 minutes from then on,
  *    for estimates approved from that day (REBUILD_CALENDAR_FROM; change it to an earlier yyyy-MM-dd to add earlier ones).
  * The "Rebuild calendar" tab lists each one put on the calendar. Delete its trigger (Triggers, left side) to stop it.
@@ -137,7 +138,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 70;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 71;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4513,7 +4514,7 @@ function estSync_(req, user) {
    approved again: taken off. The "Rebuild calendar" tab keeps each one booked. ---- */
 const RB_SHEET = "Rebuild calendar";
 const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title"];
-const RB_TITLE = "APPROVED - NEED TO SCHEDULE - ", RB_CANCEL = "CANCELED - ", RB_HOUR = 6;
+const RB_TITLE = "APPROVED - NEED TO SCHEDULE - ", RB_CANCEL = "CANCELED - ", RB_HOUR = 6, RB_NAME = "VODA rebuilds";
 function rbSheet_() {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(RB_SHEET);
@@ -4591,8 +4592,16 @@ function rebuildCalendarTick() {
 /** Run once from the script editor (Run > rebuildCalendarSetup) after adding REBUILD_CALENDAR_ID in Project Settings >
  *  Script Properties: Google asks for the calendar permission, the 15-minute check is turned on, and it runs once now. */
 function rebuildCalendarSetup() {
-  const P = PropertiesService.getScriptProperties(), id = String(P.getProperty("REBUILD_CALENDAR_ID") || "").trim();
-  if (!id) { Logger.log("First add REBUILD_CALENDAR_ID in Project Settings > Script Properties: the calendar's ID, from its Settings > Integrate calendar."); return; }
+  const P = PropertiesService.getScriptProperties();
+  let id = String(P.getProperty("REBUILD_CALENDAR_ID") || "").trim();
+  if (!id) {
+    // no ID typed in (Script Properties can't be added by hand past 50): the calendar called "VODA rebuilds"
+    const name = String(P.getProperty("REBUILD_CALENDAR_NAME") || "").trim() || RB_NAME;
+    const found = CalendarApp.getCalendarsByName(name) || [];
+    if (found.length !== 1) { Logger.log(found.length ? "More than one calendar is called \"" + name + "\": rename the extra ones, then run this again." : "No calendar called \"" + name + "\" in this account: make it in Google Calendar (Settings > Add calendar > Create new calendar), then run this again."); return; }
+    id = found[0].getId();
+    P.setProperty("REBUILD_CALENDAR_ID", id);
+  }
   const cal = CalendarApp.getCalendarById(id);
   if (!cal) { Logger.log("This Google account can't open that calendar. Check the ID, and that the calendar is this account's or shared with it (Make changes to events)."); return; }
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "rebuildCalendarTick") ScriptApp.deleteTrigger(tr); });
