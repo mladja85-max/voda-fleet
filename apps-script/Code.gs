@@ -70,7 +70,8 @@
  * CHECKLISTS (cleaning supplies, products, equipment)
  * The app's Checklists section starts with the paper cleaning products checklist; Admins add more in the app
  * (Checklists > + New checklist) and change any of them (Edit). A technician taps what's missing, sets how many, and sends
- * it. Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with
+ * it ("Something else" at the bottom takes one thing that isn't on the checklist, typed in; it shows as "other", section
+ * "Not on the list"). Each item lands on the Supply orders tab as "To order"; an Admin marks it Ordered, then Received. Every check (with
  * any note) is kept on the Supply checks tab. The checklists are on the Checklists tab and their items on the Supplies tab;
  * change them in the app rather than in the sheet. The tabs are made the first time the app opens Checklists.
  * When anyone sends missing items (technicians and admins), an email goes to the Script Property SUPPLY_EMAIL if you add one (for example
@@ -125,7 +126,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 67;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 68;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2312,6 +2313,8 @@ const SUP_SCHEMA = "3";      // bumped when the tabs above gain columns; older t
 const SUP_MAX_QTY = 999;
 const SUP_KEEP_DAYS = 45;    // received or removed items stay in the app this long (they stay in the sheet for good)
 const SUP_CHECKS_PER_LIST = 12;
+// Something not on the checklist: one typed line per list sent ("other"), on the order list like any item.
+const SUP_OTHER = "other", SUP_OTHER_SECTION = "Not on the list", SUP_OTHER_MAX = 120;
 // More checklists from VODA's paper sheets. Each is added once (the first time this script version runs) and never again,
 // so renaming or deleting one in the app sticks. Assign them to technicians in the app (Settings > Users and invites).
 const SUP_STARTERS = [
@@ -2583,7 +2586,7 @@ function suppliesForApp_(inLock, user, pre) {
   // When each item was last ordered, from the whole history (not only the last few weeks), so everyone can see it.
   const lastOrdered = {};
   allReqs.forEach(function (r) {
-    if (!r.orderedAt || r.status === "Removed") return;
+    if (!r.orderedAt || r.status === "Removed" || r.productId === SUP_OTHER) return;
     const cur = lastOrdered[r.productId];
     if (cur && cur.at >= r.orderedAt) return;
     lastOrdered[r.productId] = { at: r.orderedAt, qty: r.qty, by: r.orderedBy, status: r.status, receivedAt: r.status === "Received" ? r.closedAt : "" };
@@ -2604,7 +2607,8 @@ function suppliesForApp_(inLock, user, pre) {
 }
 
 /** Anyone with that checklist: the items that are missing and how many (the newest count wins for an item not ordered
- *  yet), or an empty list for "nothing missing". checkId comes from the phone, so a list sent twice counts once. */
+ *  yet), plus one typed thing that isn't on the checklist (other: { text, qty }), or an empty list for "nothing
+ *  missing". checkId comes from the phone, so a list sent twice counts once. */
 function supplyReport_(req) {
   const sh = supSheets_();
   const checkId = String(req.checkId || "");
@@ -2651,6 +2655,18 @@ function supplyReport_(req) {
     else { const row = supReqRow_(rec); add.push(row); fresh.push(supReqFromRow_(row)); }   // the same shape a fresh read gives
     lines.push({ name: p.name, container: p.container, qty: qty });
   });
+  // something not on the checklist, typed in: always a line of its own (nobody's count is replaced)
+  const o = req.other && typeof req.other === "object" ? req.other : null;
+  if (o) {
+    const text = String(o.text || "").replace(/\s+/g, " ").trim().slice(0, SUP_OTHER_MAX), qty = Math.round(Number(o.qty));
+    if (!text || !(qty >= 1 && qty <= SUP_MAX_QTY)) skipped++;
+    else {
+      const row = supReqRow_({ id: supNewId_("r"), productId: SUP_OTHER, product: text, container: "", section: SUP_OTHER_SECTION, qty: qty,
+        status: "To order", reportedAt: now, reportedBy: by, orderedAt: "", orderedBy: "", closedAt: "", closedBy: "", updatedAt: now, checkId: checkId, list: list.id });
+      add.push(row); fresh.push(supReqFromRow_(row));
+      lines.push({ name: text + " (not on the list)", container: "", qty: qty });
+    }
+  }
   supWriteReqRows_(sh.r, updated);
   appendRows_(sh.r, REQ_COLS.length, add);
   const text = lines.map(function (l) { return l.name + " x" + l.qty; }).join(", ");
