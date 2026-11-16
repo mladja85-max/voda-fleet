@@ -2950,6 +2950,9 @@ function lbEntry(arr, n) {
   for (let i = 0; i < n; i++) { const v = lbVal(Array.isArray(arr) ? arr[i] : null); out.push(v); if (v != null) any = true; }
   return any ? out : [];
 }
+/** The Sunday that starts the week holding `day`: VODA's weeks run Sunday to Saturday, everywhere in the app. */
+const lbWeekStart = day => lbAddDays(day, -new Date(day + "T00:00:00Z").getUTCDay());
+/** The Monday of `day`'s Monday-to-Sunday week: only for reading the old Excel files, whose weeks ran that way. */
 const lbMondayOf = day => { const d = new Date(day + "T00:00:00Z"); return lbAddDays(day, -((d.getUTCDay() + 6) % 7)); };
 const lbDaysIn = key => new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
 /** The company's four closed days: New Year's Day, the 4th of July, Thanksgiving (4th Thursday of November) and
@@ -3351,8 +3354,8 @@ function lbBuild(cfgIn, docs, year, opts) {
         r.truckDays++;
         if (day > r.last) r.last = day;
         if (off) continue;
-        const wk = lbMondayOf(day) + "|" + dkey + "|" + team;
-        const w = weeks[wk] || (weeks[wk] = { week: lbMondayOf(day), month: dkey, team, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
+        const wk = lbWeekStart(day) + "|" + dkey + "|" + team;
+        const w = weeks[wk] || (weeks[wk] = { week: lbWeekStart(day), month: dkey, team, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
         add(w, "jobs", e[0]); add(w, "workDays", e[1]); add(w, "revenue", e[2]);
       }
       for (const [n, arr] of Object.entries(d.s && typeof d.s === "object" ? d.s : {})) {
@@ -3376,8 +3379,8 @@ function lbBuild(cfgIn, docs, year, opts) {
       for (const x of lbJobShares(d, nameOf)) {
         const whoOff = offDay(x.who, day), ownOff = offDay(x.truck, day);
         const r = rec(dkey, x.who, whoOff);
-        const wk = lbMondayOf(day) + "|" + dkey + "|";
-        const hw = whoOff ? null : weeks[wk + x.who] || (weeks[wk + x.who] = { week: lbMondayOf(day), month: dkey, team: x.who, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
+        const wk = lbWeekStart(day) + "|" + dkey + "|";
+        const hw = whoOff ? null : weeks[wk + x.who] || (weeks[wk + x.who] = { week: lbWeekStart(day), month: dkey, team: x.who, group: r.group, jobs: 0, workDays: 0, revenue: 0 });
         const nj = lbShareJobs(x);   // a shared job counts once; a day total's helper counts the jobs typed for him
         r.helped++; r.jobs += nj; r.saleJobs += nj;
         if (hw) hw.jobs += nj;
@@ -3583,7 +3586,7 @@ function lbLatestMonth(records, year) {
   for (const r of records) if (r.group && r.month.startsWith(year + "-") && (r.revenue || r.jobs || r.workDays || r.sales)) best = Math.max(best, Number(r.month.slice(5)));
   return best;
 }
-/** Each team's revenue for one week (Monday), both parts added when the week crosses into a new month. Only teams on
+/** Each team's revenue for one week (Sunday to Saturday), both parts added when the week crosses into a new month. Only teams on
  *  the board that week are ranked. */
 /** Revenue this month (ytd false) or this year to date (ytd true) for the presentation: everyone on the board in month
  *  `key` (people who left are out), his revenue and jobs that month, or added up from January to that month (only the
@@ -3609,7 +3612,7 @@ function lbWeek(weeks, start) {
   rows.forEach((x, i) => { x.place = ranks[i]; });
   return rows.sort((a, b) => a.place - b.place || a.team.localeCompare(b.team));
 }
-/** The newest Monday with numbers, on or before `today` ("2026-11-08"). */
+/** The newest week with numbers (its Sunday), on or before `today` ("2026-11-08"). */
 function lbLatestWeek(weeks, today) {
   let best = "";
   for (const w of weeks) if (w.week <= today && w.week > best && (w.revenue || w.jobs)) best = w.week;
@@ -3808,7 +3811,7 @@ function lbRevenueDays(tabs, year) {
     const textCells = [], unnamed = slots.map(() => 0), moved = [], other = [];
     for (const r of lbFindRows(t, 1, v => lbIs(v, "WEEKLY TOTALS"))) {
       const first = r - 7;
-      // the week's Monday: what most of the dates in column A agree on (a typed-in wrong date doesn't move the week)
+      // the week's Monday (the Excel's weeks ran Monday to Sunday): what most of the dates in column A agree on (a typed-in wrong date doesn't move the week)
       const votes = {};
       for (let i = 0; i < 7; i++) { const d = lbDay(t.get(first + i, 1)); if (d && Math.abs(Number(d.slice(0, 4)) - year) <= 1) { const mo = lbMondayOf(lbAddDays(d, -i)); votes[mo] = (votes[mo] || 0) + 1; } }
       const start = Object.keys(votes).sort((x, y) => votes[y] - votes[x] || x.localeCompare(y))[0] || "";
@@ -7270,12 +7273,12 @@ function askChecks() {
 function askCalls() {
   const cfg = ofCfg(), today = lbToday();
   if (!cfg.people.length) return { none: "No one is set up on the Office scorecard yet." };
-  const week = from => { const to = lbAddDays(from, 4) < today ? lbAddDays(from, 4) : today;
+  const week = from => { const to = lbAddDays(from, 6) < today ? lbAddDays(from, 6) : today;
     return cfg.people.filter(p => ofInRange(p, from, to)).map(p => ({ p, s: ofSummary(cfg, (ofData || {}).months, p, from, to) })).filter(x => x.s.worked > 0); };
-  // this week so far; on a Monday with nothing typed yet, last week
-  const mon = lbMondayOf(today);
-  let from = mon, rows = week(mon), text = `This week so far (from ${lbDayText(mon).replace(/^\w+, /, "")})`;
-  if (!rows.length) { from = lbAddDays(mon, -7); rows = week(from); text = `Last week (${lbDayText(from).replace(/^\w+, /, "")} – ${lbDayText(lbAddDays(from, 4)).replace(/^\w+, /, "")})`; }
+  // this week so far (Sunday to Saturday); early in the week with nothing typed yet, last week
+  const start = lbWeekStart(today);
+  let from = start, rows = week(start), text = `This week so far (from ${lbDayText(start).replace(/^\w+, /, "")})`;
+  if (!rows.length) { from = lbAddDays(start, -7); rows = week(from); text = `Last week (${lbDayText(from).replace(/^\w+, /, "")} – ${lbDayText(lbAddDays(from, 6)).replace(/^\w+, /, "")})`; }
   if (!rows.length) return { none: "No calls typed this week or last week yet." };
   rows.sort((a, b) => a.s.pct - b.s.pct || a.s.out - b.s.out);
   const pc = s => `${Math.round(s.pct * 100)}%`, w = rows[0];
@@ -7379,9 +7382,9 @@ const HCP_ERRORS = {
   hcp_bad_answer: "Housecall Pro sent something unexpected. Try again in a minute.",
   too_long: "Pick 31 days or fewer." };
 function openHcpTest() {
-  const today = lbToday(), mon = lbMondayOf(today);
-  const from = h("input", { id: "hcpFrom", type: "date", value: lbAddDays(mon, -7), "aria-label": "From" });
-  const to = h("input", { id: "hcpTo", type: "date", value: lbAddDays(mon, -1), "aria-label": "To" });
+  const today = lbToday(), start = lbWeekStart(today);   // last week, Sunday to Saturday
+  const from = h("input", { id: "hcpFrom", type: "date", value: lbAddDays(start, -7), "aria-label": "From" });
+  const to = h("input", { id: "hcpTo", type: "date", value: lbAddDays(start, -1), "aria-label": "To" });
   const out = h("div", { id: "hcpOut", class: "hcp-out", "aria-live": "polite" });
   const go = async () => {
     const f = from.value, t = to.value;
@@ -8663,8 +8666,8 @@ const lbMonthLong = m => LB_MONTH_NAMES[m - 1].replace(/^./, c => c.toUpperCase(
 const LB_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const lbDate = day => new Date(day + "T12:00:00");
 const lbDayText = day => { const d = lbDate(day); return `${LB_WD[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`; };
-/** Monday of this week, as "2026-11-02". */
-const lbThisMonday = () => lbMondayOf(lbToday());
+/** The Sunday that starts this week, as "2026-11-01". */
+const lbThisWeekStart = () => lbWeekStart(lbToday());
 function lbWeekText(start) {
   const a = lbDate(start), b = lbDate(lbAddDays(start, 6));
   return a.getMonth() === b.getMonth() ? `${MONTHS[a.getMonth()]} ${a.getDate()} – ${b.getDate()}` : `${MONTHS[a.getMonth()]} ${a.getDate()} – ${MONTHS[b.getMonth()]} ${b.getDate()}`;
@@ -9026,7 +9029,7 @@ function lbMonthSelect(id, month, onpick) {
 /* ---- performance: the ranking on top (place and score) ---- */
 const LB_GROUP_TEXT = [["Cleaning", "Cleaning"], ["Restoration", "Restoration"], ["Company", "Whole company"]];   // a phone says Company
 /** A month and the year to date are ranked by score, a week by its revenue; inside Cleaning, inside Restoration or
- *  across the whole company. month: the month ranked (the year to date runs through it); week: a week's Monday. */
+ *  across the whole company. month: the month ranked (the year to date runs through it); week: a week's Sunday. */
 function lbRankingEl(per, month, week, agg) {
   const y = lbYear(), key = lbMonthKey(y, month);
   if (!LB_GROUP_TEXT.some(([k]) => k === lbView.group)) lbView.group = "Cleaning";
@@ -9174,7 +9177,7 @@ function lbWeekRank(start, group) {
   const all = lbWeek(lbB().weeks, start);
   const list = group === "Company" ? all : all.filter(r => r.group === group);
   if (!list.length) return h("p", { class: "meta", id: "lbWeek", text: all.length ? `No ${group} trucks on the leaderboard that week.`
-    : `Nothing typed for the week of ${lbWeekText(start)}${start === lbThisMonday() ? " yet" : ""}. A week is ranked from the trucks' days under Production.` });
+    : `Nothing typed for the week of ${lbWeekText(start)}${start === lbThisWeekStart() ? " yet" : ""}. A week is ranked from the trucks' days under Production.` });
   const max = Math.max(1, ...list.map(r => r.revenue));
   // a unit: on revenue; the whole company: each team's place in its own unit (its #1s first, the most revenue first)
   const unitPlace = new Map(LB_GROUPS.flatMap(g => { const xs = list.filter(r => r.group === g), rk = lbRanks(xs.map(r => r.revenue)); return xs.map((r, i) => [r, rk[i]]); }));
@@ -9239,7 +9242,7 @@ function lbEnterEl() {
   const out = [h("div", { class: "lb-bar" }, parts)];
   {
     const first = `${y}-01-01`, last = `${y}-12-31`;
-    const mon = lbMondayOf(day);
+    const mon = lbWeekStart(day);   // the week on the strip: Sunday to Saturday
     const pk = part === "trucks" ? "t" : part === "sales" ? "s" : "r";
     out.push(h("div", { class: "lb-daybar" },
       h("button", { class: "btn small", type: "button", id: "lbPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => lbGoDay(lbAddDays(day, -1)) }, "‹"),
@@ -10362,8 +10365,8 @@ function lbPerformanceEl() {
   const key = lbMonthKey(y, month), cfg = lbCfg();
   const zero = { revenue: 0, jobs: 0, workDays: 0, techs: 0, sales: 0, up: 0, addon: 0, rugs: 0, extra: 0, saleJobs: 0, reviews: 0, truckDays: 0, saleDays: 0, last: "" };
   // the days this view covers
-  const monday = lbMondayOf(lbToday());
-  const span = per === "ytd" ? { from: `${y}-01-01`, to: today } : per === "wtd" ? { from: monday, to: lbToday() } : per === "lastweek" ? { from: lbAddDays(monday, -7), to: lbAddDays(monday, -1) }
+  const sunday = lbWeekStart(lbToday());   // weeks run Sunday to Saturday
+  const span = per === "ytd" ? { from: `${y}-01-01`, to: today } : per === "wtd" ? { from: sunday, to: lbToday() } : per === "lastweek" ? { from: lbAddDays(sunday, -7), to: lbAddDays(sunday, -1) }
     : per === "custom" ? lbPerfRange(y) : null;
   const custom = per === "custom", len = span ? lbDayCount(span.from, span.to) : 0;
   let recOf, board, days, off = [], helpers = [], built = null, agg = null;
@@ -11443,7 +11446,7 @@ function revReadText(at) {
 const revSpanText = (a, b) => (a === b ? `${MONTHS[lbDate(a).getMonth()]} ${lbDate(a).getDate()}, ${a.slice(0, 4)}` : a.slice(0, 4) === b.slice(0, 4) ? lbSpanText(a, b)
   : `${MONTHS[lbDate(a).getMonth()]} ${lbDate(a).getDate()}, ${a.slice(0, 4)} – ${MONTHS[lbDate(b).getMonth()]} ${lbDate(b).getDate()}, ${b.slice(0, 4)}`);
 const revLen = (a, b) => Math.round((lbDate(b) - lbDate(a)) / 864e5) + 1;
-/** The same day n years before: a week goes back whole weeks (Monday to Monday, 52 weeks a year), anything else to
+/** The same day n years before: a week goes back whole weeks (Sunday to Sunday, 52 weeks a year), anything else to
  *  the same date (Feb 29 → Feb 28). */
 function revShift(day, n, per) {
   if (!n) return day;
@@ -11470,8 +11473,8 @@ function revLines(per, r, to, today) {
     for (let d = r.from; d <= end; d = lbAddDays(d, 1)) {
       const dt = lbDate(d);
       out.push({ label: `${LB_WD[dt.getDay()]} ${MONTHS[dt.getMonth()]} ${dt.getDate()}${per === "dates" && r.from.slice(0, 4) !== r.to.slice(0, 4) ? `, ${d.slice(0, 4)}` : ""}`, a: d, b: d, day: d, future: d > today });
-      if (weeks && (dt.getDay() === 0 || d === end) && wk <= today) {
-        out.push({ label: `Week of ${lbWeekText(lbMondayOf(wk))}`, sub: lbAddDays(lbMondayOf(wk), 6) > today ? "so far" : "", a: wk, b: d > today ? today : d, cls: "rev-wk" });
+      if (weeks && (dt.getDay() === 6 || d === end) && wk <= today) {   // a week's total after each Saturday
+        out.push({ label: `Week of ${lbWeekText(lbWeekStart(wk))}`, sub: lbAddDays(lbWeekStart(wk), 6) > today ? "so far" : "", a: wk, b: d > today ? today : d, cls: "rev-wk" });
         wk = lbAddDays(d, 1);
       }
     }
@@ -14931,7 +14934,7 @@ function ofTodayEl() {
       h("p", { class: "meta", text: admin ? "Check the months in People." : "Ask Mike to pick your login next to your name in Office > People. Until then you can see everyone under Scorecard." })));
     return out;
   }
-  const first = `${y}-01-01`, last = `${y}-12-31`, mon = lbMondayOf(day);
+  const first = `${y}-01-01`, last = `${y}-12-31`, mon = lbWeekStart(day);
   if (admin) out.push(h("div", { class: "lb-bar" }, lbSeg(people.map(x => [x.name, x.name]), p.name, k => { ofFlush(); ofView.who = k; ofSaveView(); renderOffice(); }, "Who")));
   out.push(h("div", { class: "lb-daybar" },
     h("button", { class: "btn small", type: "button", id: "ofPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => go(lbAddDays(day, -1)) }, "‹"),
@@ -14983,7 +14986,7 @@ function ofRefreshDay(day, p) {
     const a = ofNum(e[f.id]), b = ofNum(e[f.of]);
     el.textContent = a != null && b ? `${ofPct(a / b)} of ${base.label}` : "";   // as typed: "Google", "6M"
   }
-  const mon = lbMondayOf(day), sw = ofSummary(cfg, ofData.months, p, mon, lbAddDays(mon, 6) > lbToday() ? lbToday() : lbAddDays(mon, 6));
+  const mon = lbWeekStart(day), sw = ofSummary(cfg, ofData.months, p, mon, lbAddDays(mon, 6) > lbToday() ? lbToday() : lbAddDays(mon, 6));
   $("ofWeekFoot").textContent = `Week of ${lbWeekText(mon)}: ${fmt(sw.out)} outgoing calls · ${goal} reached on ${sw.hit} of ${sw.worked} day${sw.worked === 1 ? "" : "s"} worked`;
 }
 function ofTypedBox(day, p, input) {
@@ -15001,7 +15004,7 @@ function ofTypedBox(day, p, input) {
 function ofRange(per, off) {
   const today = lbToday(), y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
   if (per === "day") { const d = lbAddDays(today, off); return { from: d, to: d, label: lbDayText(d) }; }
-  if (per === "week") { const mon = lbAddDays(lbMondayOf(today), 7 * off); return { from: mon, to: lbAddDays(mon, 6), label: `Week of ${lbWeekText(mon)}` }; }
+  if (per === "week") { const sun = lbAddDays(lbWeekStart(today), 7 * off); return { from: sun, to: lbAddDays(sun, 6), label: `Week of ${lbWeekText(sun)}` }; }
   if (per === "month") {
     const t = y * 12 + (m - 1) + off, yy = Math.floor(t / 12), mm = (t % 12) + 1, k = lbMonthKey(yy, mm);
     return { from: `${k}-01`, to: `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`, label: `${lbMonthLong(mm)} ${yy}` };
