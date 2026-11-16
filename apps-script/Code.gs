@@ -125,7 +125,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 66;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 67;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4450,7 +4450,7 @@ function estSync_(req, user) {
   });
 }
 /* ---- Price changes: a job's amount changed in Housecall Pro after the app saw it (a discount, a reduction, more work,
-   a job from months ago edited). Every hour the script asks Housecall Pro for the jobs changed most recently and compares
+   a job from months ago edited), more than a day after the job (see PRICE_SETTLE_MS). Every hour the script asks Housecall Pro for the jobs changed most recently and compares
    each one's amount with the last one the app saw (the Price watch tab, else the Revenue tab's day). A difference is a
    warning on the Price changes tab, with the job's Private notes (why it changed, if someone wrote it): admins see them
    on Operations; an admin switched on for it marks each one checked. Housecall Pro's API doesn't say who changed it (its
@@ -4460,6 +4460,16 @@ const PRICE_COLS = ["ID", "Noticed", "Last noticed", "Changes", "Job id", "Job #
   "Change $", "Was seen", "Private notes", "New note", "Status", "Checked by", "Checked at", "Check note", "Monumental", "Job status"];
 const WATCH_COLS = ["Job id", "Job #", "Amount $", "Notes", "Seen"];
 const PRICE_PAGES = 10, PRICE_AT = "PRICE_SCAN_AT", PRICE_ERR = "PRICE_SCAN_ERR";
+// A job's amount settles a day after the job (its start, end or when it was finished, whichever is latest): a change
+// before then is the crew's sale on the day or the office's estimate before the job, kept as the amount without a
+// warning; only a change after then is a price change to check.
+const PRICE_SETTLE_MS = 24 * 3600e3;
+function priceSettleAt_(job) {
+  const ts = [job && job.schedule && job.schedule.scheduled_start, job && job.schedule && job.schedule.scheduled_end, job && job.work_timestamps && job.work_timestamps.completed_at]
+    .map(function (v) { return Date.parse(v || "") || 0; });
+  const last = Math.max.apply(null, ts);
+  return last ? last + PRICE_SETTLE_MS : 0;
+}
 /** Marks price changes checked (and sees them): anyone switched on for it, an admin or not. */
 function canPriceCheck_(user) { return !!user && user.status !== "disabled" && parseAccess_(user.access).indexOf(PRICE_CHECK) !== -1; }
 function priceSheet_(name, cols) {
@@ -4527,7 +4537,12 @@ function priceCompare_(jobs, now) {
     let was = null, wasAt = "", known = null;
     if (w) { was = w.c; wasAt = w.at; known = w.notes; }
     else { const v = revOf(id); if (v) { was = v[0]; wasAt = v[2]; } }
-    if (was !== null && was !== cents) {
+    // changed before the job settled (the day of the job, or before it): the amount it is now, no warning
+    const settle = priceSettleAt_(job), changedAt = Date.parse(job.updated_at || "") || now;
+    if (was !== null && was !== cents && settle && changedAt < settle && openOf[id] === undefined) {   // (no date at all: as before)
+      const st0 = new Date((job.schedule && job.schedule.scheduled_start) || "");
+      if (!isNaN(st0.getTime())) stale[Utilities.formatDate(st0, tz, "yyyy-MM-dd")] = true;   // its day's totals read again
+    } else if (was !== null && was !== cents) {
       const start = new Date((job.schedule && job.schedule.scheduled_start) || ""), day = isNaN(start.getTime()) ? "" : Utilities.formatDate(start, tz, "yyyy-MM-dd");
       const type = hcpJobType_(job), tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return typeof t === "object" && t ? (t.name || "") : String(t); });
       const fresh = known ? notes.filter(function (n) { return !known.some(function (k) { return k[0] === n[0] && k[1] === n[1]; }); }).map(function (n) { return n[0]; }) : null;

@@ -11737,7 +11737,7 @@ function revPriceEl() {
         h("span", { class: "price-title" }, h("strong", { text: `${n} price change${n === 1 ? "" : "s"} in Housecall Pro to check` }),
           h("span", { class: "price-show", text: priceOpen ? "Hide ▴" : "Show ▾" }))),
       h("div", { class: "price-tools" }, ...tools, priceOpen && P.mayCheck && n > 1 ? btn(`Mark all ${n} checked`, "priceAll", () => priceCheckDlg(P.open)) : null)),
-    priceOpen ? h("p", { class: "price-sub", text: `Amounts changed after the app saw them. Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` }) : null,
+    priceOpen ? h("p", { class: "price-sub", text: `Amounts changed more than a day after the job (changes on the day of the job, or before it, aren't counted). Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` }) : null,
     setup, err,
     priceOpen ? h("div", { class: "price-list", id: "priceList" }, shown.map(w => priceCard(w, P.mayCheck))) : null,
     priceOpen && n > 3 ? h("button", { class: "btn small ghost price-more", type: "button", id: "priceMore", onclick: () => { priceMore = !priceMore; renderRevenue(); } }, priceMore ? "Show fewer" : `Show all ${n}`) : null);
