@@ -958,7 +958,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .price-card.up { border-left-color: var(--ok); }
 .price-who { grid-area: who; min-width: 0; display: grid; gap: 1px; } .price-amt { grid-area: amt; } .price-tag { grid-area: tag; } .price-acts { grid-area: act; }
 .price-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
-.price-inv { font-size: 1rem; user-select: all; } .price-client { font-weight: 700; overflow-wrap: anywhere; }
+.price-inv { font-size: 1rem; } .price-client { font-weight: 700; overflow-wrap: anywhere; }
 .price-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: .78rem; color: var(--muted); }
 .price-dep { display: inline-flex; align-items: center; gap: 4px; } .price-day { white-space: nowrap; }
 .price-chip { font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
@@ -11767,7 +11767,7 @@ function priceCard(w, may) {
   const shown = open === 2 ? notes : notes.slice(0, 3);
   return h("div", { class: "price-card" + (d < 0 ? " down" : " up"), "data-price": w.id, "data-inv": w.inv },
     h("div", { class: "price-who" },
-      h("div", { class: "price-top" }, h("b", { class: "price-inv", text: `#${w.inv}` }), h("span", { class: "price-client", text: w.client || "(no name)" })),
+      h("div", { class: "price-top" }, h("b", { class: "price-inv" }, hcpLink("job", w.job, `#${w.inv}`)), h("span", { class: "price-client", text: w.client || "(no name)" })),
       h("div", { class: "price-line" }, h("span", { class: "price-dep" }, h("i", { class: "rev-dot " + dep[0] }), dep[1]), w.mon ? h("span", { class: "price-chip mon", text: "Monumental" }) : null,
         w.day ? h("span", { class: "price-day", text: `visit ${lbDayText(w.day)}${w.day.slice(0, 4) !== String(clockNow().getFullYear()) ? `, ${w.day.slice(0, 4)}` : ""}` }) : null,
         h("span", { class: "price-day", text: `Noticed ${priceWhen(w.noticed)}` }))),
@@ -11805,7 +11805,7 @@ function priceHistoryDlg() {
   const list = (priceDoc && priceDoc.checked) || [];
   openDialog(h("h2", { text: "Price changes checked" }),
     list.length ? h("div", { class: "price-hist", id: "priceHist" }, list.map(w => h("div", { class: "price-hrow" },
-      h("b", { text: `#${w.inv} ${w.client || ""}` }), h("span", { text: `${priceCash(w.was)} → ${priceCash(w.now)} (${priceChange(w)})${w.day ? ` · visit ${lbDayText(w.day)}` : ""}` }),
+      h("b", null, hcpLink("job", w.job, `#${w.inv}`), ` ${w.client || ""}`), h("span", { text: `${priceCash(w.was)} → ${priceCash(w.now)} (${priceChange(w)})${w.day ? ` · visit ${lbDayText(w.day)}` : ""}` }),
       h("small", { text: `Checked by ${w.by || "?"}, ${priceWhen(w.at)}${w.note ? `: ${w.note}` : ""}` }))))
       : h("p", { class: "meta", text: "None checked yet." }),
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
