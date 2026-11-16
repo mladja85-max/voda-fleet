@@ -126,7 +126,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 68;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 69;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4228,11 +4228,11 @@ function repRead_(year) {
    can't list estimates by the day they were created, only sort them by it: the first time they're read newest first,
    page by page, back to January 1 of last year; after that only the ones changed since the last read. ---- */
 const EST_SHEET = "Estimates";
-const EST_COLS = ["Estimate id", "Estimate #", "Created", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
+const EST_COLS = ["Estimate id", "Estimate #", "Day (scheduled, else created)", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
-  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro"];
+  "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for"];
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
-const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "4";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once
+const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "5";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once; 5: the day it was scheduled for, read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
 function estAll_(user) { return !!user && (user.role === "admin" || canSee_(user, "estimates-all")); }
 function estSheet_(create) {
@@ -4259,7 +4259,7 @@ function estRows_(s, at) {
     const id = String(r[0] || "").trim();
     if (!id) return;
     r[2] = repDay_(r[2], tz);
-    [3, 11, 18, 19, 24].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
+    [3, 11, 18, 19, 24, 28].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
     out[id] = r;
     if (at) at[id] = i + 2;
   });
@@ -4272,7 +4272,16 @@ function estKind_(tags) {
   const kinds = [has(/mou?ld/i) ? "mold" : "", has(/water|flood/i) ? "water" : "", has(/fire|smoke|soot/i) ? "fire" : ""].filter(Boolean);
   return kinds.length === 1 ? kinds[0] : "";   // two kinds of tag: not sorted (counted once)
 }
-/** An estimate from Housecall Pro as a row (what was typed in the app for it kept). */
+/** When an estimate was scheduled for in Housecall Pro (its Schedule: the visit), or "" when it has none: the
+ *  estimate's own schedule, else the first of its options'. */
+function estSched_(e) {
+  const ok = function (v) { return v && !isNaN(Date.parse(v)) ? String(v) : ""; };
+  const own = ok(e && e.schedule && e.schedule.scheduled_start);
+  if (own) return own;
+  return (Array.isArray(e && e.options) ? e.options : []).map(function (o) { return ok(o && o.schedule && o.schedule.scheduled_start); }).filter(Boolean).sort()[0] || "";
+}
+/** An estimate from Housecall Pro as a row (what was typed in the app for it kept). Its day: the day it was scheduled
+ *  for (the visit), else the day it was made. */
 function estRow_(e, old, tz, at) {
   const opts = Array.isArray(e.options) ? e.options : [];
   const stOf = function (o) { const v = String((o && (o.approval_status || o.status)) || "").toLowerCase(); return /approv/.test(v) ? "approved" : /declin|reject/.test(v) ? "declined" : ""; };
@@ -4298,13 +4307,13 @@ function estRow_(e, old, tz, at) {
   const kind = estKind_(tagList);
   let dept = revDept_(type) !== "o" ? revDept_(type) : revDept_(unit);   // no job type: its business unit
   if (dept === "o" && kind) dept = "r";   // a Water, Mold or Fire/Smoke tag: Restoration
-  const created = new Date(e.created_at || ""), day = isNaN(created.getTime()) ? "" : Utilities.formatDate(created, tz, "yyyy-MM-dd");
+  const sched = estSched_(e), when = new Date(sched || e.created_at || ""), day = isNaN(when.getTime()) ? "" : Utilities.formatDate(when, tz, "yyyy-MM-dd");
   const emps = (Array.isArray(e.assigned_employees) ? e.assigned_employees : []).map(function (x) { return [x.first_name, x.last_name].filter(Boolean).join(" "); }).filter(Boolean).join(", ");
   const a = e.address || {};
   const row = [String(e.id), String(e.estimate_number || ""), day, String(e.created_at || ""), hcpClient_(e), [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), dept,
     dept === "r" ? kind : "", type, status, by, decided, total / 100, approved / 100,
     JSON.stringify(opts.map(function (o) { return [String(o.name || "").slice(0, 60), cents(o.total_amount), stOf(o), String(o.status || "").slice(0, 40), String(o.id || "").slice(0, 80)]; })), ws, emps, hcpLead_(e), String(e.updated_at || ""), at,
-    "", "", "", "", "", text, tagList.join(", "), opts.map(function (o) { return String(o.status || ""); }).filter(Boolean).join(", ")];
+    "", "", "", "", "", text, tagList.join(", "), opts.map(function (o) { return String(o.status || ""); }).filter(Boolean).join(", "), sched];
   return row;
 }
 /** Who's in charge of an estimate: of the people assigned to it in Housecall Pro, the one with the highest role in
@@ -4355,7 +4364,7 @@ function estOut_(r, lead) {
     // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email)
     sent: String(r[9]) !== "open" || /sen[dt]|submit|fail/i.test(String(r[27] || "")) };
 }
-/** A year's estimates (by the day each was created): all of them for an admin or someone who sees them all, else
+/** A year's estimates (by the day each was scheduled for, else created): all of them for an admin or someone who sees them all, else
  *  every one he's assigned to in Housecall Pro (his whole part: a supervisor's tile on Estimates), whoever's in charge;
  *  and whether the first read from Housecall Pro is done. */
 function estRead_(year, user) {

@@ -14452,8 +14452,8 @@ function renderEstimates() {
   if (!list.length && doc.done && !estSync.busy) {
     const first = (doc.years || []).length ? Math.min(...doc.years) : 0;
     box.replaceChildren(...head, h("div", { class: "panel est-empty", id: "estEmpty" },
-      h("p", null, h("b", { text: `No estimates created in ${r.label}.` }),
-        first && Number(r.to.slice(0, 4)) < first ? ` Housecall Pro's estimates start in ${first}.` : r.from > today ? "" : " Every estimate in Housecall Pro is read; none were created in these days.")));
+      h("p", null, h("b", { text: `No estimates in ${r.label}.` }),
+        first && Number(r.to.slice(0, 4)) < first ? ` Housecall Pro's estimates start in ${first}.` : r.from > today ? "" : " Every estimate in Housecall Pro is read; none were scheduled (or made) in these days.")));
     return;
   }
   // the tiles: every estimate, then each group (approval rate by estimates and by dollars); a tile picks the list's group
@@ -14502,7 +14502,7 @@ function renderEstimates() {
       // water damage, mold, the supervisors, then the ones not sorted
       h("div", { class: "est-row2", id: "estRestRow", style: `--c:${subN}` }, row2.filter(([k]) => k !== "u").map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))), crew.map(crewTile),
         row2.filter(([k]) => k === "u").map(([k, name]) => tile(k, name, list.filter(e => grpOf.get(e) === k))))] : null);
-  const how = h("p", { class: "lb-sub est-how" }, "Approval rate: estimates approved (by the client or the office) out of every estimate created in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage, Mold or Fire/Smoke: the estimate's tag in Housecall Pro (two kinds of tag: not sorted). In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his. Tap tiles to pick any mix.");
+  const how = h("p", { class: "lb-sub est-how" }, "Each estimate counts on the day it was scheduled for in Housecall Pro (its visit), or the day it was made if it has no schedule. Approval rate: estimates approved (by the client or the office) out of every estimate in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage, Mold or Fire/Smoke: the estimate's tag in Housecall Pro (two kinds of tag: not sorted). In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his. Tap tiles to pick any mix.");
   // the people (whoever sees them all): a tile each, under the groups; without names in Reports, a word on where to set them
   const inGrp = whoPicked || allOn ? list : list.filter(e => sel.some(k => inKey(grpOf.get(e), k)));
   const people = all && !crew.length && isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Add people under With in Reports (Restoration's supervisors, say) to get a tile for each of them here." }) : null;
@@ -14558,9 +14558,9 @@ function renderEstimates() {
     h("h3", null, `Estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
     filters,
     shown.length ? h("div", { class: "est-rows", id: "estRows" },
-      h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Created", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
+      h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
       shown.slice(0, estShown).map(row))
-      : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates created in these days."
+      : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates in these days."
         : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
   box.replaceChildren(...[...head, tiles, people, how, listBox].filter(Boolean));
@@ -14675,9 +14675,9 @@ function estReportEl(d, name) {
   const pct = (a, b) => (b ? Math.round(a / b * 100) : null);
   const tile = (label, big, sub, vsEl) => h("div", { class: "er-tile" }, h("small", { text: label }), h("b", { text: big }), sub ? h("span", { text: sub }) : null, vsEl || null);
   const tiles = h("div", { class: "er-tiles", id: "erTiles" },
-    tile("Created", fmt(R.cur.n), `${lbMoney(R.cur.val / 100)} estimated`, vs(R.cur.n, R.prev.n)),
+    tile("Estimates", fmt(R.cur.n), `${lbMoney(R.cur.val / 100)} estimated (scheduled in these days)`, vs(R.cur.n, R.prev.n)),
     tile("Approved", fmt(R.appr.n), `${lbMoney(R.appr.val / 100)} (approved in these days)`, vs(R.appr.val, R.pappr.val, true, true)),
-    tile("Approval rate", pct(R.cur.appr, R.cur.n) === null ? "–" : `${pct(R.cur.appr, R.cur.n)}%`, pct(R.cur.apprVal, R.cur.val) === null ? "None created in these days" : `${pct(R.cur.apprVal, R.cur.val)}% of dollars · of the ones created`,
+    tile("Approval rate", pct(R.cur.appr, R.cur.n) === null ? "–" : `${pct(R.cur.appr, R.cur.n)}%`, pct(R.cur.apprVal, R.cur.val) === null ? "No estimates in these days" : `${pct(R.cur.apprVal, R.cur.val)}% of dollars · of these estimates`,
       vsPts(pct(R.cur.appr, R.cur.n), pct(R.prev.appr, R.prev.n))),
     tile("Produced", R.prod === null ? "…" : lbMoney(R.prod / 100), `${name} revenue (Operations)`, R.prod === null || R.pprod === null ? null : vs(R.prod, R.pprod, true)));
   // the goal: the department's part of the Minimum goal (the Super as the stretch) and of the Bonus (Repairs: its revenue
@@ -14715,15 +14715,15 @@ function estReportEl(d, name) {
       : h("p", { class: "lb-sub", text: "No open estimates worth chasing right now." }));
   // Restoration: water damage and mold apart (and the ones not sorted yet)
   const kinds = R.kinds && h("table", { class: "er-table", id: "erKinds" },
-    h("thead", null, h("tr", null, ["", "Created", "$ estimated", "Approved", "$ approved", "Rate", "Likely"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
+    h("thead", null, h("tr", null, ["", "Estimates", "$ estimated", "Approved", "$ approved", "Rate", "Likely"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
     h("tbody", null, R.kinds.map(k => h("tr", { "data-k": k.k }, h("td", { class: "er-kn" }, h("i", { class: "est-dot " + k.k }), h("b", null, k.k === "w" ? [h("span", { class: "t-long", text: k.name }), h("span", { class: "t-short", text: "Water" })] : k.name)),
       h("td", { class: "num", text: fmt(k.cur.n) }), h("td", { class: "num", text: lbMoney(k.cur.val / 100) }), h("td", { class: "num", text: fmt(k.appr.n) }), h("td", { class: "num", text: lbMoney(k.appr.val / 100) }),
       h("td", { class: "num" }, h("b", { text: estPct(k.cur.appr, k.cur.n) })), h("td", { class: "num", text: lbMoney(k.likely / 100) })))));
   const people = estPeopleTable(R.people.map(([n, st]) => [n, n, st]), { id: "erPeople", cls: "er-table" });
   return h("div", { class: "er", "data-d": d }, head, tiles,
-    kinds ? [h("h4", { text: "Water damage, mold and fire" }), kinds, h("small", { class: "er-note", text: "Created and rate: estimates made in these days. Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
+    kinds ? [h("h4", { text: "Water damage, mold and fire" }), kinds, h("small", { class: "er-note", text: "Estimates and rate: the ones scheduled in these days (no schedule: made). Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
     h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
-    h("h4", { text: "Follow up first" }), fu, h("h4", { text: "By person in charge" }), R.people.length ? people : h("p", { class: "lb-sub", text: "No estimates created in these days." }));
+    h("h4", { text: "Follow up first" }), fu, h("h4", { text: "By person in charge" }), R.people.length ? people : h("p", { class: "lb-sub", text: "No estimates in these days." }));
 }
 /** The numbers of a department's report. */
 function estRepData(d, per, r, to, pv, all, today) {
@@ -14757,7 +14757,7 @@ function estRepData(d, per, r, to, pv, all, today) {
     return { label: c.label, n: xs.length, val: xs.reduce((s, e) => s + e.est, 0), p: c.p, hist: c.n, likely: Math.round(xs.reduce((s, e) => s + e.est * c.p, 0)) }; });
   const fc = { n: open.length, open: open.reduce((s, e) => s + e.est, 0), likely: rows.reduce((s, x) => s + x.likely, 0), rows,
     follow: open.filter(e => e.p >= 0.05 && e.est > 0).sort((a, b) => b.est * b.p - a.est * a.p).slice(0, 8) };
-  // by person (created in these days)
+  // by person (the estimates in these days)
   const by = new Map();
   for (const e of dep.filter(x => within(x.day, r.from, to))) for (const o of estOwners(e)) { const k = o === "-" ? "Nobody assigned" : o; if (!by.has(k)) by.set(k, []); by.get(k).push(e); }
   const people = [...by.entries()].map(([k, xs]) => [k, estStats(xs)]).sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]));
