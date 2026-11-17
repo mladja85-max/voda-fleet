@@ -730,18 +730,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .at-grid .at-ph .at-pname { display: inline-block; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
 .at-rep-tot { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; margin: 6px 0 12px; }
 #atRepList th, #atRepList td { text-align: left; }
+.at-key { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }   /* a kind's tag in a person's report */
 .at-rep-dlg { min-width: 0; max-width: 100%; display: grid; gap: 4px; } .at-rep-dlg .lb-scroll { max-width: 100%; overflow-x: auto; }
 dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .at-rep-k { display: grid; gap: 1px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
 .at-rep-k { min-width: 0; } .at-rep-k b { font-size: 1.3rem; font-variant-numeric: tabular-nums; } .at-rep-k span { font-size: .72rem; font-weight: 700; color: var(--muted); overflow-wrap: anywhere; } .at-rep-k small { font-size: .72rem; color: var(--muted); }
 .at-rep-k.has.k-late b, .at-rep-k.has.k-left b { color: var(--soon); } .at-rep-k.has.k-sick b, .at-rep-k.has.k-noshow b { color: var(--due); } .at-rep-k.has.k-vac b { color: var(--accent); }
 .at-rep tbody tr { cursor: pointer; } .at-rep tbody tr:hover { background: var(--accent-soft); } .at-rep td.nowrap { white-space: nowrap; }
-.at-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; } .at-key { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
 .at-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; } .at-kb[aria-checked=true] { border-color: currentColor; box-shadow: 0 0 0 1px currentColor; }
 .at-f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .at-f[hidden] { display: none; } .at-f .field { margin: 0; }
-.at-tot { margin-top: 14px; } .at-tot-h { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; } .at-tot-h h3 { margin: 0; }
-.at-tot-t td { text-align: center; font-variant-numeric: tabular-nums; } .at-tot-t td.has { font-weight: 800; } .at-tot-t td small { font-weight: 600; color: var(--muted); }
-.at-tot-t td.has.k-sick, .at-tot-t td.has.k-noshow { color: var(--due); } .at-tot-t td.has.k-late, .at-tot-t td.has.k-left { color: var(--soon); } .at-tot-t td.has.k-vac { color: var(--accent); }
 .at-people { display: grid; gap: 8px; }
 .at-person { display: grid; grid-template-columns: minmax(90px, 1fr) auto auto auto; gap: 8px; align-items: end; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
 .at-person .p-name-fixed { align-self: center; } .at-pbtns { display: flex; gap: 4px; }
@@ -1537,6 +1534,15 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
 .lb-wd.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .lb-wd.on small { color: inherit; opacity: .85; }
 .lb-wd:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+/* The Leaderboard's week: the day shown has a blue ring (so its colors still show). Revenue & sales: the left half turns
+   green once the day's jobs and revenue are typed, the right half blue once a sale is typed. */
+.lb-wk2 .lb-wd.on { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.lb-wk2 .lb-wd.on small { color: var(--accent); opacity: 1; }
+.lb-wk2 { --wd-t: color-mix(in srgb, var(--ok) 48%, var(--surface)); --wd-s: color-mix(in srgb, var(--accent) 40%, var(--surface)); }
+.lb-wk2 .lb-wd.has-t { background: linear-gradient(90deg, var(--wd-t) 50%, var(--surface) 50%); }
+.lb-wk2 .lb-wd.has-s { background: linear-gradient(90deg, var(--surface) 50%, var(--wd-s) 50%); }
+.lb-wk2 .lb-wd.has-t.has-s { background: linear-gradient(90deg, var(--wd-t) 50%, var(--wd-s) 50%); }
+.lb-wk2 .lb-wd.has-t:not(.on) small, .lb-wk2 .lb-wd.has-s:not(.on) small { color: var(--ink); opacity: .75; }
 .lb-enter { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; }
 .lb-enter > .lb-sub, .lb-enter > .hint, .lb-enter > .meta { grid-column: 1 / -1; margin: 0; }
 .lb-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; display: grid; gap: 8px; align-content: start; }
@@ -9368,6 +9374,25 @@ const LB_PARTS = { trucks: "Revenue & sales", sales: "Technician sales", reviews
 const lbParts = () => (apiLevel && apiLevel < LB_JOBS_API ? LB_PARTS : { trucks: LB_PARTS.trucks, reviews: LB_PARTS.reviews });
 /** A day has something typed for a part. Trucks counts his sales too when they're typed there. */
 const lbDayHas = (day, pk) => lbHasPart(day, pk) || (pk === "t" && !lbParts().sales && lbHasPart(day, "s"));
+/** What's typed on a day: its revenue (any card's jobs, work day, revenue or # of techs, his own or from + Help) and
+ *  its sales (any card's dollars of up sale, add-on, rugs or additional service). */
+function lbDayTyped(day) {
+  const doc = lbDayDoc(day);
+  return { t: Object.values(doc.t || {}).some(a => lbEntry(a, LB_TRUCK.length).length),
+    s: Object.values(doc.s || {}).some(a => lbEntry(a, LB_SALE.length).slice(0, 4).some(v => v != null && Number(v) !== 0)) };
+}
+/** A day on the week strip. Revenue & sales: the left half green once the revenue is typed, the right half blue once a
+ *  sale is (no sales: the right half stays white). Reviews: the dot, as before. */
+function lbWdMark(el, day, pk) {
+  if (!el) return el;
+  if (pk === "r") { el.classList.toggle("has", lbDayHas(day, "r")); return el; }
+  const x = lbDayTyped(day);
+  el.classList.remove("has");
+  el.classList.toggle("has-t", x.t);
+  el.classList.toggle("has-s", x.s);
+  el.title = !x.t && !x.s ? "Nothing typed yet" : `${x.t ? "Revenue typed" : "No revenue typed"} · ${x.s ? "sales typed" : "no sales typed"}`;
+  return el;
+}
 function lbEnterDay() {
   const y = lbYear(), today = lbToday();
   let d = lbIsDay(lbView.day) ? lbView.day : (today.startsWith(y + "-") ? today : `${y}-12-31`);
@@ -9411,11 +9436,11 @@ function lbEnterEl() {
       lbDateInput({ id: "lbDay", value: day, min: first, max: last, "aria-label": "Day" }, v => lbGoDay(v), first, last),
       h("button", { class: "btn small", type: "button", id: "lbNextDay", "aria-label": "Next day", disabled: day >= last, onclick: () => lbGoDay(lbAddDays(day, 1)) }, "›"),
       day !== lbToday() && lbToday().startsWith(y + "-") ? h("button", { class: "btn ghost small", type: "button", onclick: () => lbGoDay(lbToday()) }, "Today") : null),
-      h("div", { class: "lb-week", role: "group", "aria-label": "This week" }, Array.from({ length: 7 }, (_, i) => {
+      h("div", { class: "lb-week lb-wk2", role: "group", "aria-label": "This week" }, Array.from({ length: 7 }, (_, i) => {
         const d = lbAddDays(mon, i), dt = lbDate(d);
         if (!d.startsWith(y + "-")) return h("span");
-        return h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : "") + (lbDayHas(d, pk) ? " has" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => lbGoDay(d) },
-          h("small", { text: LB_WD[dt.getDay()] }), String(dt.getDate()));
+        return lbWdMark(h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => lbGoDay(d) },
+          h("small", { text: LB_WD[dt.getDay()] }), String(dt.getDate())), d, pk);
       })));
     out.push(part === "trucks" ? lbTrucksEl(day) : part === "sales" ? lbSalesEl(day)
       : apiLevel && apiLevel < LB_RV_API ? h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
@@ -9465,8 +9490,7 @@ function lbTyped(day, part, team, n) {
   if (part === "r") lbReviewSoFarSet(day, team);
   const tot = $("lbDayTotal");
   if (tot) tot.textContent = lbDayTotalText(day);
-  const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);
-  if (wd) wd.classList.toggle("has", lbDayHas(day, part));
+  lbWdMark(document.querySelector(`.lb-wk2 .lb-wd[data-day="${day}"]`), day, part);
   if (total) lbTotalSync(day, team);
 }
 const lbRecOf = (key, team) => lbRecords().find(r => r.month === key && r.team.toLowerCase() === team.toLowerCase()) || null;
@@ -9626,8 +9650,7 @@ function lbDaySaleTyped(day, team) {
   if (bad) return;
   const any = v.some(x => x != null);
   lbQueue(day.slice(0, 7), { days: { [day]: { s: { [team]: lbEntry(v.concat([jobs != null ? jobs : any ? t[0] ?? null : null]), LB_SALE.length) } } } });
-  const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);   // the day's dot in the week strip
-  if (wd) wd.classList.toggle("has", lbDayHas(day, "t"));
+  lbWdMark(document.querySelector(`.lb-wk2 .lb-wd[data-day="${day}"]`), day, "t");   // the day's colors in the week strip
   lbTotalSync(day, team);
 }
 /* ---- + Help: who worked with him, in the card. Each helper is a line of boxes: who, the jobs he was on, his dollars
@@ -9806,7 +9829,7 @@ function lbTrucksEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Settings › Employees.` }),
-    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card; Sale jobs is how many of the day's jobs he sold on (left blank: all of them). + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
+    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card; Sale jobs is how many of the day's jobs he sold on (left blank: all of them). + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest. The days above: the left half turns green once the day's revenue is typed, the right half blue once a sale is." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
     jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
 }
 
@@ -9887,8 +9910,7 @@ function lbSaveJobs(day, team, jobs, workDay, redraw) {
   lbQueue(day.slice(0, 7), { days: { [day]: patch } });
   const tot = $("lbDayTotal");
   if (tot) tot.textContent = lbDayTotalText(day);
-  const wd = document.querySelector(`.lb-wd[data-day="${day}"]`);
-  if (wd) wd.classList.toggle("has", lbDayHas(day, "t"));
+  lbWdMark(document.querySelector(`.lb-wk2 .lb-wd[data-day="${day}"]`), day, "t");
   if (redraw !== false) lbRedrawJobs(day, team);
   lbSyncHelpCards(day, team);
 }
@@ -15883,22 +15905,8 @@ function renderAttendance() {
     h("thead", null, h("tr", null, h("th", { class: "at-dh", text: "Day" }), people.map(n => h("th", { class: "at-ph", "data-who": n },
       h("button", { class: "at-pname", type: "button", title: `${n}: their report for ${r.label}`, onclick: () => openAtPerson(n) }, n))))),
     h("tbody", null, rows)));
-  const cut = all.length < len ? h("p", { class: "lb-sub", id: "atCut", text: `The grid shows the first ${AT_MAX_ROWS} days; the totals count them all. Pick fewer days to see the rest.` }) : null;
-  const legend = h("p", { class: "at-legend" }, Object.entries(AT_KINDS).map(([k, t]) => h("span", { class: `at-key k-${k}`, text: t })));
-  // the totals: the same days (tap a name for their report)
-  const tot = atTotalsOf(days);
-  const totEl = h("section", { class: "panel at-tot", id: "atTotals" },
-    h("div", { class: "at-tot-h" }, h("h3", { text: `Totals · ${r.label}${now && per !== "day" ? " (so far)" : ""}` })),
-    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table at-tot-t", id: "atTotTable" },
-      h("thead", null, h("tr", null, h("th", { class: "l", text: "Person" }), AT_COLS.map(([k, t]) => h("th", { "data-k": k, text: t })))),
-      h("tbody", null, people.map(n => {
-        const x = tot[n] || {};
-        return h("tr", { "data-who": n }, h("th", { class: "l" }, h("button", { class: "at-pname", type: "button", title: `${n}: their report`, onclick: () => openAtPerson(n) }, n)),
-          AT_COLS.map(([k]) => h("td", { "data-k": k, class: x[k] ? `has k-${k}` : "" },
-            !x[k] ? "–" : k === "late" ? [String(x.late), x.lateM ? h("small", { text: ` · ${atMins(x.lateM)}` }) : null] : String(x[k]))));
-      })))),
-    h("p", { class: "lb-sub", text: "Late: times late (and the minutes typed). Left early: times. Sick, Vacation, Off, No call / no show, Closed: days. Tap a name for that person's report." }));
-  box.replaceChildren(...[...head, legend, grid, cut, totEl].filter(Boolean));   // no "null" when nothing was cut
+  const cut = all.length < len ? h("p", { class: "lb-sub", id: "atCut", text: `The grid shows the first ${AT_MAX_ROWS} days. Pick fewer days to see the rest; a person's report (tap a name) counts them all.` }) : null;
+  box.replaceChildren(...[...head, grid, cut].filter(Boolean));   // no "null" when nothing was cut
   // the days with today in them open on today's row
   const tr = now ? box.querySelector(`#atGrid tr[data-day="${today}"]`) : null;
   if (tr && !atView.scrolled) { atView.scrolled = true; const sc = box.querySelector(".at-scroll"); if (sc) sc.scrollTop = Math.max(0, tr.offsetTop - 120); }
