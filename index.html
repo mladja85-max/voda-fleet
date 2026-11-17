@@ -723,7 +723,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .at-cell.k-noshow, .at-key.k-noshow, .at-kb.k-noshow[aria-checked=true] { background: var(--due); color: #fff; }
 .at-cell.k-closed, .at-key.k-closed, .at-kb.k-closed[aria-checked=true] { background: color-mix(in srgb, var(--muted) 22%, var(--surface)); color: var(--ink); }
 .at-cell.k-note, .at-key.k-note, .at-kb.k-note[aria-checked=true] { background: var(--clean-bg); color: var(--clean); font-weight: 600; }
-.at-grid tr.at-mrow th { position: sticky; left: 0; background: var(--surface); color: var(--accent); font-weight: 800; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; padding: 10px 8px 6px; }
+.at-grids .at-grid + .at-grid { margin-top: 16px; border-top: 1px solid var(--line); }   /* days in more than one month: a block a month */
+.at-grid thead .at-mname { color: var(--accent); font-weight: 800; font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
 .at-cell.pending { opacity: .55; }
 .at-pname { all: unset; cursor: pointer; font-weight: 700; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); }
 .at-pname:hover, .at-pname:focus-visible { color: var(--accent); border-bottom-style: solid; }
@@ -742,6 +743,9 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .at-people { display: grid; gap: 8px; }
 .at-person { display: grid; grid-template-columns: minmax(90px, 1fr) auto auto auto; gap: 8px; align-items: end; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
 .at-person .p-name-fixed { align-self: center; } .at-pbtns { display: flex; gap: 4px; }
+.at-person:has(.at-back) .at-pbtns { grid-column: 1 / -1; justify-content: flex-end; }   /* gone: its buttons on a line of their own */
+.at-earlier { grid-column: 1 / -1; margin: 0; font-size: .8rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; } .at-earlier:empty { display: none; }
+.at-span { font-weight: 700; color: var(--ink); white-space: nowrap; } .at-span .link { margin-left: 4px; color: var(--muted); }
 .at-gone { margin-top: 10px; } .at-gone summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 @media (max-width: 600px) { .at-person { grid-template-columns: 1fr 1fr; } .at-person .p-name, .at-person .p-name-fixed, .at-pbtns { grid-column: 1 / -1; } .at-scroll { max-height: 66vh; } .at-cell { min-width: 62px; font-size: .7rem; } }
 .of-opt { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; background: var(--surface-2); }
@@ -15802,9 +15806,17 @@ function atDaysIn(from, to) {
   return wait ? null : out;
 }
 /** Who's on the grid for some days: the people here in any month of them (in their order), then anyone else with a day. */
+/** A person's times here: [[from, to], ...] oldest first (to "" = still here). Someone who left and came back has more
+ *  than one; a list from before has just its From – To. */
+const atSpans = p => Array.isArray(p.spans) && p.spans.length ? p.spans : [[p.from || "", p.to || ""]];
+/** Here at some time in the months a – b (yyyy-mm). */
+const atHere = (p, a, b) => atSpans(p).some(([f, t]) => (!f || f <= b) && (!t || t >= a));
+const atMonShort = ym => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(0, 4)}`;
+const atSpanText = ([f, t]) => `${f ? atMonShort(f) : "the start"} – ${t ? atMonShort(t) : "now"}`;
+const AT_SPANS_API = 77;                                 // the Google script that keeps a person's times here (left and came back)
 function atPeopleFor(from, to, days) {
   const a = from.slice(0, 7), b = to.slice(0, 7);
-  const out = atCfg().people.filter(p => (!p.from || p.from <= b) && (!p.to || p.to >= a)).map(p => p.name);
+  const out = atCfg().people.filter(p => atHere(p, a, b)).map(p => p.name);
   const have = new Set(out.map(n => n.toLowerCase()));
   for (const x of Object.values(days || {})) for (const n of Object.keys(x)) if (!have.has(n.toLowerCase())) { have.add(n.toLowerCase()); out.push(n); }
   return out;
@@ -15884,32 +15896,38 @@ function renderAttendance() {
       h("p", { class: "meta", text: admin ? "Tap People to add everyone, or Load from Excel to bring in 7. EMPLOYEE TARDINESS (its people and every month)." : "An admin hasn't set up the people yet." })));
     return;
   }
-  // the grid: people across (tap a name for their report), days down; a day off (Sunday, closed) greyed; today marked;
-  // a row with the month's name where a new month starts
+  // the grid: people across (tap a name for their report), days down; a day off (Sunday, closed) greyed; today marked.
+  // Days in more than one month: a block a month, each with only that month's people (like the Excel's tabs), its
+  // name in the corner; the names stay on top while its days scroll.
   const all = [];
   for (let d = r.from; d <= r.to && all.length < AT_MAX_ROWS; d = lbAddDays(d, 1)) all.push(d);
   const many = r.from.slice(0, 7) !== r.to.slice(0, 7);
-  const rows = [];
-  for (const day of all) {
-    if (many && (day === r.from || day.endsWith("-01"))) rows.push(h("tr", { class: "at-mrow" }, h("th", { class: "at-dh", colspan: String(people.length + 1) }, `${lbMonthLong(Number(day.slice(5, 7)))} ${day.slice(0, 4)}`)));
-    const dt = lbDate(day), hol = lbHoliday(day), shut = dt.getDay() === 0 || !!hol, x = days[day] || {};
-    rows.push(h("tr", { class: (shut ? "shut" : "") + (day === today ? " today" : ""), "data-day": day },
-      h("th", { class: "at-dh", title: hol ? `${hol}: closed` : "" }, h("b", { text: String(dt.getDate()) }), h("small", { text: LB_WD[dt.getDay()] })),
-      people.map(n => {
-        const e = x[n];
-        return h("td", null, h("button", { class: "at-cell" + (e ? ` k-${e.k}` : "") + (e && e._p ? " pending" : ""), type: "button", "data-who": n, "data-day": day,
-          title: e ? `${n}: ${atLong(e)}${e._p ? " · saving…" : ""}` : `${n}, ${lbDayText(day)}: tap to add`, onclick: () => openAtDay(day, n) }, e ? atShort(e) : ""));
-      })));
-  }
-  const grid = h("div", { class: "lb-scroll at-scroll" }, h("table", { class: "at-grid", id: "atGrid" },
-    h("thead", null, h("tr", null, h("th", { class: "at-dh", text: "Day" }), people.map(n => h("th", { class: "at-ph", "data-who": n },
-      h("button", { class: "at-pname", type: "button", title: `${n}: their report for ${r.label}`, onclick: () => openAtPerson(n) }, n))))),
-    h("tbody", null, rows)));
+  const blocks = [];
+  for (const day of all) { const k = day.slice(0, 7); let b = blocks[blocks.length - 1]; if (!b || b.key !== k) blocks.push(b = { key: k, days: [] }); b.days.push(day); }
+  const tables = blocks.map(b => {
+    const ppl = !many ? people : atPeopleFor(b.days[0], b.days[b.days.length - 1], Object.fromEntries(b.days.filter(d => days[d]).map(d => [d, days[d]])));
+    if (many && !ppl.length) return null;
+    const rows = b.days.map(day => {
+      const dt = lbDate(day), hol = lbHoliday(day), shut = dt.getDay() === 0 || !!hol, x = days[day] || {};
+      return h("tr", { class: (shut ? "shut" : "") + (day === today ? " today" : ""), "data-day": day },
+        h("th", { class: "at-dh", title: hol ? `${hol}: closed` : "" }, h("b", { text: String(dt.getDate()) }), h("small", { text: LB_WD[dt.getDay()] })),
+        ppl.map(n => {
+          const e = x[n];
+          return h("td", null, h("button", { class: "at-cell" + (e ? ` k-${e.k}` : "") + (e && e._p ? " pending" : ""), type: "button", "data-who": n, "data-day": day,
+            title: e ? `${n}: ${atLong(e)}${e._p ? " · saving…" : ""}` : `${n}, ${lbDayText(day)}: tap to add`, onclick: () => openAtDay(day, n) }, e ? atShort(e) : ""));
+        }));
+    });
+    return h("table", { class: "at-grid", "data-month": b.key },
+      h("thead", null, h("tr", null, h("th", { class: "at-dh" + (many ? " at-mname" : ""), text: many ? atMonShort(b.key) : "Day" }), ppl.map(n => h("th", { class: "at-ph", "data-who": n },
+        h("button", { class: "at-pname", type: "button", title: `${n}: their report for ${r.label}`, onclick: () => openAtPerson(n) }, n))))),
+      h("tbody", null, rows));
+  }).filter(Boolean);
+  const grid = h("div", { class: "lb-scroll at-scroll" }, h("div", { class: "at-grids", id: "atGrid" }, tables));
   const cut = all.length < len ? h("p", { class: "lb-sub", id: "atCut", text: `The grid shows the first ${AT_MAX_ROWS} days. Pick fewer days to see the rest; a person's report (tap a name) counts them all.` }) : null;
   box.replaceChildren(...[...head, grid, cut].filter(Boolean));   // no "null" when nothing was cut
   // the days with today in them open on today's row
   const tr = now ? box.querySelector(`#atGrid tr[data-day="${today}"]`) : null;
-  if (tr && !atView.scrolled) { atView.scrolled = true; const sc = box.querySelector(".at-scroll"); if (sc) sc.scrollTop = Math.max(0, tr.offsetTop - 120); }
+  if (tr && !atView.scrolled) { atView.scrolled = true; const sc = box.querySelector(".at-scroll"); if (sc) sc.scrollTop = Math.max(0, tr.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 120); }
 }
 
 /* ---- a person's report: their days in the period on screen, and their totals ---- */
@@ -15931,7 +15949,7 @@ function openAtPerson(name) {
       h("td", { class: "l muted", text: e.by || "" })))))) : h("p", { class: "meta", id: "atRepNone", text: `Nothing typed for ${name} in ${r.label}.` });
   openDialog(h("div", { class: "at-rep-dlg" },
     h("h3", { id: "dlgTitle", text: name }),
-    h("p", { class: "hint", id: "atRepWhen", text: `${r.label}${now && r.per !== "day" ? " (so far)" : ""}${p ? ` · here ${p.from ? `since ${lbMonthLong(Number(p.from.slice(5)))} ${p.from.slice(0, 4)}` : ""}${p.to ? ` until ${lbMonthLong(Number(p.to.slice(5)))} ${p.to.slice(0, 4)}` : ""}` : ""}. Change the days with Day, Week, Month, Year or Dates on the page.` }),
+    h("p", { class: "hint", id: "atRepWhen", text: `${r.label}${now && r.per !== "day" ? " (so far)" : ""}${p ? ` · here ${atSpans(p).map(atSpanText).join(", ")}` : ""}. Change the days with Day, Week, Month, Year or Dates on the page.` }),
     chips, list,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
 }
@@ -16036,22 +16054,38 @@ function openAtDay(day, name) {
 /* ---- the people: who's on the grid, in what order, and the months each one is here ---- */
 function openAtPeople() {
   const err = h("p", { class: "dlg-err", role: "alert" });
-  const row = (p, isNew) => h("div", { class: "at-person", "data-name": p.name || "" },
-    isNew ? h("input", { type: "text", class: "p-name", maxlength: "30", placeholder: "Name", "aria-label": "Name" }) : h("strong", { class: "p-name-fixed", text: p.name }),
-    h("label", { class: "of-mo" }, h("span", { text: "From" }), h("input", { type: "month", class: "p-from", value: p.from || "" })),
-    h("label", { class: "of-mo" }, h("span", { text: "To (blank = now)" }), h("input", { type: "month", class: "p-to", value: p.to || "" })),
-    h("div", { class: "at-pbtns" },
-      h("button", { class: "btn ghost small", type: "button", "aria-label": "Up", text: "↑", onclick: ev => { const r = ev.currentTarget.closest(".at-person"); if (r.previousElementSibling) r.parentNode.insertBefore(r, r.previousElementSibling); } }),
-      h("button", { class: "btn ghost small", type: "button", "aria-label": "Down", text: "↓", onclick: ev => { const r = ev.currentTarget.closest(".at-person"); if (r.nextElementSibling) r.parentNode.insertBefore(r.nextElementSibling, r); } }),
-      h("button", { class: "btn ghost small", type: "button", text: "Remove", onclick: ev => { if (isNew || confirm(`Take ${p.name} off the list? Her or his days stay saved and still show in the months they have any.`)) ev.currentTarget.closest(".at-person").remove(); } })));
   const now = lbToday().slice(0, 7);
+  // From / To: their latest time here. Earlier times (left and came back) are listed under it.
+  const row = (p, isNew) => {
+    const sp = atSpans(p), earlier = sp.slice(0, -1).map(x => x.slice()), last = sp[sp.length - 1];
+    const from = h("input", { type: "month", class: "p-from", value: last[0] || "" }), to = h("input", { type: "month", class: "p-to", value: last[1] || "" });
+    const was = h("p", { class: "at-earlier" });
+    const drawWas = () => was.replaceChildren(...(earlier.length ? [h("span", { text: "Also here: " }), ...earlier.map((x, i) => h("span", { class: "at-span" }, atSpanText(x),
+      h("button", { class: "link", type: "button", "aria-label": `Take off ${atSpanText(x)}`, title: "Take this time off", text: "✕", onclick: () => { earlier.splice(i, 1); drawWas(); dlgDirty = true; } })))] : []));
+    drawWas();
+    const el = h("div", { class: "at-person", "data-name": p.name || "" },
+      isNew ? h("input", { type: "text", class: "p-name", maxlength: "30", placeholder: "Name", "aria-label": "Name" }) : h("strong", { class: "p-name-fixed", text: p.name }),
+      h("label", { class: "of-mo" }, h("span", { text: "From" }), from),
+      h("label", { class: "of-mo" }, h("span", { text: "To (blank = now)" }), to),
+      h("div", { class: "at-pbtns" },
+        h("button", { class: "btn ghost small", type: "button", "aria-label": "Up", text: "↑", onclick: ev => { const r = ev.currentTarget.closest(".at-person"); if (r.previousElementSibling) r.parentNode.insertBefore(r, r.previousElementSibling); } }),
+        h("button", { class: "btn ghost small", type: "button", "aria-label": "Down", text: "↓", onclick: ev => { const r = ev.currentTarget.closest(".at-person"); if (r.nextElementSibling) r.parentNode.insertBefore(r.nextElementSibling, r); } }),
+        !isNew && last[1] && last[1] < now ? h("button", { class: "btn ghost small at-back", type: "button", text: "Came back", title: "Back on the grid from this month (their earlier time stays)", onclick: ev => {
+          earlier.push([from.value, to.value]); from.value = now; to.value = ""; drawWas(); dlgDirty = true;
+          ev.currentTarget.remove(); $("atPeopleList").append(el); } }) : null,
+        h("button", { class: "btn ghost small", type: "button", text: "Remove", onclick: ev => { if (isNew || confirm(`Take ${p.name} off the list? Her or his days stay saved and still show in the months they have any.`)) ev.currentTarget.closest(".at-person").remove(); } })),
+      was);
+    el._spans = () => earlier.concat([[from.value, to.value]]);
+    return el;
+  };
   const ppl = atCfg().people;
-  const here = ppl.filter(p => !p.to || p.to >= now), gone = ppl.filter(p => p.to && p.to < now);
+  const isHere = p => { const t = atSpans(p).slice(-1)[0][1]; return !t || t >= now; };
+  const here = ppl.filter(isHere), gone = ppl.filter(p => !isHere(p));
   const list = h("div", { class: "at-people", id: "atPeopleList" }, here.map(p => row(p, false)));
   const goneBox = gone.length ? h("details", { class: "at-gone" }, h("summary", { text: `Not here any more (${gone.length})` }), h("div", { class: "at-people", id: "atGoneList" }, gone.map(p => row(p, false)))) : null;
   openDialog(
     h("h3", { id: "dlgTitle", text: "Attendance people" }),
-    h("p", { class: "hint", text: "Everyone on the grid, in its order (↑ ↓). From / To: the months each one is here; a To month takes them off the grid after it, their days stay." }),
+    h("p", { class: "hint", text: "Everyone on the grid, in its order (↑ ↓). From / To: the months each one is here; a To month takes them off the grid after it, their days stay. Someone who left and came back: tap Came back (under Not here any more); their earlier time is kept and they show only in the months they were here." }),
     list,
     h("button", { class: "btn small", type: "button", id: "atAddPerson", onclick: () => list.append(row({ name: "", from: now, to: "" }, true)) }, "+ Add a person"),
     goneBox, err,
@@ -16064,13 +16098,16 @@ function openAtPeople() {
           const name = el.dataset.name || lbTeamName(el.querySelector(".p-name") ? el.querySelector(".p-name").value : "");
           if (!name) { err.textContent = "Every new person needs a name (letters only)."; return; }
           if (people.some(x => x.name.toLowerCase() === name.toLowerCase())) { err.textContent = `${name} is on the list twice.`; return; }
-          people.push({ name, from: el.querySelector(".p-from").value, to: el.querySelector(".p-to").value });
+          const spans = el._spans(), lastS = spans[spans.length - 1];
+          if (spans.length > 1 && lastS[0] && spans.slice(0, -1).some(x => x[1] && x[1] >= lastS[0])) { err.textContent = `${name}: From has to be after their earlier time here (${spans.slice(0, -1).map(atSpanText).join(", ")}).`; return; }
+          people.push(Object.assign({ name, from: spans[0][0], to: lastS[1] }, spans.length > 1 ? { spans } : {}));
         }
         const b = ev.currentTarget; b.disabled = true; b.textContent = "Saving…";
         try {
           const out = await api("atPut", { writes: [{ key: "config", data: { people } }] });
           atData.config = out.config || { people }; store.set(K_AT, atData);
-          dlgDirty = false; closeDialog(); toast("People saved"); renderAttendance();
+          dlgDirty = false; closeDialog();
+          toast(people.some(x => x.spans) && apiLevel && apiLevel < AT_SPANS_API ? "Saved. Update the Google script so the earlier times are kept." : "People saved"); renderAttendance();
         } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
       } }))));
 }
@@ -16182,7 +16219,22 @@ function atFromExcel(tabs) {
     }
     out.months[key] = doc;
     if (key > out.newest) out.newest = key;
+    for (const nm of Object.values(names)) (out.people[nm].on || (out.people[nm].on = new Set())).add(key);
   });
+  // each person's times here: the runs of month tabs they're on, one after another (the newest tab: still here)
+  const keys = Object.keys(out.months).sort();
+  for (const p of Object.values(out.people)) {
+    p.spans = [];
+    let cur = null;
+    for (const k of keys) {
+      if (p.on && p.on.has(k)) { if (cur) cur[1] = k; else p.spans.push(cur = [k, k]); }
+      else cur = null;
+    }
+    if (!p.spans.length) p.spans.push([p.first, p.last]);
+    const last = p.spans[p.spans.length - 1];
+    if (last[1] >= out.newest) last[1] = "";
+    delete p.on;
+  }
   return out;
 }
 function openAtExcel() {
@@ -16211,12 +16263,15 @@ function openAtExcel() {
       const now = lbToday().slice(0, 7), ppl = atCfg().people.map(p => Object.assign({}, p));
       const add = Object.entries(hist.people).sort(([, a], [, b]) => (b.last > a.last ? 1 : b.last < a.last ? -1 : a.col - b.col));
       for (const [name, p] of add) {
-        const to = p.last >= hist.newest ? "" : p.last;
+        // their times here are the Excel's (only the months it has tabs for); a time set in the app after its newest month stays
         const have2 = ppl.find(x => x.name.toLowerCase() === name.toLowerCase());
-        if (have2) { if (!have2.from || p.first < have2.from) have2.from = p.first; }
-        else ppl.push({ name, from: p.first, to });
+        const later = have2 ? atSpans(have2).filter(x => x[0] > hist.newest) : [];
+        const spans = p.spans.map(x => x.slice()).concat(later);
+        const fresh = Object.assign({ name, from: spans[0][0], to: spans[spans.length - 1][1] }, spans.length > 1 ? { spans } : {});
+        if (have2) { delete have2.spans; Object.assign(have2, fresh); }
+        else ppl.push(fresh);
       }
-      const isHere = p => !p.to || p.to >= now;
+      const isHere = p => { const t = atSpans(p).slice(-1)[0][1]; return !t || t >= now; };
       ppl.sort((a, b) => Number(!isHere(a)) - Number(!isHere(b)));   // those here first (in their order), then those gone
       writes.push({ key: "config", data: { people: ppl } });
       for (let i = 0; i < writes.length; i += 20) {

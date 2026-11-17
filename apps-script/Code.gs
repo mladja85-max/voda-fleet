@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 76;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 77;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -5800,10 +5800,34 @@ function atConfig_(c) {
     const name = lbTeam_(p && p.name);
     if (!name || seen[name.toLowerCase()]) return;
     seen[name.toLowerCase()] = true;
-    const from = lbYm_(p.from);
-    let to = lbYm_(p.to);
-    if (from && to && to < from) to = from;
-    out.people.push({ name: name, from: from, to: to });
+    const spans = atSpans_(p);
+    const person = { name: name, from: spans[0][0], to: spans[spans.length - 1][1] };
+    if (spans.length > 1) person.spans = spans;
+    out.people.push(person);
+  });
+  return out;
+}
+/** yyyy-MM plus one month. */
+function atNextYm_(ym) { const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5)); return m === 12 ? (y + 1) + "-01" : y + "-" + ("0" + (m + 1)).slice(-2); }
+/** A person's times here (someone who left and came back has more than one): [[from, to], ...] oldest first, To not
+ *  before From, times that overlap or follow on joined, only the last one open (to ""). A list from before: its From – To. */
+function atSpans_(p) {
+  const raw = Array.isArray(p.spans) && p.spans.length ? p.spans.slice(0, 60) : [[p.from, p.to]];
+  const list = raw.map(function (x) {
+    const f = lbYm_(x && x[0]);
+    let t = lbYm_(x && x[1]);
+    if (f && t && t < f) t = f;
+    return [f, t];
+  }).filter(function (x, i, all) { return x[0] || all.length === 1; })   // more than one time: each needs its From
+    .sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+  if (!list.length) list.push(["", ""]);
+  const out = [];
+  list.forEach(function (x) {
+    const last = out[out.length - 1];
+    if (!last) { out.push(x); return; }
+    if (last[1] === "") return;   // still here: a later time is part of it
+    if (x[0] === "" || x[0] <= atNextYm_(last[1])) { last[1] = x[1] === "" ? "" : (x[1] > last[1] ? x[1] : last[1]); return; }
+    out.push(x);
   });
   return out;
 }
