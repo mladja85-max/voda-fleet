@@ -15834,7 +15834,7 @@ function renderAttendance() {
             !x[k] ? "–" : k === "late" ? [String(x.late), x.lateM ? h("small", { text: ` · ${atMins(x.lateM)}` }) : null] : String(x[k]))));
       })))),
     h("p", { class: "lb-sub", text: "Late: times late (and the minutes typed). Left early: times. Sick, Vacation, Off, No call / no show, Closed: days. Tap a name for that person's report." }));
-  box.replaceChildren(...head, legend, grid, cut, totEl);
+  box.replaceChildren(...[...head, legend, grid, cut, totEl].filter(Boolean));   // no "null" when nothing was cut
   // the days with today in them open on today's row
   const tr = now ? box.querySelector(`#atGrid tr[data-day="${today}"]`) : null;
   if (tr && !atView.scrolled) { atView.scrolled = true; const sc = box.querySelector(".at-scroll"); if (sc) sc.scrollTop = Math.max(0, tr.offsetTop - 120); }
