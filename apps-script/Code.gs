@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 79;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 80;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -5614,9 +5614,11 @@ function repStreetKey_(addr) {
   while (k + 1 < w.length && REP_DIRS_.indexOf(w[k]) !== -1) k++;
   return w[k] ? w[i].replace(/[a-z]$/, "") + " " + w[k] : "";
 }
-/** The invoice numbers written in a job's "Their invoice #" (the old Excel list: "59404326-2 - $45,715.61****59404326-3"). */
+/** The invoice numbers written in a job's "Their invoice #" (the old Excel list: "59404326-2 - $45,715.61****59404326-3");
+ *  a "#" inside one is part of it ("REB-5909-#102-FOUNDE", "V2#3817-3854BLENHEI"), one in front isn't ("#1010731026-1"). */
 function repInvNos_(text) {
-  return (String(text || "").match(/[A-Za-z0-9&]+(?:-[A-Za-z0-9&]+)+/g) || []).filter(function (t) { return t.length >= 6 && (t.match(/\d/g) || []).length >= 4; })
+  return (String(text || "").match(/[A-Za-z0-9&#]+(?:-[A-Za-z0-9&#]+)+/g) || []).map(function (t) { return t.replace(/^#+/, ""); })
+    .filter(function (t) { return t.length >= 6 && (t.match(/\d/g) || []).length >= 4; })
     .map(function (t) { return t.toUpperCase(); }).filter(function (t, i, a) { return a.indexOf(t) === i; });
 }
 /** The jobs Monumental is paid for by invoices paid before the app (Admins). Without ids, which: every invoice # on a job
@@ -5628,24 +5630,29 @@ function cpBeforeJobs_(req, user) {
   const paid = {}, before = [];
   all.forEach(function (y) {
     if (y.b.status !== "paid") return;
-    y.b.items.forEach(function (i) { if (i.n) paid[String(i.n).toUpperCase()] = { b: y.b.id, a: Number(i.a) || 0 }; });
+    // each number paid: its batch and what was paid on it (a number used on two invoices: both)
+    y.b.items.forEach(function (i) { if (!i.n) return; const k = String(i.n).toUpperCase(), p = paid[k] || (paid[k] = { b: y.b.id, a: 0 }); p.a += Number(i.pay || i.a) || 0; });
     if (cpIsBefore_(y.b)) y.b.items.forEach(function (i) { before.push({ i: i, b: y.b.id }); });
   });
   const open = Object.keys(rows).map(function (id) { return rows[id]; }).filter(function (r) { return !r[25] && !r[13] && repIsMon_(r); });
   const nos = function (r) { return repInvNos_(r[24]).concat(repMonList_(r).map(function (v) { return String(v.n).toUpperCase(); })).filter(function (t, i, a) { return t && a.indexOf(t) === i; }); };
-  const used = {}, num = [], partly = [], addr = [];
+  const used = {}, num = [], partly = [], addr = [], short = [];
   const out = function (r, extra) { return Object.assign({ id: String(r[0]), day: r[1], client: String(r[35] || r[3] || ""), addr: String(r[4] || ""), owed: repSplit_(r).owed }, extra); };
   open.forEach(function (r) {
     const ns = nos(r);
     if (!ns.length) return;
     ns.forEach(function (n) { if (paid[n]) used[n] = true; });
     const have = ns.filter(function (n) { return paid[n]; });
-    if (have.length === ns.length) num.push(out(r, { inv: ns, b: have.map(function (n) { return paid[n].b; }).filter(function (x, i, a) { return a.indexOf(x) === i; }), by: "number" }));
+    if (have.length === ns.length) {
+      // the invoices paid add up to less than Monumental's share still owed (more than $1): told apart, to check first
+      const pa = have.reduce(function (t, n) { return t + paid[n].a; }, 0), x = out(r, { inv: ns, b: have.map(function (n) { return paid[n].b; }).filter(function (y, i, a) { return a.indexOf(y) === i; }), by: "number", paidA: pa });
+      (x.owed > pa + 100 ? short : num).push(x);
+    }
     else if (have.length) partly.push(out(r, { paid: have, open: ns.filter(function (n) { return !paid[n]; }) }));
   });
   // invoices on no job by their number: the one job at their street with no invoice # and Monumental's share within $1
   const taken = {};
-  num.forEach(function (x) { taken[x.id] = true; });
+  num.concat(short).forEach(function (x) { taken[x.id] = true; });
   before.forEach(function (x) {
     const n = String(x.i.n || "").toUpperCase();
     if ((n && used[n]) || x.i.j) return;
@@ -5656,9 +5663,9 @@ function cpBeforeJobs_(req, user) {
     taken[c[0][0]] = true;
     addr.push(out(c[0], { inv: n ? [n] : [], b: [x.b], by: "address", a: x.i.a, invClient: String(x.i.client || "") }));
   });
-  if (!Array.isArray(req.ids)) return { ok: true, num: num, addr: addr, partly: partly };
+  if (!Array.isArray(req.ids)) return { ok: true, num: num, short: short, addr: addr, partly: partly };
   // mark the ones picked
-  const pick = {}, ok = num.concat(addr);
+  const pick = {}, ok = num.concat(short, addr);
   req.ids.forEach(function (id) { pick[String(id)] = true; });
   const now = new Date().toISOString(), who = user.name || user.id, done = [];
   ok.forEach(function (x) {
