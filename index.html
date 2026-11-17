@@ -891,6 +891,11 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .cp-items tfoot tr.dif td b { color: var(--soon); }
 .cp-paysum.dif { background: var(--soon-bg); } .cp-sumdif { color: var(--soon); font-size: .9rem; }
 .cp-dlg .dlg-foot .left { display: flex; }
+/* a waiting batch's buttons: one row, Cancel batch at the left (the same width tapped once: nothing moves) */
+.cp-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.cp-foot > #cpCancel { margin-right: auto; }
+.btn.two-tap { display: inline-grid; justify-items: center; } .two-tap > span { grid-area: 1 / 1; }
+.two-tap .tt-b, .two-tap.armed .tt-a { visibility: hidden; } .two-tap.armed .tt-b { visibility: visible; }
 @media (min-width: 700px) { .cp-items td.inv .linkish { white-space: nowrap; } }
 .cp-items input.cp-ok { width: 20px; height: 20px; accent-color: var(--accent); }
 .cp .ph, .cp-dlg .ph { display: none; }
@@ -931,7 +936,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .cp-kpis { grid-template-columns: 1fr 1fr; gap: 8px; } .cp-kpi { padding: 10px 12px; } .cp-kpi small { font-size: .66rem; } .cp-kpi span { font-size: .78rem; }
   .cp-table th small.ph { font-weight: 500; color: var(--muted); }
   .cp-table td small.ph { margin-top: 3px; }
-  .rp-dlg .dlg-foot .right:has(#repInvSend) > .btn.primary, .cp-dlg .dlg-foot .right > .btn.primary { flex: 1 1 100%; order: 9; }
+  .rp-dlg .dlg-foot .right:has(#repInvSend) > .btn.primary, .cp-dlg .dlg-foot .right > .btn.primary, .cp-foot > .btn.primary { flex: 1 1 100%; order: 9; }
 }
 .rp-inv .top { display: flex; justify-content: space-between; gap: 10px; } .rp-inv .top span { font-weight: 700; }
 .rp-inv p { margin: 0; } .rp-inv.saved { opacity: .7; } .rp-inv.bad { border-color: var(--due); }
@@ -13440,13 +13445,14 @@ function openCpBatch(id) {
     } catch (e) { err.textContent = cpCpErr(e, "The payment"); go.disabled = false; if (e && e.error === "not_waiting" && e.batch) { cpTake({ batch: e.batch }); cpRedraw(); } }
   };
   let armed = false;
-  const cancel = h("button", { class: "btn", type: "button", id: "cpCancel", onclick: async ev => {
+  // both its words in the same spot (one hidden): tapped once, it says "Tap again to cancel" without growing
+  const cancel = h("button", { class: "btn two-tap", type: "button", id: "cpCancel", "aria-label": "Cancel batch", onclick: async ev => {
     const x = ev.currentTarget;
-    if (!armed) { armed = true; x.textContent = "Tap again to cancel the batch"; x.classList.add("danger"); return; }
+    if (!armed) { armed = true; x.classList.add("armed", "danger"); x.setAttribute("aria-label", "Tap again to cancel the batch"); return; }
     x.disabled = true; err.textContent = "";
     try { const o = await api("cpCancel", { id: b.id }); cpTake(o); closeDialog(); toast(`Batch ${b.id} canceled: its invoices can be sent again`); cpRedraw(); }
     catch (e) { err.textContent = cpCpErr(e, "The batch"); x.disabled = false; }
-  } }, "Cancel batch");
+  } }, h("span", { class: "tt-a", text: "Cancel batch" }), h("span", { class: "tt-b", text: "Tap again to cancel" }));
   const again = h("button", { class: "btn", type: "button", id: "cpAgain", onclick: () => {
     const t2 = cpToPicker("accounting", b.vendor, "cpAto");
     resendBox.replaceChildren(h("div", { class: "cp-sendbox" }, t2.el, h("div", null, h("button", { class: "btn primary", type: "button", id: "cpAgainGo", onclick: async ev => {
@@ -13464,7 +13470,7 @@ function openCpBatch(id) {
       h("tbody", null, rows), foot)),
     h("div", { class: "cp-payf" }, f("cpPaidOn", "Paid on", paidOn), f("cpHow", "How", how), h("div", { class: "field" }, refLbl, ref), f("cpLast4", "From account (last 4)", last4), f("cpAppBy", "Approved by", appBy)),
     h("div", { class: "cp-sendbox" }, to.el), sumBox, err, resendBox,
-    h("div", { class: "dlg-foot" }, h("div", { class: "left" }, cancel), h("div", { class: "right" }, stubBtn, again, go))));
+    h("div", { class: "dlg-foot cp-foot" }, cancel, stubBtn, again, go)));
   draw();
 }
 
