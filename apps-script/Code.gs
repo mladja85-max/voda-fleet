@@ -4456,8 +4456,17 @@ function estOut_(r, lead) {
     kind: kind, type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
     est: Math.round((Number(r[12]) || 0) * 100), appr: Math.round((Number(r[13]) || 0) * 100), opts: opts, ws: String(r[15] || ""), emps: String(r[16] || ""), lead: String(r[17] || ""),
     inc: lead ? lead.name : "", incRole: lead ? lead.role : "", tags: String(r[26] || ""), hcpSt: String(r[27] || ""),
-    // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email)
-    sent: String(r[9]) !== "open" || /sen[dt]|submit|fail/i.test(String(r[27] || "")) };
+    // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email), or
+    // it's in a stage of your own in the Pipeline (Rebuild estimates, On hold…), which it moves to once it's sent
+    sent: String(r[9]) !== "open" || estSentSt_(r[27]) };
+}
+/** Before it's sent, in Housecall Pro's own stages: Unscheduled, Scheduled, In progress (On my way), Completed (finished). */
+const EST_PRESEND = /^(unscheduled|needs scheduling|scheduled|in progress|on my way|completed?|complete (un)?rated|finished)$/i;
+/** Housecall Pro's status for an estimate's options ("Sent, Completed") says it was sent: Sent or a failed send, or a
+ *  stage of your own. */
+function estSentSt_(st) {
+  return String(st || "").split(/\s*,\s*/).map(function (x) { return x.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim(); }).filter(Boolean)
+    .some(function (x) { return /sen[dt]|submit|fail/i.test(x) || !EST_PRESEND.test(x); });
 }
 /** A year's estimates (by the day each was scheduled for, else created): all of them for an admin or someone who sees them all, else
  *  every one he's assigned to in Housecall Pro (his whole part: a supervisor's tile on Estimates), whoever's in charge;
