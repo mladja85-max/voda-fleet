@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 77;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 78;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -447,7 +447,10 @@ function doPost(e) {
         return json_(withLock_(function () { return cpResend_(req); }));
       case "cpDelete":
         if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(withLock_(function () { return cpDelete_(req); }));
+        return json_(withLock_(function () { return cpDelete_(req, user); }));
+      case "cpBefore":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpBefore_(req, user); }));
       case "cpDoc":
         if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(cpDoc_(req));
@@ -5445,16 +5448,25 @@ function cpMailVendor_(b, to) {
 function cpRead_() {
   return { ok: true, batches: cpAll_(cpSheet_(false)).map(function (x) { return cpOut_(x.b); }).reverse(), parties: cpParties_(), replyTo: cpReplyTo_() };
 }
-/** Is this invoice paid already, or waiting in a batch? { why, on, b, ref } or null. */
-function cpTaken_(n, batches) {
+/** Is this invoice paid already, or waiting in a batch? { why, on, b, ref } or null. With its amount (cents): the same
+ *  number on a different amount is another invoice (Monumental used the number again): { why: "reused", st, on, b, a }
+ *  (an admin can still send it once the other one is paid). */
+function cpTaken_(n, batches, a) {
+  let reused = null;
   for (let i = batches.length - 1; i >= 0; i--) {
-    const b = batches[i].b, it = b.items.filter(function (x) { return String(x.n) === n; })[0];
-    if (!it) continue;
+    const b = batches[i].b;
+    if (b.status !== "paid" && b.status !== "waiting") continue;
+    const its = b.items.filter(function (x) { return String(x.n) === n; });
+    if (!its.length) continue;
+    const same = a === undefined || a === null || its.some(function (x) { return Math.abs((Number(x.a) || 0) - a) <= 1; });
+    if (!same) { if (!reused) reused = { why: "reused", st: b.status, on: b.status === "paid" ? b.paidOn : cpAtDay_(b.at), b: b.id, a: Number(its[0].a) || 0 }; continue; }
     if (b.status === "paid") return { why: "paid", on: b.paidOn, b: b.id, ref: b.ref };
-    if (b.status === "waiting") return { why: "waiting", on: cpAtDay_(b.at), b: b.id };
+    return { why: "waiting", on: cpAtDay_(b.at), b: b.id };
   }
-  return null;
+  return reused;
 }
+/** A batch of invoices paid before the app: paid, with no paid day. */
+function cpIsBefore_(b) { return b.status === "paid" && !b.paidOn; }
 /** Sends invoices already recorded on their jobs to accounting: { vendor, to, items: [{ id (job), n, f (file id) }] }. When a
  *  batch to the same contractor is still waiting for accounting they join it (one payment, one pay stub; accounting is
  *  emailed the new PDFs and the pay stub as it is now), else they're a new batch. Refused, with every reason, when one is
@@ -5467,6 +5479,8 @@ function cpSend_(req, user) {
   if (!list || !list.length || list.length > CP_MAX_ITEMS) return { ok: false, error: "bad_request" };
   const s = repSheet_(true), rows = repRows_(s), cs = cpSheet_(true), all = cpAll_(cs);
   const items = [], files = {}, seen = {}, problems = [];
+  // the same number as a paid invoice for a different amount: sent only when an admin said it's another invoice
+  const reuse = user.role === "admin" && Array.isArray(req.reuse) ? req.reuse.map(String) : [];
   list.forEach(function (x) {
     const id = String((x && x.id) || ""), n = String((x && x.n) || "").trim(), r = rows[id];
     if (!r || !n) { problems.push({ n: n, why: "gone" }); return; }
@@ -5474,8 +5488,8 @@ function cpSend_(req, user) {
     seen[n] = true;
     const inv = repMonList_(r).filter(function (i) { return String(i.n) === n; })[0];
     if (!inv) { problems.push({ n: n, why: "not_saved" }); return; }
-    const taken = inv.paid ? { why: "paid", on: inv.paid, b: inv.b || "", ref: inv.ref || "" } : cpTaken_(n, all);
-    if (taken) { taken.n = n; problems.push(taken); return; }
+    const taken = inv.paid ? { why: "paid", on: inv.paid, b: inv.b || "", ref: inv.ref || "" } : cpTaken_(n, all, Number(inv.a) || 0);
+    if (taken && !(taken.why === "reused" && taken.st === "paid" && reuse.indexOf(n) !== -1)) { taken.n = n; problems.push(taken); return; }
     if (r[25]) { problems.push({ n: n, why: "job_paid", on: r[25] }); return; }
     const f = files[x.f] || cpFileOk_(x.f);
     if (!f) { problems.push({ n: n, why: "no_pdf" }); return; }
@@ -5516,6 +5530,72 @@ function cpSend_(req, user) {
   const ids = {};
   items.forEach(function (i) { ids[i.j] = true; });
   return { ok: true, batch: cpOut_(b), added: added, jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
+}
+/** Invoices paid before the app (Admins): { vendor, items: [{ n, d, a ($), client, addr, fn }] } (up to 100 a time). Each is
+ *  recorded as paid, with no paid day, in a batch of its own ("MON-PAID-BEFORE"; -2, -3 when one is full), so none of
+ *  them can be sent for payment again. Left as it is: one already paid or waiting in a batch, or paid on its job (the same
+ *  number and amount), and the same invoice twice in what's sent. One saved on its job and not sent yet is marked paid
+ *  there too ("before"). → { ok, added: [n], skipped: [{ n, a, why, b, on }], batch } */
+function cpBefore_(req, user) {
+  const list = Array.isArray(req.items) ? req.items : null;
+  if (!list || !list.length || list.length > CP_MAX_ITEMS) return { ok: false, error: "bad_request" };
+  const vendor = String(req.vendor || CP_VENDOR).trim().slice(0, 80) || CP_VENDOR;
+  const cs = cpSheet_(true), all = cpAll_(cs), s = repSheet_(true), rows = repRows_(s);
+  const onJobs = {};
+  Object.keys(rows).forEach(function (id) { repMonList_(rows[id]).forEach(function (v) { const k = String(v.n); (onJobs[k] || (onJobs[k] = [])).push({ id: id, v: v }); }); });
+  const now = new Date().toISOString(), who = user.name || user.id, add = [], skipped = [], seen = {};
+  list.forEach(function (x) {
+    const n = String((x && x.n) || "").trim().slice(0, 60), a = Math.round(Number(x && x.a) * 100);
+    if (!(a > 0 && a < 1e11)) { skipped.push({ n: n, why: "bad_amount" }); return; }
+    const client = String(x.client || "").slice(0, 120), key = n + "|" + a + (n ? "" : "|" + client);
+    if (seen[key]) { skipped.push({ n: n, a: a, why: "twice" }); return; }
+    seen[key] = true;
+    // no number on the PDF: the same amount and client already recorded before the app
+    const was = n ? null : all.filter(function (y) { return cpIsBefore_(y.b) && y.b.items.some(function (i) { return !i.n && i.a === a && i.client === client; }); })[0];
+    if (was) { skipped.push({ n: n, a: a, why: "paid", b: was.b.id, on: "" }); return; }
+    let job = null;
+    if (n) {
+      const t = cpTaken_(n, all, a);
+      if (t && t.why !== "reused") { skipped.push(Object.assign({ n: n, a: a }, t)); return; }
+      const j = (onJobs[n] || []).filter(function (o) { return Math.abs((Number(o.v.a) || 0) - a) <= 1; })[0];
+      if (j && (j.v.paid || j.v.b)) { skipped.push({ n: n, a: a, why: j.v.paid ? "paid" : "waiting", b: j.v.b || "", on: j.v.paid === "before" ? "" : String(j.v.paid || j.v.sent || "") }); return; }
+      job = j || null;
+    }
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(String(x.d || "")) ? String(x.d) : "";
+    add.push({ i: { j: job ? job.id : "", n: n, d: day, a: a, pay: a, client: client, addr: String(x.addr || "").slice(0, 160), day: "", f: "",
+      fn: String(x.fn || "").slice(0, 160), at: now, by: who }, job: job });
+  });
+  if (!add.length) return { ok: true, added: [], skipped: skipped, batch: null };
+  // into the batch paid before the app (a new one when it's full: the tab keeps a batch's invoices in one cell)
+  const pre = (vendor.replace(/[^A-Za-z]/g, "").slice(0, 3) || "CON").toUpperCase() + "-PAID-BEFORE";
+  let cur = all.filter(function (y) { return cpIsBefore_(y.b) && y.b.vendor.toLowerCase() === vendor.toLowerCase(); }).pop() || null, out = null;
+  const have = {};
+  all.forEach(function (y) { have[y.b.id] = true; });
+  add.forEach(function (x) {
+    if (!cur || JSON.stringify(cur.b.items).length + JSON.stringify(x.i).length > 40000) {
+      if (cur && out === cur) cpPut_(cs, cur.row, cur.b);
+      let id = pre, k = 1;
+      while (have[id]) id = pre + "-" + (++k);
+      have[id] = true;
+      cur = { row: Math.max(cs.getLastRow(), 1) + 1, b: { id: id, vendor: vendor, status: "paid", at: now, by: who, to: "", items: [], total: 0, paid: 0, paidOn: "", how: "", ref: "",
+        last4: "", appBy: who, appAt: now, vTo: "", vAt: "", cxBy: "", cxAt: "", out: "" } };
+      cpPut_(cs, cur.row, cur.b);   // its row now, so the next one starts under it
+    }
+    cur.b.items.push(x.i);
+    cur.b.total += x.i.a; cur.b.paid += x.i.pay;
+    out = cur;
+    if (x.job) {
+      const r = rows[x.job.id], inv = repMonList_(r);
+      inv.forEach(function (v) { if (String(v.n) === x.i.n && Math.abs((Number(v.a) || 0) - x.i.a) <= 1 && !v.paid && !v.b) { v.paid = "before"; v.pay = x.i.a; v.b = cur.b.id; } });
+      r[32] = JSON.stringify(inv).slice(0, 45000); r[27] = who; r[28] = now;
+    }
+  });
+  cpPut_(cs, cur.row, cur.b);
+  if (add.some(function (x) { return x.job; })) repWrite_(s, rows);
+  const ids = {};
+  add.forEach(function (x) { if (x.job) ids[x.job.id] = true; });
+  return { ok: true, added: add.map(function (x) { return x.i.n; }), skipped: skipped, batches: cpAll_(cs).filter(function (y) { return cpIsBefore_(y.b); }).map(function (y) { return cpOut_(y.b); }),
+    jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
 }
 /** Finds a batch: { s, row, b } or null. */
 function cpFind_(id) {
@@ -5615,9 +5695,23 @@ function cpResend_(req) {
 }
 /** A canceled batch taken off the list ({ id }): its row goes, and its PDFs go to the Drive's trash unless another
  *  batch has them. Only a canceled one: waiting and paid batches are the record. */
-function cpDelete_(req) {
+function cpDelete_(req, user) {
   const x = cpFind_(req.id);
   if (!x) return { ok: false, error: "gone" };
+  if (cpIsBefore_(x.b)) {
+    // invoices recorded as paid before the app, taken off again (Admins): those marked paid on their jobs by it are to pay again
+    if (!user || user.role !== "admin") return { ok: false, error: "not_allowed" };
+    const s = repSheet_(true), rows = repRows_(s), ids = {};
+    Object.keys(rows).forEach(function (id) {
+      const r = rows[id], inv = repMonList_(r);
+      let hit = false;
+      inv.forEach(function (v) { if (v.b === x.b.id && v.paid === "before") { delete v.paid; delete v.b; delete v.pay; hit = true; } });
+      if (hit) { r[32] = JSON.stringify(inv).slice(0, 45000); ids[id] = true; }
+    });
+    if (Object.keys(ids).length) repWrite_(s, rows);
+    x.s.deleteRow(x.row);
+    return { ok: true, id: x.b.id, jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
+  }
   if (x.b.status !== "canceled") return { ok: false, error: "not_canceled", batch: cpOut_(x.b) };
   const others = {};
   cpAll_(x.s).forEach(function (y) { if (y.b.id !== x.b.id) y.b.items.forEach(function (i) { others[i.f] = true; }); });
