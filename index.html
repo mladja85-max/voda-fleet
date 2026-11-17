@@ -891,6 +891,14 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .cp-kpi.due { border-color: color-mix(in srgb, var(--soon) 45%, var(--line)); }
 .cp-panel { display: grid; gap: 10px; } .cp-panel .meta { margin: 0; }
 .cp-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; } .cp-head h3 { margin: 0; }
+.cp-head #cpBeforeBtn { margin-left: auto; } .cp-kpi .cp-bef { color: var(--ok); font-weight: 700; font-size: .8rem; }
+/* invoices paid before the app: the folder read, the list to mark paid */
+.cpb-dlg { min-width: 0; } dialog#dlg:has(.rp-dlg.cpb-dlg), dialog#dlg:has(.rp-dlg.cpb-wide) { width: min(1100px, calc(100% - 24px)); }
+.cpb-wide #cpItems td:nth-child(2) { white-space: nowrap; } .cpb-pick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .cpb-pick { position: relative; } .cpb-pick input[type=file] { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); pointer-events: none; }
+.cpb-sum { display: grid; gap: 2px; margin: 6px 0; } .cpb-sum small { color: var(--muted); }
+.cpb-list { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; } .cpb-list:empty { display: none; }
+.cpb-table td, .cpb-table th { vertical-align: top; } .cpb-table td small { display: block; color: var(--muted); font-size: .74rem; } .cpb-table td small.ok { color: var(--ok); } .cpb-table td small.bad { color: var(--due); }
+.cpb-table tr.off td, .cpb-table tr.out td { color: var(--muted); } .cpb-table td.l.pc { white-space: nowrap; } .cpb-table { width: 100%; } .cpb-table th.l, .cpb-table td.l { text-align: left; } .cpb-table td:first-child, .cpb-table th:first-child { width: 28px; } .cpb-table .cpb-f { width: 34%; min-width: 180px; white-space: normal; overflow-wrap: anywhere; } .cpb-table td.l { white-space: normal; } .cpb-table .mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: .8rem; }
 .cp-table tbody tr { cursor: pointer; } .cp-table tr.gone { opacity: .6; }
 .cp-table td small, .cp-table th small, .cp-items td small { display: block; }
 .cp-table th, .cp-table td, .cp-items th, .cp-items td { white-space: nowrap; }
@@ -4420,6 +4428,21 @@ async function pdfLines(buf) {
     else if (filt && filt !== "null") return "";   // pictures and other packings: not text
     return Array.from(bytes, b => String.fromCharCode(b)).join("");
   };
+  // objects packed in object streams (a PDF saved again by Acrobat or a printer, PDF 1.5 and later): unpacked next to
+  // the others (each stream starts with "number offset" pairs, then the objects from /First on)
+  for (const id of Object.keys(objs)) {
+    const d = dictOf(id);
+    if (!/\/Type\s*\/ObjStm\b/.test(d)) continue;
+    let txt = "";
+    try { txt = await streamOf(id); } catch (e) { continue; }
+    const n = Number(dictVal(d, "N")) || 0, first = Number(dictVal(d, "First")) || 0;
+    const nums = txt.slice(0, first).trim().split(/\s+/).map(Number);
+    for (let i = 0; i < n && i < 5000; i++) {
+      const on = nums[2 * i], off = nums[2 * i + 1], next = i + 1 < n ? nums[2 * i + 3] : txt.length - first;
+      if (!Number.isFinite(on) || !Number.isFinite(off) || objs[on]) continue;
+      objs[on] = { start: -1, body: txt.slice(first + off, first + next) };
+    }
+  }
   /** A font's ToUnicode map: { code (hex, as written): text } and its code width in bytes. */
   const cmaps = {};
   const cmapOf = async fontRef => {
@@ -12957,7 +12980,13 @@ function repMonParse(pages) {
   let n = "", d = "";
   for (const l of lines) {
     if (!n && /^in[vo]{2}ice\b/i.test(l.items[0].s) && l.items.length >= 2 && /\d/.test(l.items[l.items.length - 1].s)) n = l.items[l.items.length - 1].s.replace(/^#\s*/, "");
-    if (!d) { const m = l.items.map(i => /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(i.s)).find(Boolean); if (m) d = `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`; }
+    if (!d) { const m = l.items.map(i => /^(?:(?:due )?date:?\s*)?(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})$/i.exec(i.s.trim())).find(Boolean); if (m) d = `${m[3].length === 2 ? "20" + m[3] : m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`; }   // 1/21/26 and "Due date: 3/10/2026" too
+  }
+  // the number on a line of its own under "Invoice" in the right column (when "Invoice" and its number sit at two heights)
+  if (!n) {
+    const k = lines.findIndex(l => l.items.some(i => i.x > 200 && /^in[vo]{2}ice$/i.test(i.s)));
+    const it = k >= 0 && lines[k + 1] ? lines[k + 1].items.find(i => i.x > 200 && /\d/.test(i.s) && !/\s/.test(i.s.trim()) && !/^terms/i.test(i.s)) : null;
+    if (it) n = it.s.trim().replace(/^#\s*/, "");
   }
   const head = lines.findIndex(l => l.items.some(i => /^activity$/i.test(i.s)) && l.items.some(i => /^amount$/i.test(i.s)));
   const items = [];
@@ -13035,8 +13064,8 @@ function openRepMonInv() {
   const matches = c => { const j = jobOf(c); return !!j && (Math.abs(c.item.a - repSplit(j).monAmt) <= 100 || !!c.extra); };
   /** Paid already, sent and waiting, or its job marked paid: it can't be ticked. */
   const lockOf = c => {
-    const n = nOf(c), j = jobOf(c), t = cpTaken(n, allJobs());
-    if (t) return t;
+    const n = nOf(c), j = jobOf(c), t = cpTaken(n, allJobs(), c.item.a);
+    if (t && !(t.why === "reused" && t.st === "paid" && c.reuse)) return Object.assign({ n }, t);
     if (j && j.t && j.t.mPaidAt) return { why: "job_paid", on: j.t.mPaidAt };
     return null;
   };
@@ -13071,8 +13100,12 @@ function openRepMonInv() {
       const tick = h("input", { type: "checkbox", class: "rp-tick", "aria-label": `Include invoice ${c.n || c.file}`, checked: !!c.on, disabled: busy || !!lock || !c.pick,
         title: lock ? cpTakenText(lock) : !c.pick ? "Pick its project first" : c.on ? "Untick to leave it out" : "Tick to include it",
         onchange: e => { e.stopPropagation(); c.on = e.target.checked; if (c.on) cards.forEach(o => { if (o !== c && nOf(o) === nOf(c)) o.on = false; }); draw(); }, oninput: e => e.stopPropagation() });
+      const reusable = (lock && lock.why === "reused" && lock.st === "paid") || c.reuse;
       return h("div", { class: "rp-inv" + (c.on ? " on" : " off") + (lock ? " locked" : ""), "data-inv": c.n }, tick, ...head,
         lock ? h("p", { class: "rp-lock", text: cpTakenText(lock) }) : null,
+        reusable && isAdmin() && apiLevel >= CP_BEFORE_API ? h("label", { class: "rp-check rp-reuse" }, h("input", { type: "checkbox", class: "rp-reuse-ok", checked: !!c.reuse,
+          onchange: e => { e.stopPropagation(); c.reuse = e.target.checked; c.on = c.reuse && !!c.pick && !twinOn(c); draw(); }, oninput: e => e.stopPropagation() }),
+          " It's another invoice (Monumental used the number again): send it") : null,
         !lock && !c.on && twinOn(c) ? h("p", { class: "meta", text: "The same invoice # as another one here: only one of them can go." }) : null,
         h("div", { class: "field" }, h("label", { text: c.cands.length ? "Project" : "Project (no match found: pick it)" }), sel), lock ? null : check);
     }));
@@ -13128,7 +13161,7 @@ function openRepMonInv() {
         fileIds.set(c.fobj, o.id);
       }
       status.textContent = "Sending to accounting…";
-      const o = await api("cpSend", { vendor: cpVendorName(), to: to.list(), items: pick.map(c => ({ id: c.pick, n: nOf(c), f: fileIds.get(c.fobj) })) }, 170000);
+      const o = await api("cpSend", { vendor: cpVendorName(), to: to.list(), items: pick.map(c => ({ id: c.pick, n: nOf(c), f: fileIds.get(c.fobj) })), reuse: pick.filter(c => c.reuse).map(nOf) }, 170000);
       cpTake(o);
       pick.forEach(c => { c.sent = o.batch.id; c.on = false; });
       return finish(o.added ? `Added ${cpPlural(o.added, "invoice")} to batch ${o.batch.id} (now ${cpPlural(o.batch.items.length, "invoice")})` : `Sent ${cpPlural(pick.length, "invoice")} to accounting · batch ${o.batch.id}`);
@@ -13243,6 +13276,9 @@ const repStreetText = a => { const p = String(a || "").split(",").map(x => x.tri
 const CP_API = 46;                                       // the Google script with Contractor Payroll
 const CP_REPLY_API = 47;                                 // ... and where vendors' questions go
 const CP_DEL_API = 48;                                   // ... and deleting a canceled batch
+const CP_BEFORE_API = 78;                                 // ... and invoices paid before the app (and a reused number on another amount)
+/** A batch of invoices paid before the app: paid, with no paid day. */
+const cpBefore = b => b.status === "paid" && !b.paidOn;
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
 const CP_VENDOR = "Monumental Flooring";
 let cpData = null, cpLoading = false, cpErr = "", cpOld = false, cpFilter = "all", cpLoadP = null;
@@ -13281,23 +13317,35 @@ const cpLate = (i, b) => !!(i.at && b.at && Date.parse(i.at) - Date.parse(b.at) 
 const cpVendorName = () => (((cpData && cpData.parties) || []).find(p => p.kind === "vendor" && /^monumental\b/i.test(p.name)) || {}).name || CP_VENDOR;
 /** A batch's status, as a tag. */
 function cpTag(b, short) {
+  if (cpBefore(b)) return h("span", { class: "rp-tag ok", text: short ? "Paid before" : "Paid before VODA Hub" });
   if (b.status === "paid") return h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(b.paidOn)}${short ? "" : ` · sent to ${cpShort(b.vendor)}`}` });
   if (b.status === "canceled") return h("span", { class: "rp-tag", text: "Canceled" });
   return h("span", { class: "rp-tag dep", text: short ? "Waiting" : "Waiting for accounting" });
 }
-/** Is a Monumental invoice paid already, or sent to accounting and waiting? { why, on, b, ref } or null (its jobs and the batches). */
-function cpTaken(n, jobs) {
-  for (const j of jobs) for (const v of j.mon || []) if (v.n === n) {
+/** Is a Monumental invoice paid already, or sent to accounting and waiting? { why, on, b, ref } or null (its jobs and the
+ *  batches). With its amount (cents): the same number on another amount is another invoice (Monumental used the number
+ *  again): { why: "reused", st, on, b, a } (an admin can still send it once the other one is paid). */
+function cpTaken(n, jobs, a) {
+  const same = x => a == null || Math.abs((Number(x) || 0) - a) <= 1;
+  let reused = null;
+  for (const j of jobs) for (const v of j.mon || []) if (v.n === n && (v.paid || v.b)) {
+    if (!same(v.a)) { reused = reused || { why: "reused", st: v.paid ? "paid" : "waiting", on: v.paid || v.sent || "", b: v.b || "", a: Number(v.a) || 0 }; continue; }
     if (v.paid) return { why: "paid", on: v.paid, b: v.b || "", ref: v.ref || "" };
-    if (v.b) return { why: "waiting", on: v.sent || "", b: v.b };
+    return { why: "waiting", on: v.sent || "", b: v.b };
   }
-  for (const b of (cpData && cpData.batches) || []) if (b.items.some(i => i.n === n)) {
+  for (const b of (cpData && cpData.batches) || []) {
+    if (b.status !== "paid" && b.status !== "waiting") continue;
+    const its = b.items.filter(i => i.n === n);
+    if (!its.length) continue;
+    if (!its.some(i => same(i.a))) { reused = reused || { why: "reused", st: b.status, on: b.status === "paid" ? b.paidOn : cpAtDay(b.at), b: b.id, a: Number(its[0].a) || 0 }; continue; }
     if (b.status === "paid") return { why: "paid", on: b.paidOn, b: b.id, ref: b.ref };
-    if (b.status === "waiting") return { why: "waiting", on: cpAtDay(b.at), b: b.id };
+    return { why: "waiting", on: cpAtDay(b.at), b: b.id };
   }
-  return null;
+  return reused;
 }
-const cpTakenText = t => (t.why === "paid" ? `Already paid${t.on ? ` on ${cpDay(t.on)}` : ""}${t.b ? ` (batch ${t.b}${t.ref ? `, ref ${t.ref}` : ""})` : ""}. It can't be sent again.`
+const cpPaidWhen = t => (lbIsDay(t.on) ? ` on ${cpDay(t.on)}` : t.on === "before" || /-PAID-BEFORE\b/.test(t.b || "") ? " before VODA Hub" : "");
+const cpTakenText = t => (t.why === "paid" ? `Already paid${cpPaidWhen(t)}${t.b ? ` (batch ${t.b}${t.ref ? `, ref ${t.ref}` : ""})` : ""}. It can't be sent again.`
+  : t.why === "reused" ? `Invoice #${t.n ? ` ${t.n}` : ""} is already on another invoice of ${cpCents(t.a)}, ${t.st === "paid" ? `paid${cpPaidWhen(t)}` : "waiting for accounting"}${t.b ? ` (batch ${t.b})` : ""}. ${t.st !== "paid" ? "Wait until that batch is paid." : isAdmin() ? "If this is a different invoice, tick “It's another invoice” to send it." : "If it's a different invoice, an admin can send it."}`
   : t.why === "waiting" ? `Already sent to accounting${t.on ? ` on ${cpDay(t.on)}` : ""}${t.b ? ` (batch ${t.b})` : ""}. It can't be sent twice.`
   : t.why === "job_paid" ? `This job is already marked paid to Monumental${t.on ? ` on ${cpDay(t.on)}` : ""}. Clear that date on the job first if it's still owed.`
   : t.why === "no_pdf" ? "Its PDF didn't upload. Send again." : t.why === "twice" ? "The same invoice # is in this batch twice." : "This invoice isn't saved on its job. Save it first.");
@@ -13360,7 +13408,7 @@ function cpBlock(compact) {
       cpErr ? h("button", { class: "btn", type: "button", onclick: () => { cpErr = ""; cpLoad(); } }, "Try again") : null)];
   }
   const all = cpData.batches, waiting = all.filter(b => b.status === "waiting"), paid = all.filter(b => b.status === "paid");
-  const year = String(revThisYear()), paidYear = paid.filter(b => String(b.paidOn).startsWith(year));
+  const year = String(revThisYear()), paidYear = paid.filter(b => String(b.paidOn).startsWith(year)), before = paid.filter(cpBefore);
   const list = cpFilter === "waiting" ? waiting : cpFilter === "paid" ? paid : all, MAX = 8;
   const shown = compact && !cpAll ? list.slice(0, MAX) : list;
   const seg = h("div", { class: "seg", role: "group", "aria-label": "Show", id: "cpFilter" }, [["all", "All"], ["waiting", "Waiting"], ["paid", "Paid"]].map(([k, t]) =>
@@ -13368,11 +13416,12 @@ function cpBlock(compact) {
   const sum = (l, f) => l.reduce((n, b) => n + (b[f] || 0), 0);
   const tiles = h("div", { class: "cp-kpis", id: "cpKpis" },
     h("div", { class: "cp-kpi" + (waiting.length ? " due" : "") }, h("small", { text: "Waiting for accounting" }), h("b", { text: lbCash(sum(waiting, "total") / 100) }), h("span", { text: cpPlural(waiting.length, "batch") })),
-    h("div", { class: "cp-kpi" }, h("small", { text: `Paid in ${year}` }), h("b", { text: lbCash(sum(paidYear, "paid") / 100) }), h("span", { text: `${cpPlural(paidYear.length, "batch")} · ${cpPlural(paidYear.reduce((n, b) => n + b.items.length, 0), "invoice")}` })));
+    h("div", { class: "cp-kpi" }, h("small", { text: `Paid in ${year}` }), h("b", { text: lbCash(sum(paidYear, "paid") / 100) }), h("span", { text: `${cpPlural(paidYear.length, "batch")} · ${cpPlural(paidYear.reduce((n, b) => n + b.items.length, 0), "invoice")}` }),
+      before.length ? h("span", { class: "cp-bef", id: "cpBeforeSum", text: `+ ${lbCash(sum(before, "paid") / 100)} paid before VODA Hub (${cpPlural(before.reduce((n, b) => n + b.items.length, 0), "invoice")})` }) : null));
   const row = b => h("tr", { "data-b": b.id, class: b.status === "canceled" ? "gone" : "", tabindex: "0", onclick: () => openCpBatch(b.id), onkeydown: e => { if (e.key === "Enter") openCpBatch(b.id); } },
-    h("th", null, b.id, h("small", { class: "ph", text: `${cpShort(b.vendor)} · sent ${repShortDay(cpAtDay(b.at))} · ${cpPlural(b.items.length, "invoice")}` })),
+    h("th", null, b.id, h("small", { class: "ph", text: `${cpShort(b.vendor)} · ${cpBefore(b) ? "recorded" : "sent"} ${repShortDay(cpAtDay(b.at))} · ${cpPlural(b.items.length, "invoice")}` })),
     h("td", { class: "l pc", text: b.vendor }),
-    h("td", { class: "l pc" }, cpDay(cpAtDay(b.at)), h("small", { text: b.by })),
+    h("td", { class: "l pc" }, cpBefore(b) ? "–" : cpDay(cpAtDay(b.at)), h("small", { text: cpBefore(b) ? `recorded ${cpDay(cpAtDay(b.at))} · ${b.by}` : b.by })),
     h("td", { class: "pc", text: fmt(b.items.length) }),
     h("td", null, h("b", { text: lbCash((b.status === "paid" ? b.paid : b.total) / 100) }), h("small", { class: "ph" }, cpTag(b, true))),
     h("td", { class: "st pc" }, cpTag(b)));
@@ -13382,9 +13431,149 @@ function cpBlock(compact) {
     : h("p", { class: "meta cp-empty", id: "cpEmpty", text: all.length ? "None here." : canSee("repairs") ? "Nothing sent to accounting yet. Send Monumental's invoices with + Monumental invoice (PDF)." : "Nothing sent to accounting yet." });
   const more = shown.length < list.length ? h("button", { class: "btn small", type: "button", id: "cpMore", onclick: () => { cpAll = true; cpRedraw(); } }, `Show all ${fmt(list.length)}`) : null;
   return [tiles, h("section", { class: "panel cp-panel", id: "cpPanel" },
-    h("div", { class: "cp-head" }, compact ? null : h("h3", { text: "Contractor payroll" }), seg),
+    h("div", { class: "cp-head" }, compact ? null : h("h3", { text: "Contractor payroll" }), seg,
+      isAdmin() && (!apiLevel || apiLevel >= CP_BEFORE_API) ? h("button", { class: "btn small", type: "button", id: "cpBeforeBtn", title: "Monumental's invoices paid before the app: marked paid so they can't be paid twice", onclick: () => openCpBeforeLoad() }, "Load paid invoices") : null),
     h("p", { class: "meta", text: compact ? "Batches sent to accounting. Tap one to open it." : "Every batch sent to accounting: what's waiting and what's paid. Tap one to open it." }),
     body, more)];
+}
+/* ---- invoices paid before the app (Admins): Monumental's PDFs read here and recorded as paid, with no paid date, so none
+   of them can be sent for payment again ---- */
+function openCpBeforeLoad() {
+  if (apiLevel && apiLevel < CP_BEFORE_API) { toast("Update the Google script first: paste the latest Code.gs, then Deploy › Manage deployments › New version."); return; }
+  let rows = [], busy = false, armed = false;
+  const C = cpCents;
+  const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", id: "cpbStatus", role: "status" });
+  const list = h("div", { class: "cpb-list", id: "cpbList" }), sumEl = h("div", { class: "cpb-sum", id: "cpbSum" });
+  const jobs = () => Object.values(repDocs).flatMap(d => d.jobs || []);
+  const short = n => n.split("/").pop().replace(/\.pdf$/i, "");
+  // already in the app (paid or waiting: the same number and amount), or the same invoice twice in what's picked
+  const classify = () => {
+    const seen = new Map();
+    for (const r of rows) {
+      if (r.bad || r.done) continue;
+      r.why = ""; r.msg = "";
+      if (!r.n) {
+        // no number on the PDF: the same amount and client already recorded before the app
+        const b = ((cpData && cpData.batches) || []).find(x => cpBefore(x) && x.items.some(i => !i.n && i.a === r.a && i.client === r.client));
+        if (b) { r.why = "have"; r.msg = `Already paid before VODA Hub (batch ${b.id})`; continue; }
+        const k = `|${r.a}|${r.client}`;
+        if (seen.has(k)) { r.why = "twice"; r.msg = `The same invoice (amount and client) as ${short(seen.get(k).name)}: counted once`; continue; }
+        seen.set(k, r);
+      }
+      if (r.n) {
+        const t = cpTaken(r.n, jobs(), r.a);
+        if (t && t.why !== "reused") { r.why = "have"; r.msg = t.why === "paid" ? `Already paid${cpPaidWhen(t)}${t.b ? ` (batch ${t.b})` : ""}` : `Waiting for accounting${t.b ? ` (batch ${t.b})` : ""}`; continue; }
+        const k = `${r.n}|${r.a}`;
+        if (seen.has(k)) { r.why = "twice"; r.msg = `The same invoice (# and amount) as ${short(seen.get(k).name)}: counted once`; continue; }
+        seen.set(k, r);
+      }
+    }
+  };
+  const goes = r => !r.bad && !r.why && !r.done && r.on;
+  const go = h("button", { class: "btn primary", type: "button", id: "cpbGo", disabled: true, onclick: () => mark() });
+  const draw = () => {
+    const ok = rows.filter(goes), tot = ok.reduce((n, r) => n + r.a, 0), done = rows.filter(r => r.done);
+    const n = k => rows.filter(k).length;
+    sumEl.replaceChildren(...(rows.length ? [
+      h("b", { text: done.length ? `✓ ${cpPlural(done.length, "invoice")} marked paid · ${C(done.reduce((t, r) => t + r.a, 0))}` : ok.length ? `${cpPlural(ok.length, "invoice")} to mark paid · ${C(tot)}` : "Nothing to mark paid" }),
+      h("small", { text: [`${cpPlural(rows.length, "PDF")} read`, n(r => r.why === "have") ? `${fmt(n(r => r.why === "have"))} already in the app` : "", n(r => r.why === "twice") ? `${fmt(n(r => r.why === "twice"))} the same invoice twice` : "",
+        n(r => !r.bad && !r.why && !r.done && !r.on) ? `${fmt(n(r => !r.bad && !r.why && !r.done && !r.on))} left out` : "", n(r => r.bad) ? `${fmt(n(r => r.bad))} couldn't be read` : ""].filter(Boolean).join(" · ") })] : []));
+    list.replaceChildren(...(rows.length ? [h("table", { class: "lb-table cpb-table", id: "cpbTable" },
+      h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l", text: "File" }), h("th", { class: "l", text: "Invoice #" }), h("th", { class: "l pc", text: "Date" }), h("th", { class: "l", text: "Client" }), h("th", { text: "Amount" }))),
+      h("tbody", null, rows.map((r, i) => h("tr", { class: r.done ? "done" : r.bad || r.why ? "off" : r.on ? "" : "out", "data-i": i },
+        h("td", null, h("input", { type: "checkbox", "aria-label": `Mark ${short(r.name)} paid`, checked: goes(r) || !!r.done, disabled: busy || !!r.bad || !!r.why || !!r.done, onchange: e => { r.on = e.target.checked; armed = false; draw(); } })),
+        h("td", { class: "l cpb-f", title: r.name }, short(r.name), r.bad || r.msg || r.note || r.done ? h("small", { class: r.done ? "ok" : r.bad ? "bad" : "", text: r.done ? `✓ Marked paid${r.doneB ? ` · ${r.doneB}` : ""}` : r.bad || r.msg || r.note }) : null),
+        h("td", { class: "l mono", text: r.bad ? "" : r.n || "(no #)" }), h("td", { class: "l pc", text: r.d ? lbDayText(r.d) : "" }),
+        h("td", { class: "l" }, r.client || "", r.addr ? h("small", { text: r.addr }) : null), h("td", { text: r.bad ? "" : C(r.a) }))))) ] : []));
+    const k = ok.length;
+    go.textContent = !k ? "Mark paid" : armed ? `Tap again: mark ${cpPlural(k, "invoice")} paid` : `Mark ${cpPlural(k, "invoice")} paid`;
+    go.disabled = busy || !k;
+    go.classList.toggle("danger", armed);
+  };
+  const read = async files => {
+    const pdfs = [...files].filter(f => /\.pdf$/i.test(f.name)).sort((a, b) => String(a.webkitRelativePath || a.name).localeCompare(String(b.webkitRelativePath || b.name), "en", { numeric: true }));
+    if (!pdfs.length) { err.textContent = "No PDFs there."; return; }
+    if (!cpData) await cpLoad();
+    rows = []; err.textContent = ""; armed = false; busy = true; draw();
+    for (let i = 0; i < pdfs.length; i++) {
+      const f = pdfs[i], name = f.webkitRelativePath || f.name;
+      status.textContent = `Reading ${i + 1} of ${pdfs.length}…`;
+      let inv = null;
+      try { inv = repMonParse(await pdfLines(await f.arrayBuffer())); } catch (e) { inv = null; }
+      const it = inv && inv.items[0];
+      if (!inv || !(inv.a > 0)) { rows.push({ name, bad: "Couldn't read an invoice in it" }); continue; }
+      const noInv = /(^|[^a-z])no invoice\b/i.test(f.name);   // a file named like "12_no invoice - ..."
+      rows.push({ name, n: String(inv.n || "").slice(0, 60), d: inv.d || "", a: inv.a, client: it ? it.name : "", addr: it ? it.addr : "", on: !noInv,
+        note: noInv ? "Its file name says “no invoice”: left out (tick it to include it)" : !inv.n ? "No invoice # on the PDF: kept, but a new one can't be matched to it" : "" });
+      if (i % 12 === 11) draw();
+    }
+    busy = false; status.textContent = ""; classify(); draw();
+  };
+  const mark = async () => {
+    const pick = rows.filter(goes);
+    if (!pick.length) return;
+    if (!armed) { armed = true; draw(); return; }
+    busy = true; armed = false; err.textContent = ""; draw();
+    let added = 0;
+    try {
+      for (let i = 0; i < pick.length; i += 50) {
+        const part = pick.slice(i, i + 50);
+        status.textContent = `Marking ${Math.min(i + 50, pick.length)} of ${pick.length} paid…`;
+        const o = await api("cpBefore", { vendor: cpVendorName(), items: part.map(r => ({ n: r.n, d: r.d, a: r.a / 100, client: r.client, addr: r.addr, fn: short(r.name) })) }, 170000);
+        const sk = new Map((o.skipped || []).map(x => [`${x.n}|${x.a}`, x]));
+        for (const r of part) {
+          const x = sk.get(`${r.n}|${r.a}`);
+          if (x) { r.why = x.why === "twice" ? "twice" : "have"; r.msg = x.why === "twice" ? "The same invoice twice: counted once" : cpTakenText(Object.assign({}, x, { n: r.n })).replace(/ It can't be sent again\.$/, ""); }
+          else { r.done = true; added++; }
+        }
+        if (cpData && Array.isArray(o.batches)) { cpData.batches = cpData.batches.filter(b => !o.batches.some(x => x.id === b.id)); cpData.batches.unshift(...o.batches); }
+        cpTake({ jobs: o.jobs || [] });
+        const bid = o.batches && o.batches.length ? o.batches[o.batches.length - 1].id : "";
+        part.forEach(r => { if (r.done && !r.doneB) r.doneB = bid; });
+      }
+      dlgDirty = false;
+      toast(`Marked ${cpPlural(added, "invoice")} paid (before VODA Hub)`);
+    } catch (e) { err.textContent = e && e.error === "bad_request" && (Number(e.api) || 0) < CP_BEFORE_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, "Some invoices"); }
+    busy = false; status.textContent = ""; draw(); cpRedraw();
+  };
+  // two plain pickers behind buttons (not drop boxes: a folder can't be dropped, and 146 names would fill the window)
+  const folder = h("input", { type: "file", id: "cpbFolder", class: "drop-in", multiple: true, onchange: e => read(e.target.files) });
+  folder.webkitdirectory = true;
+  const pdfs = h("input", { type: "file", id: "cpbFiles", class: "drop-in", accept: ".pdf,application/pdf", multiple: true, onchange: e => read(e.target.files) });
+  openDialog(h("div", { class: "rp-dlg cpb-dlg" },
+    h("h3", { id: "dlgTitle", text: "Invoices paid before VODA Hub" }),
+    h("p", { class: "hint", text: "Pick the folder with Monumental's invoices you've paid (every PDF in it and its folders is read), or the PDFs. Those already in the app — paid or waiting for accounting, the same invoice # and amount — are left as they are. The rest are marked paid, with no paid date, in one batch (Paid before VODA Hub), so none of them can be sent for payment again. The same # on another amount is another invoice: an admin can still send it. Nothing is emailed." }),
+    h("div", { class: "cpb-pick" }, h("label", { class: "btn", for: "cpbFolder" }, "Pick the folder"), folder, h("label", { class: "btn", for: "cpbFiles" }, "Pick PDFs"), pdfs),
+    status, sumEl, list, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() }), go))));
+  draw();
+}
+/** A batch of invoices paid before the app: what's on it (no paid dates, no PDFs kept); an admin can take it off again. */
+function openCpBeforeBatch(b) {
+  const err = h("p", { class: "dlg-err", role: "alert" }), C = cpCents;
+  const items = b.items.slice().sort((x, y) => (x.d || "9") < (y.d || "9") ? -1 : (x.d || "9") > (y.d || "9") ? 1 : String(x.n).localeCompare(String(y.n)));
+  let armed = false;
+  const del = isAdmin() ? h("button", { class: "btn", type: "button", id: "cpDelete", onclick: async ev => {
+    const x = ev.currentTarget;
+    if (!armed) { armed = true; x.textContent = `Tap again: take all ${fmt(b.items.length)} off`; x.classList.add("danger"); return; }
+    x.disabled = true; err.textContent = "";
+    try {
+      const o = await api("cpDelete", { id: b.id });
+      cpData.batches = cpData.batches.filter(y => y.id !== b.id); cpTake({ jobs: o.jobs || [] });
+      closeDialog(); toast(`Batch ${b.id} deleted: its invoices can be sent for payment again`); cpRedraw();
+    } catch (e) { err.textContent = cpCpErr(e, "The batch"); x.disabled = false; }
+  } }, "Delete batch") : null;
+  openDialog(h("div", { class: "rp-dlg cp-dlg cpb-wide" },
+    h("h3", { id: "dlgTitle", text: `Batch ${b.id} · ${b.vendor}` }),
+    h("div", { class: "cp-paidbox", id: "cpPaidBox" },
+      h("b", { text: `Paid before VODA Hub · ${C(b.paid)} · ${cpPlural(b.items.length, "invoice")}` }),
+      h("span", { text: `Recorded ${cpDay(cpAtDay(b.at))} by ${b.by}, from Monumental's PDFs. No paid dates, nothing emailed. None of these can be sent for payment again (the same invoice # on another amount: an admin can still send it).` })),
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
+      h("thead", null, h("tr", null, h("th", { class: "l", text: "Invoice" }), h("th", { class: "l pc", text: "Date" }), h("th", { class: "l", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Amount" }))),
+      h("tbody", null, items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l inv mono" }, i.n || "(no #)", i.fn ? h("small", { text: i.fn }) : null), h("td", { class: "l pc", text: i.d ? cpDay(i.d) : "" }),
+        h("td", { class: "l" }, i.client, h("small", { class: "ph", text: [i.d ? cpDay(i.d) : "", i.addr].filter(Boolean).join(" · ") })), h("td", { class: "l pc", text: i.addr }), h("td", { text: C(i.a) })))))),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, del, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
 }
 /** Contractor Payroll's own page: for someone who sees it without Repairs Payroll (the accounting manager). */
 function renderContractors(box) {
@@ -13410,6 +13599,7 @@ const CP_REF_FREE = ["Cash"];
 function openCpBatch(id) {
   const b = cpData && cpData.batches.find(x => x.id === id);
   if (!b) return;
+  if (cpBefore(b)) { openCpBeforeBatch(b); return; }
   const err = h("p", { class: "dlg-err", role: "alert" }), C = cpCents, vs = cpShort(b.vendor);
   const late = b.items.filter(i => cpLate(i, b)), lateDays = [...new Set(late.map(i => cpDay(cpAtDay(i.at)).replace(/, \d{4}$/, "")))];
   const steps = h("p", { class: "cp-steps" },
