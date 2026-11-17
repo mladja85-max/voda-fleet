@@ -696,6 +696,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-tasks { display: grid; gap: 6px; justify-items: start; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--accent); background: var(--accent-soft); }
 /* Office people: every number and who tracks it (tap a name); each person's numbers one by one, folded */
 .of-sec { margin: 8px 0 0; font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; letter-spacing: .03em; }
+.of-card { display: grid; gap: 6px; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--accent-soft); }
+.of-card .hint { margin: 0; } .of-card .btn { justify-self: start; white-space: normal; text-align: left; max-width: 100%; } .of-card .hint.ok { color: var(--ok); font-weight: 700; }
 .of-opts { display: grid; gap: 8px; }
 .of-opt { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; background: var(--surface-2); }
 .of-opt.gone { opacity: .8; }
@@ -4674,6 +4676,24 @@ const OF_TASK_LISTS = {
     { id: "price", label: "Pricing follow-ups (not booked yet)", kind: "out" },
     { id: "priceb", label: "Booked from pricing calls", kind: "num", of: "price" }] };
 const OF_RETIRED = ["fu", "fus", "other"];
+/** Does she track exactly the scorecard's numbers (as on the Excel: the 8 of OF_DEFAULT_FIELDS)? */
+const ofHasCard = fields => OF_DEFAULT_FIELDS.every(d => fields.some(f => f.id === d.id && f.label === d.label && f.kind === d.kind && !f.hide))
+  && fields.filter(f => !f.hide).length === OF_DEFAULT_FIELDS.length;
+/** A person's numbers as the scorecard's 8 (one she already has keeps its history under its scorecard name); her other
+ *  numbers: past only when she has a number in them some day (`used`: those ids), else taken off. */
+function ofWithCard(fields, used) {
+  const out = OF_DEFAULT_FIELDS.map(d => { const f = Object.assign({}, fields.find(x => x.id === d.id) || {}, { id: d.id, label: d.label, kind: d.kind, of: d.of }); delete f.hide; return f; });
+  const names = new Set(out.map(f => f.label.toLowerCase()));
+  for (const f of fields) {
+    if (out.some(x => x.id === f.id) || !(used && used.has(f.id))) continue;
+    const label = names.has(f.label.trim().toLowerCase()) ? `${f.label.slice(0, 34)} (old)` : f.label;
+    names.add(label.toLowerCase());
+    out.push(Object.assign({}, f, { label, hide: true }));
+  }
+  const ids = new Set(out.map(f => f.id));
+  for (const f of out) if (f.of && !ids.has(f.of)) f.of = "";
+  return out;
+}
 /** A person's numbers with a task list put in: the list first (a number she already has keeps its history under the
  *  new name), then her other numbers as they were, then the sheet's general follow-up / other calls as past only. */
 function ofWithTasks(fields, list) {
@@ -15190,7 +15210,7 @@ function openOfPeople() {
   const personEl = (p, isNew) => {
     const fields = h("div", { class: "of-fields" }, p.fields.map(f => fieldRow(f, p.fields)));
     const list = !isNew && OF_TASK_LISTS[Object.keys(OF_TASK_LISTS).find(k => k.toLowerCase() === p.name.toLowerCase())];
-    const tasks = list && !ofHasTasks(p.fields, list) ? h("div", { class: "of-tasks" },
+    const tasks = list && !ofHasTasks(p.fields, list) && !ofHasCard(p.fields) ? h("div", { class: "of-tasks" },
       h("p", { class: "hint", text: `${p.name}'s task list: ${list.filter(t => t.kind === "out").map(t => t.label.toLowerCase()).join(", ")} (they add up to the goal), what each one booked, and Google Guaranteed / Online Booking (tracked, not in the goal).` }),
       h("button", { class: "btn small primary", type: "button", "data-tasks": p.name, onclick: ev => {
         const next = ofWithTasks(rowsOf(fields), list);
@@ -15218,6 +15238,10 @@ function openOfPeople() {
   /* ---- every number, and who tracks it: tap a name to give it to her or take it off her ---- */
   const opts = h("div", { class: "of-opts", id: "ofOpts" }), newBox = h("div", { class: "of-new", id: "ofNewOpt", hidden: true });
   const peopleEls = () => [...list.querySelectorAll(".of-person")];
+  // working now: no To month, or one from this month on (those who left keep their numbers, but aren't on the buttons)
+  const nowKey = lbToday().slice(0, 7);
+  const working = el => { const t = el.querySelector(".p-to"); return !t || !t.value || t.value >= nowKey; };
+  const workEls = () => peopleEls().filter(working);
   const nameOf = el => el.dataset.name || lbTeamName(el.querySelector(".p-name") ? el.querySelector(".p-name").value : "") || "New person";
   const rowFor = (el, label) => [...el.querySelectorAll(".of-f")].find(r => norm(r.querySelector(".f-label").value) === norm(label));
   /** Gives her the number: back from past only, or added with the same kind and % (of the number with that name, if she has it). */
@@ -15238,10 +15262,10 @@ function openOfPeople() {
     if (r.dataset.added === "1" || !c) r.remove();
     else { c.checked = true; r.classList.add("past"); }
   };
-  /** Every number anyone has (by its name), who tracks it now and who has it past only. */
+  /** Every number anyone working now has (by its name), who tracks it and who has it past only. */
   const optList = () => {
     const out = [];
-    for (const el of peopleEls()) {
+    for (const el of workEls()) {
       const fs = rowsOf(el);
       for (const f of fs) {
         if (!f.label) continue;
@@ -15253,10 +15277,54 @@ function openOfPeople() {
     }
     return out;
   };
+  /* ---- one tap: everyone working now on the scorecard's 8 numbers (as on the Excel) ---- */
+  const cardBox = h("div", { class: "of-card", id: "ofCardBox", hidden: true });
+  let cardDone = "";
+  const drawCard = () => {
+    const need = workEls().filter(el => !ofHasCard(rowsOf(el)));
+    if (!need.length) { cardBox.hidden = !cardDone; cardBox.replaceChildren(...(cardDone ? [h("p", { class: "hint ok", id: "ofCardDone", text: cardDone })] : [])); return; }
+    cardBox.hidden = false;
+    const names = need.map(nameOf), list2 = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+    cardBox.replaceChildren(
+      h("p", { class: "hint", text: "Same as the Excel: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed leads and Scheduled, Follow-up calls and Scheduled from follow-ups, Other outgoing calls, Scheduled / completed. Numbers with the same meaning under other names keep their history (past only); ones never typed are taken off." }),
+      h("button", { class: "btn small primary", type: "button", id: "ofUseCard", onclick: ev => useCard(ev.currentTarget) }, `Use the scorecard's 8 numbers for ${list2}`));
+  };
+  const useCard = async b => {
+    b.disabled = true; b.textContent = "Checking their history…"; err.textContent = "";
+    try {
+      const els = workEls().filter(el => !ofHasCard(rowsOf(el)));
+      // the numbers each one has ever typed (every year she's been here): those stay as past only
+      const used = new Map(els.map(el => [nameOf(el).toLowerCase(), new Set()]));
+      const yTo = Number(lbToday().slice(0, 4)), yFrom = Math.min(yTo, ...els.map(el => Number(((el.querySelector(".p-from") || {}).value || "").slice(0, 4)) || 2023));
+      for (let y = yFrom; y <= yTo; y++) {
+        // the sheet's (fresh), and for this year what's on this phone too (a day still being saved)
+        const sets = [((await api("office", { year: y })) || {}).months || {}];
+        if (ofData && ofData.year === y && ofData.months) sets.push(ofData.months);
+        for (const months of sets) for (const doc of Object.values(months)) for (const day of Object.values((doc && doc.days) || {})) for (const [n, e] of Object.entries(day || {})) {
+          const set = used.get(String(n).toLowerCase());
+          if (set && e && typeof e === "object") for (const [k, v] of Object.entries(e)) if (k !== "at" && k !== "by" && v != null && v !== "") set.add(k);
+        }
+      }
+      if (!list.isConnected) return;
+      const said = [];
+      for (const el of els) {
+        const was = rowsOf(el), next = ofWithCard(was, used.get(nameOf(el).toLowerCase()));
+        el.querySelector(".of-fields").replaceChildren(...next.map(f => fieldRow(f, next)));
+        const t = el.querySelector(".of-tasks"); if (t) t.remove();
+        const past = next.filter(f => f.hide).length, off = was.filter(f => !next.some(x => x.id === f.id)).length;
+        said.push(`${nameOf(el)}: 8 numbers${past ? `, ${past} past only` : ""}${off ? `, ${off} never typed taken off` : ""}`);
+      }
+      cardDone = `Done. ${said.join("; ")}. Tap Save to keep it (Cancel leaves it as it was).`;
+      drawOpts();
+    } catch (e) {
+      err.textContent = errText(e, "Their history");
+      b.disabled = false; b.textContent = "Try again";
+    }
+  };
   let oldOpen = false, drawing = false;
   const optEl = o => h("div", { class: "of-opt" + (o.on.size ? "" : " gone"), "data-opt": o.label },
     h("div", { class: "of-opt-h" }, h("b", { text: o.label }), h("span", { class: "of-kind " + o.kind, text: OF_KIND_SHORT[o.kind] || "" }), o.of ? h("small", { text: `% of ${o.of}` }) : null),
-    h("div", { class: "of-who" }, peopleEls().map(el => {
+    h("div", { class: "of-who" }, workEls().map(el => {
       const st = o.on.has(el) ? "on" : o.past.has(el) ? "past" : "off", who = nameOf(el);
       return h("button", { class: "chip-btn sm of-who-b " + st, type: "button", "aria-pressed": String(st === "on"), "data-who": who,
         title: st === "on" ? `${who} tracks it. Tap to take it off her (what she typed so far still counts).` : st === "past" ? `Past only for ${who}. Tap to give it back to her.` : `Tap to give it to ${who}.`,
@@ -15266,8 +15334,9 @@ function openOfPeople() {
     if (drawing) return;
     drawing = true;
     const all = optList(), act = all.filter(o => o.on.size), old = all.filter(o => !o.on.size);
-    const det = old.length ? h("details", { class: "of-old", open: oldOpen, ontoggle: ev => { oldOpen = ev.currentTarget.open; } }, h("summary", { text: `No one tracks these any more (${old.length}): tap a name to bring one back` }), old.map(optEl)) : null;
+    const det = old.length ? h("details", { class: "of-old", open: oldOpen, ontoggle: ev => { oldOpen = ev.currentTarget.open; } }, h("summary", { text: `Past only (${old.length}): their history still counts; tap a name to bring one back` }), old.map(optEl)) : null;
     opts.replaceChildren(...act.map(optEl), ...(det ? [det] : []));
+    drawCard();
     // each person's folded list says how many she tracks (only when it changes: writing it is a change to the list)
     for (const el of peopleEls()) {
       const fs = rowsOf(el), on = fs.filter(f => !f.hide).length, past = fs.length - on, s = el.querySelector(".of-pnums-s");
@@ -15290,7 +15359,7 @@ function openOfPeople() {
     const kind = h("select", { id: "ofNewKind", "aria-label": "Kind" }, Object.entries(OF_KINDS).map(([k, t]) => h("option", { value: k, text: t })));
     const ofSel = h("select", { id: "ofNewOf", "aria-label": "Show as a % of" }, [h("option", { value: "", text: "No %" })].concat(optList().filter(o => o.on.size).map(o => h("option", { value: o.label, text: `% of ${o.label}` }))));
     const who = new Set(), msg = h("p", { class: "dlg-err", role: "alert" });
-    const chips = h("div", { class: "of-who" }, peopleEls().map(el => h("button", { class: "chip-btn sm", type: "button", "aria-pressed": "false", "data-who": nameOf(el),
+    const chips = h("div", { class: "of-who" }, workEls().map(el => h("button", { class: "chip-btn sm", type: "button", "aria-pressed": "false", "data-who": nameOf(el),
       onclick: ev => { const b = ev.currentTarget, on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on)); if (on) who.add(el); else who.delete(el); } }, nameOf(el))));
     const close = () => { newBox.hidden = true; newBox.replaceChildren(); };
     newBox.hidden = false;
@@ -15314,7 +15383,8 @@ function openOfPeople() {
     canHide ? null : h("p", { class: "dlg-err", id: "ofHideOld", text: "To use the task lists and past-only numbers, update the Google script first: paste the newest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that." }),
     h("label", { class: "of-mo" }, h("span", { text: "Outgoing calls goal (a day, Monday to Friday)" }), h("input", { type: "text", inputmode: "numeric", id: "ofGoal", value: String(cfg.goal) })),
     h("h4", { class: "of-sec", text: "Numbers and who tracks them" }),
-    h("p", { class: "hint", text: "Tap a name to give her the number, or tap it again to take it off her: she stops typing it, and what she typed so far still counts (past only). New number: something new to follow up on, for whoever you pick." }),
+    h("p", { class: "hint", text: "Tap a name to give her the number, or tap it again to take it off her: she stops typing it, and what she typed so far still counts (past only). New number: something new to follow up on, for whoever you pick. Only the people working now are here (no To month, or this month on)." }),
+    cardBox,
     opts,
     h("button", { class: "btn small", type: "button", id: "ofNewOptBtn", onclick: () => openNew() }, "+ New number"),
     newBox,
