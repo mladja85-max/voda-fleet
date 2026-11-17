@@ -124,6 +124,13 @@
  * her login, and type the admin-only numbers (like Scheduled / Completed, checked in the CRM). Everyone with Office ticked
  * sees everyone. The Office tab keeps it, one row per month plus "config", in JSON. Don't edit that tab by hand.
  *
+ * ATTENDANCE (employee tardiness)
+ * The app's Attendance section replaces "7. EMPLOYEE TARDINESS": a month at a time, people across and days down, each
+ * day what happened (late, left early, sick, vacation, off, no call / no show, company closed, or a note) with the
+ * minutes, the time and the reason. Admins set up the people (the months each one is here) and can bring in the Excel's
+ * history; everyone with Attendance ticked sees everyone and types the days. The Attendance tab keeps it, one row per month
+ * plus "config", in JSON. Don't edit that tab by hand.
+ *
  * WHO SEES WHAT
  * Admins see everything. Each technician sees only what an Admin ticks for him in the app (Settings > Users and invites):
  * Trucks, any of the checklists, Leaderboard (sees the standings), Leaderboard numbers (types the numbers, sets up the
@@ -139,7 +146,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 72;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 73;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -340,6 +347,12 @@ function doPost(e) {
       case "ofPut":
         if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return ofPut_(req); }));
+      case "attendance":
+        if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
+        return json_(atRead_(user, req.year));
+      case "atPut":
+        if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return atPut_(req); }));
       case "hcpTest":
         return json_(hcpTest_(req));
       case "revenue":
@@ -2989,7 +3002,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || EST_ACCESS.indexOf(x) !== -1 || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "attendance" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || EST_ACCESS.indexOf(x) !== -1 || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -5657,6 +5670,128 @@ function ofPut_(req) {
         change = { days: days };
       }
       doc = ofMonth_(lbMerge_(whole ? {} : lbParse_(byKey[key] ? byKey[key].json : ""), change), key);
+    }
+    lbSaveRow_(s, byKey, key, JSON.stringify(doc), now, req.by);
+    if (key === "config") out.config = doc; else out.months[key] = doc;
+  });
+  return out;
+}
+
+/* ---------------- attendance ---------------- */
+// One row per document, in JSON, like the Office tab: "config" (the people, in the grid's order, and the months each one
+// is here) and one row per month ("2026-11": each day, each person's entry: { k: kind, m: minutes, t: "HH:MM", n: note,
+// at, by }).
+
+const AT_SHEET = "Attendance";
+// late (m: minutes late, t: came in at), left early (t: left at), sick, vacation, off, no call / no show, company closed
+// (snow), or just a note (started, last day...)
+const AT_KINDS = ["late", "left", "sick", "vac", "off", "noshow", "closed", "note"];
+const AT_MAX_PEOPLE = 80;
+
+function atSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(AT_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(AT_SHEET);
+    s.getRange(1, 1, 1, LB_COLS.length).setValues([LB_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("A:B").setNumberFormat("@");
+  }
+  return s;
+}
+/** The people, cleaned: a name each (once), in order, with the months they're here (blank: from the start / up to now). */
+function atConfig_(c) {
+  const out = { people: [] }, seen = {};
+  ((c && Array.isArray(c.people)) ? c.people : []).slice(0, AT_MAX_PEOPLE).forEach(function (p) {
+    const name = lbTeam_(p && p.name);
+    if (!name || seen[name.toLowerCase()]) return;
+    seen[name.toLowerCase()] = true;
+    const from = lbYm_(p.from);
+    let to = lbYm_(p.to);
+    if (from && to && to < from) to = from;
+    out.people.push({ name: name, from: from, to: to });
+  });
+  return out;
+}
+/** One person's day, cleaned, or null: a kind, then minutes (1-1440), a time ("08:30") and a note, when there are. */
+function atEntry_(x) {
+  if (!x || typeof x !== "object" || AT_KINDS.indexOf(x.k) === -1) return null;
+  const e = { k: x.k }, m = Number(x.m);
+  if (x.m !== undefined && x.m !== null && x.m !== "" && isFinite(m) && m >= 1 && m <= 1440) e.m = Math.round(m);
+  if (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(x.t || ""))) e.t = String(x.t);
+  const n = supText_(x.n, 160);
+  if (n) e.n = n;
+  if (x.at) e.at = supText_(x.at, 40);
+  if (x.by) e.by = supText_(x.by, 40);
+  return e;
+}
+/** A month, cleaned: only that month's days, a name and an entry each. */
+function atMonth_(d, key) {
+  const out = { days: {} };
+  const days = d && d.days && typeof d.days === "object" ? d.days : {};
+  Object.keys(days).forEach(function (day) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day.slice(0, 7) !== key) return;
+    const x = days[day] && typeof days[day] === "object" ? days[day] : {};
+    const y = {};
+    Object.keys(x).forEach(function (name) {
+      const n = lbTeam_(name), e = n ? atEntry_(x[name]) : null;
+      if (e) y[n] = e;
+    });
+    if (Object.keys(y).length) out.days[day] = y;
+  });
+  return out;
+}
+/** The people and one year's months; which years have any. */
+function atRead_(user, year) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const out = { ok: true, config: { people: [] }, months: {}, years: [], admin: user.role === "admin" };
+  const ys = {};
+  lbRows_(atSheet_(false)).forEach(function (r) {
+    if (r.key === "config") out.config = atConfig_(lbParse_(r.json));
+    else if (lbYm_(r.key)) {
+      ys[r.key.slice(0, 4)] = true;
+      if (r.key.indexOf(y + "-") === 0) out.months[r.key] = atMonth_(lbParse_(r.json), r.key);
+    }
+  });
+  out.years = Object.keys(ys).map(Number).sort();
+  return out;
+}
+/** Saves changes: { writes: [{ key: "2026-11", patch: { days: { day: { name: entry | null } } } }] } puts each person's
+ *  day in whole (null takes it off), stamped with who and when; Admins may also replace a month or the people ("config")
+ *  whole ({ key, data }: the Excel's history, People). Up to 24 writes a call. */
+function atPut_(req) {
+  const admin = req.user.role === "admin";
+  const writes = (Array.isArray(req.writes) ? req.writes : []).slice(0, 24);
+  if (!admin && writes.some(function (w) { return w && (w.key === "config" || (w.data && typeof w.data === "object")); })) return { ok: false, error: "not_allowed" };
+  const s = atSheet_(true);
+  const byKey = {};
+  lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
+  const now = new Date().toISOString();
+  const out = { ok: true, months: {} };
+  writes.forEach(function (w) {
+    const key = String((w && w.key) || "");
+    const whole = w && w.data && typeof w.data === "object";
+    const change = whole ? w.data : (w && w.patch && typeof w.patch === "object" ? w.patch : null);
+    if (!change || (key !== "config" && !lbYm_(key))) return;
+    let doc;
+    if (key === "config") { doc = atConfig_(change); doc.at = now; doc.by = req.by; }
+    else if (whole) doc = atMonth_(change, key);
+    else {
+      doc = atMonth_(lbParse_(byKey[key] ? byKey[key].json : ""), key);
+      const days = change.days && typeof change.days === "object" ? change.days : {};
+      Object.keys(days).forEach(function (day) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day.slice(0, 7) !== key) return;
+        const x = days[day] && typeof days[day] === "object" ? days[day] : {};
+        Object.keys(x).forEach(function (name) {
+          const n = lbTeam_(name);
+          if (!n) return;
+          const e = x[name] === null ? null : atEntry_(Object.assign({}, x[name], { at: now, by: req.by }));
+          if (x[name] !== null && !e) return;
+          const dd = doc.days[day] || (doc.days[day] = {});
+          if (e) dd[n] = e; else delete dd[n];
+          if (!Object.keys(dd).length) delete doc.days[day];
+        });
+      });
     }
     lbSaveRow_(s, byKey, key, JSON.stringify(doc), now, req.by);
     if (key === "config") out.config = doc; else out.months[key] = doc;
