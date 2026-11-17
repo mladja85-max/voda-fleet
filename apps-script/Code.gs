@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 78;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 79;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -451,6 +451,9 @@ function doPost(e) {
       case "cpBefore":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return cpBefore_(req, user); }));
+      case "cpBeforeJobs":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpBeforeJobs_(req, user); }));
       case "cpDoc":
         if (!canCp_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(cpDoc_(req));
@@ -4243,7 +4246,8 @@ function repRows_(s) {
     const id = String(r[0] || "").trim();
     if (!id) return;
     r[1] = repDay_(r[1], tz);
-    [18, 21, 25].forEach(function (c) { r[c] = repDay_(r[c], tz); });
+    [18, 21].forEach(function (c) { r[c] = repDay_(r[c], tz); });
+    r[25] = String(r[25]).trim() === "before" ? "before" : repDay_(r[25], tz);   // paid before the app: no day
     [12, 13, 28].forEach(function (c) { if (r[c] instanceof Date) r[c] = r[c].toISOString(); });
     out[id] = r;
   });
@@ -5119,7 +5123,7 @@ function repTyped_(r, t) {
       else { v = Math.round(Number(v) * 100) / 100; if (!isFinite(v) || v < 0 || v > 1e7) return k; }
     } else if (d[2] === "day") {
       v = String(v || "");
-      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return k;
+      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v) && !(k === "mPaidAt" && v === "before")) return k;   // paid before the app: no day
     } else if (d[2] === "split") {
       v = ["auto", "mon", "none"].indexOf(String(v)) === -1 ? "auto" : String(v);
     } else v = String(v || "").slice(0, 200);
@@ -5597,6 +5601,78 @@ function cpBefore_(req, user) {
   return { ok: true, added: add.map(function (x) { return x.i.n; }), skipped: skipped, batches: cpAll_(cs).filter(function (y) { return cpIsBefore_(y.b); }).map(function (y) { return cpOut_(y.b); }),
     jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
 }
+/** A street the way the app keys it: "275 South Pickett Street, Alexandria" → "275 pickett"; "" when it has no number. */
+const REP_ST_WORDS_ = { street: "st", avenue: "ave", av: "ave", boulevard: "blvd", drive: "dr", road: "rd", lane: "ln", court: "ct", place: "pl", terrace: "ter", circle: "cir", parkway: "pkwy", highway: "hwy", square: "sq", trail: "trl" };
+const REP_DIRS_ = ["n", "s", "e", "w", "ne", "nw", "se", "sw", "north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest"];
+function repStreetKey_(addr) {
+  const w = String(addr || "").split(",")[0].toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean)
+    .map(function (x) { return REP_ST_WORDS_[x] || x; });
+  let i = -1;
+  for (let k = 0; k < w.length; k++) if (/^\d+[a-z]?$/.test(w[k])) { i = k; break; }
+  if (i < 0) return "";
+  let k = i + 1;
+  while (k + 1 < w.length && REP_DIRS_.indexOf(w[k]) !== -1) k++;
+  return w[k] ? w[i].replace(/[a-z]$/, "") + " " + w[k] : "";
+}
+/** The invoice numbers written in a job's "Their invoice #" (the old Excel list: "59404326-2 - $45,715.61****59404326-3"). */
+function repInvNos_(text) {
+  return (String(text || "").match(/[A-Za-z0-9&]+(?:-[A-Za-z0-9&]+)+/g) || []).filter(function (t) { return t.length >= 6 && (t.match(/\d/g) || []).length >= 4; })
+    .map(function (t) { return t.toUpperCase(); }).filter(function (t, i, a) { return a.indexOf(t) === i; });
+}
+/** The jobs Monumental is paid for by invoices paid before the app (Admins). Without ids, which: every invoice # on a job
+ *  (its "Their invoice #" and the invoices saved on it) paid, or, a job with no invoice #, the only one at an invoice's
+ *  street with Monumental's share within $1 of it; and those only partly paid. With ids: those jobs marked paid to
+ *  Monumental with no day ("before"), and their invoices saved on them that are paid. */
+function cpBeforeJobs_(req, user) {
+  const cs = cpSheet_(false), all = cpAll_(cs), s = repSheet_(true), rows = repRows_(s);
+  const paid = {}, before = [];
+  all.forEach(function (y) {
+    if (y.b.status !== "paid") return;
+    y.b.items.forEach(function (i) { if (i.n) paid[String(i.n).toUpperCase()] = { b: y.b.id, a: Number(i.a) || 0 }; });
+    if (cpIsBefore_(y.b)) y.b.items.forEach(function (i) { before.push({ i: i, b: y.b.id }); });
+  });
+  const open = Object.keys(rows).map(function (id) { return rows[id]; }).filter(function (r) { return !r[25] && !r[13] && repIsMon_(r); });
+  const nos = function (r) { return repInvNos_(r[24]).concat(repMonList_(r).map(function (v) { return String(v.n).toUpperCase(); })).filter(function (t, i, a) { return t && a.indexOf(t) === i; }); };
+  const used = {}, num = [], partly = [], addr = [];
+  const out = function (r, extra) { return Object.assign({ id: String(r[0]), day: r[1], client: String(r[35] || r[3] || ""), addr: String(r[4] || ""), owed: repSplit_(r).owed }, extra); };
+  open.forEach(function (r) {
+    const ns = nos(r);
+    if (!ns.length) return;
+    ns.forEach(function (n) { if (paid[n]) used[n] = true; });
+    const have = ns.filter(function (n) { return paid[n]; });
+    if (have.length === ns.length) num.push(out(r, { inv: ns, b: have.map(function (n) { return paid[n].b; }).filter(function (x, i, a) { return a.indexOf(x) === i; }), by: "number" }));
+    else if (have.length) partly.push(out(r, { paid: have, open: ns.filter(function (n) { return !paid[n]; }) }));
+  });
+  // invoices on no job by their number: the one job at their street with no invoice # and Monumental's share within $1
+  const taken = {};
+  num.forEach(function (x) { taken[x.id] = true; });
+  before.forEach(function (x) {
+    const n = String(x.i.n || "").toUpperCase();
+    if ((n && used[n]) || x.i.j) return;
+    const k = repStreetKey_(x.i.addr);
+    if (!k) return;
+    const c = open.filter(function (r) { return !taken[r[0]] && !nos(r).length && repStreetKey_(r[4]) === k && Math.abs(repSplit_(r).owed - x.i.a) <= 100; });
+    if (c.length !== 1) return;
+    taken[c[0][0]] = true;
+    addr.push(out(c[0], { inv: n ? [n] : [], b: [x.b], by: "address", a: x.i.a, invClient: String(x.i.client || "") }));
+  });
+  if (!Array.isArray(req.ids)) return { ok: true, num: num, addr: addr, partly: partly };
+  // mark the ones picked
+  const pick = {}, ok = num.concat(addr);
+  req.ids.forEach(function (id) { pick[String(id)] = true; });
+  const now = new Date().toISOString(), who = user.name || user.id, done = [];
+  ok.forEach(function (x) {
+    if (!pick[x.id]) return;
+    const r = rows[x.id];
+    r[25] = "before";
+    const inv = repMonList_(r);
+    inv.forEach(function (v) { const p = paid[String(v.n).toUpperCase()]; if (p && !v.paid) { v.paid = "before"; v.pay = Number(v.a) || 0; v.b = p.b; } });
+    r[32] = JSON.stringify(inv).slice(0, 45000); r[27] = who; r[28] = now;
+    done.push(x.id);
+  });
+  if (done.length) repWrite_(s, rows);
+  return { ok: true, marked: done, jobs: done.map(function (id) { return repOut_(rows[id]); }) };
+}
 /** Finds a batch: { s, row, b } or null. */
 function cpFind_(id) {
   const s = cpSheet_(false), x = cpAll_(s).filter(function (y) { return y.b.id === String(id || ""); })[0];
@@ -5706,7 +5782,9 @@ function cpDelete_(req, user) {
       const r = rows[id], inv = repMonList_(r);
       let hit = false;
       inv.forEach(function (v) { if (v.b === x.b.id && v.paid === "before") { delete v.paid; delete v.b; delete v.pay; hit = true; } });
-      if (hit) { r[32] = JSON.stringify(inv).slice(0, 45000); ids[id] = true; }
+      if (hit) r[32] = JSON.stringify(inv).slice(0, 45000);
+      if (r[25] === "before") { r[25] = ""; hit = true; }   // jobs marked paid by invoices paid before the app: to pay again (Mark their jobs paid can run again)
+      if (hit) ids[id] = true;
     });
     if (Object.keys(ids).length) repWrite_(s, rows);
     x.s.deleteRow(x.row);
