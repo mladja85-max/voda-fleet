@@ -7439,7 +7439,7 @@ function openHcpTest() {
           h("tbody", null, r.types.map(x => h("tr", { "data-type": x.type }, h("th", { text: x.type }), h("td", { text: fmt(x.visits) }), h("td", { text: fmt(x.jobs) }), h("td", { text: lbCash(x.cents / 100) })))),
           h("tfoot", null, h("tr", null, h("th", { text: "Total" }), h("td", { text: fmt(visits) }), h("td", { text: fmt(jobs) }), h("td", { text: lbCash(total / 100) })))))
           : h("p", { class: "meta", text: "No jobs scheduled on those days." }),
-        r.repairs && r.repairs.jobs ? h("p", { class: "meta", id: "hcpRepairs", text: `Repairs: ${fmt(r.repairs.jobs)} job${r.repairs.jobs === 1 ? "" : "s"}, ${lbCash(r.repairs.cents / 100)}${r.repairs.owedSent ? ` · clients still owe ${lbCash(r.repairs.owed / 100)}` : ""}.` }) : null,
+        r.repairs && r.repairs.jobs ? h("p", { class: "meta", id: "hcpRepairs", text: `Repairs: ${fmt(r.repairs.jobs)} job${r.repairs.jobs === 1 ? "" : "s"}, ${lbCash(r.repairs.cents / 100)}${r.repairs.owedSent ? ` · clients still owe ${lbCash(r.repairs.owed / 100)}` : ""}.` }) : "",
         h("p", { class: "hint", text: "Jobs: first visits only (a job's later visits, the ones ending in -2, -3 and so on, add their money but aren't new jobs). Compare these with the Daily Sales Report for the same days." }),
         h("details", { class: "hcp-tech" }, h("summary", { text: "For Claude: the fields Housecall Pro sends" }),
           h("p", { class: "meta", text: `Job: ${(r.keys || []).join(", ") || "–"}` }),
@@ -13316,9 +13316,10 @@ function openCpBatch(id) {
     foot.replaceChildren(h("tr", { class: dif ? "dif" : "" }, h("td"), h("th", { class: "l", text: `${cpPlural(on.length, "invoice")} OK` }), h("td", { class: "pc" }), h("td", { class: "pc" }),
       h("td", { text: C(inv) }), h("td", null, h("b", { text: C(pay) }))));
     sumBox.classList.toggle("dif", !!(on.length && dif));
-    sumBox.replaceChildren(h("b", { text: on.length ? `Pay ${C(pay)} to ${b.vendor}` : "Nothing ticked OK" }),
+    // one line: what's paid, to whom (a pay that isn't the invoices: by how much, under it)
+    sumBox.replaceChildren(...[h("b", { id: "cpSumLine", text: on.length ? `Pay ${cpPlural(on.length, "invoice")} – ${C(pay)} to ${b.vendor}` : "Nothing ticked OK" }),
       on.length && dif ? h("strong", { class: "cp-sumdif", id: "cpSumDif", text: `${C(Math.abs(dif))} ${dif < 0 ? "less" : "more"} than the invoices (${C(inv)})` }) : null,
-      h("small", { text: on.length ? `Marks ${on.length === 1 ? "the invoice paid on its job" : `the ${fmt(on.length)} invoices paid on their jobs`}, and emails ${vs} the pay stub.${on.length < st.length ? ` ${st.length - on.length === 1 ? "The invoice left out goes" : `The ${fmt(st.length - on.length)} left out go`} back to not sent.` : ""}` : "Tick at least one invoice OK, or cancel the batch." }));
+      on.length ? null : h("small", { text: "Tick at least one invoice OK, or cancel the batch." })].filter(Boolean));
     go.textContent = `Approve, mark paid & send to ${vs}`;
     go.disabled = !on.length;
   };
@@ -15014,7 +15015,7 @@ function renderOffice() {
   if (!cfg.people.length) {
     box.replaceChildren(top, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
-      ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null);
+      ofErr ? h("p", { class: "dlg-err", text: ofErr }) : "");
     return;
   }
   if (!OF_TABS[ofView.tab]) ofView.tab = "today";
@@ -15369,12 +15370,12 @@ function openOfExcel() {
     res.replaceChildren(
       h("h4", { text: `Found in ${years.join(" and ")}` }),
       hist.unnamed.length ? h("div", { class: "of-unnamed" }, h("p", { class: "dlg-err", text: "These have numbers but no name at the top. Type who it was:" }),
-        hist.unnamed.map(u => h("label", { class: "of-mo" }, h("span", { text: `${u.month}, ${u.side} side` }), h("input", { type: "text", "data-k": u.key, value: names[u.key] || "", onchange: ev => { names[u.key] = ev.target.value; read(); } })))) : null,
+        hist.unnamed.map(u => h("label", { class: "of-mo" }, h("span", { text: `${u.month}, ${u.side} side` }), h("input", { type: "text", "data-k": u.key, value: names[u.key] || "", onchange: ev => { names[u.key] = ev.target.value; read(); } })))) : "",
       h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "ofXlTable" }, h("thead", null, h("tr", null, ["Person", "Months", "Days", "Outgoing calls"].map(c => h("th", { text: c })))), h("tbody", null, rows))),
       h("p", { class: "hint", text: "Each day comes in per person (not per seat). The sheet only had the total outgoing calls and the follow-ups, so the rest of each day's total comes in as Other outgoing calls. Days already typed in the app stay as they are." }),
       hist.warnings.length || hist.notes.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${hist.warnings.length + hist.notes.length})` }),
         hist.warnings.length ? h("ul", { class: "lb-notes warn" }, hist.warnings.map(w => h("li", { text: w }))) : null,
-        hist.notes.length ? h("ul", { class: "lb-notes" }, hist.notes.map(w => h("li", { text: w }))) : null) : null);
+        hist.notes.length ? h("ul", { class: "lb-notes" }, hist.notes.map(w => h("li", { text: w }))) : null) : "");
     res.hidden = false;
     $("ofXlGo").disabled = !Object.keys(hist.people).length;
     armed = false; $("ofXlGo").textContent = "Load";
