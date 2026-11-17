@@ -15268,18 +15268,23 @@ function openOfPeople() {
     const all = optList(), act = all.filter(o => o.on.size), old = all.filter(o => !o.on.size);
     const det = old.length ? h("details", { class: "of-old", open: oldOpen, ontoggle: ev => { oldOpen = ev.currentTarget.open; } }, h("summary", { text: `No one tracks these any more (${old.length}): tap a name to bring one back` }), old.map(optEl)) : null;
     opts.replaceChildren(...act.map(optEl), ...(det ? [det] : []));
-    // each person's folded list says how many she tracks
+    // each person's folded list says how many she tracks (only when it changes: writing it is a change to the list)
     for (const el of peopleEls()) {
       const fs = rowsOf(el), on = fs.filter(f => !f.hide).length, past = fs.length - on, s = el.querySelector(".of-pnums-s");
-      if (s) s.textContent = `Her numbers one by one: ${on} tracked${past ? `, ${past} past only` : ""} (names, kinds, %)`;
+      const t = `Her numbers one by one: ${on} tracked${past ? `, ${past} past only` : ""} (names, kinds, %)`;
+      if (s && s.textContent !== t) s.textContent = t;
     }
+    // what changed in the list is drawn now: no second drawing a moment later (it replaced the buttons, and a tap
+    // held while they were replaced was lost; the line above set again every time also kept it drawing 8 times a second)
+    watch.takeRecords();
     drawing = false;
   };
   let queued = false;
   const queueDraw = () => { if (queued || drawing) return; queued = true; setTimeout(() => { queued = false; drawOpts(); }, 120); };
   list.addEventListener("input", queueDraw);
   list.addEventListener("change", queueDraw);
-  new MutationObserver(() => { if (!drawing) queueDraw(); }).observe(list, { childList: true, subtree: true });
+  const watch = new MutationObserver(() => { if (!drawing) queueDraw(); });
+  watch.observe(list, { childList: true, subtree: true });
   const openNew = () => {
     const name = h("input", { type: "text", id: "ofNewName", maxlength: "40", placeholder: "Name, like Past client follow-ups", "aria-label": "Name of the new number" });
     const kind = h("select", { id: "ofNewKind", "aria-label": "Kind" }, Object.entries(OF_KINDS).map(([k, t]) => h("option", { value: k, text: t })));
@@ -15350,6 +15355,7 @@ function openOfPeople() {
     ofUsers = ((o && o.users) || []).filter(u => u.status !== "removed");
     if (!list.isConnected) return;
     for (const s of list.querySelectorAll(".p-user")) loginOpts(s, s.value);
+    watch.takeRecords();   // only the logins' lists changed: the numbers needn't be drawn again
   }).catch(() => { /* logins can be picked later */ });
 }
 
