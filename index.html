@@ -655,6 +655,34 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-acts:empty { display: none; }
 .lb-when { display: flex; gap: 8px; flex-wrap: wrap; }
 /* ---- office scorecards ---- */
+.pc-groups { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+@media (max-width: 560px) { .pc-groups { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pc-g { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); font: inherit; cursor: pointer; text-align: left; box-shadow: var(--shadow); min-width: 0; }
+.pc-g b { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.pc-g .pc-n { font-family: var(--font-display); font-size: 2.1rem; line-height: 1; font-weight: 700; }
+.pc-g small { color: var(--muted); font-size: .78rem; }
+.pc-g .pc-miss { color: var(--soon); font-weight: 700; }
+.pc-g.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.pc-g.on b { color: var(--accent); }
+.pc-daybar .pc-upd { margin-left: auto; }
+.pc-note { margin: 8px 0 0; }
+.pc-left { color: var(--muted); font-size: .88rem; margin: 2px 0 6px; }
+.pc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+@media (max-width: 760px) { .pc-row { grid-template-columns: minmax(0, 1fr); } }
+.pc-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.pc-name { font-weight: 700; font-size: 1.05rem; }
+.pc-tel { font-weight: 700; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.pc-tel2 { font-weight: 600; color: var(--muted); }
+.pc-acts, .pc-done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pc-done { gap: 6px 10px; }
+.pc-chip { padding: 3px 10px; border-radius: 99px; font-weight: 700; font-size: .85rem; background: var(--surface-2); border: 1px solid var(--line); white-space: nowrap; }
+.pc-chip.pc-vm { background: var(--soon-bg); color: var(--soon); border-color: transparent; }
+.pc-chip.pc-booked { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.pc-chip.pc-dnc { background: var(--due-bg); color: var(--due); border-color: transparent; }
+.pc-row.marked .pc-name, .pc-row.marked .pc-name a { color: var(--muted); }
+.pc-msec { margin-top: 18px; }
+.pc-admin { margin-top: 10px; }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
 .of-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .2s ease; }
 .of-bar.done i { background: var(--ok); }
@@ -12512,11 +12540,11 @@ function unsentDlg(dep) {
   if (!unsentDoc) unsentLoad(false);
 }
 
-/** A link that opens an estimate or a job (its invoice) in Housecall Pro, in a new tab; just the text without its id. */
+/** A link that opens an estimate, a job (its invoice) or a customer in Housecall Pro, in a new tab; just the text without its id. */
 const HCP_WEB = "https://pro.housecallpro.com/app/";
 function hcpLink(kind, id, text) {
   if (!id || !/^[A-Za-z0-9_-]{4,80}$/.test(String(id))) return text;
-  return h("a", { class: "hcp-link", href: `${HCP_WEB}${kind === "est" ? "estimates" : "jobs"}/${encodeURIComponent(id)}`, target: "_blank", rel: "noopener noreferrer",
+  return h("a", { class: "hcp-link", href: `${HCP_WEB}${kind === "est" ? "estimates" : kind === "cust" ? "customers" : "jobs"}/${encodeURIComponent(id)}`, target: "_blank", rel: "noopener noreferrer",
     title: "Open in Housecall Pro", onclick: ev => ev.stopPropagation() }, text);
 }
 /** "project · #1234 · Complete" for a phone, the number a link to the job in Housecall Pro. */
@@ -15402,7 +15430,7 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "My day", score: "Scorecard" };
+const OF_TABS = { today: "My day", score: "Scorecard", pc: "Past clients" };
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const ofCfg = () => ofCleanConfig(ofData && ofData.config);
 /** The office person linked to this login. */
@@ -15507,18 +15535,219 @@ function renderOffice() {
     admin ? h("div", { class: "lb-acts" },
       h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => openOfPeople() }, "People"),
       h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => openOfExcel() }, "Load from Excel")) : null);
-  if (!cfg.people.length) {
-    box.replaceChildren(top, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
+  if (!OF_TABS[ofView.tab]) ofView.tab = "today";
+  const tabs = lbSeg(Object.entries(OF_TABS).map(([k, t]) => [k, k === "today" && ofEditor() ? "Enter numbers" : t]), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
+  tabs.classList.add("of-tabs");
+  if (!cfg.people.length && ofView.tab !== "pc") {
+    box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
       ofErr ? h("p", { class: "dlg-err", text: ofErr }) : "");
     return;
   }
-  if (!OF_TABS[ofView.tab]) ofView.tab = "today";
-  const tabs = lbSeg(Object.entries(OF_TABS).map(([k, t]) => [k, k === "today" && ofEditor() ? "Enter numbers" : t]), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
-  tabs.classList.add("of-tabs");
-  const body = ofView.tab === "score" ? ofScoreEl() : ofTodayEl();
+  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofTodayEl();
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
   if (ofView.tab === "today") ofShowSave();
+}
+/* ---- Past clients to call: the clients whose last finished job in Housecall Pro was 6, 12, 18, 24 or 36 months before
+   the day picked (a Sunday or a closed day moves to the next working day), less anyone booked since, tagged do not call,
+   commercial, or marked Don't call again. Each call is marked, so two people don't call the same client. The lists stay
+   in this window only: the clients' names and phones aren't saved on the device. ---- */
+const PC_API = 81;                                       // the Google script version with Past clients
+const PC_GROUPS = [6, 12, 18, 24, 36];
+const PC_MARKS = [["na", "No answer"], ["vm", "Voicemail"], ["booked", "Booked"], ["dnc", "Don't call again"]];
+const PC_MARK_TEXT = Object.fromEntries(PC_MARKS);
+const PC_DEPT = { r: "Restoration", c: "Cleaning", p: "Repairs" };
+const K_PC_VIEW = "voda.pcView1";
+const pcView = Object.assign({ g: 6, day: "" }, store.get(K_PC_VIEW) || {}, { day: "" });
+let pcData = null, pcLoading = false, pcErr = "", pcSyncing = null, pcMarksAt = 0, pcPolling = false, pcPolledAt = 0, pcLoadedAt = 0;
+let pcSure = "", pcSureTimer = 0;
+const pcDay = () => (lbIsDay(pcView.day) ? pcView.day : lbToday());
+const pcShowing = () => view.tab === "office" && ofView.tab === "pc";
+const pcDate = day => { const d = lbDate(day); return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; };
+const pcWhen = at => { const d = new Date(at); if (isNaN(d.getTime())) return ""; const t = fmtTime(d); return lbDayKey(d) === lbToday() ? t : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${t}`; };
+/** The working day a closed day's clients are called on. */
+function pcNextOpen(day) { let d = day; for (let i = 0; i < 7 && (lbDate(d).getDay() === 0 || lbHoliday(d)); i++) d = lbAddDays(d, 1); return d; }
+
+async function pcLoad() {
+  if (pcLoading || !session || !ofCan()) return;
+  const day = pcDay();
+  pcLoading = true;
+  try {
+    const out = await api("pcRead", { day }, 120000);
+    pcData = out; pcErr = ""; pcMarksAt = out.now || 0; pcPolledAt = pcLoadedAt = performance.now();
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { pcLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    pcErr = e && e.error === "bad_request" && (Number(e.api) || 0) < PC_API ? "old" : revErrText(e);
+  } finally {
+    pcLoading = false;
+    if (pcShowing()) renderOffice();
+  }
+}
+/** What the others marked since the last look (and the whole lists again every 15 minutes, or on a new day). */
+async function pcPoll() {
+  if (pcPolling || !pcData || !pcData.ready) return;
+  if ((!pcView.day && pcData.day !== lbToday()) || performance.now() - pcLoadedAt > 15 * 60e3) { pcLoad(); return; }
+  pcPolling = true; pcPolledAt = performance.now();
+  try {
+    const out = await api("pcMarks", { since: pcMarksAt });
+    pcMarksAt = out.now || pcMarksAt;
+    let changed = false;
+    for (const m of out.marks || []) {
+      const G = pcData.groups && pcData.groups[m.g];
+      if (!G) continue;
+      for (const r of G.due.concat(G.missed)) if (r.id === m.id && r.last === m.last && !(r.m && r.m.saving)) { r.m = m.r ? { r: m.r, who: m.who, at: m.at } : null; changed = true; }
+    }
+    if (changed && pcShowing() && !dlg.open) renderOffice();
+  } catch (e) { /* next time */ } finally { pcPolling = false; }
+}
+setInterval(() => {
+  if (document.visibilityState !== "visible" || !session || offline || !pcShowing() || pcLoading || pcSyncing || dlg.open) return;
+  if (performance.now() - pcPolledAt >= 30000) pcPoll();
+}, 5000);
+
+/** A call marked (or taken back: "clear"), on the screen at once; put back as it was when it couldn't be saved. */
+async function pcMark(r, g, res) {
+  pcSure = ""; clearTimeout(pcSureTimer);
+  const was = r.m;
+  r.m = res === "clear" ? null : { r: res, who: session ? session.name || "" : "", at: new Date().toISOString(), saving: true };
+  renderOffice();
+  try {
+    const out = await api("pcMark", { id: r.id, g, last: r.last, r: res });
+    r.m = out.m && out.m.r ? out.m : null;
+  } catch (e) {
+    r.m = was;
+    toast(e && e.error === "offline" ? "No connection: that call wasn't marked. Try again when you're back online." : "That call wasn't marked. " + errText(e, "The mark"));
+  }
+  if (pcShowing()) renderOffice();
+}
+function pcAskSure(key) {
+  pcSure = key; clearTimeout(pcSureTimer);
+  pcSureTimer = setTimeout(() => { pcSure = ""; if (pcShowing()) renderOffice(); }, 5000);
+  renderOffice();
+}
+/** Admins: Housecall Pro read (the first time, or all of it again), step by step until it's done. */
+async function pcBackfill(full) {
+  if (pcSyncing) return;
+  pcSyncing = { read: 0, page: 0, pages: 0 }; pcErr = ""; pcSure = "";
+  if (pcShowing()) renderOffice();
+  let first = true, retry = 0;
+  try {
+    for (let n = 0; n < 500; n++) {
+      let out;
+      try { out = await api("pcSync", first && full ? { full: true } : {}, 330000); }
+      catch (e) {
+        if (e && ["hcp_busy", "busy", "network", "hcp_unreachable"].includes(e.error) && retry < 4) { retry++; await new Promise(res => setTimeout(res, 15000)); continue; }
+        throw e;
+      }
+      first = false; retry = 0;
+      pcSyncing = { read: pcSyncing.read + (out.read || 0), page: out.page || 0, pages: out.pages || 0 };
+      if (pcShowing()) renderOffice();
+      if (!out.next) break;
+    }
+    pcSyncing = null; pcData = null;
+    pcLoad();
+  } catch (e) {
+    pcSyncing = null; pcErr = revErrText(e);
+  }
+  if (pcShowing()) renderOffice();
+}
+
+function pcEl() {
+  if ((apiLevel && apiLevel < PC_API) || pcErr === "old") {
+    return [h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Past clients needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > New version > Deploy." }))];
+  }
+  if (pcSyncing) return [pcSyncingEl()];
+  const day = pcDay();
+  if (!pcData || (pcData.ready && pcData.day !== day)) {
+    if (pcErr && !pcLoading) return [h("div", { class: "panel" }, h("p", { class: "dlg-err", text: pcErr }), h("button", { class: "btn", type: "button", id: "pcRetry", onclick: () => { pcErr = ""; pcLoad(); renderOffice(); } }, "Try again"))];
+    if (!pcLoading) pcLoad();
+    return [h("p", { class: "loading", text: offline ? "Past clients need a connection. Try again when you're back online." : "Loading the past clients…" })];
+  }
+  if (!pcData.ready) return [pcSetupEl()];
+  const today = lbToday(), admin = isAdmin();
+  const go = d => { pcView.day = d === today ? "" : d; pcLoad(); renderOffice(); };
+  const out = [];
+  const read = pcData.at ? `Housecall Pro read ${pcWhen(new Date(pcData.at).toISOString())}` : "";
+  out.push(h("div", { class: "lb-daybar pc-daybar" },
+    h("button", { class: "btn small", type: "button", id: "pcPrev", "aria-label": "Previous day", onclick: () => go(lbAddDays(day, -1)) }, "‹"),
+    lbDateInput({ id: "pcDay", value: day, "aria-label": "Day" }, v => go(v)),
+    h("button", { class: "btn small", type: "button", id: "pcNext", "aria-label": "Next day", onclick: () => go(lbAddDays(day, 1)) }, "›"),
+    day !== today ? h("button", { class: "btn ghost small", type: "button", id: "pcToday", onclick: () => go(today) }, "Today") : null,
+    h("span", { class: "pc-upd meta", text: read }),
+    h("button", { class: "btn ghost small", type: "button", id: "pcRefresh", disabled: pcLoading, onclick: () => pcLoad() }, pcLoading ? "Loading…" : "Refresh")));
+  if (pcErr) out.push(h("p", { class: "dlg-err", text: pcErr }));
+  if (pcData.sync && pcData.sync.error) out.push(h("p", { class: "meta pc-note", text: `Couldn't read what changed in Housecall Pro just now (${revErrText(pcData.sync).replace(/\.$/, "")}). These lists are from the last read.` }));
+  if (lbDate(day).getDay() === 0 || lbHoliday(day)) out.push(h("p", { class: "meta pc-note", id: "pcClosed", text: `${lbDate(day).getDay() === 0 ? "Sunday" : "A closed day"}: the clients who come up today are on ${lbDayText(pcNextOpen(day))}'s lists.` }));
+  const G = pcData.groups || {};
+  const grp = g => G[g] || { due: [], missed: [], more: 0, left: {} };
+  out.push(h("div", { class: "pc-groups", role: "tablist", "aria-label": "Months since the last service" }, PC_GROUPS.map(g => {
+    const x = grp(g), open = x.due.filter(r => !r.m).length, missed = x.missed.filter(r => !r.m).length + (x.more || 0);
+    return h("button", { type: "button", class: "pc-g" + (pcView.g === g ? " on" : ""), role: "tab", "aria-selected": String(pcView.g === g), "data-g": String(g),
+      onclick: () => { pcView.g = g; store.set(K_PC_VIEW, { g }); renderOffice(); } },
+      h("b", { text: `${g} months` }), h("span", { class: "pc-n", text: String(x.due.length) }),
+      h("small", { text: !x.due.length ? "none this day" : open ? `${open} to call` : "all marked" }),
+      missed ? h("small", { class: "pc-miss", text: `+${missed} missed` }) : null);
+  })));
+  const g = PC_GROUPS.includes(pcView.g) ? pcView.g : 6, x = grp(g);
+  const L = x.left || {}, left = [L.booked ? `${L.booked} booked since` : "", L.dnc ? `${L.dnc} do not call` : "", L.com ? `${L.com} commercial` : ""].filter(Boolean);
+  const list = h("div", { class: "panel pc-list", id: "pcList" },
+    h("h2", { text: `${g} months since the last service` }),
+    h("p", { class: "meta", text: `Clients whose last finished job was ${g} months before ${day === today ? "today" : lbDayText(day)}. ${x.due.length === 1 ? "1 client" : `${x.due.length} clients`}.` }),
+    left.length ? h("p", { class: "pc-left", id: "pcLeft", text: `Left off: ${left.join(" · ")}.` }) : null);
+  if (x.due.length) list.append(...x.due.map(r => pcRowEl(r, g, false)));
+  else list.append(h("p", { class: "meta pc-none", text: "Nobody comes up in this group on this day." }));
+  const missed = x.missed.filter(r => !r.m || r.m.saving || r.m.r);
+  if (missed.length) {
+    list.append(h("h3", { class: "of-sec pc-msec", text: `Missed: came up on an earlier day, not marked (${missed.length + (x.more || 0)})` }), ...missed.map(r => pcRowEl(r, g, true)));
+    if (x.more) list.append(h("p", { class: "meta", text: `…and ${x.more} more. Mark these and they'll show.` }));
+  }
+  out.push(list);
+  if (admin) {
+    const sure = pcSure === "all";
+    out.push(h("p", { class: "meta pc-admin" }, `Admins: the lists start ${pcDate(pcData.start)}. `,
+      h("button", { class: "btn ghost small" + (sure ? " danger" : ""), type: "button", id: "pcReadAll", onclick: () => (sure ? pcBackfill(true) : pcAskSure("all")) }, sure ? "Sure? Read it all again" : "Read all again from Housecall Pro")));
+  }
+  return out;
+}
+function pcRowEl(r, g, missed) {
+  const m = r.m, key = `${r.id}|${g}`, sure = pcSure === key;
+  const tel = (r.phone || "").replace(/\D/g, "");
+  const tel2 = (r.phone2 || "").replace(/\D/g, "");
+  const what = r.type || PC_DEPT[r.dept] || "";
+  const jobs = r.jobs > 1 && r.first ? `${r.jobs} jobs since ${MONTHS[Number(r.first.slice(5, 7)) - 1]} ${r.first.slice(0, 4)}` : r.jobs === 1 ? "1 job" : "";
+  const acts = m
+    ? h("div", { class: "pc-done" }, h("span", { class: `pc-chip pc-${m.r}`, text: PC_MARK_TEXT[m.r] || m.r }),
+      h("span", { class: "meta", text: [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · ") }),
+      m.saving ? null : h("button", { class: "btn ghost small", type: "button", "data-act": "clear", onclick: () => pcMark(r, g, "clear") }, "Change"))
+    : h("div", { class: "pc-acts" }, PC_MARKS.map(([k, t]) => k === "dnc"
+      ? h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": k, onclick: () => (sure ? pcMark(r, g, k) : pcAskSure(key)) }, sure ? "Sure? Tap again" : t)
+      : h("button", { class: "btn small", type: "button", "data-r": k, onclick: () => pcMark(r, g, k) }, t)));
+  return h("div", { class: "pc-row" + (m ? " marked" : ""), "data-id": r.id },
+    h("div", { class: "pc-main" },
+      h("div", { class: "pc-top" }, h("span", { class: "pc-name" }, hcpLink("cust", r.id, r.name || "(no name)")),
+        tel ? h("a", { class: "pc-tel", href: `tel:+1${tel.slice(-10)}` }, r.phone) : h("span", { class: "meta", text: "no phone" }),
+        tel2 ? h("a", { class: "pc-tel pc-tel2", href: `tel:+1${tel2.slice(-10)}` }, r.phone2) : null),
+      r.addr ? h("div", { class: "meta", text: r.addr }) : null,
+      h("div", { class: "meta pc-last", text: [`Last service ${pcDate(r.last)}`, what, jobs, missed ? `came up ${lbDayText(r.due)}` : ""].filter(Boolean).join(" · ") })),
+    acts);
+}
+function pcSyncingEl() {
+  const s = pcSyncing, pct = s.pages ? Math.min(100, Math.round(s.page / s.pages * 100)) : 0;
+  return h("div", { class: "panel", id: "pcSyncing" }, h("h2", { text: "Reading your clients from Housecall Pro…" }),
+    h("p", { class: "meta", text: `${fmt(s.read)} read so far${s.pages ? ` (page ${fmt(s.page)} of at most ${fmt(s.pages)})` : ""}. Keep this window open: it takes a few minutes, one time.` }),
+    h("div", { class: "of-bar" }, h("i", { style: `width:${pct}%` })));
+}
+function pcSetupEl() {
+  if (!isAdmin()) return h("div", { class: "panel" }, h("h2", { text: "Past clients aren't set up yet" }),
+    h("p", { class: "meta", text: "Mike needs to read the client history from Housecall Pro once: Office › Past clients." }));
+  return h("div", { class: "panel", id: "pcSetup" }, h("h2", { text: "Past clients to call" }),
+    h("p", { class: "meta", text: "The app finds the clients to call 6, 12, 18, 24 and 36 months after their last finished job. To start, it reads every job from the last 3½ years in Housecall Pro, once: a few minutes (keep this window open). After that it only reads what changed, each time the lists open." }),
+    h("p", { class: "meta", text: "Clients' names, phones and addresses stay in your Google Sheet (the Past clients tabs). Nothing is saved on phones." }),
+    pcData.key === false ? h("p", { class: "dlg-err", text: HCP_ERRORS.no_key }) : null,
+    pcData.started ? h("p", { class: "meta", text: `The first read stopped part way (${fmt(pcData.rows || 0)} jobs so far): it goes on from there.` }) : null,
+    pcErr ? h("p", { class: "dlg-err", text: pcErr }) : null,
+    h("button", { class: "btn primary", type: "button", id: "pcStart", disabled: pcData.key === false, onclick: () => pcBackfill(false) }, pcData.started ? "Go on reading" : "Read from Housecall Pro"));
 }
 const ofPct = v => `${Math.round(v * 100)}%`;
 /** The bar toward a goal: green when it's reached. */
