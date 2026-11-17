@@ -898,7 +898,7 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .cpb-sum { display: grid; gap: 2px; margin: 6px 0; } .cpb-sum small { color: var(--muted); }
 .cpb-list { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; } .cpb-list:empty { display: none; }
 .cpb-table td, .cpb-table th { vertical-align: top; } .cpb-table td small { display: block; color: var(--muted); font-size: .74rem; } .cpb-table td small.ok { color: var(--ok); } .cpb-table td small.bad { color: var(--due); }
-.cpb-table tr.off td, .cpb-table tr.out td { color: var(--muted); } .cpb-table td.l.pc { white-space: nowrap; } .cpb-table { width: 100%; } .cpb-table th.l, .cpb-table td.l { text-align: left; } .cpb-table td:first-child, .cpb-table th:first-child { width: 28px; } .cpb-table .cpb-f { width: 34%; min-width: 180px; white-space: normal; overflow-wrap: anywhere; } .cpb-table td.l { white-space: normal; } .cpb-table .mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: .8rem; }
+.cpb-table tr.off td, .cpb-table tr.out td { color: var(--muted); } .cpj h4 { margin: 12px 0 6px; } .cpj .cpb-list { max-height: 34vh; } .rp-before { display: block; margin-top: 4px; } .cpb-table td.l.pc { white-space: nowrap; } .cpb-table { width: 100%; } .cpb-table th.l, .cpb-table td.l { text-align: left; } .cpb-table td:first-child, .cpb-table th:first-child { width: 28px; } .cpb-table .cpb-f { width: 34%; min-width: 180px; white-space: normal; overflow-wrap: anywhere; } .cpb-table td.l { white-space: normal; } .cpb-table .mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: .8rem; }
 .cp-table tbody tr { cursor: pointer; } .cp-table tr.gone { opacity: .6; }
 .cp-table td small, .cp-table th small, .cp-items td small { display: block; }
 .cp-table th, .cp-table td, .cp-items th, .cp-items td { white-space: nowrap; }
@@ -12710,6 +12710,8 @@ function repSum(jobs) {
   return s;
 }
 const repShortDay = d => { const x = lbDate(d); return `${MONTHS[x.getMonth()]} ${x.getDate()}`; };
+/** The day VODA paid Monumental for a job, or "before VODA Hub" (paid before the app: no day). */
+const repPaidDay = d => (d === "before" ? "before VODA Hub" : repShortDay(d));
 /** The client side of a job: Paid / Deposit $X / Not paid / Scheduled. */
 function repPayTag(j, today) {
   if (j.c > 0 && j.owes <= 0) return h("span", { class: "rp-tag ok", text: "Paid" });
@@ -12810,7 +12812,7 @@ function renderRepairs(box) {
         h("td", { class: "cc" }, lbCash((j.c - x.fee) / 100), x.fee ? h("small", { text: `− ${lbCash(x.fee / 100)} card fee` }) : null),
         h("td", { class: "vn" }, x.f ? lbCash(x.f / 100) : "–", x.f && j.t.sName ? h("small", { text: j.t.sName }) : null),
         h("td", { class: "vn" }, x.mon ? lbCash(x.monAmt / 100) : "–", x.mon ? h("small", { text: `70%${x.j ? ` + ${lbMoney(x.j / 100)} materials` : ""}${x.x ? ` + ${lbMoney(x.x / 100)} extra` : ""}` }) : h("small", { text: "no Monumental" })),
-        h("td", { class: "vn" }, !x.mon ? "–" : j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(j.t.mPaidAt)}${repMonBatches(j, true) ? ` · ${repMonBatches(j, true)}` : ""}` }) : lbCash(x.owed / 100),
+        h("td", { class: "vn" }, !x.mon ? "–" : j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: `Paid ${repPaidDay(j.t.mPaidAt)}${repMonBatches(j, true) ? ` · ${repMonBatches(j, true)}` : ""}` }) : lbCash(x.owed / 100),
           x.mon && j.t.mInv ? h("small", { text: j.t.mInv }) : x.mon && !j.t.mPaidAt && x.k ? h("small", { text: `after ${lbMoney(x.k / 100)} deposit` }) : null,
           repMonToPay(j) && repMonSent(j) ? h("span", { class: "rp-tag sent", text: `${lbCash(repMonSent(j) / 100)} sent to accounting` }) : null,
           repMonToPay(j) > repMonSent(j) ? h("span", { class: "rp-tag dep", text: `Invoice ${lbCash((repMonToPay(j) - repMonSent(j)) / 100)} to pay` }) : null),
@@ -12836,7 +12838,7 @@ function renderRepairs(box) {
         x.fee ? h("span", { class: "rp-cc" }, `Charged − CC ${lbCash((j.c - x.fee) / 100)}`, h("small", { text: ` (${lbCash(x.fee / 100)} card fee)` })) : null,
         h("span", { class: "split" },
           h("span", { class: "vn" }, h("small", { text: "Monumental" }), x.mon ? lbCash(x.monAmt / 100) : "–"),
-          h("span", { class: "vn" }, h("small", { text: j.t.mPaidAt ? "Paid" : repMonToPay(j) ? "Invoiced, to pay" : "Still owed" }), !x.mon ? "–" : j.t.mPaidAt ? repShortDay(j.t.mPaidAt) : lbCash((repMonToPay(j) || x.owed) / 100)),
+          h("span", { class: "vn" }, h("small", { text: j.t.mPaidAt ? "Paid" : repMonToPay(j) ? "Invoiced, to pay" : "Still owed" }), !x.mon ? "–" : j.t.mPaidAt ? repPaidDay(j.t.mPaidAt) : lbCash((repMonToPay(j) || x.owed) / 100)),
           h("span", { class: "vd" }, h("small", { text: "VODA" }), lbCash(x.voda / 100))));
     }));
     body = oweJobs ? [oweBar, ...(L.length ? [table, cards] : [h("p", { class: "meta", text: "No client owes money for these days." })])]
@@ -12905,7 +12907,7 @@ function openRepJob(id) {
         line(`Monumental: 70%${x.j ? " + materials back" : ""}${x.x ? " + extra" : ""}`, C(x.monAmt), "mon tot"),
         line(`VODA: 30%${x.j ? " + 30% on materials" : ""}${x.x ? " − extra to Monumental" : ""}`, C(x.voda), "vd tot"),
         x.k && !t.mPaidAt ? line("Monumental deposit already paid", C(x.k), "sub") : null,
-        line("Paid to Monumental:", t.mPaidAt ? `✓ ${repShortDay(t.mPaidAt)}` : `not yet · ${C(x.owed)} owed`, "tot " + (t.mPaidAt ? "vd" : "mon"))] : [
+        line("Paid to Monumental:", t.mPaidAt ? `✓ ${repPaidDay(t.mPaidAt)}` : `not yet · ${C(x.owed)} owed`, "tot " + (t.mPaidAt ? "vd" : "mon"))] : [
         line("VODA (no Monumental on this job)", C(x.voda), "vd tot")])].flat().filter(Boolean));
     err.textContent = bad.length ? "Amounts as numbers, like 1250 or 1,250.50." : "";
   };
@@ -12915,7 +12917,16 @@ function openRepJob(id) {
     h("div", { class: "grid4" }, inp("mat", "Materials $", "money"), inp("mDep", "Deposit $", "money"), inp("mDepAt", "Deposit date", "day"), inp("mInv", "Their invoice #", "text", "REB-…")),
     h("div", { class: "grid4" }, inp("extra", "Extra pay $", "money", "0"), h("div", { class: "field span2" }, h("label", { for: "rp-extraWhy", text: "Why (unforeseen)" }),
       h("input", { id: "rp-extraWhy", type: "text", value: t.extraWhy || "", maxlength: "200", oninput: ev => { t.extraWhy = ev.target.value; dlgDirty = true; } })),
-      inp("mPaidAt", "Date VODA paid them", "day")),
+      (() => {
+        // paid before the app (no day): said under the empty date box, which a date typed in replaces
+        const f = inp("mPaidAt", "Date VODA paid them", "day");
+        if (t.mPaidAt === "before") {
+          f.querySelector("input").value = "";
+          f.append(h("small", { class: "meta rp-before", id: "rpBefore" }, "Paid before VODA Hub (no date). ",
+            h("button", { class: "link", type: "button", onclick: ev => { t.mPaidAt = ""; ev.currentTarget.parentNode.remove(); draw(); dlgDirty = true; } }, "Not paid")));
+        }
+        return f;
+      })()),
     (j.mon || []).length ? h("div", { class: "rp-invs", id: "repJobInvs" }, h("h4", { text: "Invoices from Monumental" }), j.mon.map(v => h("div", { class: "rp-line", "data-n": v.n },
       h("span", { text: [`#${v.n}`, v.d ? repShortDay(v.d) : "", v.k].filter(Boolean).join(" · ") }),
       h("b", null, lbCash(v.a / 100), " ", v.paid || j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: v.b && v.paid ? `Paid · ${v.b}` : "Paid" })
@@ -13277,6 +13288,7 @@ const CP_API = 46;                                       // the Google script wi
 const CP_REPLY_API = 47;                                 // ... and where vendors' questions go
 const CP_DEL_API = 48;                                   // ... and deleting a canceled batch
 const CP_BEFORE_API = 78;                                 // ... and invoices paid before the app (and a reused number on another amount)
+const CP_BEFORE_JOBS_API = 79;                            // ... and the jobs they paid for, marked paid to Monumental
 /** A batch of invoices paid before the app: paid, with no paid day. */
 const cpBefore = b => b.status === "paid" && !b.paidOn;
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
@@ -13533,6 +13545,7 @@ function openCpBeforeLoad() {
       }
       dlgDirty = false;
       toast(`Marked ${cpPlural(added, "invoice")} paid (before VODA Hub)`);
+      const nx = $("cpbToJobs"); if (nx && apiLevel >= CP_BEFORE_JOBS_API) nx.hidden = false;
     } catch (e) { err.textContent = e && e.error === "bad_request" && (Number(e.api) || 0) < CP_BEFORE_API ? "Update the Google script first (paste the new Code.gs and deploy a new version)." : errText(e, "Some invoices"); }
     busy = false; status.textContent = ""; draw(); cpRedraw();
   };
@@ -13545,7 +13558,8 @@ function openCpBeforeLoad() {
     h("p", { class: "hint", text: "Pick the folder with Monumental's invoices you've paid (every PDF in it and its folders is read), or the PDFs. Those already in the app — paid or waiting for accounting, the same invoice # and amount — are left as they are. The rest are marked paid, with no paid date, in one batch (Paid before VODA Hub), so none of them can be sent for payment again. The same # on another amount is another invoice: an admin can still send it. Nothing is emailed." }),
     h("div", { class: "cpb-pick" }, h("label", { class: "btn", for: "cpbFolder" }, "Pick the folder"), folder, h("label", { class: "btn", for: "cpbFiles" }, "Pick PDFs"), pdfs),
     status, sumEl, list, err,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() }), go))));
+    h("div", { class: "dlg-foot" }, h("button", { class: "btn", type: "button", id: "cpbToJobs", hidden: true, onclick: () => openCpBeforeJobs() }, "Next: mark their jobs paid"),
+      h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() }), go))));
   draw();
 }
 /** A batch of invoices paid before the app: what's on it (no paid dates, no PDFs kept); an admin can take it off again. */
@@ -13573,7 +13587,68 @@ function openCpBeforeBatch(b) {
       h("tbody", null, items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l inv mono" }, i.n || "(no #)", i.fn ? h("small", { text: i.fn }) : null), h("td", { class: "l pc", text: i.d ? cpDay(i.d) : "" }),
         h("td", { class: "l" }, i.client, h("small", { class: "ph", text: [i.d ? cpDay(i.d) : "", i.addr].filter(Boolean).join(" · ") })), h("td", { class: "l pc", text: i.addr }), h("td", { text: C(i.a) })))))),
     err,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, del, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
+    h("div", { class: "dlg-foot" }, isAdmin() ? h("button", { class: "btn", type: "button", id: "cpbJobsBtn", onclick: () => openCpBeforeJobs() }, "Mark their jobs paid") : null,
+      h("div", { class: "right" }, del, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
+}
+/** The jobs paid for by invoices paid before the app (Admins): every invoice # on a job paid ("Their invoice #" from the
+ *  old Excel list, or saved on it), or a job with no invoice # at an invoice's street with Monumental's share within $1 of
+ *  it. They're marked paid to Monumental with no date, so Repairs Payroll stops showing them as still owed. Jobs only
+ *  partly paid are listed, not marked. */
+async function openCpBeforeJobs() {
+  if (apiLevel && apiLevel < CP_BEFORE_JOBS_API) { toast("Update the Google script first: paste the latest Code.gs, then Deploy › Manage deployments › New version."); return; }
+  const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", id: "cpjStatus", role: "status", text: "Finding the jobs…" });
+  const box = h("div", { class: "cpj", id: "cpjBox" }), sumEl = h("div", { class: "cpb-sum", id: "cpjSum" });
+  let res = null, busy = false, armed = false;
+  const pick = new Set(), done = new Set();
+  const go = h("button", { class: "btn primary", type: "button", id: "cpjGo", disabled: true, onclick: () => mark() });
+  const C = cpCents, place = x => repTown(x.addr) || x.addr;
+  const draw = () => {
+    if (!res) return;
+    const all = res.num.concat(res.addr), ok = all.filter(x => pick.has(x.id) && !done.has(x.id)), dn = all.filter(x => done.has(x.id));
+    const tot = l => l.reduce((n, x) => n + (x.owed || 0), 0);
+    sumEl.replaceChildren(h("b", { text: dn.length ? `✓ ${cpPlural(dn.length, "job")} marked paid to Monumental · ${C(tot(dn))} no longer owed` : all.length ? `${cpPlural(ok.length, "job")} to mark paid to Monumental · ${C(tot(ok))} shown as still owed now` : "No job to mark paid" }),
+      h("small", { text: [`${fmt(res.num.length)} by invoice #`, `${fmt(res.addr.length)} by street and amount`, res.partly.length ? `${fmt(res.partly.length)} only partly paid (not marked)` : ""].filter(Boolean).join(" · ") }));
+    const row = x => h("tr", { "data-job": x.id, class: done.has(x.id) ? "done" : "" },
+      h("td", null, h("input", { type: "checkbox", "aria-label": `Mark ${x.client || "this job"} paid`, checked: pick.has(x.id) || done.has(x.id), disabled: busy || done.has(x.id), onchange: e => { if (e.target.checked) pick.add(x.id); else pick.delete(x.id); armed = false; draw(); } })),
+      h("td", { class: "l pc", text: x.day ? lbDayText(x.day) : "" }),
+      h("td", { class: "l" }, x.client || "(no name)", h("small", { text: [place(x), x.by === "address" ? `invoice for ${x.invClient || "this street"} · ${C(x.a)}` : ""].filter(Boolean).join(" · ") }), done.has(x.id) ? h("small", { class: "ok", text: "✓ Paid before VODA Hub" }) : null),
+      h("td", { class: "l mono", text: (x.inv || []).join(" · ") || "(no #)" }), h("td", { text: C(x.owed || 0) }));
+    const table = (id, l) => h("table", { class: "lb-table cpb-table", id }, h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l pc", text: "Day" }), h("th", { class: "l", text: "Job" }), h("th", { class: "l", text: "Invoice #" }), h("th", { text: "Still owed now" }))), h("tbody", null, l.map(row)));
+    box.replaceChildren(...[
+      res.num.length ? h("h4", { text: `Every invoice # on the job paid (${fmt(res.num.length)})` }) : null, res.num.length ? h("div", { class: "cpb-list" }, table("cpjNum", res.num)) : null,
+      res.addr.length ? h("h4", { text: `No invoice # on the job: a paid invoice at its street, for its amount (${fmt(res.addr.length)})` }) : null, res.addr.length ? h("div", { class: "cpb-list" }, table("cpjAddr", res.addr)) : null,
+      res.partly.length ? h("h4", { text: `Only partly paid: left as they are (${fmt(res.partly.length)})` }) : null,
+      res.partly.length ? h("div", { class: "cpb-list" }, h("table", { class: "lb-table cpb-table", id: "cpjPartly" }, h("thead", null, h("tr", null, h("th", { class: "l pc", text: "Day" }), h("th", { class: "l", text: "Job" }), h("th", { class: "l", text: "Paid" }), h("th", { class: "l", text: "Not on the paid list" }))),
+        h("tbody", null, res.partly.map(x => h("tr", { "data-job": x.id }, h("td", { class: "l pc", text: x.day ? lbDayText(x.day) : "" }), h("td", { class: "l" }, x.client || "(no name)", h("small", { text: place(x) })), h("td", { class: "l mono", text: x.paid.join(" · ") }), h("td", { class: "l mono", text: x.open.join(" · ") })))))) : null].filter(Boolean));
+    const k = ok.length;
+    go.textContent = !k ? "Mark paid" : armed ? `Tap again: mark ${cpPlural(k, "job")} paid` : `Mark ${cpPlural(k, "job")} paid`;
+    go.disabled = busy || !k; go.classList.toggle("danger", armed);
+  };
+  const mark = async () => {
+    const ids = [...pick].filter(id => !done.has(id));
+    if (!ids.length) return;
+    if (!armed) { armed = true; draw(); return; }
+    busy = true; armed = false; err.textContent = ""; status.textContent = "Marking…"; draw();
+    try {
+      const o = await api("cpBeforeJobs", { ids }, 170000);
+      (o.marked || []).forEach(id => { done.add(id); pick.delete(id); });
+      cpTake({ jobs: o.jobs || [] });
+      dlgDirty = false; toast(`Marked ${cpPlural((o.marked || []).length, "job")} paid to Monumental (before VODA Hub)`);
+    } catch (e) { err.textContent = errText(e, "The jobs"); }
+    busy = false; status.textContent = ""; draw(); renderRevenue();
+  };
+  openDialog(h("div", { class: "rp-dlg cpb-dlg" },
+    h("h3", { id: "dlgTitle", text: "Jobs paid by invoices paid before VODA Hub" }),
+    h("p", { class: "hint", text: "Repairs Payroll still shows these jobs as owed to Monumental. A job is marked paid (no date) when every invoice # on it — typed in “Their invoice #” (the old Excel list) or saved on it — is on the paid list; a job with no invoice # when a paid invoice is for its street and Monumental's share (within $1). Jobs only partly paid are listed, not marked." }),
+    status, sumEl, box, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() }), go))));
+  try {
+    res = await api("cpBeforeJobs", {}, 170000);
+    res.num = res.num || []; res.addr = res.addr || []; res.partly = res.partly || [];
+    res.num.concat(res.addr).forEach(x => pick.add(x.id));
+    status.textContent = "";
+  } catch (e) { status.textContent = ""; err.textContent = errText(e, "The jobs"); }
+  draw();
 }
 /** Contractor Payroll's own page: for someone who sees it without Repairs Payroll (the accounting manager). */
 function renderContractors(box) {
