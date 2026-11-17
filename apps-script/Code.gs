@@ -37,15 +37,17 @@
  * named "Service import" (File > Import > Insert new sheet). It is merged in automatically the next time the app
  * opens a truck, then renamed "Service import (merged)" so it is kept as a backup and never merged twice.
  *
- * TUESDAY TM HOURS CHECK
- * Every Tuesday the technician enters (or confirms) TM hrs on each truckmount truck. The app shows what's left,
- * flags any truck that was missed, and a truck can be marked "Not available this week".
- * Reminder email (optional): pick "tmCheckEmailSetup" and click Run, then approve the permission.
- * Every morning between 7 and 8 AM: on Tuesday it lists the trucks to check that day; from Wednesday on it lists
- * the trucks still missing that week's TM hrs. Once every truck is done or marked not available, the emails stop
- * until the next Tuesday. It's sent from the Google account that ran the setup, to the
- * Script Property TM_CHECK_EMAIL (one or more addresses, separated by commas), or to that same account if it's
- * not set. To stop it: pick "tmCheckEmailStop" and click Run.
+ * MONDAY TM HOURS CHECK
+ * Every Monday the technician enters (or confirms) TM hrs on each truckmount truck (Tuesday when the company is
+ * closed that Monday). The app shows what's left, lists the trucks that missed it from the next day on (with a red
+ * number on Warehouse and Trucks), and a truck can be marked "Not available this week".
+ * Reminder email (optional): in the app, Settings › TM hrs email (Admins): on or off, who gets it, a test.
+ * (Or from the editor: pick "tmCheckEmailSetup" and click Run.)
+ * Every morning between 7 and 8 AM (not Sundays or closed days): on Monday it lists the trucks to check that day;
+ * from Tuesday on it lists the trucks still missing that week's TM hrs. Once every truck is done or marked not
+ * available, the emails stop until the next Monday. It's sent from the Google account that set up the script, to
+ * the Script Property TM_CHECK_EMAIL (one or more addresses, separated by commas), or to that same account if it's
+ * not set. To stop it: Settings › TM hrs email, or pick "tmCheckEmailStop" and click Run.
  *
  * PAPERWORK EMAIL (optional)
  * Every Monday between 7 and 8 AM: any truck whose safety inspection or registration is due within a month, or
@@ -146,11 +148,11 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
   "tmOilInterval", "tmOilHrs", "hrsNow", "tier100", "tier400", "tier500", "tier1000", "tier2000",
   "inspectionDue", "registrationDue", "insuranceUntil", "notes", "readingAt", "readingBy", "updatedAt", "division", "vin", "color", "hrsAt", "hrsBy", "tmSkip", "tier200"];
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
-// and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
+// and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 75;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 76;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
-const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
+const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
 const DIVISIONS = ["Cleaning", "Restoration"];
 const NUM_COLS = ["order", "oilInterval", "milesAtOil", "milesNow", "cdsMilesPerHr", "hrsAtOil",
@@ -297,6 +299,9 @@ function doPost(e) {
         return json_(withLock_(function () { return deleteTruck_(req); }));
       case "tmSkip":
         return json_(withLock_(function () { return tmSkip_(req); }));
+      case "tmMail":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return tmMail_(req); }));
       case "history":
         return json_({ ok: true, entries: history_(String(req.id || "")) });
       case "services":
@@ -1153,23 +1158,38 @@ function svcRenameTruck_(id, unit) {
   if (changed) range.setValues(vals);
 }
 
-/* ---------------- Tuesday TM hours check ---------------- */
+/* ---------------- Monday TM hours check ---------------- */
 
-/** The Tuesday that starts the check week holding `when`, as yyyy-MM-dd in the script's time zone. */
-function checkWeek_(when) {
-  const tz = Session.getScriptTimeZone();
-  const day = Number(Utilities.formatDate(when, tz, "u")) % 7;   // 0 = Sunday ... 6 = Saturday
-  const p = Utilities.formatDate(when, tz, "yyyy-MM-dd").split("-").map(Number);
-  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2] - ((day - CHECK_DAY + 7) % 7)));
-  return Utilities.formatDate(d, "UTC", "yyyy-MM-dd");
+function tmNow_() { return new Date(); }   // tests move the clock
+/** yyyy-MM-dd plus n days. */
+function tmAddDays_(day, n) { const p = day.split("-").map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10); }
+/** A day the company is closed: New Year's Day, 4th of July, Thanksgiving, Christmas. */
+function tmClosed_(day) {
+  const md = day.slice(5), d = Number(day.slice(8));
+  return md === "01-01" || md === "07-04" || md === "12-25" || (day.slice(5, 7) === "11" && d >= 22 && d <= 28 && new Date(day + "T12:00:00Z").getUTCDay() === 4);
 }
+/** The Monday that starts the check week holding `when`, as yyyy-MM-dd in the script's time zone. */
+function checkWeek_(when) {
+  const p = Utilities.formatDate(when, Session.getScriptTimeZone(), "yyyy-MM-dd").split("-").map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() - CHECK_DAY + 7) % 7));
+  return d.toISOString().slice(0, 10);
+}
+/** The day the week's check is due: its Monday, or Tuesday when the company is closed that Monday. */
+function tmDueDay_(week) { return tmClosed_(week) ? tmAddDays_(week, 1) : week; }
+/** A "not available" mark from the check week `week` (one saved on a Tuesday, before the check moved to Mondays, too). */
+function tmInWeek_(day, week) { day = String(day || ""); return !!day && day >= week && day < tmAddDays_(week, 7); }
+const TM_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const TM_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "Mon Nov 16" */
+function tmDayText_(day) { const d = new Date(day + "T12:00:00Z"); return TM_DAYS[d.getUTCDay()].slice(0, 3) + " " + TM_MONTHS[d.getUTCMonth()] + " " + d.getUTCDate(); }
 /** done, skipped or missed for the check week `week`. */
 function checkState_(t, week) {
   if (t.hrsAt) {
     const at = new Date(t.hrsAt);
     if (!isNaN(at.getTime()) && Utilities.formatDate(at, Session.getScriptTimeZone(), "yyyy-MM-dd") >= week) return "done";
   }
-  return t.tmSkip === week ? "skipped" : "missed";
+  return tmInWeek_(t.tmSkip, week) ? "skipped" : "missed";
 }
 
 /** "Not available this week" for the TM hrs check (Admins and Technicians). Doesn't touch anything else on the truck. */
@@ -1179,24 +1199,24 @@ function tmSkip_(req) {
   if (!found) return { ok: false, error: "gone" };
   if (TM_KINDS.indexOf(found.truck.tm) < 1) return { ok: false, error: "not_allowed" };
   const t = found.truck;
-  const week = checkWeek_(new Date());
+  const week = checkWeek_(tmNow_());
   const old = String(t.tmSkip || "");
   const on = req.on === true;
-  const next = on ? week : (old === week ? "" : old);
+  const next = on ? week : (tmInWeek_(old, week) ? "" : old);
   if (next !== old) {
     t.tmSkip = next;
     sheet_("Trucks").getRange(found.rowIndex, TRUCK_COLS.indexOf("tmSkip") + 1).setValue(next);
-    appendLog_(t, { kind: "skip", items: [on ? "Not available for the Tuesday TM hrs check" : "TM hrs check: not available undone"] }, req.by);
+    appendLog_(t, { kind: "skip", items: [on ? "Not available for the Monday TM hrs check" : "TM hrs check: not available undone"] }, req.by);
   }
   return { ok: true, truck: t, week: week };
 }
 
-/** Run once from the editor: a Tuesday morning list of trucks to check, then every morning from Wednesday on the
- *  trucks still missing that week's TM hrs, until they're all done. Sends a test email now so you can see it. */
+/** Run once from the editor (or Settings › TM hrs email in the app): a Monday morning list of trucks to check, then
+ *  every morning from Tuesday on the trucks still missing that week's TM hrs, until they're all done. Sends a test now. */
 function tmCheckEmailSetup() {
   tmCheckSchedule_();
   const sent = tmCheckEmail(true);
-  Logger.log("TM hrs check email is on: Tuesday morning, then every morning until every truck is done. Test email sent to " + sent + ".");
+  Logger.log("TM hrs check email is on: Monday morning, then every morning until every truck is done. Test email sent to " + sent + ".");
 }
 function tmCheckEmailStop() {
   let n = 0;
@@ -1210,18 +1230,41 @@ function tmCheckSchedule_() {
   ScriptApp.newTrigger("tmCheckEmail").timeBased().everyDays(1).atHour(7).create();
   PropertiesService.getScriptProperties().setProperty("TM_CHECK_SCHEDULE", "daily");
 }
-/** Runs every morning. Tuesday: the trucks to check today. Other days: the trucks with no TM hrs since Tuesday that
- *  weren't marked not available. Sends nothing once they're all done. */
+/** Who gets the TM hrs email (Script Property TM_CHECK_EMAIL); empty: the Google account that set up the script. */
+function tmMailTo_() {
+  return String(PropertiesService.getScriptProperties().getProperty("TM_CHECK_EMAIL") || "").split(/[,;\s]+/)
+    .map(function (x) { return x.trim(); }).filter(Boolean);
+}
+/** Settings › TM hrs email (Admins): whether it's on and who gets it; with `set`: turn it on or off and change who
+ *  (an empty list: the Google account that set up the script); with `test`: a test email now. */
+function tmMail_(req) {
+  const P = PropertiesService.getScriptProperties();
+  let sent = false;
+  if (req.set === true) {
+    const raw = Array.isArray(req.to) ? req.to : [];
+    const to = raw.length ? cpEmails_(raw) : { list: [] };   // none: the Google account that set up the script
+    if (to.error) return { ok: false, error: to.error, email: to.email || "" };
+    if (to.list.length) P.setProperty("TM_CHECK_EMAIL", to.list.join(", ")); else P.deleteProperty("TM_CHECK_EMAIL");
+    if (req.on === true) tmCheckSchedule_();
+    else if (req.on === false) tmCheckEmailStop();
+    if (req.test === true) sent = !!tmCheckEmail(true);
+  }
+  const on = ScriptApp.getProjectTriggers().some(function (tr) { return tr.getHandlerFunction() === "tmCheckEmail"; });
+  return { ok: true, on: on, to: tmMailTo_(), sent: sent };
+}
+/** Runs every morning (not Sundays or closed days). Monday: the trucks to check today. Later in the week: the trucks
+ *  with no TM hrs since Monday that weren't marked not available. Sends nothing once they're all done. */
 function tmCheckEmail(test) {
   const isTest = test === true;
   // A setup from before daily reminders ran only on Wednesdays: switch it over the first time it runs.
   if (!isTest && PropertiesService.getScriptProperties().getProperty("TM_CHECK_SCHEDULE") !== "daily") tmCheckSchedule_();
   const tz = Session.getScriptTimeZone();
-  const now = new Date();
-  const today = Number(Utilities.formatDate(now, tz, "u")) % 7 === CHECK_DAY;   // the check day itself
-  const week = checkWeek_(now);
-  const p = Utilities.formatDate(now, tz, "yyyy-MM-dd").split("-").map(Number), w = week.split("-").map(Number);
-  const daysLate = Math.round((Date.UTC(p[0], p[1] - 1, p[2]) - Date.UTC(w[0], w[1] - 1, w[2])) / 864e5);
+  const now = tmNow_();
+  const day = Utilities.formatDate(now, tz, "yyyy-MM-dd");
+  const week = checkWeek_(now), due = tmDueDay_(week), dueName = TM_DAYS[new Date(due + "T12:00:00Z").getUTCDay()];
+  if (!isTest && (new Date(day + "T12:00:00Z").getUTCDay() === 0 || tmClosed_(day) || day < due)) { Logger.log("Closed today: no TM hrs email."); return ""; }
+  const today = day <= due;   // the check day itself
+  const daysLate = Math.round((Date.parse(day + "T12:00:00Z") - Date.parse(due + "T12:00:00Z")) / 864e5);
   const tm = readTrucks_().map(function (x) { return x.truck; }).filter(function (t) { return TM_KINDS.indexOf(t.tm) > 0; });
   const state = {};
   tm.forEach(function (t) { state[t.id] = checkState_(t, week); });
@@ -1229,29 +1272,29 @@ function tmCheckEmail(test) {
   const skipped = tm.filter(function (t) { return state[t.id] === "skipped"; });
   const done = tm.filter(function (t) { return state[t.id] === "done"; });
   if (!missed.length && !isTest) { Logger.log("All " + tm.length + " truckmount trucks are done for this week. No email sent."); return ""; }
-  const weekText = Utilities.formatDate(new Date(week + "T12:00:00Z"), "UTC", "EEE MMM d");
   const lastText = function (t) {
     if (!t.hrsAt) return "no TM hrs entered in the app yet";
     const at = new Date(t.hrsAt);
     if (isNaN(at.getTime())) return "no TM hrs entered in the app yet";
-    const days = Math.floor((Date.now() - at.getTime()) / 864e5);
-    return "last entered " + Utilities.formatDate(at, tz, "MMM d") + (t.hrsBy ? " by " + t.hrsBy : "") + " (" + days + " day" + (days === 1 ? "" : "s") + " ago, " + (t.hrsNow === null ? "no hrs" : t.hrsNow + " hrs") + ")";
+    const days = Math.floor((now.getTime() - at.getTime()) / 864e5);
+    return "last entered " + tmDayText_(Utilities.formatDate(at, tz, "yyyy-MM-dd")).slice(4) + (t.hrsBy ? " by " + t.hrsBy : "") + " (" + days + " day" + (days === 1 ? "" : "s") + " ago, " + (t.hrsNow === null || t.hrsNow === "" || t.hrsNow === undefined ? "no hrs" : t.hrsNow + " hrs") + ")";
   };
   const name = function (t) { return t.unit + (t.driver ? " · " + t.driver : ""); };
   const lines = [];
-  if (isTest) lines.push("TEST: this is what the reminder looks like. It comes Tuesday morning, then every morning while a truck is still missing its TM hrs.", "");
-  lines.push((today ? "Today's TM hrs check, " : "Tuesday TM hrs check, ") + weekText + ": " + done.length + " of " + tm.length + " truckmount trucks done.", "");
-  if (missed.length) { lines.push(today ? "To check today:" : "Not checked:"); missed.forEach(function (t) { lines.push("• " + name(t) + ": " + lastText(t)); }); lines.push(""); }
+  if (isTest) lines.push("TEST: this is what the reminder looks like. It comes Monday morning, then every morning (not Sundays or closed days) while a truck is still missing its TM hrs.", "");
+  lines.push((today ? "Today's TM hrs check, " : dueName + "'s TM hrs check, ") + tmDayText_(due) + ": " + done.length + " of " + tm.length + " truckmount trucks done.", "");
+  if (missed.length) { lines.push(today ? "To check today:" : "Missed (not checked):"); missed.forEach(function (t) { lines.push("• " + name(t) + ": " + lastText(t)); }); lines.push(""); }
   else lines.push(today ? "All done for today." : "Nothing missed so far this week.", "");
   if (skipped.length) { lines.push("Marked not available:"); skipped.forEach(function (t) { lines.push("• " + name(t)); }); lines.push(""); }
   if (missed.length && today) lines.push("Enter the TM hrs on each truck in the app, or tap Confirm if they haven't changed. Truck not there? Open it and tap Not available this week.", "");
-  if (missed.length && !today) lines.push("This email comes every morning until each truck above has its TM hrs entered or is marked Not available this week. Then it stops until next week's check.", "");
+  if (missed.length && !today) lines.push("This email comes every morning until each truck above has its TM hrs entered or is marked Not available this week. Then it stops until next " + dueName + "'s check.", "");
   lines.push("Open the app: " + APP_URL);
-  const to = String(PropertiesService.getScriptProperties().getProperty("TM_CHECK_EMAIL") || "").trim() || Session.getEffectiveUser().getEmail();
+  const toList = tmMailTo_();
+  const to = toList.length ? toList.join(",") : Session.getEffectiveUser().getEmail();
   const units = missed.map(function (t) { return t.unit; }).join(", ");
-  const subject = (isTest ? "(Test) " : "") + (!missed.length ? "Tuesday TM hrs check: all done"
+  const subject = (isTest ? "(Test) " : "") + (!missed.length ? dueName + " TM hrs check: all done"
     : today ? "Today's TM hrs check: " + missed.length + " truck" + (missed.length === 1 ? "" : "s") + " to do (" + units + ")"
-    : daysLate > 1 ? "Still missing TM hrs (" + daysLate + " days since Tuesday): " + units : "Missed Tuesday TM hrs: " + units);
+    : daysLate > 1 ? "Still missing TM hrs (" + daysLate + " days since " + dueName + "): " + units : "Missed " + dueName + "'s TM hrs check: " + units);
   MailApp.sendEmail({ to: to, subject: subject.slice(0, 250), body: lines.join("\n") });
   return to;
 }
