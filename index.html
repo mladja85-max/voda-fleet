@@ -1055,6 +1055,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .goal-days { grid-column: 1 / -1; display: grid; gap: 7px; padding: 12px 12px 14px; border-radius: 14px;
   background: linear-gradient(160deg, rgba(255, 206, 70, .20), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 1.5px rgba(255, 214, 90, .6); }
 .goal-days .goal-title { flex-wrap: wrap; row-gap: 2px; }
+.goal-when { display: grid; gap: 1px; flex-basis: 100%; } .goal-now { font-weight: 800; color: #fff; font-size: .78rem; }
 .goal-days .goal-row { padding: 7px 10px; } .goal-days .goal-rg { font-size: 1.25rem; }
 .goal-days .goal-deps { background: rgba(4, 14, 48, .3); }
 .goal-old p { margin: 0; font-size: .86rem; color: var(--gw); }
@@ -11712,7 +11713,7 @@ function renderRevenue() {
   }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
-  const goalDays = (per === "week" || per === "dates") && r.from <= today ? { from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
+  const goalDays = (per === "week" || per === "dates") && r.from <= today ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
   const goal = revGoalEl(r.from > today ? today : to, goalDays), slot = goal ? revGoalSlot() : "";
   if (slot === "side") { if (aside) aside.prepend(goal); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, goal); }
   box.classList.toggle("goal3", slot === "wide");
@@ -11938,16 +11939,25 @@ function goalForDays(G, from, to) {
   for (const k of ["sup", "min", "bon", "r", "c", "p"]) o[k] = Math.round(o[k]);
   return o;
 }
-/** The days picked (a Week or Dates): their goals against what they produced. */
-function goalDaysEl(G, P) {
+/** The days picked (a Week or Dates): their goals against what they produced. Each department's goal: its share of
+ *  the Minimum (as in the year's goal), so they add up to it; no Minimum, its year goal spread over the year's working days. */
+function goalDaysEl(G, P, shares, year) {
   for (let y = Number(P.from.slice(0, 4)); y <= Number(P.upto.slice(0, 4)); y++) goalsLoad(y);
   const g = goalForDays(G, P.from, P.to), days = revDaysFor(P.from, P.upto), ps = days ? revSum(days, P.from, P.upto) : null;
   let contr = 0, cOk = true;
   for (let d = P.from; d <= P.upto; d = lbAddDays(d, 1)) { const cd = goalsDocs[Number(d.slice(0, 4))]; if (!cd) { cOk = false; break; } contr += Number(cd.contractors[d]) || 0; }
-  const oneMonth = P.from.slice(0, 7) === P.to.slice(0, 7), mName = lbMonthLong(Number(P.from.slice(5, 7)));
-  const share = oneMonth ? `${fmt(g.n)} of ${fmt(lbWorkDays(P.from.slice(0, 7)))} working days in ${mName}` : `${fmt(g.n)} working day${g.n === 1 ? "" : "s"}`;
+  const oneMonth = P.from.slice(0, 7) === P.to.slice(0, 7), mName = lbMonthLong(Number(P.from.slice(5, 7))), mAll = lbWorkDays(P.from.slice(0, 7));
+  const these = P.per === "week" ? "This week" : "These days", wd = n => `${fmt(n)} working day${n === 1 ? "" : "s"}`;
+  // today in these days: which of the month's working days it is, and how many are left after it
+  let now = null;
+  if (P.to >= lbToday()) {
+    const m = P.upto.slice(0, 7), all = lbWorkDays(m), n = goalWorkDays(`${m}-01`, P.upto), mn = lbMonthLong(Number(m.slice(5)));
+    now = `${lbWorkDay(P.upto) ? `${lbOrd(n)} of ${fmt(all)} working days in ${mn}` : `${fmt(n)} of ${fmt(all)} working days in ${mn} done`} – ${fmt(all - n)} left`;
+  }
+  const share = oneMonth ? (now ? `${these}: ${wd(g.n)}, ${mAll ? Math.round(g.n / mAll * 100) : 0}% of ${mName}'s goals` : `${fmt(g.n)} of ${mName}'s ${fmt(mAll)} working days, ${mAll ? Math.round(g.n / mAll * 100) : 0}% of its goals`)
+    : `${these}: ${wd(g.n)}`;
   const el = h("div", { class: "goal-days", id: "goalDays" },
-    h("h3", { class: "goal-title" }, P.label, h("small", { text: share + (P.upto < P.to ? ` · so far: ${revSpanText(P.from, P.upto)}` : "") })));
+    h("h3", { class: "goal-title" }, P.label, h("small", { class: "goal-when" }, now ? h("span", { class: "goal-now", id: "goalNow", text: now }) : null, h("span", { id: "goalShare", text: share }))));
   if (!g.n) { el.append(h("p", { class: "goal-lead", text: "No working days in these days." })); return el; }
   const rows = GOAL_MONTH.filter(([k]) => !g.miss.has(k));
   for (const [k, label] of rows) {
@@ -11961,18 +11971,31 @@ function goalDaysEl(G, P) {
   }
   const gone = GOAL_MONTH.filter(([k]) => g.miss.has(k)).map(([, l]) => l.replace(" goal", ""));
   if (gone.length) el.append(h("p", { class: "goal-lead small", text: `No ${gone.join(", ")} goal for some months of these days${isAdmin() ? ": set them with Edit on the month" : ""}.` }));
-  if (GOAL_DEPTS.some(([k]) => !g.miss.has(k))) el.append(h("div", { class: "goal-deps goal-ddays", id: "goalDaysDeps" },
-    h("span", { class: "goal-rl", text: "By department" }), h("span", { class: "goal-rl r", text: "Produced" }),
-    GOAL_DEPTS.filter(([k]) => !g.miss.has(k)).map(([k, name]) => {
-      const goal = g[k], done = ps ? ps[k][0] : null, hit = done != null && goal > 0 && done >= goal;
+  const split = shares && !g.miss.has("min") && g.min > 0 ? goalParts(g.min, shares) : null;
+  if (split || GOAL_DEPTS.some(([k]) => !g.miss.has(k))) el.append(h("div", { class: "goal-deps goal-ddays", id: "goalDaysDeps" },
+    h("span", { class: "goal-rl", text: split ? "By department · Minimum" : "By department" }), h("span", { class: "goal-rl r", text: "Produced" }),
+    GOAL_DEPTS.filter(([k]) => split || !g.miss.has(k)).map(([k, name]) => {
+      const goal = split ? split[k] : g[k], done = ps ? ps[k][0] : null, hit = done != null && goal > 0 && done >= goal;
       return [h("span", { class: "goal-dn " + k }, h("i", { class: "rev-dot " + k }), name),
         h("span", { class: "goal-dl" + (hit ? " hit" : ""), "data-k": k }, h("b", { text: done == null ? "…" : lbMoney(done / 100) })),
         goalBar(done || 0, goal, k),
         h("span", { class: "goal-dg", "data-k": k }, "Goal ", h("b", { text: lbMoney(goal / 100) })),
         h("small", { class: "goal-dp" }, done == null ? "" : hit ? `✓ Reached · ${goalPct(done, goal)}` : `${lbMoney((goal - done) / 100)} to go · ${goalPct(done, goal)}`)];
-    })));
+    }),
+    split ? h("small", { class: "goal-split-how", id: "goalDaysHow", text: `Each department's goal: its share of the Minimum's ${lbMoney(g.min / 100)}, as in the ${year ? `${year} goal` : "year's production"} (${GOAL_DEPTS.map(([d, n]) => `${n} ${Math.round(shares[d] * 100)}%`).join(", ")}). Together they're the Minimum.` }) : null));
   return el;
 }
+/** A goal split by the departments' shares, in whole dollars that add up to the goal (the dollars left over by
+ *  rounding down go to the ones closest to the next dollar). In cents. */
+function goalParts(goal, shares) {
+  const dollars = Math.round(goal / 100), raw = GOAL_DEPTS.map(([k]) => [k, dollars * shares[k]]);
+  const out = Object.fromEntries(raw.map(([k, v]) => [k, Math.floor(v + 1e-9)]));
+  let left = dollars - GOAL_DEPTS.reduce((n, [k]) => n + out[k], 0);
+  for (const [k] of raw.slice().sort((a, b) => (b[1] - Math.floor(b[1] + 1e-9)) - (a[1] - Math.floor(a[1] + 1e-9)))) { if (left <= 0) break; out[k]++; left--; }
+  for (const k of Object.keys(out)) out[k] *= 100;
+  return out;
+}
+const lbOrd = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th"}`;
 /** Each department's share of the company goal: its part of the year's goal; no year goal, its part of what was
  *  produced this year; nothing yet, a third each. */
 function goalShares(yg, ys) {
@@ -11987,8 +12010,9 @@ const goalRepPct = (ms, contr) => (ms.p[0] > 0 ? Math.round((ms.p[0] - contr) / 
  *  Minimum: all of it). */
 function goalSplitEl(k, goal, ms, contr, shares, daysLeft, year) {
   const bon = k === "bon";
+  const pg = goalParts(goal, shares);
   const parts = GOAL_DEPTS.map(([d, name]) => {
-    const g = Math.round(goal * shares[d]), done = d === "p" && bon ? ms.p[0] - contr : ms[d][0], left = g - done;
+    const g = pg[d], done = d === "p" && bon ? ms.p[0] - contr : ms[d][0], left = g - done;
     return { d, name, g, done, left };
   });
   const counted = ms.cents - (bon ? contr : 0), left = goal - counted, rp = goalRepPct(ms, contr);
@@ -12041,7 +12065,7 @@ function revGoalEl(asOf, P) {
     h("div", { class: "goal-head" }, goalKicker("Company goal"), edit));
   const body = h("div", { class: "goal-body" });
   out.append(body);
-  if (P) body.append(goalDaysEl(doc.goals, P));   // a Week or Dates: the days picked, first
+  if (P) body.append(goalDaysEl(doc.goals, P, goalShares(yg, ys), yg ? y : 0));   // a Week or Dates: the days picked, first
   // the year: the goal, then each department's goal and what's left of it
   if (yg) {
     const total = (yg.r || 0) + (yg.c || 0) + (yg.p || 0), done = ys ? ys.cents : 0, left = total - done;
