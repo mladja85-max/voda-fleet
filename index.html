@@ -2332,7 +2332,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-rates em { font-style: normal; font-size: .7rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .est-line { color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .est-line .est-open { font-style: normal; color: var(--soon); font-weight: 600; }
-.est-ns { font-style: normal; color: var(--due); font-weight: 700; } .est-ptable td.est-ns { color: var(--due); }
+.est-ns { font-style: normal; color: var(--due); font-weight: 700; } .est-stage { font-style: normal; color: var(--accent); font-weight: 700; }   /* a stage of your own in the Pipeline */ .est-ptable td.est-ns { color: var(--due); }
 .est-bar { display: flex; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 4px; box-shadow: inset 0 0 0 1px var(--line); }
 .est-bar i { display: block; height: 100%; } .est-bar i.ok { background: var(--ok); } .est-bar i.op { background: color-mix(in srgb, var(--soon) 55%, transparent); }
 .est-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--muted); }
@@ -14534,7 +14534,17 @@ const EST_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates:
 const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["f", "Fire/Smoke"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
 const EST_ST = { all: "All", open: "Open", notsent: "Not sent", approved: "Approved", declined: "Declined", canceled: "Canceled" };
 /** Open and not sent to the client yet (Housecall Pro: Scheduled, In progress, Completed; Sent, even a failed email, is sent). */
-const estNotSent = e => e.st === "open" && e.sent === false;
+/** Housecall Pro's status for an estimate's options ("Sent, Completed"), one at a time, as words ("in_progress" → "in progress"). */
+const estStList = st => String(st || "").split(/\s*,\s*/).map(x => x.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+/** Before it's sent, in Housecall Pro's own stages: Unscheduled, Scheduled, In progress (On my way), Completed (finished). */
+const EST_PRESEND = /^(unscheduled|needs scheduling|scheduled|in progress|on my way|completed?|complete (un)?rated|finished)$/i;
+/** Sent to the client: Housecall Pro says Sent (a failed email too: the office sends from its own email), or the
+ *  estimate is in a stage of your own in the Pipeline (Rebuild estimates, On hold…), which it moves to once it's sent. */
+const estSentSt = st => estStList(st).some(x => /sen[dt]|submit|fail/i.test(x) || !EST_PRESEND.test(x));
+/** A stage of your own in the Pipeline ("Rebuild estimates"), or "". */
+const estStage = e => { const x = estStList(e.hcpSt).find(v => !/sen[dt]|submit|fail/i.test(v) && !EST_PRESEND.test(v)); return x ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : ""; };
+/** Open and not sent to the client yet (an older Google script: its own word). */
+const estNotSent = e => e.st === "open" && (typeof e.hcpSt === "string" ? !estSentSt(e.hcpSt) : e.sent === false);
 let estData = store.get(K_EST);                         // this year's: { year, estimates, years, all, readAt, done, connected }
 let estOther = {};                                      // other years' (looked at in this window)
 const estLoading = {};
@@ -14845,7 +14855,7 @@ function renderEstimates() {
     const age = estAge(e.day, today);
     const ns = estNotSent(e), days = age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}`;
     return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title: e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "" }, h("b", { text: "Open" }),
-      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : null, days));
+      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days));
   };
   const row = e => {
     const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);
