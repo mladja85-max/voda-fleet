@@ -146,7 +146,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 73;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 74;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -5297,7 +5297,7 @@ const cpPlural_ = (n, w) => n + " " + w + (n === 1 ? "" : "s");
 function cpOut_(b) {
   return { id: b.id, vendor: b.vendor, status: b.status, at: b.at, by: b.by, to: b.to, total: b.total, paid: b.paid, paidOn: b.paidOn, how: b.how, ref: b.ref, last4: b.last4,
     appBy: b.appBy, appAt: b.appAt, vTo: b.vTo, vAt: b.vAt, cxBy: b.cxBy, cxAt: b.cxAt, out: b.out,
-    items: b.items.map(function (i) { return { j: i.j, n: i.n, d: i.d, a: i.a, pay: i.pay, client: i.client, addr: i.addr, day: i.day, f: i.f, fn: i.fn }; }) };
+    items: b.items.map(function (i) { return { j: i.j, n: i.n, d: i.d, a: i.a, pay: i.pay, client: i.client, addr: i.addr, day: i.day, f: i.f, fn: i.fn, at: i.at || "", by: i.by || "" }; }) };
 }
 /** The pay stub, as a page: the paid one (what the contractor gets) or the one waiting for approval (accounting's). */
 function cpStubHtml_(b) {
@@ -5326,14 +5326,16 @@ function cpStubHtml_(b) {
 function cpStubPdf_(b) {
   return Utilities.newBlob(cpStubHtml_(b), "text/html", "stub.html").getAs("application/pdf").setName("Pay stub " + b.id + ".pdf");
 }
-/** The invoices as a table in an email. */
-function cpMailTable_(b, paid) {
+/** The invoices as a table in an email (fresh: the invoice #s just added, marked "new"). */
+function cpMailTable_(b, paid, fresh) {
   const td = "padding:5px 8px;border-bottom:1px solid #eef0f4;font-size:13px", th = "padding:5px 8px;border-bottom:1px solid #dfe3ea;font-size:11px;text-align:left;color:#5b6474;text-transform:uppercase";
   const amt = function (i) { return paid ? i.pay : i.a; }, total = b.items.reduce(function (n, i) { return n + amt(i); }, 0);
   return '<table style="border-collapse:collapse;width:100%;max-width:760px"><tr><th style="' + th + '">Invoice</th><th style="' + th + '">Client</th>' + (paid ? '<th style="' + th + '">Address</th>' : "") +
     '<th style="' + th + ';text-align:right">' + (paid ? "Paid" : "Amount") + "</th></tr>" +
     b.items.map(function (i) {
-      return '<tr><td style="' + td + ';font-family:monospace">' + cpEsc_(i.n) + '</td><td style="' + td + '">' + cpEsc_(i.client) + "</td>" + (paid ? '<td style="' + td + '">' + cpEsc_(i.addr) + "</td>" : "") +
+      const isNew = fresh && fresh[i.n];
+      return '<tr' + (isNew ? ' style="background:#fff7e0"' : "") + '><td style="' + td + ';font-family:monospace">' + cpEsc_(i.n) + (isNew ? ' <b style="font-family:Arial,sans-serif;color:#a15c07;font-size:11px">NEW</b>' : "") +
+        '</td><td style="' + td + '">' + cpEsc_(i.client) + "</td>" + (paid ? '<td style="' + td + '">' + cpEsc_(i.addr) + "</td>" : "") +
         '<td style="' + td + ';text-align:right">' + cpMoney_(amt(i)) + "</td></tr>";
     }).join("") +
     '<tr><td style="padding:6px 8px;font-weight:bold;border-top:2px solid #111">' + cpPlural_(b.items.length, "invoice") + '</td><td></td>' + (paid ? "<td></td>" : "") +
@@ -5346,6 +5348,21 @@ function cpMailAccounting_(b, to, files) {
     .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + cpMoney_(i.a); }), ["", "Approve and record the payment in VODA Hub (Contractor Payroll): " + APP_URL + "#contractors"]);
   const html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.5"><p>Hi,</p><p>' + cpEsc_(b.vendor) + " sent <b>" + cpPlural_(b.items.length, "invoice") +
     "</b> for payroll, batch <b>" + cpEsc_(b.id) + "</b>, total <b>" + cpMoney_(b.total) + "</b>. The PDFs and the pay stub are attached.</p>" + cpMailTable_(b, false) +
+    '<p>Approve and record the payment in VODA Hub (Contractor Payroll).</p><p><a href="' + APP_URL + '#contractors" style="display:inline-block;background:#1f4fc7;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Open batch ' + cpEsc_(b.id) + "</a></p></div>";
+  MailApp.sendEmail({ to: to.join(","), subject: subject, body: lines.join("\n"), htmlBody: html, name: "VODA Hub",
+    attachments: files.map(function (f) { return f.getBlob(); }).concat([cpStubPdf_(b)]) });
+}
+/** The email to accounting when invoices join a batch still waiting: the new ones' PDFs and the pay stub as it is now. */
+function cpMailAccountingAdded_(b, added, to, files) {
+  const fresh = {};
+  added.forEach(function (i) { fresh[i.n] = true; });
+  const more = cpPlural_(added.length, "more invoice"), now = cpPlural_(b.items.length, "invoice");
+  const subject = cpShort_(b.vendor) + " invoices: " + added.length + " added to batch " + b.id + " (now " + b.items.length + ")";
+  const lines = ["Hi,", "", b.vendor + " sent " + more + " for batch " + b.id + ", still waiting for approval. It's now " + now + ", total " + cpMoney_(b.total) + ". The new " + (added.length === 1 ? "PDF" : "PDFs") + " and the updated pay stub are attached (the earlier PDFs came with the first email).", "", "Added:"]
+    .concat(added.map(function (i) { return i.n + " · " + i.client + " · " + cpMoney_(i.a); }), ["", "Approve and record the payment in VODA Hub (Contractor Payroll): " + APP_URL + "#contractors"]);
+  const html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.5"><p>Hi,</p><p>' + cpEsc_(b.vendor) + " sent <b>" + more + "</b> for batch <b>" + cpEsc_(b.id) +
+    "</b>, still waiting for approval. It's now <b>" + now + "</b>, total <b>" + cpMoney_(b.total) + "</b>. The new " + (added.length === 1 ? "PDF" : "PDFs") + " and the updated pay stub are attached (the earlier PDFs came with the first email).</p>" +
+    cpMailTable_(b, false, fresh) +
     '<p>Approve and record the payment in VODA Hub (Contractor Payroll).</p><p><a href="' + APP_URL + '#contractors" style="display:inline-block;background:#1f4fc7;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Open batch ' + cpEsc_(b.id) + "</a></p></div>";
   MailApp.sendEmail({ to: to.join(","), subject: subject, body: lines.join("\n"), htmlBody: html, name: "VODA Hub",
     attachments: files.map(function (f) { return f.getBlob(); }).concat([cpStubPdf_(b)]) });
@@ -5377,8 +5394,10 @@ function cpTaken_(n, batches) {
   }
   return null;
 }
-/** Sends invoices already recorded on their jobs to accounting as a new batch: { vendor, to, items: [{ id (job), n, f (file id) }] }.
- *  Refused, with every reason, when one is paid already, waiting in another batch, on a job marked paid, or has no PDF. */
+/** Sends invoices already recorded on their jobs to accounting: { vendor, to, items: [{ id (job), n, f (file id) }] }. When a
+ *  batch to the same contractor is still waiting for accounting they join it (one payment, one pay stub; accounting is
+ *  emailed the new PDFs and the pay stub as it is now), else they're a new batch. Refused, with every reason, when one is
+ *  paid already, waiting in a batch, on a job marked paid, or has no PDF. */
 function cpSend_(req, user) {
   const to = cpEmails_(req.to);
   if (to.error) return { ok: false, error: to.error, email: to.email };
@@ -5405,24 +5424,37 @@ function cpSend_(req, user) {
   if (problems.length) return { ok: false, error: "cant_send", problems: problems };
   const used = Object.keys(files).map(function (k) { return files[k]; });
   if (used.reduce(function (n, f) { return n + (Number(f.getSize()) || 0); }, 0) > CP_MAX_MAIL) return { ok: false, error: "too_big" };
-  // the batch's name: the contractor and today ("MON-2026-11-13"), then -2, -3 on the same day
-  const pre = (vendor.replace(/[^A-Za-z]/g, "").slice(0, 3) || "CON").toUpperCase(), day = cpToday_(), have = {};
-  all.forEach(function (x) { have[x.b.id] = true; });
-  let id = pre + "-" + day, k = 1;
-  while (have[id]) id = pre + "-" + day + "-" + (++k);
-  const now = new Date().toISOString(), who = user.name || user.id;
-  const b = { id: id, vendor: vendor, status: "waiting", at: now, by: who, to: to.list.join(", "), items: items, total: items.reduce(function (n, i) { return n + i.a; }, 0), paid: 0 };
-  cpMailAccounting_(b, to.list, used);   // first: when it can't go, nothing is marked
+  const day = cpToday_(), now = new Date().toISOString(), who = user.name || user.id;
+  items.forEach(function (i) { i.at = now; i.by = who; });   // when each invoice was sent, and by whom
+  // a batch to the same contractor still waiting for accounting: these join it
+  const open = all.filter(function (x) { return x.b.status === "waiting" && x.b.vendor.toLowerCase() === vendor.toLowerCase(); }).pop();
+  let b, row, added = 0;
+  if (open && open.b.items.length + items.length <= CP_MAX_ITEMS) {
+    b = Object.assign({}, open.b, { items: open.b.items.concat(items), to: to.list.join(", ") });
+    b.total = b.items.reduce(function (n, i) { return n + i.a; }, 0);
+    row = open.row; added = items.length;
+    cpMailAccountingAdded_(b, items, to.list, used);   // first: when it can't go, nothing is marked
+  } else {
+    // a new batch, named for the contractor and today ("MON-2026-11-13"), then -2, -3 on the same day
+    const pre = (vendor.replace(/[^A-Za-z]/g, "").slice(0, 3) || "CON").toUpperCase(), have = {};
+    all.forEach(function (x) { have[x.b.id] = true; });
+    let id = pre + "-" + day, k = 1;
+    while (have[id]) id = pre + "-" + day + "-" + (++k);
+    b = { id: id, vendor: vendor, status: "waiting", at: now, by: who, to: to.list.join(", "), items: items, total: items.reduce(function (n, i) { return n + i.a; }, 0), paid: 0 };
+    row = Math.max(cs.getLastRow(), 1) + 1;
+    cpMailAccounting_(b, to.list, used);   // first: when it can't go, nothing is marked
+  }
+  const id = b.id;
   items.forEach(function (i) {
     const r = rows[i.j], inv = repMonList_(r);
     inv.forEach(function (v) { if (String(v.n) === i.n) { v.sent = day; v.b = id; } });
     r[32] = JSON.stringify(inv).slice(0, 45000); r[27] = who; r[28] = now;
   });
   repWrite_(s, rows);
-  cpPut_(cs, Math.max(cs.getLastRow(), 1) + 1, b);
+  cpPut_(cs, row, b);
   const ids = {};
   items.forEach(function (i) { ids[i.j] = true; });
-  return { ok: true, batch: cpOut_(b), jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
+  return { ok: true, batch: cpOut_(b), added: added, jobs: Object.keys(ids).map(function (k) { return repOut_(rows[k]); }) };
 }
 /** Finds a batch: { s, row, b } or null. */
 function cpFind_(id) {

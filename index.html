@@ -894,6 +894,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 /* a waiting batch's buttons: one row, Cancel batch at the left (the same width tapped once: nothing moves) */
 .cp-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
 .cp-foot > #cpCancel { margin-right: auto; }
+.cp-items .cp-added { color: var(--soon); font-weight: 700; font-size: .72rem; }
 .btn.two-tap { display: inline-grid; justify-items: center; } .two-tap > span { grid-area: 1 / 1; }
 .two-tap .tt-b, .two-tap.armed .tt-a { visibility: hidden; } .two-tap.armed .tt-b { visibility: visible; }
 @media (min-width: 700px) { .cp-items td.inv .linkish { white-space: nowrap; } }
@@ -13001,13 +13002,15 @@ function openRepMonInv() {
         !lock && !c.on && twinOn(c) ? h("p", { class: "meta", text: "The same invoice # as another one here: only one of them can go." }) : null,
         h("div", { class: "field" }, h("label", { text: c.cands.length ? "Project" : "Project (no match found: pick it)" }), sel), lock ? null : check);
     }));
-    const ok = cards.filter(goes), tot = ok.reduce((n, c) => n + c.item.a, 0), n = ok.length;
+    const ok = cards.filter(goes), tot = ok.reduce((n, c) => n + c.item.a, 0), n = ok.length, wb = canSend ? cpWaitingFor(cpVendorName()) : null;
     if (!cards.some(c => !c.bad)) sumBox.replaceChildren();
     else sumBox.replaceChildren(...[h("b", { text: n ? `${cpPlural(n, "invoice")} · ${C(tot)}` : "Nothing ticked" }),
-      n ? h("small", { text: canSend ? `Send: saved on their jobs and emailed to accounting with ${n === 1 ? "its PDF" : "their PDFs"} and the pay stub.` : "Saved on their jobs as “to pay”." }) : null].filter(Boolean));
+      n ? h("small", { id: "repInvHow", text: !canSend ? "Saved on their jobs as “to pay”." : wb
+        ? `Batch ${wb.id} is still waiting for accounting: ${n === 1 ? "this one joins" : "these join"} it (${C(wb.total)} → ${C(wb.total + tot)}, ${cpPlural(wb.items.length + n, "invoice")}). Accounting is emailed ${n === 1 ? "its PDF" : "their PDFs"} and the updated pay stub.`
+        : `Send: saved on their jobs and emailed to accounting with ${n === 1 ? "its PDF" : "their PDFs"} and the pay stub.` }) : null].filter(Boolean));
     save.textContent = n ? (canSend ? `Save ${fmt(n)} without sending` : `Save ${cpPlural(n, "invoice")}`) : "Save";
     save.disabled = busy || !n;
-    if (send) { send.textContent = n ? `Send ${cpPlural(n, "invoice")} to accounting` : "Send to accounting"; send.disabled = busy || !n || !to; }
+    if (send) { send.textContent = n ? (wb ? `Add ${cpPlural(n, "invoice")} to batch ${wb.id}` : `Send ${cpPlural(n, "invoice")} to accounting`) : "Send to accounting"; send.disabled = busy || !n || !to; }
   };
   // who accounting is: the saved addresses, once loaded
   const drawTo = () => { if (!canSend || to || !cpData) return; to = cpToPicker("accounting", cpVendorName(), "repInvTo-p"); toBox.replaceChildren(to.el); draw(); };
@@ -13054,7 +13057,7 @@ function openRepMonInv() {
       const o = await api("cpSend", { vendor: cpVendorName(), to: to.list(), items: pick.map(c => ({ id: c.pick, n: nOf(c), f: fileIds.get(c.fobj) })) }, 170000);
       cpTake(o);
       pick.forEach(c => { c.sent = o.batch.id; c.on = false; });
-      return finish(`Sent ${cpPlural(pick.length, "invoice")} to accounting · batch ${o.batch.id}`);
+      return finish(o.added ? `Added ${cpPlural(o.added, "invoice")} to batch ${o.batch.id} (now ${cpPlural(o.batch.items.length, "invoice")})` : `Sent ${cpPlural(pick.length, "invoice")} to accounting · batch ${o.batch.id}`);
     } catch (e) {
       if (e && e.error === "cant_send") {
         for (const p of e.problems || []) { const c = pick.find(x => nOf(x) === p.n); if (c) c.msg = cpTakenText(p); }
@@ -13195,6 +13198,11 @@ const cpShort = v => String(v || "").trim().split(/\s+/)[0] || "the contractor";
 const cpPlural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : /(ch|sh|s|x)$/.test(w) ? "es" : "s"}`;
 const cpDay = d => (lbIsDay(d) ? `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}` : "");
 const cpAtDay = iso => { const t = Date.parse(iso || ""); return isNaN(t) ? "" : lbDayKey(new Date(t)); };
+const CP_ADD_API = 74;                                   // the Google script that adds invoices to the batch still waiting
+/** The contractor's batch still waiting for accounting (new invoices join it), or null. */
+const cpWaitingFor = vendor => (apiLevel >= CP_ADD_API && cpData ? cpData.batches.find(b => b.status === "waiting" && String(b.vendor).toLowerCase() === String(vendor).toLowerCase()) || null : null);
+/** An invoice that joined its batch after it was sent (a minute or more later). */
+const cpLate = (i, b) => !!(i.at && b.at && Date.parse(i.at) - Date.parse(b.at) > 60e3);
 /** The contractor's name as typed in Payroll emails (Monumental's own line), else the usual one. */
 const cpVendorName = () => (((cpData && cpData.parties) || []).find(p => p.kind === "vendor" && /^monumental\b/i.test(p.name)) || {}).name || CP_VENDOR;
 /** A batch's status, as a tag. */
@@ -13329,10 +13337,12 @@ function openCpBatch(id) {
   const b = cpData && cpData.batches.find(x => x.id === id);
   if (!b) return;
   const err = h("p", { class: "dlg-err", role: "alert" }), C = cpCents, vs = cpShort(b.vendor);
+  const late = b.items.filter(i => cpLate(i, b)), lateDays = [...new Set(late.map(i => cpDay(cpAtDay(i.at)).replace(/, \d{4}$/, "")))];
   const steps = h("p", { class: "cp-steps" },
-    h("span", { class: "on" }, `① Sent to accounting ${cpDay(cpAtDay(b.at))} (${b.by})`), " → ",
+    h("span", { class: "on" }, `① Sent to accounting ${cpDay(cpAtDay(b.at))} (${b.by})${late.length ? ` · ${late.length} added ${lateDays.join(", ")}` : ""}`), " → ",
     h("span", { class: b.status === "paid" ? "on" : "" }, b.status === "canceled" ? "Canceled" : `② Paid & sent to ${vs}`));
   const pdfBtn = (i, text) => h("button", { class: "linkish mono", type: "button", title: "Open its PDF", onclick: ev => cpOpenDoc(b.id, i.f, ev.currentTarget) }, text || i.n);
+  const addedEl = i => (cpLate(i, b) ? h("small", { class: "cp-added", text: `added ${cpDay(cpAtDay(i.at)).replace(/, \d{4}$/, "")}${i.by && i.by !== b.by ? ` (${i.by})` : ""}` }) : null);
   const stubBtn = h("button", { class: "btn", type: "button", id: "cpStubBtn", onclick: ev => cpOpenDoc(b.id, "", ev.currentTarget) }, "Pay stub (PDF)");
   if (b.status !== "waiting") {
     // paid or canceled: what happened, the invoices, and the email again
@@ -13371,7 +13381,7 @@ function openCpBatch(id) {
         : h("p", { class: "meta", text: `Canceled by ${b.cxBy}${b.cxAt ? ` on ${cpDay(cpAtDay(b.cxAt))}` : ""}. Its invoices went back to not sent. Delete it to take it off the list.` }),
       h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
         h("thead", null, h("tr", null, h("th", { class: "l", text: "Invoice" }), h("th", { class: "l", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: b.status === "paid" ? "Paid" : "" }))),
-        h("tbody", null, b.items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l inv" }, pdfBtn(i)), h("td", { class: "l" }, i.client, h("small", { class: "ph", text: i.addr })), h("td", { class: "l pc", text: i.addr }),
+        h("tbody", null, b.items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l inv" }, pdfBtn(i), addedEl(i)), h("td", { class: "l" }, i.client, h("small", { class: "ph", text: i.addr })), h("td", { class: "l pc", text: i.addr }),
           h("td", { text: C(i.a) }), h("td", null, b.status === "paid" ? h("b", { text: C(i.pay) }) : "")))))),
       err, resendBox,
       h("div", { class: "dlg-foot" }, h("div", { class: "right" }, b.status === "canceled" ? del : stubBtn, resend, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
@@ -13404,7 +13414,7 @@ function openCpBatch(id) {
   };
   const rows = st.map(x => x.tr = h("tr", { "data-n": x.i.n },
     h("td", { class: "c" }, h("input", { type: "checkbox", class: "cp-ok", checked: true, "aria-label": `Invoice ${x.i.n} OK`, onchange: e => { x.ok = e.target.checked; e.target.closest("tr").classList.toggle("off", !x.ok); draw(); } })),
-    h("td", { class: "l inv" }, pdfBtn(x.i), h("small", { class: "ph", text: x.i.client })),
+    h("td", { class: "l inv" }, pdfBtn(x.i), addedEl(x.i), h("small", { class: "ph", text: x.i.client })),
     h("td", { class: "l pc" }, x.i.client),
     h("td", { class: "l pc", text: x.i.addr }),
     h("td", { text: C(x.i.a) }),
