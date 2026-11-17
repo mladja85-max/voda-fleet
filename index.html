@@ -2357,8 +2357,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-stseg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .est-stseg::-webkit-scrollbar { display: none; } .est-stseg .seg-btn { flex: none; }
 .est-filters .seg-btn { padding: 6px 10px; font-size: .86rem; gap: 6px; }
 .est-n { font-style: normal; font-size: .72rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.est-d { font-style: normal; font-size: .78rem; font-weight: 700; font-variant-numeric: tabular-nums; opacity: .8; margin-left: -2px; }   /* the status button's dollars */
 .est-filters select, .est-filters input[type="search"] { font: inherit; font-size: .9rem; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; }
-.est-filters input[type="search"] { flex: 1 1 200px; }
+.est-filters input[type="search"] { flex: 1 1 160px; }
 .est-rows { display: grid; }
 .est-row { display: grid; grid-template-columns: 70px 60px minmax(0, 1fr) 140px 120px 136px 178px; gap: 14px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: .9rem; }
 .est-row.est-hdr { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 4px; }
@@ -2385,7 +2386,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   .est-pwrap th:first-child, .est-pwrap td:first-child { min-width: 112px; max-width: 132px; white-space: normal; overflow-wrap: anywhere; box-shadow: 1px 0 0 var(--line); }
   /* the status buttons: two rows of three, nothing sliding sideways */
   .est-stseg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; overflow: visible; }
-  .est-stseg .seg-btn { justify-content: center; padding: 7px 4px; }
+  .est-stseg .seg-btn { justify-content: center; padding: 6px 4px; flex-wrap: wrap; row-gap: 2px; column-gap: 5px; }
+  .est-stseg .est-sl { flex-basis: 100%; text-align: center; }   /* the name, then its count and dollars under it */
+  .est-stseg .est-d { margin: 0; font-size: .74rem; }
   /* the tiles' lines wrap instead of cutting off "· 42 open · 39 not sent" */
   .est-line { white-space: normal; }
 }
@@ -14834,7 +14837,10 @@ function renderEstimates() {
   const qOk = e => !q || [e.client, e.n, e.addr, e.type, e.emps, e.inc, e.lead, e.tags].some(v => String(v || "").toLowerCase().includes(q));
   const base = inGrp.filter(e => whoOk(e) && qOk(e));
   const shown = base.filter(stOk).sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
-  const stCount = k => (k === "all" ? base.length : k === "notsent" ? base.filter(estNotSent).length : base.filter(e => e.st === k).length);
+  const stOf = k => (k === "all" ? base : k === "notsent" ? base.filter(estNotSent) : base.filter(e => e.st === k));
+  const stCount = k => stOf(k).length;
+  // each button's dollars: its rows' amounts added up (estimated, an estimate with options its largest; approved: what was approved)
+  const stCents = k => stOf(k).reduce((n, e) => n + (estValue(e) || 0), 0);
   const whoSel = all ? h("select", { id: "estWho", "aria-label": "In charge", onchange: ev => { estView.who = ev.target.value; if (crew.some(([n]) => n === estView.who)) estView.grps = sel.filter(k => R_SUB.includes(k)); redraw(); } },
     h("option", { value: "", text: "Everyone" }), ownerNames.includes("-") ? h("option", { value: "-", text: "Nobody assigned" }) : null,
     ownerNames.filter(n => n !== "-").sort((a, b) => a.localeCompare(b)).map(name => h("option", { value: name, text: name }))) : null;
@@ -14843,7 +14849,8 @@ function renderEstimates() {
     oninput: ev => { estView.q = ev.target.value; estShown = 100; const at = ev.target.selectionStart; renderEstimates(); const f = $("estFind"); if (f) { f.focus(); try { f.setSelectionRange(at, at); } catch (e) { /* not a text box */ } } } });
   const filters = h("div", { class: "est-filters" },
     h("div", { class: "seg est-stseg", role: "tablist", "aria-label": "Status" }, Object.entries(EST_ST).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "data-k": k, "aria-selected": String(estView.st === k),
-      onclick: () => { estView.st = k; redraw(); } }, t, h("i", { class: "est-n", text: fmt(stCount(k)) })))),
+      title: `${t}: ${fmt(stCount(k))} estimate${stCount(k) === 1 ? "" : "s"}, ${lbMoney(Math.round(stCents(k) / 100))}`,
+      onclick: () => { estView.st = k; redraw(); } }, h("span", { class: "est-sl", text: t }), h("i", { class: "est-n", text: fmt(stCount(k)) }), h("i", { class: "est-d", text: revShort(stCents(k)) })))),
     whoSel, search,
     sel.length || who || q || estView.st !== "all" ? h("button", { class: "btn small ghost", type: "button", id: "estClear", onclick: () => { Object.assign(estView, { grps: [], st: "all", who: "", q: "" }); redraw(); } }, "Show all") : null);
   const grpName = e => { const g = estGroup(e); return g === "u" ? "Restoration" : EST_GROUPS.find(x => x[0] === g)[1]; };
