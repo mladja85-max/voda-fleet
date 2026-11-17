@@ -846,7 +846,16 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .cp-table .l, .cp-items .l { text-align: left; } .cp-table td.st, .cp-table th.st { text-align: right; }
 .cp-items td.l { white-space: normal; } .cp-items td.c, .cp-items th.c { text-align: center; }
 .cp-items tr.off td { opacity: .5; } .cp-items .cp-pay { width: 7.5em; text-align: right; font: inherit; padding: 4px 6px; }
-.cp-items .cp-pay.bad { border-color: var(--due); }
+.cp-items .cp-pay.bad, .cp-payf input.bad { border-color: var(--due); }
+/* a pay that isn't its invoice */
+.cp-items tbody tr.dif td { background: var(--soon-bg); }
+.cp-items .cp-dif { color: var(--soon); font-weight: 700; font-size: .74rem; margin-top: 3px; white-space: normal; max-width: 9.5em; margin-left: auto; line-height: 1.25; }
+@media (min-width: 700px) { .cp-items .cp-dif { white-space: nowrap; max-width: none; } }
+.cp-items .cp-dif:empty { display: none; }
+.cp-items tfoot tr.dif td b { color: var(--soon); }
+.cp-paysum.dif { background: var(--soon-bg); } .cp-sumdif { color: var(--soon); font-size: .9rem; }
+.cp-dlg .dlg-foot .left { display: flex; }
+@media (min-width: 700px) { .cp-items td.inv .linkish { white-space: nowrap; } }
 .cp-items input.cp-ok { width: 20px; height: 20px; accent-color: var(--accent); }
 .cp .ph, .cp-dlg .ph { display: none; }
 .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; text-align: left; }
@@ -13233,10 +13242,14 @@ function cpAside() {
 }
 
 /* ---- a batch: accounting checks it, records the payment, and Monumental gets the pay stub ---- */
+/** Cents as dollars, always with the cents ($770.00), to check against the invoice PDFs. */
+const cpCents = c => { const v = Math.round(Number(c) || 0); return (v < 0 ? "-$" : "$") + (Math.abs(v) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+/** The Reference # (the ACH, check or wire number): needed to find the payment in the bank, except for cash. */
+const CP_REF_FREE = ["Cash"];
 function openCpBatch(id) {
   const b = cpData && cpData.batches.find(x => x.id === id);
   if (!b) return;
-  const err = h("p", { class: "dlg-err", role: "alert" }), C = c => lbCash(c / 100), vs = cpShort(b.vendor);
+  const err = h("p", { class: "dlg-err", role: "alert" }), C = cpCents, vs = cpShort(b.vendor);
   const steps = h("p", { class: "cp-steps" },
     h("span", { class: "on" }, `① Sent to accounting ${cpDay(cpAtDay(b.at))} (${b.by})`), " → ",
     h("span", { class: b.status === "paid" ? "on" : "" }, b.status === "canceled" ? "Canceled" : `② Paid & sent to ${vs}`));
@@ -13279,7 +13292,7 @@ function openCpBatch(id) {
         : h("p", { class: "meta", text: `Canceled by ${b.cxBy}${b.cxAt ? ` on ${cpDay(cpAtDay(b.cxAt))}` : ""}. Its invoices went back to not sent. Delete it to take it off the list.` }),
       h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
         h("thead", null, h("tr", null, h("th", { class: "l", text: "Invoice" }), h("th", { class: "l", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: b.status === "paid" ? "Paid" : "" }))),
-        h("tbody", null, b.items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l" }, pdfBtn(i)), h("td", { class: "l" }, i.client, h("small", { class: "ph", text: i.addr })), h("td", { class: "l pc", text: i.addr }),
+        h("tbody", null, b.items.map(i => h("tr", { "data-n": i.n }, h("td", { class: "l inv" }, pdfBtn(i)), h("td", { class: "l" }, i.client, h("small", { class: "ph", text: i.addr })), h("td", { class: "l pc", text: i.addr }),
           h("td", { text: C(i.a) }), h("td", null, b.status === "paid" ? h("b", { text: C(i.pay) }) : "")))))),
       err, resendBox,
       h("div", { class: "dlg-foot" }, h("div", { class: "right" }, b.status === "canceled" ? del : stubBtn, resend, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
@@ -13290,26 +13303,48 @@ function openCpBatch(id) {
   const foot = h("tfoot"), sumBox = h("div", { class: "cp-paysum", id: "cpPaySum" });
   const go = h("button", { class: "btn primary", type: "button", id: "cpPayGo" });
   const num = v => { const x = String(v == null ? "" : v).replace(/[$,\s]/g, ""); return x === "" ? NaN : Number(x); };
+  const cents = x => Math.round((num(x.pay) || 0) * 100);
+  /** A pay that isn't its invoice: the row turns amber and says by how much. */
+  const difOf = x => {
+    const d = num(x.pay) > 0 ? cents(x) - x.i.a : 0, tr = x.tr, note = tr && tr.querySelector(".cp-dif");
+    if (tr) tr.classList.toggle("dif", x.ok && d !== 0);
+    if (note) note.textContent = x.ok && d ? `${C(Math.abs(d))} ${d < 0 ? "less" : "more"} than invoiced` : "";
+  };
   const draw = () => {
-    const on = st.filter(x => x.ok), pay = on.reduce((n, x) => n + Math.round((num(x.pay) || 0) * 100), 0);
-    foot.replaceChildren(h("tr", null, h("td"), h("th", { class: "l", text: `${cpPlural(on.length, "invoice")} OK` }), h("td", { class: "pc" }), h("td", { class: "pc" }),
-      h("td", { text: C(on.reduce((n, x) => n + x.i.a, 0)) }), h("td", null, h("b", { text: C(pay) }))));
+    const on = st.filter(x => x.ok), pay = on.reduce((n, x) => n + cents(x), 0), inv = on.reduce((n, x) => n + x.i.a, 0), dif = pay - inv;
+    st.forEach(difOf);
+    foot.replaceChildren(h("tr", { class: dif ? "dif" : "" }, h("td"), h("th", { class: "l", text: `${cpPlural(on.length, "invoice")} OK` }), h("td", { class: "pc" }), h("td", { class: "pc" }),
+      h("td", { text: C(inv) }), h("td", null, h("b", { text: C(pay) }))));
+    sumBox.classList.toggle("dif", !!(on.length && dif));
     sumBox.replaceChildren(h("b", { text: on.length ? `Pay ${C(pay)} to ${b.vendor}` : "Nothing ticked OK" }),
+      on.length && dif ? h("strong", { class: "cp-sumdif", id: "cpSumDif", text: `${C(Math.abs(dif))} ${dif < 0 ? "less" : "more"} than the invoices (${C(inv)})` }) : null,
       h("small", { text: on.length ? `Marks ${on.length === 1 ? "the invoice paid on its job" : `the ${fmt(on.length)} invoices paid on their jobs`}, and emails ${vs} the pay stub.${on.length < st.length ? ` ${st.length - on.length === 1 ? "The invoice left out goes" : `The ${fmt(st.length - on.length)} left out go`} back to not sent.` : ""}` : "Tick at least one invoice OK, or cancel the batch." }));
     go.textContent = `Approve, mark paid & send to ${vs}`;
     go.disabled = !on.length;
   };
-  const rows = st.map(x => h("tr", { "data-n": x.i.n },
+  const rows = st.map(x => x.tr = h("tr", { "data-n": x.i.n },
     h("td", { class: "c" }, h("input", { type: "checkbox", class: "cp-ok", checked: true, "aria-label": `Invoice ${x.i.n} OK`, onchange: e => { x.ok = e.target.checked; e.target.closest("tr").classList.toggle("off", !x.ok); draw(); } })),
-    h("td", { class: "l" }, pdfBtn(x.i), h("small", { class: "ph", text: x.i.client })),
+    h("td", { class: "l inv" }, pdfBtn(x.i), h("small", { class: "ph", text: x.i.client })),
     h("td", { class: "l pc" }, x.i.client),
     h("td", { class: "l pc", text: x.i.addr }),
     h("td", { text: C(x.i.a) }),
-    h("td", null, h("input", { type: "text", inputmode: "decimal", class: "cp-pay", value: x.pay, "aria-label": `Pay on ${x.i.n}`, oninput: e => { x.pay = e.target.value; e.target.classList.toggle("bad", !(num(x.pay) > 0)); draw(); } }))));
+    h("td", null, h("input", { type: "text", inputmode: "decimal", class: "cp-pay", value: x.pay, "aria-label": `Pay on ${x.i.n}`, oninput: e => { x.pay = e.target.value; e.target.classList.toggle("bad", !(num(x.pay) > 0)); draw(); } }),
+      h("small", { class: "cp-dif" }))));
   const paidOn = lbDateInput({ id: "cpPaidOn", value: lbToday() }, () => {});
-  const how = h("select", { id: "cpHow" }, CP_HOW.map(x => h("option", { value: x, text: x })));
-  const ref = h("input", { type: "text", id: "cpRef", maxlength: "60", placeholder: "ACH / check #" });
-  const last4 = h("input", { type: "text", id: "cpLast4", inputmode: "numeric", maxlength: "4", placeholder: "1234" });
+  // How and the account: as on the last batch paid (to the same contractor, else any), to change when it's different
+  const lastPaid = cpData.batches.filter(x => x.status === "paid" && x.id !== b.id).sort((x, y) => ((x.vendor === b.vendor) - (y.vendor === b.vendor)) || (String(x.appAt || x.paidOn || "") < String(y.appAt || y.paidOn || "") ? -1 : 1)).pop();
+  const refLbl = h("label", { for: "cpRef" });
+  const how = h("select", { id: "cpHow", onchange: () => refSay() }, CP_HOW.map(x => h("option", { value: x, text: x })));
+  if (lastPaid && CP_HOW.includes(lastPaid.how)) how.value = lastPaid.how;
+  const ref = h("input", { type: "text", id: "cpRef", maxlength: "60", oninput: () => ref.classList.remove("bad") });
+  const refSay = () => {
+    const free = CP_REF_FREE.includes(how.value);
+    refLbl.textContent = free ? "Reference # (if any)" : "Reference # *";
+    ref.placeholder = { ACH: "ACH / trace #", Check: "Check #", Wire: "Wire confirmation #", Zelle: "Zelle confirmation #", Card: "Card confirmation #" }[how.value] || (free ? "Optional" : "Reference #");
+    ref.required = !free; if (free) ref.classList.remove("bad");
+  };
+  refSay();
+  const last4 = h("input", { type: "text", id: "cpLast4", inputmode: "numeric", maxlength: "4", placeholder: "1234", value: (lastPaid && /^\d{4}$/.test(lastPaid.last4 || "") ? lastPaid.last4 : "") });
   const appBy = h("input", { type: "text", id: "cpAppBy", maxlength: "60", value: (session && session.name) || "" });
   const to = cpToPicker("vendor", b.vendor, "cpTo");
   const f = (id, label, el) => h("div", { class: "field" }, h("label", { for: id, text: label }), el);
@@ -13318,6 +13353,7 @@ function openCpBatch(id) {
     const on = st.filter(x => x.ok);
     if (on.some(x => !(num(x.pay) > 0))) { err.textContent = "Each invoice ticked OK needs what's paid on it, like 770 or 1,250.50."; return; }
     if (!lbIsDay(paidOn.value)) { err.textContent = "Pick the day it was paid."; return; }
+    if (!ref.value.trim() && !CP_REF_FREE.includes(how.value)) { err.textContent = `Type the Reference # (the ${how.value === "Check" ? "check number" : `${how.value} confirmation or trace number`}), so the payment can be found in the bank.`; ref.classList.add("bad"); ref.focus(); return; }
     if (last4.value.trim() && !/^\d{4}$/.test(last4.value.trim())) { err.textContent = "The account: its last 4 digits only (or leave it empty)."; return; }
     const bad = to.bad(); if (bad) { err.textContent = bad; return; }
     go.disabled = true; err.textContent = "";
@@ -13351,9 +13387,9 @@ function openCpBatch(id) {
     h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
       h("thead", null, h("tr", null, h("th", { class: "c", text: "OK" }), h("th", { class: "l", text: "Invoice" }), h("th", { class: "l pc", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: "Pay" }))),
       h("tbody", null, rows), foot)),
-    h("div", { class: "cp-payf" }, f("cpPaidOn", "Paid on", paidOn), f("cpHow", "How", how), f("cpRef", "Reference #", ref), f("cpLast4", "From account (last 4)", last4), f("cpAppBy", "Approved by", appBy)),
+    h("div", { class: "cp-payf" }, f("cpPaidOn", "Paid on", paidOn), f("cpHow", "How", how), h("div", { class: "field" }, refLbl, ref), f("cpLast4", "From account (last 4)", last4), f("cpAppBy", "Approved by", appBy)),
     h("div", { class: "cp-sendbox" }, to.el), sumBox, err, resendBox,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, stubBtn, again, cancel, go))));
+    h("div", { class: "dlg-foot" }, h("div", { class: "left" }, cancel), h("div", { class: "right" }, stubBtn, again, go))));
   draw();
 }
 
