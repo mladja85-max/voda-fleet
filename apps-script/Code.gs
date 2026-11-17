@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 80;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 81;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -354,6 +354,18 @@ function doPost(e) {
       case "ofPut":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return ofPut_(req); }));
+      case "pcRead":
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(pcRead_(req, user));
+      case "pcSync":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(pcSyncStep_(req));
+      case "pcMark":
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return pcMark_(req, user); }));
+      case "pcMarks":
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(pcMarks_(req));
       case "attendance":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(atRead_(user, req.year));
@@ -4585,6 +4597,312 @@ function estSync_(req, user) {
     return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
   });
 }
+/* ---------------- Past clients to call (Office) ----------------
+   The office calls past clients 6, 12, 18, 24 and 36 months after their last finished job (a finished job restarts the
+   clock; an estimate doesn't). The day of a visit is its scheduled day (or the day it was finished). Left off the lists:
+   a client with a job booked since their last one (scheduled, in progress or still to be scheduled); a "do not call" tag
+   on the customer in Housecall Pro (or Housecall Pro's "do not service"); commercial clients (a Commercial job type, or a
+   commercial / property manager tag); anyone marked "Don't call again" here. A day that falls on a Sunday or a day the
+   company is closed moves to the next working day. Each call is marked (No answer, Voicemail, Booked, Don't call again)
+   with who and when. A client in a group whose day went by without a mark (since the lists started) stays in "Missed"
+   until marked or the next group's day.
+   Housecall Pro is read once (every job created in the last 42 months, newest first, a few pages a step: an admin's
+   "Read from Housecall Pro"), then only what changed (jobs, then customers, by when they changed; when the lists are
+   opened, at most every 15 minutes). It all stays in this Sheet: the "Past client jobs" and "Past clients" tabs, and
+   the marks in "Past client calls". ---------------- */
+const PC_JOBS = "Past client jobs", PC_CUST = "Past clients", PC_CALLS = "Past client calls";
+const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Created", "Job type", "Address", "Changed"];
+const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed"];
+const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who"];
+const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
+const PC_DONE = "PC_BACKFILL_DONE", PC_AT = "PC_SYNC_AT", PC_START = "PC_START", PC_CUR = "PC_CURSOR", PC_SORTS = "PC_SORTS", PC_BUSY = "PC_BUSY";
+const PC_RESULTS = { na: "No answer", vm: "Voicemail", booked: "Booked", dnc: "Don't call again", clear: "" };
+const PC_DNC = /do\s*n[o']?t\s*(call|contact|service)|\bdnc\b|no\s+(calls?|contact)\b/i;
+const PC_COM = /commercial|property\s*manag/i;
+
+/** yyyy-MM-dd plus n months, on the same day of the month (or the month's last day: Aug 31 + 6 months is Feb 28). */
+function pcAddMonths_(day, n) {
+  const y = Number(day.slice(0, 4)), m = Number(day.slice(5, 7)) - 1 + n, d = Number(day.slice(8, 10));
+  const Y = y + Math.floor(m / 12), M = ((m % 12) + 12) % 12;
+  const end = new Date(Date.UTC(Y, M + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(Y, M, Math.min(d, end))).toISOString().slice(0, 10);
+}
+/** The day itself, or the next working day when it's a Sunday or a day the company is closed. */
+function pcWorkDay_(day) {
+  let d = day;
+  for (let i = 0; i < 7 && (new Date(d + "T12:00:00Z").getUTCDay() === 0 || tmClosed_(d)); i++) d = tmAddDays_(d, 1);
+  return d;
+}
+/** The day a client whose last finished job was on `last` is called for the n-month group. */
+function pcDue_(last, n) { return pcWorkDay_(pcAddMonths_(last, n)); }
+/** A cell as yyyy-MM-dd (a Sheet may have turned the text into a date), or "". */
+function pcDay_(v, tz) {
+  if (v instanceof Date) return isNaN(v.getTime()) ? "" : Utilities.formatDate(v, tz, "yyyy-MM-dd");
+  const s = String(v || "");
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+function pcPhone_(v) {
+  const raw = String(v || "").trim();
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
+  return d.length === 10 ? "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6) : raw.slice(0, 30);
+}
+/** A job as the "Past client jobs" tab keeps it, or null (no customer). */
+function pcJobRow_(job, tz) {
+  const cu = (job && job.customer) || {};
+  const cid = String(cu.id || job.customer_id || "");
+  if (!job || !job.id || !cid) return null;
+  const ws = String(job.work_status || "");
+  const st = /^complete/i.test(ws) ? "done" : /cancel/i.test(ws) ? "canceled" : "open";
+  const dayOf = function (v) { const d = new Date(v || ""); return v && !isNaN(d.getTime()) ? Utilities.formatDate(d, tz, "yyyy-MM-dd") : ""; };
+  const sch = job.schedule && job.schedule.scheduled_start, fin = job.work_timestamps && job.work_timestamps.completed_at;
+  const day = st === "done" ? dayOf(sch) || dayOf(fin) || dayOf(job.updated_at) : dayOf(sch);
+  const a = job.address || {};
+  const addr = [a.street, a.street_line_2, a.city].filter(Boolean).join(", ").replace(/\s+/g, " ").trim().slice(0, 120);
+  return [String(job.id), cid, String(job.invoice_number || "").slice(0, 30), st, day, dayOf(job.created_at), hcpJobType_(job).slice(0, 80), addr, String(job.updated_at || "").slice(0, 40)];
+}
+/** A customer as the "Past clients" tab keeps one (what Housecall Pro didn't send stays as it was). */
+function pcCustRow_(cu, old) {
+  const ph = [cu.mobile_number, cu.home_number, cu.work_number].map(pcPhone_).filter(Boolean);
+  const uniq = ph.filter(function (p, i) { return ph.indexOf(p) === i; });
+  const name = [cu.first_name, cu.last_name].filter(Boolean).join(" ").replace(/\s+/g, " ").trim() || String(cu.company || "").trim();
+  const tags = Array.isArray(cu.tags) ? cu.tags.map(function (t) { return String((t && t.name) || t || "").trim(); }).filter(Boolean).join(", ").slice(0, 300) : old ? String(old[4] || "") : "";
+  const dns = typeof cu.do_not_service === "boolean" ? (cu.do_not_service ? "yes" : "") : old ? String(old[6] || "") : "";
+  return [String(cu.id), name.slice(0, 80), uniq[0] || "", uniq[1] || "", tags, String(cu.company || "").slice(0, 80), dns, String(cu.updated_at || "").slice(0, 40)];
+}
+function pcSheet_(name, cols) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(name);
+  if (!s) {
+    s = ss.insertSheet(name);
+    s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+    if (typeof s.setFrozenRows === "function") s.setFrozenRows(1);
+  }
+  return s;
+}
+function pcRows_(name, W) {
+  const s = SpreadsheetApp.getActive().getSheetByName(name);
+  const n = s ? s.getLastRow() - 1 : 0;
+  return n > 0 ? s.getRange(2, 1, n, W).getValues() : [];
+}
+/** Each row in its own place on the tab (by the id in its first column), a new one at the bottom; all as text. */
+function pcUpsert_(name, cols, rows, keep) {
+  if (!rows.length) return 0;
+  const s = pcSheet_(name, cols), W = cols.length, n = s.getLastRow() - 1;
+  const old = n > 0 ? s.getRange(2, 1, n, W).getValues() : [], at = {};
+  old.forEach(function (r, i) { at[String(r[0])] = i; });
+  const changed = {}, add = [], seen = {};
+  rows.forEach(function (row) {
+    if (!row || seen[row[0]]) return;   // the first one of each (the newest read)
+    seen[row[0]] = true;
+    const i = at[row[0]];
+    const next = keep ? keep(row, i === undefined ? null : old[i]) : row;
+    if (i === undefined) { add.push(next); return; }
+    if (next.some(function (v, k) { return String(v) !== String(old[i][k] instanceof Date ? pcDay_(old[i][k], Session.getScriptTimeZone()) : old[i][k]); })) { old[i] = next; changed[i] = true; }
+  });
+  const nChanged = Object.keys(changed).length;
+  if (nChanged > 40) {
+    const all = old.concat(add);
+    if (s.getMaxRows() < all.length + 1) s.insertRowsAfter(s.getMaxRows(), all.length + 201 - s.getMaxRows());
+    s.getRange(2, 1, all.length, W).setNumberFormat("@").setValues(all);
+  } else {
+    Object.keys(changed).forEach(function (i) { s.getRange(Number(i) + 2, 1, 1, W).setNumberFormat("@").setValues([old[i]]); });
+    if (add.length) {
+      const first = Math.max(2, s.getLastRow() + 1);
+      if (s.getMaxRows() < first + add.length - 1) s.insertRowsAfter(s.getMaxRows(), first + add.length + 200 - s.getMaxRows());
+      s.getRange(first, 1, add.length, W).setNumberFormat("@").setValues(add);
+    }
+  }
+  return nChanged + add.length;
+}
+function pcSorted_(list, by) {
+  for (let i = 1; i < list.length; i++) if ((Date.parse(list[i - 1][by]) || 0) < (Date.parse(list[i][by]) || 0)) return false;
+  return true;
+}
+/** One step of reading Housecall Pro: the first read (every job created in the last 42 months, newest first) or, once
+ *  that's done, what changed since the last read (jobs, then customers, by when they changed); `pages` pages at most.
+ *  Where it got to is kept, so the next step goes on. { ok, done (the first read is finished), next (more to read),
+ *  read, page, pages, at } */
+function pcSync_(req, pages) {
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = tmNow_().getTime();
+  if (!hcpKey_()) return { ok: false, error: "no_key" };
+  if (req.full === true) { P.deleteProperty(PC_DONE); P.deleteProperty(PC_CUR); }
+  const done = P.getProperty(PC_DONE) === "yes";
+  let cur = {};
+  try { cur = JSON.parse(P.getProperty(PC_CUR) || "{}") || {}; } catch (e) { cur = {}; }
+  if (!cur.stage || (done && cur.stage === "back") || (!done && cur.stage !== "back")) {
+    cur = done ? { stage: "jobs", page: 1, by: "updated_at", at: now, since: (Number(P.getProperty(PC_AT)) || 0) - 15 * 60e3 } : { stage: "back", page: 1, by: "created_at", at: now };
+  }
+  let sorts = {};
+  try { sorts = JSON.parse(P.getProperty(PC_SORTS) || "{}") || {}; } catch (e) { sorts = {}; }
+  const today = Utilities.formatDate(new Date(now), tz, "yyyy-MM-dd");
+  const cutoff = pcAddMonths_(today, -PC_BACK_MONTHS), recent = tmAddDays_(today, -60);
+  const dayOf = function (v) { const d = new Date(v || ""); return v && !isNaN(d.getTime()) ? Utilities.formatDate(d, tz, "yyyy-MM-dd") : ""; };
+  const jobs = [], custs = [];
+  let n = 0, total = 0, backDone = false, passDone = false;
+  while (n < pages && !backDone && !passDone) {
+    const cust = cur.stage === "cust", key = cust ? "customers" : "jobs";
+    const r = hcpGet_(cust ? "/customers" : "/jobs", { sort_by: cur.by, sort_direction: "desc", page: cur.page, page_size: HCP_PAGE });
+    if (r.error) { P.setProperty(PC_CUR, JSON.stringify(cur)); return { ok: false, error: r.error, status: r.status || 0 }; }
+    n++;
+    const list = Array.isArray(r.data && r.data[key]) ? r.data[key] : [];
+    total = Number(r.data && r.data.total_pages) || 1;
+    if (cur.page === 1 && list.length > 1 && !pcSorted_(list, cur.by)) {
+      // not sorted that way: the first read reads every page; what changed: jobs created in the last 60 days instead
+      // (customers: not read; their tags still come with their jobs)
+      if (cur.stage === "back") cur.unsorted = true;
+      else if (!cust && cur.by === "updated_at") { cur.by = "created_at"; sorts.jobs = "created_at"; continue; }
+      else { if (cust) sorts.cust = false; else sorts.jobs = "none"; list.length = 0; }
+    } else if (cur.page === 1 && list.length > 1) { if (cust) sorts.cust = true; else if (cur.stage === "jobs") sorts.jobs = cur.by; else sorts.back = true; }
+    let older = false;
+    for (let i = 0; i < list.length && !older; i++) {
+      const x = list[i] || {};
+      if (cur.stage === "back") older = !cur.unsorted && dayOf(x.created_at) !== "" && dayOf(x.created_at) < cutoff;
+      else if (cur.by === "created_at") older = dayOf(x.created_at) !== "" && dayOf(x.created_at) < recent;
+      else older = (Date.parse(x.updated_at) || 0) < cur.since;
+      if (older) break;
+      if (cust) custs.push(x); else jobs.push(x);
+    }
+    const end = older || !list.length || cur.page >= total;
+    if (!end) { cur.page++; continue; }
+    if (cur.stage === "back") backDone = true;
+    else if (cur.stage === "jobs") cur = { stage: "cust", page: 1, by: "updated_at", at: cur.at, since: cur.since };
+    else passDone = true;
+  }
+  const out = withLock_(function () {
+    const jr = [], cr = [];
+    jobs.forEach(function (j) {
+      const row = pcJobRow_(j, tz);
+      if (!row) return;
+      jr.push(row);
+      if (j.customer && j.customer.id) cr.push(j.customer);
+    });
+    custs.forEach(function (c) { if (c && c.id) cr.push(c); });
+    const wroteJobs = pcUpsert_(PC_JOBS, PC_JOB_COLS, jr);
+    const wroteCust = pcUpsert_(PC_CUST, PC_CUST_COLS, cr.map(function (c) { return [String(c.id), c]; }), function (row, old) { return pcCustRow_(row[1], old); });
+    return { jobs: wroteJobs, customers: wroteCust };
+  });
+  if (backDone) {
+    P.setProperty(PC_DONE, "yes"); P.setProperty(PC_AT, String(cur.at)); P.deleteProperty(PC_CUR);
+    if (!P.getProperty(PC_START)) P.setProperty(PC_START, today);
+  } else if (passDone) { P.setProperty(PC_AT, String(cur.at)); P.deleteProperty(PC_CUR); }
+  else P.setProperty(PC_CUR, JSON.stringify(cur));
+  P.setProperty(PC_SORTS, JSON.stringify(sorts));
+  return { ok: true, done: P.getProperty(PC_DONE) === "yes", next: !backDone && !passDone, read: jobs.length + custs.length, wrote: out,
+    stage: cur.stage, page: cur.page, pages: total, at: Number(P.getProperty(PC_AT)) || 0, sorts: sorts };
+}
+/** Admin: a step of the first read (or all of it again: full), from the app's "Read from Housecall Pro". */
+function pcSyncStep_(req) {
+  const P = PropertiesService.getScriptProperties();
+  const out = pcSync_(req, PC_PAGES);
+  if (!out.ok) return out;
+  out.start = P.getProperty(PC_START) || "";
+  out.rows = { jobs: Math.max(0, pcCount_(PC_JOBS)), customers: Math.max(0, pcCount_(PC_CUST)) };
+  return out;
+}
+function pcCount_(name) { const s = SpreadsheetApp.getActive().getSheetByName(name); return s ? s.getLastRow() - 1 : 0; }
+
+/** Everyone with Office: who to call on a day (yyyy-MM-dd; today when none), each group's { due, missed, more, left (due
+ *  today and left off: booked, do not call, commercial) }, after
+ *  reading what changed in Housecall Pro (at most every 15 minutes; one person's read at a time). */
+function pcRead_(req, user) {
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = tmNow_().getTime();
+  const today = Utilities.formatDate(new Date(now), tz, "yyyy-MM-dd");
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.day || "")) ? String(req.day) : today;
+  const admin = user.role === "admin";
+  if (P.getProperty(PC_DONE) !== "yes") {
+    let cur = {};
+    try { cur = JSON.parse(P.getProperty(PC_CUR) || "{}") || {}; } catch (e) { cur = {}; }
+    return { ok: true, ready: false, admin: admin, key: !!hcpKey_(), started: cur.stage === "back", rows: pcCount_(PC_JOBS) };
+  }
+  let sync = null;
+  if (req.sync !== false && now - (Number(P.getProperty(PC_AT)) || 0) > PC_STALE && now - (Number(P.getProperty(PC_BUSY)) || 0) > 90e3) {
+    P.setProperty(PC_BUSY, String(now));
+    try { sync = pcSync_({}, PC_READ_PAGES); } catch (e) { sync = { ok: false, error: "server", message: String((e && e.message) || e).slice(0, 200) }; }
+    P.deleteProperty(PC_BUSY);
+  }
+  const start = P.getProperty(PC_START) || today;
+  const jr = pcRows_(PC_JOBS, PC_JOB_COLS.length), cr = pcRows_(PC_CUST, PC_CUST_COLS.length), mr = pcRows_(PC_CALLS, PC_CALL_COLS.length);
+  const by = {};
+  jr.forEach(function (r) {
+    const c = String(r[1] || ""), st = String(r[3] || ""), d = pcDay_(r[4], tz), made = pcDay_(r[5], tz), type = String(r[6] || "");
+    if (!c) return;
+    const s = by[c] || (by[c] = { last: "", type: "", addr: "", jobs: 0, first: "", com: false, open: [] });
+    if (PC_COM.test(type)) s.com = true;
+    if (st === "done" && d) {
+      if (d > s.last || (d === s.last && !s.addr)) { s.last = d; s.type = type; s.addr = String(r[7] || ""); }
+      if (!s.first || d < s.first) s.first = d;
+      if (hcpFirstVisit_({ invoice_number: String(r[2] || "") })) s.jobs++;
+    } else if (st === "open") s.open.push([d, made]);
+  });
+  const cust = {};
+  cr.forEach(function (r) { cust[String(r[0])] = r; });
+  const marks = {}, never = {};
+  mr.forEach(function (r) {   // in the order made: the last one of each counts
+    const k = String(r[2]) + "|" + Number(r[3]) + "|" + pcDay_(r[4], tz);
+    marks[k] = { r: String(r[5] || ""), who: String(r[6] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "") };
+  });
+  Object.keys(marks).forEach(function (k) { if (marks[k].r === "dnc") never[k.split("|")[0]] = true; });
+  const groups = {};
+  PC_GROUPS.forEach(function (g) { groups[g] = { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, com: 0 } }; });
+  Object.keys(by).forEach(function (c) {
+    const s = by[c];
+    if (!s.last) return;
+    let g = 0, due = "", missed = false;
+    for (let i = 0; i < PC_GROUPS.length; i++) {
+      const d = pcDue_(s.last, PC_GROUPS[i]);
+      if (d > day) break;
+      if (d === day) { g = PC_GROUPS[i]; due = d; break; }
+      const next = pcDue_(s.last, i + 1 < PC_GROUPS.length ? PC_GROUPS[i + 1] : PC_GROUPS[i] + 6);
+      if (d >= start && day < next) { g = PC_GROUPS[i]; due = d; missed = true; break; }
+    }
+    if (!g) return;
+    const cu = cust[c] || [];
+    const booked = s.open.some(function (o) { return o[0] ? o[0] >= s.last : o[1] !== "" && o[1] >= s.last; });
+    const dnc = !!never[c] || PC_DNC.test(String(cu[4] || "")) || String(cu[6] || "") === "yes";
+    const com = s.com || PC_COM.test(String(cu[4] || ""));
+    if (booked || dnc || com) { if (!missed) groups[g].left[booked ? "booked" : dnc ? "dnc" : "com"]++; return; }   // due today, left off
+    const m = marks[c + "|" + g + "|" + s.last] || null;
+    if (missed && m && m.r) return;   // called on a day after it came up
+    const list = groups[g][missed ? "missed" : "due"];
+    list.push({ id: c, name: String(cu[1] || ""), phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
+      dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: due, m: m && m.r ? m : null });
+  });
+  PC_GROUPS.forEach(function (g) {
+    const G = groups[g];
+    G.due.sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : a.id < b.id ? -1 : 1; });
+    G.missed.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
+    if (G.missed.length > PC_MISSED_MAX) { G.more = G.missed.length - PC_MISSED_MAX; G.missed = G.missed.slice(0, PC_MISSED_MAX); }
+  });
+  let sorts = {};
+  try { sorts = JSON.parse(P.getProperty(PC_SORTS) || "{}") || {}; } catch (e) { sorts = {}; }
+  return { ok: true, ready: true, admin: admin, day: day, today: today, start: start, groups: groups, at: Number(P.getProperty(PC_AT)) || 0, now: tmNow_().getTime(),
+    sync: sync && !sync.ok ? { error: sync.error, status: sync.status || 0 } : null, sorts: admin ? sorts : undefined };
+}
+/** Everyone with Office: a call marked (no answer, voicemail, booked, don't call again; clear takes it back). Kept for the
+ *  client's group and last finished job, so the next group starts unmarked. */
+function pcMark_(req, user) {
+  const c = String(req.id || ""), g = Number(req.g), last = String(req.last || ""), r = String(req.r || "");
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(c) || PC_GROUPS.indexOf(g) < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(last) || !Object.prototype.hasOwnProperty.call(PC_RESULTS, r)) return { ok: false, error: "bad_request" };
+  const tz = Session.getScriptTimeZone(), when = tmNow_(), at = when.toISOString();
+  const s = pcSheet_(PC_CALLS, PC_CALL_COLS);
+  const first = Math.max(2, s.getLastRow() + 1);
+  if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
+  s.getRange(first, 1, 1, PC_CALL_COLS.length).setNumberFormat("@").setValues([[at, Utilities.formatDate(when, tz, "yyyy-MM-dd"), c, String(g), last, r === "clear" ? "" : r, user.name]]);
+  return { ok: true, m: { r: r === "clear" ? "" : r, who: user.name, at: at } };
+}
+/** Everyone with Office: the marks made since `since` (ms), to show what the others marked. */
+function pcMarks_(req) {
+  const tz = Session.getScriptTimeZone(), since = Number(req.since) || 0;
+  const out = [];
+  pcRows_(PC_CALLS, PC_CALL_COLS.length).forEach(function (r) {
+    const at = r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "");
+    if ((Date.parse(at) || 0) < since) return;   // one made in the same millisecond again (showing it twice changes nothing)
+    out.push({ id: String(r[2]), g: Number(r[3]), last: pcDay_(r[4], tz), r: String(r[5] || ""), who: String(r[6] || ""), at: at });
+  });
+  return { ok: true, marks: out.slice(-500), now: tmNow_().getTime() };
+}
+
 /* ---- The rebuild calendar: every Repairs estimate approved in Housecall Pro (by the client or the office) goes on the
    vendors' calendar once, on the day it was approved, 6 to 7 AM, in red, titled "APPROVED - NEED TO SCHEDULE - <city> -
    <client>", at its address, with the client's phone, the estimate's Private notes (new ones added later: rbNotesLater_)
