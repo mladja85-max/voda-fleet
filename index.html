@@ -149,7 +149,8 @@ button { font: inherit; color: inherit; }
   .topbar { padding-inline: max(24px, calc((100% - var(--page-w)) / 2)); }
   body .sup, body .lb { max-width: 1000px; width: 100%; }
   body[data-tab="leaderboard"][data-lbtab="payroll"] .lb, body[data-tab="leaderboard"][data-lbtab="enter"] .lb { max-width: none; }
-  body[data-tab="estimates"] #estView { max-width: 1320px; }   /* Estimates: By person in charge's 11 columns without sliding sideways */
+  body[data-tab="estimates"] #estView { max-width: 1320px; }
+  body[data-tab="attendance"] #atView { max-width: 1900px; }   /* Attendance: everyone across, like the Excel */   /* Estimates: By person in charge's 11 columns without sliding sideways */
   /* Enter numbers: three cards a row across the whole page (from the same left edge) */
   body[data-lbtab="enter"] .lb-enter, body[data-lbtab="enter"] .lb-enter:has(.lb-jobs) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   /* the buttons sit next to the title instead of across the screen; Employees first, so it doesn't move when
@@ -699,6 +700,39 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-card { display: grid; gap: 6px; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--accent-soft); }
 .of-card .hint { margin: 0; } .of-card .btn { justify-self: start; white-space: normal; text-align: left; max-width: 100%; } .of-card .hint.ok { color: var(--ok); font-weight: 700; }
 .of-opts { display: grid; gap: 8px; }
+/* Attendance: people across, days down (the day and the names stay in view while scrolling) */
+.at-scroll { max-height: 72vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.at-grid { border-collapse: separate; border-spacing: 0; font-size: .82rem; min-width: 100%; }
+.at-grid th, .at-grid td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0; }
+.at-grid thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); font-weight: 700; padding: 8px 4px; text-align: center; white-space: nowrap; }
+.at-grid .at-ph span { display: inline-block; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.at-grid .at-dh { position: sticky; left: 0; z-index: 1; background: var(--surface-2); padding: 4px 8px; text-align: left; white-space: nowrap; min-width: 54px; }
+.at-grid thead .at-dh { z-index: 3; }
+.at-grid tbody .at-dh b { font-variant-numeric: tabular-nums; } .at-grid tbody .at-dh small { margin-left: 5px; color: var(--muted); font-size: .72rem; }
+.at-grid tr.shut td, .at-grid tr.shut .at-dh { background: color-mix(in srgb, var(--muted) 12%, var(--surface)); }
+.at-grid tr.today .at-dh { background: var(--accent); color: var(--accent-ink); } .at-grid tr.today .at-dh small { color: inherit; }
+.at-grid tr.today td { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+.at-cell { all: unset; box-sizing: border-box; display: block; width: 100%; min-width: 74px; min-height: 30px; padding: 5px 6px; cursor: pointer; font-size: .76rem; font-weight: 700; line-height: 1.2; text-align: center; border-radius: 6px; }
+.at-cell:hover, .at-cell:focus-visible { background: var(--accent-soft); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: -2px; }
+.at-cell.k-late, .at-key.k-late, .at-kb.k-late[aria-checked=true] { background: var(--soon-bg); color: var(--soon); }
+.at-cell.k-left, .at-key.k-left, .at-kb.k-left[aria-checked=true] { background: color-mix(in srgb, var(--soon-bg) 55%, var(--surface)); color: var(--soon); }
+.at-cell.k-sick, .at-key.k-sick, .at-kb.k-sick[aria-checked=true] { background: var(--due-bg); color: var(--due); }
+.at-cell.k-vac, .at-key.k-vac, .at-kb.k-vac[aria-checked=true] { background: var(--accent-soft); color: var(--accent); }
+.at-cell.k-off, .at-key.k-off, .at-kb.k-off[aria-checked=true] { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.at-cell.k-noshow, .at-key.k-noshow, .at-kb.k-noshow[aria-checked=true] { background: var(--due); color: #fff; }
+.at-cell.k-closed, .at-key.k-closed, .at-kb.k-closed[aria-checked=true] { background: color-mix(in srgb, var(--muted) 22%, var(--surface)); color: var(--ink); }
+.at-cell.k-note, .at-key.k-note, .at-kb.k-note[aria-checked=true] { background: var(--clean-bg); color: var(--clean); font-weight: 600; }
+.at-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; } .at-key { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+.at-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; } .at-kb[aria-checked=true] { border-color: currentColor; box-shadow: 0 0 0 1px currentColor; }
+.at-f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .at-f[hidden] { display: none; } .at-f .field { margin: 0; }
+.at-tot { margin-top: 14px; } .at-tot-h { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; } .at-tot-h h3 { margin: 0; }
+.at-tot-t td { text-align: center; font-variant-numeric: tabular-nums; } .at-tot-t td.has { font-weight: 800; } .at-tot-t td small { font-weight: 600; color: var(--muted); }
+.at-tot-t td.has.k-sick, .at-tot-t td.has.k-noshow { color: var(--due); } .at-tot-t td.has.k-late, .at-tot-t td.has.k-left { color: var(--soon); } .at-tot-t td.has.k-vac { color: var(--accent); }
+.at-people { display: grid; gap: 8px; }
+.at-person { display: grid; grid-template-columns: minmax(90px, 1fr) auto auto auto; gap: 8px; align-items: end; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.at-person .p-name-fixed { align-self: center; } .at-pbtns { display: flex; gap: 4px; }
+.at-gone { margin-top: 10px; } .at-gone summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
+@media (max-width: 600px) { .at-person { grid-template-columns: 1fr 1fr; } .at-person .p-name, .at-person .p-name-fixed, .at-pbtns { grid-column: 1 / -1; } .at-scroll { max-height: 66vh; } .at-cell { min-width: 62px; font-size: .7rem; } }
 .of-opt { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; background: var(--surface-2); }
 .of-opt.gone { opacity: .8; }
 .of-opt-h { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; } .of-opt-h b { font-size: .95rem; } .of-opt-h small { color: var(--muted); font-size: .78rem; }
@@ -2165,6 +2199,12 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 @media (max-width: 370px) { .views.five .view-btn { font-size: .54rem; } #revTable { font-size: .76rem; } #revTable th, #revTable td { padding: 5px 2px; } #revTable td .rev-was { padding: 2px 3px 3px; font-size: .68rem; } }
 @media (max-width: 600px) { .views.six .view-btn { font-size: .5rem; letter-spacing: -.03em; } .views.six .view-btn svg { width: 16px; height: 16px; } }   /* six tabs: Marketing too */
 @media (max-width: 370px) { .views.six .view-btn { font-size: .46rem; letter-spacing: -.04em; } }
+/* seven tabs (Attendance too) on a phone: small letters, not capitals (Leaderboard and Attendance fit) */
+@media (max-width: 600px) { .views.seven { gap: 0; padding-inline: 2px; } .views.seven .view-btn { flex: 1 1 auto; font-size: .58rem; letter-spacing: -.01em; text-transform: none; padding: 6px 0; } .views.seven .view-btn svg { width: 16px; height: 16px; } }
+@media (max-width: 370px) { .views.seven .view-btn { font-size: .53rem; letter-spacing: -.02em; } }
+@media (min-width: 601px) and (max-width: 1420px) { .views.seven { width: 100%; box-sizing: border-box; } .views.seven .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 5px; gap: 5px; } }
+@media (min-width: 601px) and (max-width: 1220px) { .views.seven .view-btn svg { display: none; } }
+@media (min-width: 601px) and (max-width: 900px) { .views.seven .view-btn { font-size: .74rem; letter-spacing: 0; padding: 8px 2px; } }
 /* a tablet: five tabs share the width */
 @media (min-width: 601px) and (max-width: 940px) { .views.five { width: 100%; box-sizing: border-box; } .views.five .view-btn { flex: 1 1 auto; min-width: 0; padding: 8px 6px; gap: 6px; } }
 @media (min-width: 601px) and (max-width: 760px) { .views.five .view-btn svg { display: none; } }
@@ -2450,6 +2490,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
       <button type="button" class="view-btn" id="viewOffice" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Office
       </button>
+      <button type="button" class="view-btn" id="viewAttendance" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M8.5 15l2.2 2.2L15.5 13"/></svg>Attendance
+      </button>
       <button type="button" class="view-btn" id="viewMarketing" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10v4h3l6 4V6L6 10z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>Marketing
       </button>
@@ -2514,6 +2557,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
     <section class="sup" id="suppliesView" aria-label="Checklists" hidden></section>
     <section class="lb" id="lbView" aria-label="Leaderboard" hidden></section>
     <section class="lb of" id="ofView" aria-label="Office" hidden></section>
+    <section class="lb rev at" id="atView" aria-label="Attendance" hidden></section>
     <section class="lb rev" id="revView" aria-label="Operations" hidden></section>
     <section class="lb rev est" id="estView" aria-label="Estimates" hidden></section>
     <section class="lb rev" id="repView" aria-label="Repairs Payroll" hidden></section>
@@ -4989,7 +5033,7 @@ const isBusy = e => !!(e && e.error === "server" && /lock timeout|holding the lo
    What one window saves, the others show by themselves, without Update. Typed Leaderboard numbers arrive as the sheet
    saved them; any other change just tells the other windows to load again, quietly. Nothing is sent to another
    login: a window signed in as someone else ignores it. */
-const API_READS = new Set(["list", "leaderboard", "office", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync", "repairs", "repSync", "marketing"]);
+const API_READS = new Set(["list", "leaderboard", "office", "attendance", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync", "repairs", "repSync", "marketing"]);
 let peers = null;
 try { peers = typeof BroadcastChannel === "function" ? new BroadcastChannel("voda-prime") : null; } catch (e) { peers = null; }
 function tellPeers(msg) { try { if (peers && session) peers.postMessage(Object.assign({ user: session.id }, msg)); } catch (e) { /* this window still has it */ } }
@@ -5013,9 +5057,10 @@ function peerChanged(action) {
     if (!session || !CONFIGURED) return;
     if (acts.includes("payPut")) { lbRates = null; lbRatesAsked = false; }
     if (acts.some(a => /^of/.test(a)) && view.tab === "office" && !dlg.open && !ofTypingNow()) ofLoad();
+    if (acts.some(a => /^at/.test(a)) && view.tab === "attendance" && !dlg.open) atLoad();
     if (acts.some(a => /^lb/.test(a))) { lbYearCache = {}; if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping()) lbLoad(); }
     if (acts.some(a => /^mkt/.test(a)) && view.tab === "marketing" && !dlg.open) mktLoad();
-    if (acts.some(a => !/^(of|lb|pay|mkt)/.test(a))) refresh(true);
+    if (acts.some(a => !/^(of|lb|pay|mkt|at)/.test(a))) refresh(true);
   }, 400);
 }
 if (peers) peers.onmessage = e => {
@@ -5088,6 +5133,7 @@ async function refresh(quiet) {
   // (Office by itself only while nobody is working in this window: its boxes and menus aren't redrawn under a hand)
   if (view.tab === "office" && loaded && !dlg.open && !ofTypingNow() && !ofLoading && (!quiet || performance.now() - lbActiveAt > 15000)) ofLoad();
   if ((view.tab === "contractors" || (view.tab === "repairs" && canSee("contractors"))) && loaded && !dlg.open && !cpLoading) cpLoad();
+  if (view.tab === "attendance" && loaded && !dlg.open && !atLoading) atLoad();
   if (view.tab === "estimates" && loaded && !dlg.open) estAuto();
   try {
     const out = await api("list");
@@ -7926,7 +7972,7 @@ const userAccess = () => (session && Array.isArray(session.access) ? session.acc
 const canSee = sec => isAdmin() || userAccess().includes(sec);
 const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 // what someone may see that isn't a checklist (the rest are checklists)
-const NOT_LISTS = ["trucks", "office", "revenue", "repairs", "marketing", "contractors", "estimates", "estimates-all", "payroll", "pricecheck"];
+const NOT_LISTS = ["trucks", "office", "attendance", "revenue", "repairs", "marketing", "contractors", "estimates", "estimates-all", "payroll", "pricecheck"];
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
@@ -7935,6 +7981,7 @@ function allowedTabs() {
   if (canSee("revenue")) out.push("revenue");   // Operations
   if (canSee("estimates") || canSee("estimates-all")) out.push("estimates");
   if (canSee("office")) out.push("office");
+  if (canSee("attendance") && (!apiLevel || apiLevel >= AT_API)) out.push("attendance");
   if (canSee("marketing")) out.push("marketing");
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
   // Contractor Payroll: beside Repairs Payroll for whoever sees that; its own page for anyone else (the accounting manager)
@@ -8064,7 +8111,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = ["supplies", "leaderboard", "office", "revenue", "estimates", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
+  view.tab = ["supplies", "leaderboard", "office", "attendance", "revenue", "estimates", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
   if (view.tab === "leaderboard" || view.tab === "repairs" || view.tab === "contractors") view.lbSide = view.tab;
   if (view.tab === "trucks" || view.tab === "supplies") view.whSide = view.tab;
   if (sub) view.supTab = sub;
@@ -8079,8 +8126,8 @@ function applyTab() {
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
   const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs", mk = view.tab === "marketing", cp = view.tab === "contractors";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const es = view.tab === "estimates";
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : rv ? "#revenue" : es ? "#estimates" : rp ? "#repairs" : mk ? "#marketing" : cp ? "#contractors" : "";
+  const es = view.tab === "estimates", at = view.tab === "attendance";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : at ? "#attendance" : rv ? "#revenue" : es ? "#estimates" : rp ? "#repairs" : mk ? "#marketing" : cp ? "#contractors" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
@@ -8089,10 +8136,12 @@ function applyTab() {
   $("views").classList.toggle("many", nav.length > 3);   // phones: four tabs become icons with a small label
   $("views").classList.toggle("five", nav.length > 4);   // ... five: a smaller label
   $("views").classList.toggle("six", nav.length > 5);    // ... six: smaller still
+  $("views").classList.toggle("seven", nav.length > 6);  // ... seven (Attendance too): smaller again
   $("viewWarehouse").hidden = !tabs.includes("trucks") && !tabs.includes("supplies");
   $("whTabs").hidden = !(trk || sup) || !tabs.includes("trucks") || !tabs.includes("supplies");
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
+  $("viewAttendance").hidden = !tabs.includes("attendance");
   $("viewRevenue").hidden = !nav.includes("revenue");
   $("viewEstimates").hidden = !nav.includes("estimates");
   $("viewRepairs").hidden = !nav.includes("repairs");
@@ -8106,6 +8155,7 @@ function applyTab() {
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
   $("ofView").hidden = !of;
+  $("atView").hidden = !at;
   $("revView").hidden = !rv;
   $("estView").hidden = !es;
   $("repView").hidden = !rp;
@@ -8117,6 +8167,7 @@ function applyTab() {
   $("viewSupplies").setAttribute("aria-selected", String(sup));
   $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rp && folded) || (cp && cpInLb())));
   $("viewOffice").setAttribute("aria-pressed", String(of));
+  $("viewAttendance").setAttribute("aria-pressed", String(at));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
   $("viewEstimates").setAttribute("aria-pressed", String(es));
   $("viewRepairs").setAttribute("aria-pressed", String(rp));
@@ -8128,6 +8179,7 @@ function applyTab() {
   renderSupplies();
   if (lb) { renderLeaderboard(); if (loaded && !lbLoading) lbLoad(); }
   if (of) { renderOffice(); if (loaded && !ofLoading) ofLoad(); }
+  if (at) { atView.scrolled = false; renderAttendance(); if (loaded && !atLoading) atLoad(); }
   if (rv) { renderRevenue(); if (loaded) revLoad(); }
   if (es) renderEstimates();
   if (rp) renderRevenue();
@@ -8139,6 +8191,7 @@ $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 // Warehouse: the one of Trucks and Checklists used last (that this person may see)
 $("viewWarehouse").addEventListener("click", () => { const t = allowedTabs(); setTab(t.includes(view.whSide) ? view.whSide : t.includes("trucks") ? "trucks" : "supplies"); });
 $("viewOffice").addEventListener("click", () => setTab("office"));
+$("viewAttendance").addEventListener("click", () => setTab("attendance"));
 $("viewRevenue").addEventListener("click", () => setTab("revenue"));
 $("viewEstimates").addEventListener("click", () => setTab("estimates"));
 // the bar at the top's height, so panels that stay in view while scrolling sit just under it
@@ -8649,6 +8702,7 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
     apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
     apiLevel >= OF_API ? [["office", "Office"]] : [],
+    apiLevel >= AT_API ? [["attendance", "Attendance"]] : [],
     apiLevel >= REV_API ? [["revenue", "Operations"]] : [],
     apiLevel >= EST_API ? [["estimates", "Estimates (his own)"], ["estimates-all", "Estimates (all)"]] : [],
     apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : [],
@@ -15522,6 +15576,463 @@ function openOfExcel() {
       } }))));
 }
 
+/* ---------- Attendance (replaces "7. EMPLOYEE TARDINESS"): a month at a time, people across and days down; each day
+   what happened (late, left early, sick, vacation, off, no call / no show, company closed, or a note), its minutes or
+   time and the reason; the totals per person for the month or the year. Everyone with Attendance ticked types it;
+   Admins set up the people and bring in the Excel's history. ---------- */
+const AT_API = 73;                                      // the Google script version with Attendance
+const AT_KINDS = { late: "Late", left: "Left early", sick: "Sick", vac: "Vacation", off: "Off", noshow: "No call / no show", closed: "Company closed", note: "Note" };
+const AT_DAYS_OFF = ["sick", "vac", "off", "noshow", "closed"];   // a whole day away
+const K_AT = "voda.at1", K_AT_VIEW = "voda.atView1";
+let atData = store.get(K_AT);                           // { year, config, months: { "2026-11": doc }, years, admin, at }
+let atYears = {};                                       // other years: { 2025: { months } } (asked for when shown)
+let atLoading = false, atErr = "", atOld = false;
+const atAsked = {};
+const atView = Object.assign({ off: 0, tot: "month" }, store.get(K_AT_VIEW) || {});
+atView.off = 0;                                         // opens on this month
+const atSaveView = () => store.set(K_AT_VIEW, { tot: atView.tot });
+const atThisYear = () => Number(lbToday().slice(0, 4));
+const atCfg = () => (atData && atData.config && Array.isArray(atData.config.people) ? atData.config : { people: [] });
+/** A month's document, or null while its year loads. */
+function atMonthDoc(key) {
+  const y = Number(key.slice(0, 4));
+  if (atData && atData.year === y) return (atData.months || {})[key] || { days: {} };
+  if (atYears[y]) return atYears[y].months[key] || { days: {} };
+  return null;
+}
+async function atLoad(year) {
+  if (!session || !canSee("attendance")) return;
+  const y = year || atThisYear();
+  if (y !== atThisYear()) {
+    if (atAsked[y]) return;
+    atAsked[y] = true;
+    try { const out = await api("attendance", { year: y }); atYears[y] = { months: out.months || {} }; }
+    catch (e) { atAsked[y] = false; atErr = errText(e, "Attendance"); }
+    if (view.tab === "attendance") renderAttendance();
+    return;
+  }
+  if (atLoading) return;
+  atLoading = true;
+  try {
+    const out = await api("attendance", { year: y });
+    atData = { year: y, config: out.config || { people: [] }, months: out.months || {}, years: out.years || [], admin: !!out.admin, at: new Date().toISOString() };
+    store.set(K_AT, atData);
+    atErr = ""; atOld = false;
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { atLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    atOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < AT_API);
+    atErr = atOld ? "" : errText(e, "Attendance");
+  }
+  atLoading = false;
+  if (view.tab === "attendance" && !dlg.open) renderAttendance();
+}
+/** "15:00" → "3pm", "08:30" → "8:30am". */
+const atClock = t => { if (!t) return ""; const [hh, mm] = t.split(":").map(Number); return `${hh % 12 || 12}${mm ? `:${String(mm).padStart(2, "0")}` : ""}${hh < 12 ? "am" : "pm"}`; };
+/** 75 → "1h 15m", 10 → "10m". */
+const atMins = m => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m}m`);
+/** What a day's box says. */
+function atShort(e) {
+  if (e.k === "late") return e.m ? `Late ${atMins(e.m)}` : e.t ? `In ${atClock(e.t)}` : "Late";
+  if (e.k === "left") return e.t ? `Left ${atClock(e.t)}` : "Left early";
+  if (e.k === "noshow") return "No show";
+  if (e.k === "closed") return "Closed";
+  if (e.k === "note") return e.n ? (e.n.length > 16 ? e.n.slice(0, 15) + "…" : e.n) : "Note";
+  return AT_KINDS[e.k];
+}
+/** The whole of it, for its title. */
+const atLong = e => [AT_KINDS[e.k] + (e.k === "late" && e.m ? ` ${atMins(e.m)}` : "") + (e.k === "late" && e.t ? `, came in at ${atClock(e.t)}` : "") + (e.k === "left" && e.t ? ` at ${atClock(e.t)}` : ""),
+  e.n || "", e.by ? `${e.by}${e.at ? `, ${lbDayText(lbDayKey(new Date(e.at)))}` : ""}` : ""].filter(Boolean).join(" · ");
+/** Who's on the grid in a month: the people here that month (in their order), then anyone else with a day in it. */
+function atPeopleIn(key, doc) {
+  const out = atCfg().people.filter(p => (!p.from || p.from <= key) && (!p.to || p.to >= key)).map(p => p.name);
+  const have = new Set(out.map(n => n.toLowerCase()));
+  for (const day of Object.values((doc && doc.days) || {})) for (const n of Object.keys(day)) if (!have.has(n.toLowerCase())) { have.add(n.toLowerCase()); out.push(n); }
+  return out;
+}
+/** Each person's totals over some months' documents. */
+function atTotals(docs) {
+  const t = {};
+  for (const doc of docs) for (const day of Object.values((doc && doc.days) || {})) for (const [n, e] of Object.entries(day)) {
+    const x = t[n] || (t[n] = { late: 0, lateM: 0, left: 0, sick: 0, vac: 0, off: 0, noshow: 0, closed: 0, note: 0 });
+    x[e.k] = (x[e.k] || 0) + 1;
+    if (e.k === "late" && e.m) x.lateM += e.m;
+  }
+  return t;
+}
+
+function renderAttendance() {
+  const box = $("atView");
+  if (!box || view.tab !== "attendance" || !session) return;
+  const admin = isAdmin(), today = lbToday();
+  const title = secTitle("Attendance");
+  if (atOld || (apiLevel && apiLevel < AT_API)) {
+    box.replaceChildren(...[title, h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Attendance needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." }))].filter(Boolean));
+    return;
+  }
+  if (!atData || atData.year !== atThisYear()) {
+    box.replaceChildren(...[title, atErr ? h("p", { class: "dlg-err" }, atErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { atErr = ""; atLoad(); renderAttendance(); } }, "Try again"))
+      : h("p", { class: "loading", text: offline ? "Attendance needs a connection the first time. Try again when you're back online." : "Loading attendance…" })].filter(Boolean));
+    if (!atErr) atLoad();
+    return;
+  }
+  // the month: this one, ‹ › back to the first one with any days (and up to a year ahead, for vacations planned)
+  const first = (atData.years || []).length ? `${Math.min(...atData.years)}-01` : today.slice(0, 7);
+  const now = today.slice(0, 7), off = Math.max(-1200, Math.min(12, Number(atView.off) || 0));
+  const key = lbAddMonths(now, off), y = Number(key.slice(0, 4)), mName = `${lbMonthLong(Number(key.slice(5)))} ${y}`;
+  const step = n => { atView.off = off + n; renderAttendance(); };
+  const tools = h("div", { class: "rev-tools" },
+    admin ? h("button", { class: "btn small", type: "button", id: "atPeopleBtn", onclick: () => openAtPeople() }, "People") : null,
+    admin ? h("button", { class: "btn small ghost", type: "button", id: "atExcelBtn", onclick: () => openAtExcel() }, "Load from Excel") : null);
+  const bar = h("div", { class: "lb-bar rev-bar-top" },
+    h("div", { class: "of-step" },
+      h("button", { class: "btn small", type: "button", id: "atPrev", "aria-label": "Month before", disabled: key <= first, onclick: () => step(-1) }, "‹"),
+      h("strong", { id: "atMonth", text: mName }),
+      h("button", { class: "btn small", type: "button", id: "atNext", "aria-label": "Month after", disabled: off >= 12, onclick: () => step(1) }, "›")),
+    off ? h("button", { class: "btn small ghost", type: "button", id: "atToday", onclick: () => { atView.off = 0; renderAttendance(); } }, "This month") : null,
+    tools);
+  const head = [title ? h("div", { class: "lb-top" }, title) : null, bar].filter(Boolean);
+  const doc = atMonthDoc(key);
+  if (!doc) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${y}…` })); atLoad(y); return; }
+  const people = atPeopleIn(key, doc);
+  if (!people.length) {
+    box.replaceChildren(...head, h("div", { class: "panel lb-empty", id: "atEmpty" }, h("h2", { text: atCfg().people.length ? `No one on the list in ${mName}` : "No people yet" }),
+      h("p", { class: "meta", text: admin ? "Tap People to add everyone, or Load from Excel to bring in 7. EMPLOYEE TARDINESS (its people and every month)." : "An admin hasn't set up the people yet." })));
+    return;
+  }
+  // the grid: people across, days down; a day off (Sunday, closed) is greyed; today is marked
+  const days = [];
+  for (let d = 1; d <= lbDaysIn(key); d++) days.push(`${key}-${String(d).padStart(2, "0")}`);
+  const grid = h("div", { class: "lb-scroll at-scroll" }, h("table", { class: "at-grid", id: "atGrid" },
+    h("thead", null, h("tr", null, h("th", { class: "at-dh", text: "Day" }), people.map(n => h("th", { class: "at-ph", "data-who": n, title: n }, h("span", { text: n }))))),
+    h("tbody", null, days.map(day => {
+      const dt = lbDate(day), hol = lbHoliday(day), shut = dt.getDay() === 0 || !!hol, x = (doc.days || {})[day] || {};
+      return h("tr", { class: (shut ? "shut" : "") + (day === today ? " today" : ""), "data-day": day },
+        h("th", { class: "at-dh", title: hol ? `${hol}: closed` : "" }, h("b", { text: String(dt.getDate()) }), h("small", { text: LB_WD[dt.getDay()] })),
+        people.map(n => {
+          const e = x[n];
+          return h("td", null, h("button", { class: "at-cell" + (e ? ` k-${e.k}` : ""), type: "button", "data-who": n, "data-day": day, title: e ? `${n}: ${atLong(e)}` : `${n}, ${lbDayText(day)}: tap to add`,
+            onclick: () => openAtDay(day, n) }, e ? atShort(e) : ""));
+        }));
+    }))));
+  const legend = h("p", { class: "at-legend" }, Object.entries(AT_KINDS).map(([k, t]) => h("span", { class: `at-key k-${k}`, text: t })));
+  // the totals: this month, or the year so far
+  const per = atView.tot === "year" ? "year" : "month";
+  let tot = null, totNote = "";
+  if (per === "month") tot = atTotals([doc]);
+  else {
+    const src = y === atData.year ? atData.months : atYears[y] ? atYears[y].months : null;
+    if (src) tot = atTotals(Object.entries(src).filter(([k]) => k.startsWith(`${y}-`)).map(([, d]) => d));
+    else atLoad(y);
+    totNote = `${y}${y === atThisYear() ? " so far" : ""}`;
+  }
+  const cols = [["late", "Late"], ["left", "Left early"], ["sick", "Sick"], ["vac", "Vacation"], ["off", "Off"], ["noshow", "No call / no show"], ["closed", "Closed"]];
+  const who = per === "month" ? people : (() => { const all = atCfg().people.filter(p => (!p.from || p.from <= `${y}-12`) && (!p.to || p.to >= `${y}-01`)).map(p => p.name);
+    for (const n of Object.keys(tot || {})) if (!all.some(a => a.toLowerCase() === n.toLowerCase())) all.push(n); return all; })();
+  const totEl = h("section", { class: "panel at-tot", id: "atTotals" },
+    h("div", { class: "at-tot-h" }, h("h3", { text: per === "month" ? `Totals · ${mName}` : `Totals · ${totNote}` }),
+      lbSeg([["month", "Month"], ["year", "Year"]], per, k => { atView.tot = k; atSaveView(); renderAttendance(); }, "Totals for")),
+    !tot ? h("p", { class: "loading", text: `Loading ${y}…` }) : h("div", { class: "lb-scroll" }, h("table", { class: "lb-table at-tot-t", id: "atTotTable" },
+      h("thead", null, h("tr", null, h("th", { class: "l", text: "Person" }), cols.map(([k, t]) => h("th", { "data-k": k, text: t })))),
+      h("tbody", null, who.map(n => {
+        const x = tot[n] || {};
+        return h("tr", { "data-who": n }, h("th", { class: "l", text: n }), cols.map(([k]) => h("td", { "data-k": k, class: x[k] ? `has k-${k}` : "" },
+          !x[k] ? "–" : k === "late" ? [String(x.late), x.lateM ? h("small", { text: ` · ${atMins(x.lateM)}` }) : null] : String(x[k]))));
+      })))),
+    h("p", { class: "lb-sub", text: "Late: times late (and the minutes typed). Left early: times. Sick, Vacation, Off, No call / no show, Closed: days." }));
+  box.replaceChildren(...head, legend, grid, totEl);
+  // this month opens on today's row
+  const tr = key === now ? box.querySelector(`#atGrid tr[data-day="${today}"]`) : null;
+  if (tr && !atView.scrolled) { atView.scrolled = true; const sc = box.querySelector(".at-scroll"); if (sc) sc.scrollTop = Math.max(0, tr.offsetTop - 120); }
+}
+/** "2026-11" + n months. */
+function lbAddMonths(key, n) { const t = Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7)) - 1 + n; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, "0")}`; }
+
+/* ---- a day: what happened, with its minutes or time and the reason ---- */
+function openAtDay(day, name) {
+  const key = day.slice(0, 7), doc = atMonthDoc(key) || { days: {} }, cur = ((doc.days || {})[day] || {})[name] || null;
+  let kind = cur ? cur.k : "";
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const mins = h("input", { type: "text", inputmode: "numeric", id: "atMins", maxlength: "4", placeholder: "15", value: cur && cur.m ? String(cur.m) : "" });
+  const cameAt = h("input", { type: "time", id: "atCame", value: cur && cur.k === "late" && cur.t ? cur.t : "" });
+  const leftAt = h("input", { type: "time", id: "atLeft", value: cur && cur.k === "left" && cur.t ? cur.t : "" });
+  const note = h("input", { type: "text", id: "atNote", maxlength: "160", placeholder: "Reason (optional)", value: cur && cur.n ? cur.n : "" });
+  const all = h("input", { type: "checkbox", id: "atAll", checked: !cur });
+  const fLate = h("div", { class: "at-f", id: "atFLate" }, h("label", { class: "field" }, h("span", { text: "Minutes late" }), mins), h("label", { class: "field" }, h("span", { text: "or came in at" }), cameAt));
+  const fLeft = h("div", { class: "at-f", id: "atFLeft" }, h("label", { class: "field" }, h("span", { text: "Left at" }), leftAt));
+  const fAll = h("label", { class: "rp-check", id: "atFAll" }, all, " Everyone on the list that day (anyone with something else that day keeps it)");
+  const kinds = h("div", { class: "at-kinds", role: "radiogroup", "aria-label": "What happened" }, Object.entries(AT_KINDS).map(([k, t]) =>
+    h("button", { class: `chip-btn at-kb k-${k}`, type: "button", role: "radio", "data-k": k, "aria-checked": String(kind === k), onclick: () => { kind = k; show(); } }, t)));
+  const show = () => {
+    for (const b of kinds.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.k === kind));
+    fLate.hidden = kind !== "late"; fLeft.hidden = kind !== "left"; fAll.hidden = kind !== "closed";
+    note.placeholder = kind === "note" ? "What happened (started, last day…)" : "Reason (optional)";
+    save.disabled = !kind;
+  };
+  const put = async (patchDays, b, done) => {
+    b.disabled = true; err.textContent = "";
+    try {
+      const out = await api("atPut", { writes: [{ key, patch: { days: patchDays } }] });
+      const m = (out.months || {})[key];
+      if (m) { const y = Number(key.slice(0, 4)); if (atData && atData.year === y) { atData.months[key] = m; store.set(K_AT, atData); } else if (atYears[y]) atYears[y].months[key] = m; }
+      dlgDirty = false; closeDialog(); toast(done); renderAttendance();
+    } catch (e) { err.textContent = errText(e, "That day"); b.disabled = false; }
+  };
+  const save = h("button", { class: "btn primary", type: "button", id: "atSave", text: "Save", onclick: ev => {
+    const e = { k: kind };
+    if (kind === "late") {
+      const m = mins.value.trim();
+      if (m && !(/^\d{1,4}$/.test(m) && Number(m) >= 1 && Number(m) <= 1440)) { err.textContent = "Minutes late as a number, like 15."; return; }
+      if (m) e.m = Number(m);
+      if (cameAt.value) e.t = cameAt.value;
+    }
+    if (kind === "left" && leftAt.value) e.t = leftAt.value;
+    if (note.value.trim()) e.n = note.value.trim();
+    if (kind === "note" && !e.n) { err.textContent = "Type the note."; return; }
+    const pd = { [day]: { [name]: e } };
+    if (kind === "closed" && all.checked) for (const n of atPeopleIn(key, doc)) { const o = ((doc.days || {})[day] || {})[n]; if (!o || o.k === "closed") pd[day][n] = e; }
+    put(pd, ev.currentTarget, kind === "closed" && all.checked ? `Closed on ${lbDayText(day)} for everyone` : "Saved");
+  } });
+  const del = cur ? h("button", { class: "btn", type: "button", id: "atDel", text: "Take it off", onclick: ev => put({ [day]: { [name]: null } }, ev.currentTarget, "Taken off") }) : null;
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `${name} · ${lbDayText(day)}` }),
+    cur && cur.by ? h("p", { class: "hint", text: `Typed by ${cur.by}${cur.at ? ` on ${lbDayText(lbDayKey(new Date(cur.at)))}` : ""}.` }) : null,
+    kinds, fLate, fLeft, fAll,
+    h("label", { class: "field" }, h("span", { text: "Note" }), note),
+    err,
+    h("div", { class: "dlg-foot" }, del ? h("div", { class: "left" }, del) : null, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", text: "Cancel", onclick: () => closeDialog() }), save)));
+  show();
+}
+
+/* ---- the people: who's on the grid, in what order, and the months each one is here ---- */
+function openAtPeople() {
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const row = (p, isNew) => h("div", { class: "at-person", "data-name": p.name || "" },
+    isNew ? h("input", { type: "text", class: "p-name", maxlength: "30", placeholder: "Name", "aria-label": "Name" }) : h("strong", { class: "p-name-fixed", text: p.name }),
+    h("label", { class: "of-mo" }, h("span", { text: "From" }), h("input", { type: "month", class: "p-from", value: p.from || "" })),
+    h("label", { class: "of-mo" }, h("span", { text: "To (blank = now)" }), h("input", { type: "month", class: "p-to", value: p.to || "" })),
+    h("div", { class: "at-pbtns" },
+      h("button", { class: "btn ghost small", type: "button", "aria-label": "Up", text: "↑", onclick: ev => { const r = ev.currentTarget.closest(".at-person"); if (r.previousElementSibling) r.parentNode.insertBefore(r, r.previousElementSibling); } }),
+      h("button", { class: "btn ghost small", type: "button", "aria-label": "Down", text: "↓", onclick: ev => { const r = ev.currentTarget.closest(".at-person"); if (r.nextElementSibling) r.parentNode.insertBefore(r.nextElementSibling, r); } }),
+      h("button", { class: "btn ghost small", type: "button", text: "Remove", onclick: ev => { if (isNew || confirm(`Take ${p.name} off the list? Her or his days stay saved and still show in the months they have any.`)) ev.currentTarget.closest(".at-person").remove(); } })));
+  const now = lbToday().slice(0, 7);
+  const ppl = atCfg().people;
+  const here = ppl.filter(p => !p.to || p.to >= now), gone = ppl.filter(p => p.to && p.to < now);
+  const list = h("div", { class: "at-people", id: "atPeopleList" }, here.map(p => row(p, false)));
+  const goneBox = gone.length ? h("details", { class: "at-gone" }, h("summary", { text: `Not here any more (${gone.length})` }), h("div", { class: "at-people", id: "atGoneList" }, gone.map(p => row(p, false)))) : null;
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Attendance people" }),
+    h("p", { class: "hint", text: "Everyone on the grid, in its order (↑ ↓). From / To: the months each one is here; a To month takes them off the grid after it, their days stay." }),
+    list,
+    h("button", { class: "btn small", type: "button", id: "atAddPerson", onclick: () => list.append(row({ name: "", from: now, to: "" }, true)) }, "+ Add a person"),
+    goneBox, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", text: "Cancel", onclick: () => closeDialog() }),
+      h("button", { class: "btn primary", type: "button", id: "atPeopleSave", text: "Save", onclick: async ev => {
+        err.textContent = "";
+        const people = [];
+        for (const el of document.querySelectorAll("#atPeopleList .at-person, #atGoneList .at-person")) {
+          const name = el.dataset.name || lbTeamName(el.querySelector(".p-name") ? el.querySelector(".p-name").value : "");
+          if (!name) { err.textContent = "Every new person needs a name (letters only)."; return; }
+          if (people.some(x => x.name.toLowerCase() === name.toLowerCase())) { err.textContent = `${name} is on the list twice.`; return; }
+          people.push({ name, from: el.querySelector(".p-from").value, to: el.querySelector(".p-to").value });
+        }
+        const b = ev.currentTarget; b.disabled = true; b.textContent = "Saving…";
+        try {
+          const out = await api("atPut", { writes: [{ key: "config", data: { people } }] });
+          atData.config = out.config || { people }; store.set(K_AT, atData);
+          dlgDirty = false; closeDialog(); toast("People saved"); renderAttendance();
+        } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
+      } }))));
+}
+
+/* ---- 7. EMPLOYEE TARDINESS from Excel: every month tab (since 2018), people across row 2, days 1-31 down; each cell's
+   text sorted into a kind (with its minutes or time), the text itself kept as the note ---- */
+/** "JOHN" → "John", "NEW Sam" → "New Sam", "SAM 2" → "Sam II" (a second Sam); "" when it isn't a name. */
+const atName = v => lbTeamName(lbText(v).toLowerCase().replace(/(^|[ '-])([a-z])/g, (m, a, b) => a + b.toUpperCase())
+  .replace(/\s*\b([2-4])$/, (m, d) => ` ${["II", "III", "IV"][Number(d) - 2]}`));
+/** A month tab's month: from its name ("November 2026", or "April" with the title's year), or its title ("... MONTH OF July
+ *  2019"). → { name, title } as "2026-11" or "". */
+function atTabMonths(tabName, title) {
+  const ym = s => {
+    const m = /([a-z]+)\.?\s+(\d{4})\s*$/i.exec(lbText(s));
+    if (!m) return "";
+    const k = lbSheetMonth(`${m[1]} ${m[2]}`, Number(m[2]));
+    return k ? lbMonthKey(Number(m[2]), k) : "";
+  };
+  const t = ym(title);
+  let n = ym(tabName);
+  if (!n && t) { const k = lbSheetMonth(`${lbText(tabName)} ${t.slice(0, 4)}`, Number(t.slice(0, 4))); if (k) n = lbMonthKey(Number(t.slice(0, 4)), k); }   // "April": the title's year
+  return { name: n, title: t };
+}
+/** A time in the text: "2pm", "4:30:00 PM", "8:15" → "14:00"; with no am/pm, 1-6 is the afternoon. */
+function atTimeIn(s) {
+  const m = /(\d{1,2})(?:[:.](\d{2}))?(?::\d{2})?\s*(a\.?m\.?|p\.?m\.?)?/i.exec(s);
+  if (!m) return "";
+  let hh = Number(m[1]); const mm = Number(m[2] || 0), ap = (m[3] || "").toLowerCase().replace(/\./g, "");
+  if (hh > 23 || mm > 59) return "";
+  if (ap === "pm" && hh < 12) hh += 12; else if (ap === "am" && hh === 12) hh = 0; else if (!ap && hh >= 1 && hh <= 6) hh += 12;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+/** Minutes in the text: "15 min", "1 hr", "1.5 hrs", "1:30 hrs", "3 hr." → 15, 60, 90, 90, 180. */
+function atMinsIn(s) {
+  let m = /(\d{1,2}):(\d{2})\s*(?:hrs?|hours?)\b/.exec(s);
+  if (m) return Number(m[1]) * 60 + Number(m[2]);
+  m = /(\d+(?:\.\d+)?)\s*(?:hrs?|hours?)\b/.exec(s);
+  if (m) return Math.round(Number(m[1]) * 60);
+  m = /(\d+)\s*(?:mins?|minutes?)\b/.exec(s);
+  return m ? Number(m[1]) : 0;
+}
+/** One cell's text → { k, m?, t?, n } (the text kept as the note). */
+function atParse(text) {
+  const n = lbText(text).slice(0, 160), s = n.toLowerCase(), e = { k: "note", n };
+  if (!s) return null;
+  if (/snow|\bclosed\b|weather|power out|storm/.test(s)) e.k = "closed";
+  else if (/no[\s,-]*call|no[\s-]*show|did ?n[o']?t (show|come|came)|didn'?t (show|come|came)/.test(s)) e.k = "noshow";
+  else if (/\bleft\b(?! home)|went home|sent (him|her) home|go home/.test(s)) {
+    e.k = "left";
+    const at = /\b(?:left|home)\b[^0-9]*(\d[\d:. ]*\s*(?:a\.?m\.?|p\.?m\.?)?)/i.exec(n);
+    const t = at ? atTimeIn(at[1]) : "";
+    if (t) e.t = t;
+  } else if (/\blate\b|came (in )?at|arrived|overslept|alarm|off until/.test(s) && !/^off\b(?! until)/.test(s)) {
+    e.k = "late";
+    const m = atMinsIn(s);
+    if (m >= 1 && m <= 1440) e.m = m;
+    const at = /(?:came(?: in)?|arrived|until)\s*(?:at)?\s*(\d[\d:. ]*\s*(?:a\.?m\.?|p\.?m\.?)?)/i.exec(n);
+    const t = at ? atTimeIn(at[1]) : "";
+    if (t) e.t = t;
+  } else if (/vac|\bpto\b/.test(s)) e.k = "vac";
+  else if (/sick|\bill\b|\bflu\b|covid/.test(s)) e.k = "sick";
+  else if (/\boff\b|took off|day off/.test(s)) e.k = "off";
+  return e;
+}
+/** The workbook's months: { months: { "2026-11": { days } }, people: { name: { first, last, col } }, newest, notes, warnings }. */
+function atFromExcel(tabs) {
+  const out = { months: {}, people: {}, newest: "", notes: [], warnings: [] };
+  const read = tabs.map(lbTab).map(t => Object.assign(atTabMonths(t.name, t.get(1, 2) || t.get(1, 1)), { t }));
+  read.forEach((x, i) => {
+    // the tab's name and its title disagree (a copied tab): the one no other tab has, between its neighbours
+    const taken = k => read.some((o, j) => j !== i && o.name === k);
+    let key = x.name || x.title;
+    if (x.name && x.title && x.name !== x.title) {
+      const near = [read[i - 1], read[i + 1]].filter(Boolean).map(o => o.name).filter(Boolean);
+      const lo = near.length ? near.reduce((a, b) => (a < b ? a : b)) : "", hi = near.length ? near.reduce((a, b) => (a > b ? a : b)) : "";
+      const fits = k => !taken(k) && (!lo || (k >= lo && k <= hi) || near.length < 2);
+      key = fits(x.name) ? x.name : fits(x.title) ? x.title : x.name;
+      out.notes.push(`The tab "${x.t.name}" says ${lbText(x.t.get(1, 2))} at the top: read as ${lbMonthLong(Number(key.slice(5)))} ${key.slice(0, 4)}.`);
+    }
+    if (!key) { out.warnings.push(`The tab "${x.t.name}" isn't a month. Skipped.`); return; }
+    if (out.months[key]) { out.warnings.push(`${lbMonthLong(Number(key.slice(5)))} ${key.slice(0, 4)} is on two tabs: the first one is read.`); return; }
+    const t = x.t, names = {};
+    for (let c = 2; c <= 40; c++) { const nm = atName(t.get(2, c)); if (nm) names[c] = nm; }
+    if (!Object.keys(names).length) { out.warnings.push(`The tab "${t.name}" has no names in row 2. Skipped.`); return; }
+    const doc = { days: {} }, last = lbDaysIn(key);
+    let lost = 0;
+    for (let r = 3; r <= 33; r++) {
+      const dn = lbIsNum(t.get(r, 1)) && t.get(r, 1) >= 1 && t.get(r, 1) <= 31 ? Math.round(t.get(r, 1)) : r - 2;
+      if (dn > last) continue;
+      const day = `${key}-${String(dn).padStart(2, "0")}`;
+      for (let c = 2; c <= 40; c++) {
+        const v = t.get(r, c);
+        if (v == null || v === "" || lbIsNum(v)) continue;
+        if (!names[c]) { if (lbText(v)) lost++; continue; }
+        const e = atParse(v);
+        if (!e) continue;
+        (doc.days[day] || (doc.days[day] = {}))[names[c]] = e;
+        const p = out.people[names[c]] || (out.people[names[c]] = { first: key, last: key, col: c });
+        if (key < p.first) p.first = key;
+        if (key >= p.last) { p.last = key; p.col = c; }
+      }
+    }
+    if (lost) out.warnings.push(`${lbMonthLong(Number(key.slice(5)))} ${key.slice(0, 4)}: ${lost} day${lost === 1 ? "" : "s"} typed under a column with no name at the top. Skipped.`);
+    // everyone named at the top is here that month, days or not
+    for (const [c, nm] of Object.entries(names)) {
+      const p = out.people[nm] || (out.people[nm] = { first: key, last: key, col: Number(c) });
+      if (key < p.first) p.first = key;
+      if (key >= p.last) { p.last = key; p.col = Number(c); }
+    }
+    out.months[key] = doc;
+    if (key > out.newest) out.newest = key;
+  });
+  return out;
+}
+function openAtExcel() {
+  const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "lb-dl-status", id: "atXlStatus", role: "status" });
+  const res = h("div", { class: "lb-src", id: "atXlResult", hidden: true });
+  let hist = null, armed = false;
+  const go = h("button", { class: "btn primary", type: "button", id: "atXlGo", disabled: true, text: "Load", onclick: async () => {
+    if (!hist) return;
+    if (!armed) { armed = true; go.textContent = "Tap again to load"; return; }
+    go.disabled = true; err.textContent = "";
+    try {
+      // what the app already has: a day typed in the app stays
+      const keys = Object.keys(hist.months).sort(), years = [...new Set(keys.map(k => Number(k.slice(0, 4))))];
+      const have = {};
+      for (const y of years) {
+        status.textContent = `Checking ${y} in the app…`;
+        Object.assign(have, ((await api("attendance", { year: y })) || {}).months || {});
+      }
+      const writes = keys.map(k => {
+        const m = lbClone(have[k] || { days: {} });
+        m.days = m.days || {};
+        for (const [day, ppl] of Object.entries(hist.months[k].days)) for (const [n, e] of Object.entries(ppl)) { const d = m.days[day] || (m.days[day] = {}); if (!d[n]) d[n] = e; }
+        return { key: k, data: m };
+      });
+      // the people: new ones added (in the newest tab's order; those gone after, newest first), those set up keep theirs
+      const now = lbToday().slice(0, 7), ppl = atCfg().people.map(p => Object.assign({}, p));
+      const add = Object.entries(hist.people).sort(([, a], [, b]) => (b.last > a.last ? 1 : b.last < a.last ? -1 : a.col - b.col));
+      for (const [name, p] of add) {
+        const to = p.last >= hist.newest ? "" : p.last;
+        const have2 = ppl.find(x => x.name.toLowerCase() === name.toLowerCase());
+        if (have2) { if (!have2.from || p.first < have2.from) have2.from = p.first; }
+        else ppl.push({ name, from: p.first, to });
+      }
+      const isHere = p => !p.to || p.to >= now;
+      ppl.sort((a, b) => Number(!isHere(a)) - Number(!isHere(b)));   // those here first (in their order), then those gone
+      writes.push({ key: "config", data: { people: ppl } });
+      for (let i = 0; i < writes.length; i += 20) {
+        status.textContent = `Saving ${Math.min(i + 20, writes.length)} of ${writes.length}…`;
+        const out = await api("atPut", { writes: writes.slice(i, i + 20) }, 120000);
+        if (out.config) atData.config = out.config;
+      }
+      atYears = {}; for (const k of Object.keys(atAsked)) delete atAsked[k];
+      await atLoad();
+      closeDialog();
+      renderAttendance();
+      toast(`Loaded ${keys.length} months`);
+    } catch (x) { status.textContent = ""; err.textContent = errText(x, "Not everything"); go.disabled = false; go.textContent = "Load"; armed = false; }
+  } });
+  const file = h("input", { type: "file", id: "atXlFile", accept: ".xlsx", onchange: async e => {
+    err.textContent = ""; res.hidden = true; go.disabled = true; armed = false; go.textContent = "Load";
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      status.textContent = "Reading…";
+      const tabs = await lbReadXlsx(await f.arrayBuffer(), () => true);
+      hist = atFromExcel(tabs);
+      status.textContent = "";
+      const keys = Object.keys(hist.months).sort();
+      if (!keys.length) { err.textContent = "No month tabs (like November 2026) with names in row 2 in that file."; return; }
+      let n = 0; const by = {};
+      for (const doc of Object.values(hist.months)) for (const day of Object.values(doc.days)) for (const e2 of Object.values(day)) { n++; by[e2.k] = (by[e2.k] || 0) + 1; }
+      const names = Object.entries(hist.people);
+      res.replaceChildren(
+        h("h4", { text: `${keys.length} months, ${lbMonthLong(Number(keys[0].slice(5)))} ${keys[0].slice(0, 4)} – ${lbMonthLong(Number(keys[keys.length - 1].slice(5)))} ${keys[keys.length - 1].slice(0, 4)}` }),
+        h("p", { class: "meta", id: "atXlSum", text: `${fmt(n)} days: ${Object.entries(AT_KINDS).filter(([k]) => by[k]).map(([k, t]) => `${t} ${fmt(by[k])}`).join(", ")}. ${names.length} people (${names.filter(([, p]) => p.last >= hist.newest).length} on the newest tab).` }),
+        h("p", { class: "hint", text: "Each day's text is kept as its note, so nothing is lost if a kind is read wrong (tap the day to change it). Days already typed in the app stay as they are." }),
+        hist.notes.length || hist.warnings.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${hist.notes.length + hist.warnings.length})` }),
+          h("ul", { class: "lb-notes" }, hist.warnings.concat(hist.notes).map(w => h("li", { text: w })))) : "");
+      res.hidden = false; go.disabled = false;
+    } catch (x) { status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
+  } });
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Load 7. EMPLOYEE TARDINESS" }),
+    h("p", { class: "hint", text: "Pick the Excel file. Every month tab is read (people across row 2, days down); the people are added with the months they're on." }),
+    file, status, res, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Cancel", onclick: () => closeDialog() }), go)));
+}
+
 /* ---- presenting (full screen, on a phone, laptop or TV) ---- */
 const LB_LOGO = '<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2b3c"/><path d="M256 92 C318 180 384 248 384 318 A128 128 0 0 1 128 318 C128 248 194 180 256 92 Z" fill="#2fa4da"/><path d="M196 318 L240 362 L320 272" fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg>';   // the app icon
 const LB_CROWN = '<svg class="lbs-crown" viewBox="0 0 48 32" aria-hidden="true"><path fill="currentColor" d="M2 8l10 9 12-15 12 15 10-9-4 22H6z"/></svg>';
@@ -16031,6 +16542,7 @@ if (/^#order-list(\/|$)/.test(location.hash)) {   // the link in the checklist e
 else if (location.hash === "#supplies") { view.tab = "supplies"; saveView(); }
 else if (location.hash === "#leaderboard") { view.tab = "leaderboard"; saveView(); }
 else if (location.hash === "#office") { view.tab = "office"; saveView(); }
+else if (location.hash === "#attendance") { view.tab = "attendance"; saveView(); }
 else if (location.hash === "#revenue") { view.tab = "revenue"; saveView(); }
 else if (location.hash === "#estimates") { view.tab = "estimates"; saveView(); }
 else if (location.hash === "#repairs") { view.tab = "repairs"; saveView(); }
