@@ -122,7 +122,9 @@
  * The app's Office section replaces "14. OFFICE SCORECARDS": each office person types her own day (her calls, by kind,
  * toward the 50 outgoing calls goal, and her other numbers); Admins set up the people and their numbers, link each one to
  * her login, and type the admin-only numbers (like Scheduled / Completed, checked in the CRM). Everyone with Office ticked
- * sees everyone. The Office tab keeps it, one row per month plus "config", in JSON. Don't edit that tab by hand.
+ * sees everyone. Someone with Office types only today's numbers (her own); someone with "Office (any day)" ticked, like an
+ * Admin, types anyone's numbers on any day (the admin-only ones too), but only Admins set up the people. The Office tab
+ * keeps it, one row per month plus "config", in JSON. Don't edit that tab by hand.
  *
  * ATTENDANCE (employee tardiness)
  * The app's Attendance section replaces "7. EMPLOYEE TARDINESS": a month at a time, people across and days down, each
@@ -146,7 +148,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Tuesday of a week the truck was marked "not available" for the TM hrs check.
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 74;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 75;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 2;          // TM hrs are checked every Tuesday (0 = Sunday)
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -336,7 +338,7 @@ function doPost(e) {
         if (!canLbEdit_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(jobLog_(req));
       case "office":
-        if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(ofRead_(user, req.year));
       case "payRead":
         if (!canPay_(user)) return json_({ ok: false, error: "not_allowed" });
@@ -345,14 +347,14 @@ function doPost(e) {
         if (!canPay_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return payPut_(req); }));
       case "ofPut":
-        if (!canSee_(user, "office")) return json_({ ok: false, error: "not_allowed" });
-        return json_(withLock_(function () { return ofPut_(req); }));
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return ofPut_(req); }));
       case "attendance":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(atRead_(user, req.year));
       case "atPut":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
-        return json_(withLock_(function () { return atPut_(req); }));
+        return json_(withTabLock_(function () { return atPut_(req); }));
       case "hcpTest":
         return json_(hcpTest_(req));
       case "revenue":
@@ -1476,6 +1478,13 @@ function sheet_(name) {
 }
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+/** A save to a tab only its own section writes (Office, Attendance): the Sheet's lock, not the script's, so it doesn't wait
+ *  behind a long read from Housecall Pro or the rebuild calendar's run (a day typed took 20 seconds and more). */
+function withTabLock_(fn) {
+  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
   lock.waitLock(20000);
   try { return fn(); } finally { lock.releaseLock(); }
 }
@@ -3002,7 +3011,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === "attendance" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || EST_ACCESS.indexOf(x) !== -1 || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === OF_EDIT || x === "attendance" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || EST_ACCESS.indexOf(x) !== -1 || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -5583,6 +5592,12 @@ function cpDoc_(req) {
 // each person's numbers by field, and who saved them when).
 
 const OF_SHEET = "Office";
+const OF_EDIT = "office-edit";   // Office (any day): types anyone's numbers on any day, like an Admin (not the people)
+function canOffice_(user) { return canSee_(user, "office") || canSee_(user, OF_EDIT); }
+/** Types anyone's numbers, any day, the admin-only ones too. */
+function ofEditor_(user) { return !!user && (user.role === "admin" || parseAccess_(user.access).indexOf(OF_EDIT) !== -1); }
+/** Today in the office (the script's time zone): the only day someone without "Office (any day)" types. */
+function ofToday_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"); }
 const OF_KINDS = ["out", "num", "admin"];   // counts toward the outgoing calls goal; any other number; typed by Admins only
 const OF_MAX_FIELDS = 40;   // numbers a person can have (past-only ones included)
 
@@ -5651,7 +5666,7 @@ function ofMonth_(d, key) {
 }
 function ofRead_(user, year) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
-  const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", me: user.id };
+  const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_() };
   lbRows_(ofSheet_(false)).forEach(function (r) {
     if (r.key === "config") out.config = lbParse_(r.json);
     else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);
@@ -5660,11 +5675,15 @@ function ofRead_(user, year) {
 }
 /** Saves changes: { writes: [{ key: "2026-11", patch: { days: { day: { name: { field: n | null } } } } }] } merges into
  *  the month (null clears a box); Admins may also replace a month or the people ("config") whole ({ key, data }).
- *  Someone who isn't an Admin can change only her own day (the person linked to her login) and never an admin-only number. */
+ *  Someone with "Office (any day)" changes anyone's numbers on any day, the admin-only ones too. Anyone else changes only
+ *  her own numbers (the person linked to her login), only today's, and never an admin-only number: another day is refused
+ *  whole ("only_today"), so nothing of it is half saved. */
 function ofPut_(req) {
-  const admin = req.user.role === "admin";
+  const admin = req.user.role === "admin", editor = ofEditor_(req.user), today = ofToday_();
   const writes = (Array.isArray(req.writes) ? req.writes : []).slice(0, 14);
   if (!admin && writes.some(function (w) { return w && (w.key === "config" || (w.data && typeof w.data === "object")); })) return { ok: false, error: "not_allowed" };
+  if (!editor && writes.some(function (w) { return w && w.patch && w.patch.days && typeof w.patch.days === "object" && Object.keys(w.patch.days).some(function (d) { return d !== today; }); }))
+    return { ok: false, error: "only_today", today: today };
   const s = ofSheet_(true);
   const byKey = {};
   lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
@@ -5687,10 +5706,10 @@ function ofPut_(req) {
           const x = change.days[day] && typeof change.days[day] === "object" ? change.days[day] : {};
           Object.keys(x).forEach(function (name) {
             const p = cfg.people.filter(function (q) { return q.name.toLowerCase() === String(name).toLowerCase(); })[0];
-            if (!p || (!admin && p.user !== req.user.id) || !x[name] || typeof x[name] !== "object") return;
+            if (!p || (!editor && p.user !== req.user.id) || !x[name] || typeof x[name] !== "object") return;
             const e = {};
             p.fields.forEach(function (f) {
-              if (!(f.id in x[name]) || (f.kind === "admin" && !admin)) return;
+              if (!(f.id in x[name]) || (f.kind === "admin" && !editor)) return;
               const v = x[name][f.id];
               e[f.id] = typeof v === "number" && isFinite(v) && v >= 0 && v <= 1e6 ? v : null;
             });
