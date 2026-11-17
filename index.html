@@ -723,6 +723,19 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .at-cell.k-noshow, .at-key.k-noshow, .at-kb.k-noshow[aria-checked=true] { background: var(--due); color: #fff; }
 .at-cell.k-closed, .at-key.k-closed, .at-kb.k-closed[aria-checked=true] { background: color-mix(in srgb, var(--muted) 22%, var(--surface)); color: var(--ink); }
 .at-cell.k-note, .at-key.k-note, .at-kb.k-note[aria-checked=true] { background: var(--clean-bg); color: var(--clean); font-weight: 600; }
+.at-grid tr.at-mrow th { position: sticky; left: 0; background: var(--surface); color: var(--accent); font-weight: 800; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; padding: 10px 8px 6px; }
+.at-cell.pending { opacity: .55; }
+.at-pname { all: unset; cursor: pointer; font-weight: 700; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); }
+.at-pname:hover, .at-pname:focus-visible { color: var(--accent); border-bottom-style: solid; }
+.at-grid .at-ph .at-pname { display: inline-block; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
+.at-rep-tot { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; margin: 6px 0 12px; }
+#atRepList th, #atRepList td { text-align: left; }
+.at-rep-dlg { min-width: 0; max-width: 100%; display: grid; gap: 4px; } .at-rep-dlg .lb-scroll { max-width: 100%; overflow-x: auto; }
+dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
+.at-rep-k { display: grid; gap: 1px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+.at-rep-k { min-width: 0; } .at-rep-k b { font-size: 1.3rem; font-variant-numeric: tabular-nums; } .at-rep-k span { font-size: .72rem; font-weight: 700; color: var(--muted); overflow-wrap: anywhere; } .at-rep-k small { font-size: .72rem; color: var(--muted); }
+.at-rep-k.has.k-late b, .at-rep-k.has.k-left b { color: var(--soon); } .at-rep-k.has.k-sick b, .at-rep-k.has.k-noshow b { color: var(--due); } .at-rep-k.has.k-vac b { color: var(--accent); }
+.at-rep tbody tr { cursor: pointer; } .at-rep tbody tr:hover { background: var(--accent-soft); } .at-rep td.nowrap { white-space: nowrap; }
 .at-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; } .at-key { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
 .at-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; } .at-kb[aria-checked=true] { border-color: currentColor; box-shadow: 0 0 0 1px currentColor; }
 .at-f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .at-f[hidden] { display: none; } .at-f .field { margin: 0; }
@@ -15621,9 +15634,11 @@ let atData = store.get(K_AT);                           // { year, config, month
 let atYears = {};                                       // other years: { 2025: { months } } (asked for when shown)
 let atLoading = false, atErr = "", atOld = false;
 const atAsked = {};
-const atView = Object.assign({ off: 0, tot: "month" }, store.get(K_AT_VIEW) || {});
-atView.off = 0;                                         // opens on this month
-const atSaveView = () => store.set(K_AT_VIEW, { tot: atView.tot });
+const AT_PER = EST_PER;                                 // Day, Week, Month, Year, Dates
+const atView = Object.assign({ per: "month", off: 0, from: "", to: "" }, store.get(K_AT_VIEW) || {});
+atView.off = 0;                                         // opens on today's day, week, month or year
+if (!AT_PER[atView.per]) atView.per = "month";
+const atSaveView = () => store.set(K_AT_VIEW, { per: atView.per, from: atView.from, to: atView.to });
 const atThisYear = () => Number(lbToday().slice(0, 4));
 const atCfg = () => (atData && atData.config && Array.isArray(atData.config.people) ? atData.config : { people: [] });
 /** A month's document, or null while its year loads. */
@@ -15639,7 +15654,7 @@ async function atLoad(year) {
   if (y !== atThisYear()) {
     if (atAsked[y]) return;
     atAsked[y] = true;
-    try { const out = await api("attendance", { year: y }); atYears[y] = { months: out.months || {} }; }
+    try { const out = await api("attendance", { year: y }); atYears[y] = { months: out.months || {} }; atReapply(); }
     catch (e) { atAsked[y] = false; atErr = errText(e, "Attendance"); }
     if (view.tab === "attendance") renderAttendance();
     return;
@@ -15649,6 +15664,7 @@ async function atLoad(year) {
   try {
     const out = await api("attendance", { year: y });
     atData = { year: y, config: out.config || { people: [] }, months: out.months || {}, years: out.years || [], admin: !!out.admin, at: new Date().toISOString() };
+    atReapply();
     store.set(K_AT, atData);
     atErr = ""; atOld = false;
   } catch (e) {
@@ -15675,27 +15691,55 @@ function atShort(e) {
 /** The whole of it, for its title. */
 const atLong = e => [AT_KINDS[e.k] + (e.k === "late" && e.m ? ` ${atMins(e.m)}` : "") + (e.k === "late" && e.t ? `, came in at ${atClock(e.t)}` : "") + (e.k === "left" && e.t ? ` at ${atClock(e.t)}` : ""),
   e.n || "", e.by ? `${e.by}${e.at ? `, ${lbDayText(lbDayKey(new Date(e.at)))}` : ""}` : ""].filter(Boolean).join(" · ");
-/** Who's on the grid in a month: the people here that month (in their order), then anyone else with a day in it. */
-function atPeopleIn(key, doc) {
-  const out = atCfg().people.filter(p => (!p.from || p.from <= key) && (!p.to || p.to >= key)).map(p => p.name);
+
+/** The days on screen: Day, Week, Month, Year (‹ ›; ahead too, for vacations planned) or Dates (From – To). */
+function atRange() {
+  const today = lbToday(), per = AT_PER[atView.per] ? atView.per : "month";
+  if (per === "dates") {
+    const hi = lbAddDays(today, 400);
+    let from = lbOkDay(atView.from, hi) ? atView.from : `${today.slice(0, 7)}-01`, to = lbOkDay(atView.to, hi) ? atView.to : today;
+    if (to < from) [from, to] = [to, from];
+    return { per, from, to, label: revSpanText(from, to) };
+  }
+  return Object.assign({ per }, ofRange(per, Number(atView.off) || 0));
+}
+const atKeysIn = (from, to) => { const out = []; for (let k = from.slice(0, 7); k <= to.slice(0, 7); k = lbAddMonths(k, 1)) out.push(k); return out; };
+/** Every day's entries from..to ({ day: { name: entry } }), or null while a year of it loads (asked for). */
+function atDaysIn(from, to) {
+  const out = {};
+  let wait = false;
+  for (const k of atKeysIn(from, to)) {
+    const doc = atMonthDoc(k);
+    if (!doc) { wait = true; atLoad(Number(k.slice(0, 4))); continue; }
+    for (const [day, x] of Object.entries(doc.days || {})) if (day >= from && day <= to) out[day] = x;
+  }
+  return wait ? null : out;
+}
+/** Who's on the grid for some days: the people here in any month of them (in their order), then anyone else with a day. */
+function atPeopleFor(from, to, days) {
+  const a = from.slice(0, 7), b = to.slice(0, 7);
+  const out = atCfg().people.filter(p => (!p.from || p.from <= b) && (!p.to || p.to >= a)).map(p => p.name);
   const have = new Set(out.map(n => n.toLowerCase()));
-  for (const day of Object.values((doc && doc.days) || {})) for (const n of Object.keys(day)) if (!have.has(n.toLowerCase())) { have.add(n.toLowerCase()); out.push(n); }
+  for (const x of Object.values(days || {})) for (const n of Object.keys(x)) if (!have.has(n.toLowerCase())) { have.add(n.toLowerCase()); out.push(n); }
   return out;
 }
-/** Each person's totals over some months' documents. */
-function atTotals(docs) {
+/** Each person's totals over some days' entries. */
+function atTotalsOf(days) {
   const t = {};
-  for (const doc of docs) for (const day of Object.values((doc && doc.days) || {})) for (const [n, e] of Object.entries(day)) {
-    const x = t[n] || (t[n] = { late: 0, lateM: 0, left: 0, sick: 0, vac: 0, off: 0, noshow: 0, closed: 0, note: 0 });
-    x[e.k] = (x[e.k] || 0) + 1;
-    if (e.k === "late" && e.m) x.lateM += e.m;
+  for (const x of Object.values(days || {})) for (const [n, e] of Object.entries(x)) {
+    const s = t[n] || (t[n] = { late: 0, lateM: 0, left: 0, sick: 0, vac: 0, off: 0, noshow: 0, closed: 0, note: 0 });
+    s[e.k] = (s[e.k] || 0) + 1;
+    if (e.k === "late" && e.m) s.lateM += e.m;
   }
   return t;
 }
+const AT_COLS = [["late", "Late"], ["left", "Left early"], ["sick", "Sick"], ["vac", "Vacation"], ["off", "Off"], ["noshow", "No call / no show"], ["closed", "Closed"]];
+const AT_MAX_ROWS = 400;                                 // days in the grid at most (Dates longer than that: the totals)
 
 function renderAttendance() {
   const box = $("atView");
   if (!box || view.tab !== "attendance" || !session) return;
+  if (lbHoldForDate(box, renderAttendance)) return;      // a date being typed: draw once it's done
   const admin = isAdmin(), today = lbToday();
   const title = secTitle("Attendance");
   if (atOld || (apiLevel && apiLevel < AT_API)) {
@@ -15709,75 +15753,161 @@ function renderAttendance() {
     if (!atErr) atLoad();
     return;
   }
-  // the month: this one, ‹ › back to the first one with any days (and up to a year ahead, for vacations planned)
-  const first = (atData.years || []).length ? `${Math.min(...atData.years)}-01` : today.slice(0, 7);
-  const now = today.slice(0, 7), off = Math.max(-1200, Math.min(12, Number(atView.off) || 0));
-  const key = lbAddMonths(now, off), y = Number(key.slice(0, 4)), mName = `${lbMonthLong(Number(key.slice(5)))} ${y}`;
-  const step = n => { atView.off = off + n; renderAttendance(); };
-  const tools = h("div", { class: "rev-tools" },
-    admin ? h("button", { class: "btn small", type: "button", id: "atPeopleBtn", onclick: () => openAtPeople() }, "People") : null,
-    admin ? h("button", { class: "btn small ghost", type: "button", id: "atExcelBtn", onclick: () => openAtExcel() }, "Load from Excel") : null);
+  // the days: Day / Week / Month / Year with ‹ › (back to the first year there is, up to a year ahead), or Dates
+  const r = atRange(), per = r.per, off = Number(atView.off) || 0;
+  const firstDay = (atData.years || []).length ? `${Math.min(...atData.years)}-01-01` : `${today.slice(0, 4)}-01-01`, lastDay = lbAddDays(today, 400);
+  const len = revLen(r.from, r.to);
+  const redraw = () => { atView.scrolled = false; atSaveView(); renderAttendance(); };
+  const step = n => {
+    if (per === "dates") { atView.from = lbAddDays(r.from, n * len); atView.to = lbAddDays(r.to, n * len); }
+    else atView.off = off + n;
+    redraw();
+  };
+  const pick = (a, b) => { if (a > b) [a, b] = [b, a]; atView.from = a; atView.to = b; redraw(); };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+    lbDateInput({ id, value, min: firstDay, max: lastDay, "aria-label": label }, onpick, firstDay, lastDay));
+  const now = r.from <= today && r.to >= today;
   const bar = h("div", { class: "lb-bar rev-bar-top" },
-    h("div", { class: "of-step" },
-      h("button", { class: "btn small", type: "button", id: "atPrev", "aria-label": "Month before", disabled: key <= first, onclick: () => step(-1) }, "‹"),
-      h("strong", { id: "atMonth", text: mName }),
-      h("button", { class: "btn small", type: "button", id: "atNext", "aria-label": "Month after", disabled: off >= 12, onclick: () => step(1) }, "›")),
-    off ? h("button", { class: "btn small ghost", type: "button", id: "atToday", onclick: () => { atView.off = 0; renderAttendance(); } }, "This month") : null,
-    tools);
-  const head = [title ? h("div", { class: "lb-top" }, title) : null, bar].filter(Boolean);
-  const doc = atMonthDoc(key);
-  if (!doc) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${y}…` })); atLoad(y); return; }
-  const people = atPeopleIn(key, doc);
+    lbSeg(Object.entries(AT_PER), per, k => {
+      if (k === "dates" && per !== "dates") { atView.from = r.from; atView.to = r.to; }   // Dates starts from the days on screen
+      atView.per = k; atView.off = 0; redraw();
+    }, "Period"),
+    per === "dates"
+      ? h("div", { class: "lb-daybar lb-payrange", id: "atDates" },
+        h("button", { class: "btn small", type: "button", id: "atPrev", "aria-label": "Earlier", disabled: r.from <= firstDay, onclick: () => step(-1) }, "‹"),
+        dateBox("atFrom", r.from, "From", v => pick(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
+        dateBox("atTo", r.to, "To", v => pick(v < r.from ? v : r.from, v)),
+        h("button", { class: "btn small", type: "button", id: "atNext", "aria-label": "Later", disabled: r.to >= lastDay, onclick: () => step(1) }, "›"))
+      : h("div", { class: "of-step" },
+        h("button", { class: "btn small", type: "button", id: "atPrev", "aria-label": "Earlier", disabled: r.from <= firstDay, onclick: () => step(-1) }, "‹"),
+        h("strong", { id: "atMonth", text: r.label + (now && per !== "day" ? " (so far)" : "") }),
+        h("button", { class: "btn small", type: "button", id: "atNext", "aria-label": "Later", disabled: r.to >= lastDay, onclick: () => step(1) }, "›")),
+    per !== "dates" && off ? h("button", { class: "btn small ghost", type: "button", id: "atToday", onclick: () => { atView.off = 0; redraw(); } }, per === "day" ? "Today" : `This ${AT_PER[per].toLowerCase()}`) : null,
+    h("div", { class: "rev-tools" },
+      admin ? h("button", { class: "btn small", type: "button", id: "atPeopleBtn", onclick: () => openAtPeople() }, "People") : null,
+      admin ? h("button", { class: "btn small ghost", type: "button", id: "atExcelBtn", onclick: () => openAtExcel() }, "Load from Excel") : null));
+  const saveNote = h("p", { class: "lb-save" + (atSaveErr ? " error" : atInflight.length ? " saving" : ""), id: "atSaveNote", role: "status", hidden: !atSaveErr && !atInflight.length },
+    atSaveErr ? [h("span", { text: atSaveErr }), " ", atRetry ? h("button", { class: "btn small", type: "button", id: "atRetry", onclick: () => { const j = atRetry; atRetry = null; atSaveErr = ""; atSaveDays(j.key, j.days); } }, "Try again") : null]
+      : atInflight.length ? "Saving…" : "");
+  const head = [title ? h("div", { class: "lb-top" }, title) : null, bar, saveNote].filter(Boolean);
+  const days = atDaysIn(r.from, r.to);
+  if (!days) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4) === r.to.slice(0, 4) ? r.from.slice(0, 4) : `${r.from.slice(0, 4)} – ${r.to.slice(0, 4)}`}…` })); return; }
+  const people = atPeopleFor(r.from, r.to, days);
   if (!people.length) {
-    box.replaceChildren(...head, h("div", { class: "panel lb-empty", id: "atEmpty" }, h("h2", { text: atCfg().people.length ? `No one on the list in ${mName}` : "No people yet" }),
+    box.replaceChildren(...head, h("div", { class: "panel lb-empty", id: "atEmpty" }, h("h2", { text: atCfg().people.length ? `No one on the list in ${r.label}` : "No people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add everyone, or Load from Excel to bring in 7. EMPLOYEE TARDINESS (its people and every month)." : "An admin hasn't set up the people yet." })));
     return;
   }
-  // the grid: people across, days down; a day off (Sunday, closed) is greyed; today is marked
-  const days = [];
-  for (let d = 1; d <= lbDaysIn(key); d++) days.push(`${key}-${String(d).padStart(2, "0")}`);
-  const grid = h("div", { class: "lb-scroll at-scroll" }, h("table", { class: "at-grid", id: "atGrid" },
-    h("thead", null, h("tr", null, h("th", { class: "at-dh", text: "Day" }), people.map(n => h("th", { class: "at-ph", "data-who": n, title: n }, h("span", { text: n }))))),
-    h("tbody", null, days.map(day => {
-      const dt = lbDate(day), hol = lbHoliday(day), shut = dt.getDay() === 0 || !!hol, x = (doc.days || {})[day] || {};
-      return h("tr", { class: (shut ? "shut" : "") + (day === today ? " today" : ""), "data-day": day },
-        h("th", { class: "at-dh", title: hol ? `${hol}: closed` : "" }, h("b", { text: String(dt.getDate()) }), h("small", { text: LB_WD[dt.getDay()] })),
-        people.map(n => {
-          const e = x[n];
-          return h("td", null, h("button", { class: "at-cell" + (e ? ` k-${e.k}` : ""), type: "button", "data-who": n, "data-day": day, title: e ? `${n}: ${atLong(e)}` : `${n}, ${lbDayText(day)}: tap to add`,
-            onclick: () => openAtDay(day, n) }, e ? atShort(e) : ""));
-        }));
-    }))));
-  const legend = h("p", { class: "at-legend" }, Object.entries(AT_KINDS).map(([k, t]) => h("span", { class: `at-key k-${k}`, text: t })));
-  // the totals: this month, or the year so far
-  const per = atView.tot === "year" ? "year" : "month";
-  let tot = null, totNote = "";
-  if (per === "month") tot = atTotals([doc]);
-  else {
-    const src = y === atData.year ? atData.months : atYears[y] ? atYears[y].months : null;
-    if (src) tot = atTotals(Object.entries(src).filter(([k]) => k.startsWith(`${y}-`)).map(([, d]) => d));
-    else atLoad(y);
-    totNote = `${y}${y === atThisYear() ? " so far" : ""}`;
+  // the grid: people across (tap a name for their report), days down; a day off (Sunday, closed) greyed; today marked;
+  // a row with the month's name where a new month starts
+  const all = [];
+  for (let d = r.from; d <= r.to && all.length < AT_MAX_ROWS; d = lbAddDays(d, 1)) all.push(d);
+  const many = r.from.slice(0, 7) !== r.to.slice(0, 7);
+  const rows = [];
+  for (const day of all) {
+    if (many && (day === r.from || day.endsWith("-01"))) rows.push(h("tr", { class: "at-mrow" }, h("th", { class: "at-dh", colspan: String(people.length + 1) }, `${lbMonthLong(Number(day.slice(5, 7)))} ${day.slice(0, 4)}`)));
+    const dt = lbDate(day), hol = lbHoliday(day), shut = dt.getDay() === 0 || !!hol, x = days[day] || {};
+    rows.push(h("tr", { class: (shut ? "shut" : "") + (day === today ? " today" : ""), "data-day": day },
+      h("th", { class: "at-dh", title: hol ? `${hol}: closed` : "" }, h("b", { text: String(dt.getDate()) }), h("small", { text: LB_WD[dt.getDay()] })),
+      people.map(n => {
+        const e = x[n];
+        return h("td", null, h("button", { class: "at-cell" + (e ? ` k-${e.k}` : "") + (e && e._p ? " pending" : ""), type: "button", "data-who": n, "data-day": day,
+          title: e ? `${n}: ${atLong(e)}${e._p ? " · saving…" : ""}` : `${n}, ${lbDayText(day)}: tap to add`, onclick: () => openAtDay(day, n) }, e ? atShort(e) : ""));
+      })));
   }
-  const cols = [["late", "Late"], ["left", "Left early"], ["sick", "Sick"], ["vac", "Vacation"], ["off", "Off"], ["noshow", "No call / no show"], ["closed", "Closed"]];
-  const who = per === "month" ? people : (() => { const all = atCfg().people.filter(p => (!p.from || p.from <= `${y}-12`) && (!p.to || p.to >= `${y}-01`)).map(p => p.name);
-    for (const n of Object.keys(tot || {})) if (!all.some(a => a.toLowerCase() === n.toLowerCase())) all.push(n); return all; })();
+  const grid = h("div", { class: "lb-scroll at-scroll" }, h("table", { class: "at-grid", id: "atGrid" },
+    h("thead", null, h("tr", null, h("th", { class: "at-dh", text: "Day" }), people.map(n => h("th", { class: "at-ph", "data-who": n },
+      h("button", { class: "at-pname", type: "button", title: `${n}: their report for ${r.label}`, onclick: () => openAtPerson(n) }, n))))),
+    h("tbody", null, rows)));
+  const cut = all.length < len ? h("p", { class: "lb-sub", id: "atCut", text: `The grid shows the first ${AT_MAX_ROWS} days; the totals count them all. Pick fewer days to see the rest.` }) : null;
+  const legend = h("p", { class: "at-legend" }, Object.entries(AT_KINDS).map(([k, t]) => h("span", { class: `at-key k-${k}`, text: t })));
+  // the totals: the same days (tap a name for their report)
+  const tot = atTotalsOf(days);
   const totEl = h("section", { class: "panel at-tot", id: "atTotals" },
-    h("div", { class: "at-tot-h" }, h("h3", { text: per === "month" ? `Totals · ${mName}` : `Totals · ${totNote}` }),
-      lbSeg([["month", "Month"], ["year", "Year"]], per, k => { atView.tot = k; atSaveView(); renderAttendance(); }, "Totals for")),
-    !tot ? h("p", { class: "loading", text: `Loading ${y}…` }) : h("div", { class: "lb-scroll" }, h("table", { class: "lb-table at-tot-t", id: "atTotTable" },
-      h("thead", null, h("tr", null, h("th", { class: "l", text: "Person" }), cols.map(([k, t]) => h("th", { "data-k": k, text: t })))),
-      h("tbody", null, who.map(n => {
+    h("div", { class: "at-tot-h" }, h("h3", { text: `Totals · ${r.label}${now && per !== "day" ? " (so far)" : ""}` })),
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table at-tot-t", id: "atTotTable" },
+      h("thead", null, h("tr", null, h("th", { class: "l", text: "Person" }), AT_COLS.map(([k, t]) => h("th", { "data-k": k, text: t })))),
+      h("tbody", null, people.map(n => {
         const x = tot[n] || {};
-        return h("tr", { "data-who": n }, h("th", { class: "l", text: n }), cols.map(([k]) => h("td", { "data-k": k, class: x[k] ? `has k-${k}` : "" },
-          !x[k] ? "–" : k === "late" ? [String(x.late), x.lateM ? h("small", { text: ` · ${atMins(x.lateM)}` }) : null] : String(x[k]))));
+        return h("tr", { "data-who": n }, h("th", { class: "l" }, h("button", { class: "at-pname", type: "button", title: `${n}: their report`, onclick: () => openAtPerson(n) }, n)),
+          AT_COLS.map(([k]) => h("td", { "data-k": k, class: x[k] ? `has k-${k}` : "" },
+            !x[k] ? "–" : k === "late" ? [String(x.late), x.lateM ? h("small", { text: ` · ${atMins(x.lateM)}` }) : null] : String(x[k]))));
       })))),
-    h("p", { class: "lb-sub", text: "Late: times late (and the minutes typed). Left early: times. Sick, Vacation, Off, No call / no show, Closed: days." }));
-  box.replaceChildren(...head, legend, grid, totEl);
-  // this month opens on today's row
-  const tr = key === now ? box.querySelector(`#atGrid tr[data-day="${today}"]`) : null;
+    h("p", { class: "lb-sub", text: "Late: times late (and the minutes typed). Left early: times. Sick, Vacation, Off, No call / no show, Closed: days. Tap a name for that person's report." }));
+  box.replaceChildren(...head, legend, grid, cut, totEl);
+  // the days with today in them open on today's row
+  const tr = now ? box.querySelector(`#atGrid tr[data-day="${today}"]`) : null;
   if (tr && !atView.scrolled) { atView.scrolled = true; const sc = box.querySelector(".at-scroll"); if (sc) sc.scrollTop = Math.max(0, tr.offsetTop - 120); }
 }
+
+/* ---- a person's report: their days in the period on screen, and their totals ---- */
+function openAtPerson(name) {
+  const r = atRange(), days = atDaysIn(r.from, r.to) || {}, now = r.from <= lbToday() && r.to >= lbToday();
+  const mine = Object.keys(days).filter(d => days[d][name]).sort().reverse().map(d => [d, days[d][name]]);
+  const t = atTotalsOf(Object.fromEntries(mine.map(([d, e]) => [d, { [name]: e }])))[name] || {};
+  const p = atCfg().people.find(x => x.name.toLowerCase() === name.toLowerCase());
+  const detail = e => (e.k === "late" ? [e.m ? atMins(e.m) : "", e.t ? `came in at ${atClock(e.t)}` : ""] : e.k === "left" ? [e.t ? `at ${atClock(e.t)}` : ""] : []).filter(Boolean).join(", ");
+  const chips = h("div", { class: "at-rep-tot", id: "atRepTot" }, AT_COLS.concat([["note", "Notes"]]).map(([k, label]) => h("div", { class: `at-rep-k k-${k}` + (t[k] ? " has" : ""), "data-k": k },
+    h("b", { text: t[k] ? String(t[k]) : "0" }), h("span", { text: label }), k === "late" && t.lateM ? h("small", { text: atMins(t.lateM) }) : null)));
+  const list = mine.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table at-rep", id: "atRepList" },
+    h("thead", null, h("tr", null, ["Day", "What", "", "Note", "Typed by"].map((c, i) => h("th", { class: "l", text: c, "aria-label": i === 2 ? "Minutes or time" : null })))),
+    h("tbody", null, mine.map(([d, e]) => h("tr", { "data-day": d, tabindex: "0", title: "Tap to change it", onclick: () => { closeDialog(); openAtDay(d, name); }, onkeydown: ev => { if (ev.key === "Enter") { closeDialog(); openAtDay(d, name); } } },
+      h("td", { class: "l nowrap", text: `${lbDayText(d)}${d.slice(0, 4) !== lbToday().slice(0, 4) ? `, ${d.slice(0, 4)}` : ""}` }),
+      h("td", { class: "l" }, h("span", { class: `at-key k-${e.k}`, text: AT_KINDS[e.k] })),
+      h("td", { class: "l nowrap", text: detail(e) }),
+      h("td", { class: "l", text: e.n || "" }),
+      h("td", { class: "l muted", text: e.by || "" })))))) : h("p", { class: "meta", id: "atRepNone", text: `Nothing typed for ${name} in ${r.label}.` });
+  openDialog(h("div", { class: "at-rep-dlg" },
+    h("h3", { id: "dlgTitle", text: name }),
+    h("p", { class: "hint", id: "atRepWhen", text: `${r.label}${now && r.per !== "day" ? " (so far)" : ""}${p ? ` · here ${p.from ? `since ${lbMonthLong(Number(p.from.slice(5)))} ${p.from.slice(0, 4)}` : ""}${p.to ? ` until ${lbMonthLong(Number(p.to.slice(5)))} ${p.to.slice(0, 4)}` : ""}` : ""}. Change the days with Day, Week, Month, Year or Dates on the page.` }),
+    chips, list,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
+}
+
+/* ---- saving a day: on the grid at once (faded until the Sheet has it), saved in the background ---- */
+const atInflight = [];                                   // [{ key, days }] sent and not answered yet
+let atSaveErr = "", atRetry = null;
+/** Where a month's document is kept (this year, or another year read), or null. */
+function atHolder(key) { const y = Number(key.slice(0, 4)); return atData && atData.year === y ? atData.months : atYears[y] ? atYears[y].months : null; }
+/** A patch put on a month's document (a person's day whole; null takes it off), marked as still saving. */
+function atApply(doc, days) {
+  doc.days = doc.days || {};
+  for (const [day, x] of Object.entries(days)) for (const [n, e] of Object.entries(x)) {
+    const d = doc.days[day] || (doc.days[day] = {});
+    if (e) d[n] = Object.assign({}, e, { _p: 1 }); else delete d[n];
+    if (!Object.keys(d).length) delete doc.days[day];
+  }
+  return doc;
+}
+/** What was read from the Sheet, with the days still being saved put back on top. */
+function atReapply() { for (const j of atInflight) { const hd = atHolder(j.key); if (hd) hd[j.key] = atApply(lbClone(hd[j.key] || { days: {} }), j.days); } }
+async function atSaveDays(key, days) {
+  const hold = atHolder(key);
+  if (!hold) return;
+  hold[key] = atApply(lbClone(hold[key] || { days: {} }), days);
+  const job = { key, days };
+  atInflight.push(job);
+  atSaveErr = ""; atRetry = null;
+  renderAttendance();
+  try {
+    const out = await api("atPut", { writes: [{ key, patch: { days } }] });
+    atInflight.splice(atInflight.indexOf(job), 1);
+    const m = (out.months || {})[key], hd = atHolder(key);
+    if (m && hd) hd[key] = m;
+    atReapply();
+  } catch (e) {
+    atInflight.splice(atInflight.indexOf(job), 1);
+    const who = Object.entries(days).flatMap(([d, x]) => Object.keys(x).map(n => [n, d]));
+    atSaveErr = `Not saved: ${who.length === 1 ? `${who[0][0]}, ${lbDayText(who[0][1])}` : `${who.length} days`}. ${errText(e, "That day")}`;
+    atRetry = job;
+    // what the Sheet has, again (the day as it was)
+    const y = Number(key.slice(0, 4));
+    if (y === atThisYear()) { await atLoad(); } else { delete atYears[y]; atAsked[y] = false; await atLoad(y); }
+  }
+  if (atData) store.set(K_AT, atData);
+  if (view.tab === "attendance" && !dlg.open) renderAttendance();
+}
+
 /** "2026-11" + n months. */
 function lbAddMonths(key, n) { const t = Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7)) - 1 + n; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, "0")}`; }
 
@@ -15802,15 +15932,8 @@ function openAtDay(day, name) {
     note.placeholder = kind === "note" ? "What happened (started, last day…)" : "Reason (optional)";
     save.disabled = !kind;
   };
-  const put = async (patchDays, b, done) => {
-    b.disabled = true; err.textContent = "";
-    try {
-      const out = await api("atPut", { writes: [{ key, patch: { days: patchDays } }] });
-      const m = (out.months || {})[key];
-      if (m) { const y = Number(key.slice(0, 4)); if (atData && atData.year === y) { atData.months[key] = m; store.set(K_AT, atData); } else if (atYears[y]) atYears[y].months[key] = m; }
-      dlgDirty = false; closeDialog(); toast(done); renderAttendance();
-    } catch (e) { err.textContent = errText(e, "That day"); b.disabled = false; }
-  };
+  // on the grid at once, saved in the background (the box is faded until the Sheet has it; a day not saved says so)
+  const put = (patchDays, b, done) => { dlgDirty = false; closeDialog(); if (done) toast(done); atSaveDays(key, patchDays); };
   const save = h("button", { class: "btn primary", type: "button", id: "atSave", text: "Save", onclick: ev => {
     const e = { k: kind };
     if (kind === "late") {
@@ -15823,10 +15946,10 @@ function openAtDay(day, name) {
     if (note.value.trim()) e.n = note.value.trim();
     if (kind === "note" && !e.n) { err.textContent = "Type the note."; return; }
     const pd = { [day]: { [name]: e } };
-    if (kind === "closed" && all.checked) for (const n of atPeopleIn(key, doc)) { const o = ((doc.days || {})[day] || {})[n]; if (!o || o.k === "closed") pd[day][n] = e; }
-    put(pd, ev.currentTarget, kind === "closed" && all.checked ? `Closed on ${lbDayText(day)} for everyone` : "Saved");
+    if (kind === "closed" && all.checked) for (const n of atPeopleFor(day, day, { [day]: (doc.days || {})[day] || {} })) { const o = ((doc.days || {})[day] || {})[n]; if (!o || o.k === "closed") pd[day][n] = e; }
+    put(pd, ev.currentTarget, kind === "closed" && all.checked ? `Closed on ${lbDayText(day)} for everyone` : "");
   } });
-  const del = cur ? h("button", { class: "btn", type: "button", id: "atDel", text: "Take it off", onclick: ev => put({ [day]: { [name]: null } }, ev.currentTarget, "Taken off") }) : null;
+  const del = cur ? h("button", { class: "btn", type: "button", id: "atDel", text: "Take it off", onclick: ev => put({ [day]: { [name]: null } }, ev.currentTarget, "") }) : null;
   openDialog(
     h("h3", { id: "dlgTitle", text: `${name} · ${lbDayText(day)}` }),
     cur && cur.by ? h("p", { class: "hint", text: `Typed by ${cur.by}${cur.at ? ` on ${lbDayText(lbDayKey(new Date(cur.at)))}` : ""}.` }) : null,
