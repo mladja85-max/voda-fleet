@@ -700,6 +700,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-card { display: grid; gap: 6px; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--accent-soft); }
 .of-card .hint { margin: 0; } .of-card .btn { justify-self: start; white-space: normal; text-align: left; max-width: 100%; } .of-card .hint.ok { color: var(--ok); font-weight: 700; }
 .of-opts { display: grid; gap: 8px; }
+.of-locked { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--soon-bg); color: var(--soon); font-weight: 700; font-size: .86rem; }
 /* Attendance: people across, days down (the day and the names stay in view while scrolling) */
 .at-scroll { max-height: 72vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .at-grid { border-collapse: separate; border-spacing: 0; font-size: .82rem; min-width: 100%; }
@@ -1672,6 +1673,7 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
 .lb-save { position: sticky; bottom: 0; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: .86rem; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lb-save.saved { color: var(--ok); }
 .lb-save.error { color: var(--due); border-color: var(--due); }
+.lb-save.refused { color: var(--soon); border-color: var(--soon); font-weight: 700; }
 .lb-grid { border-collapse: separate; border-spacing: 2px; font-size: .72rem; font-variant-numeric: tabular-nums; }
 .lb-grid th { font-weight: 600; color: var(--muted); padding: 0 2px; text-align: center; }
 .lb-grid tbody th { text-align: left; color: var(--ink); font-weight: 700; padding-right: 8px; white-space: nowrap; font-size: .8rem; }
@@ -7978,7 +7980,7 @@ const userAccess = () => (session && Array.isArray(session.access) ? session.acc
 const canSee = sec => isAdmin() || userAccess().includes(sec);
 const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 // what someone may see that isn't a checklist (the rest are checklists)
-const NOT_LISTS = ["trucks", "office", "attendance", "revenue", "repairs", "marketing", "contractors", "estimates", "estimates-all", "payroll", "pricecheck"];
+const NOT_LISTS = ["trucks", "office", "office-edit", "attendance", "revenue", "repairs", "marketing", "contractors", "estimates", "estimates-all", "payroll", "pricecheck"];
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
@@ -7986,7 +7988,7 @@ function allowedTabs() {
   if (canSeeLb()) out.push("leaderboard");
   if (canSee("revenue")) out.push("revenue");   // Operations
   if (canSee("estimates") || canSee("estimates-all")) out.push("estimates");
-  if (canSee("office")) out.push("office");
+  if (ofCan()) out.push("office");
   if (canSee("attendance") && (!apiLevel || apiLevel >= AT_API)) out.push("attendance");
   if (canSee("marketing")) out.push("marketing");
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
@@ -8708,6 +8710,7 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
     apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
     apiLevel >= OF_API ? [["office", "Office"]] : [],
+    apiLevel >= OF_EDIT_API ? [["office-edit", "Office (any day)"]] : [],
     apiLevel >= AT_API ? [["attendance", "Attendance"]] : [],
     apiLevel >= REV_API ? [["revenue", "Operations"]] : [],
     apiLevel >= EST_API ? [["estimates", "Estimates (his own)"], ["estimates-all", "Estimates (all)"]] : [],
@@ -14993,6 +14996,12 @@ function estReportPrint(d, name) {
 
 /* ======================= Office scorecards ======================= */
 const OF_API = 24;                                      // the Google script version with the Office section
+const OF_EDIT_API = 75;                                 // ... with "Office (any day)" (and today only for everyone else)
+/** Sees Office: Office, or Office (any day) ticked. */
+const ofCan = () => canSee("office") || canSee("office-edit");
+/** Types anyone's numbers on any day (the admin-only ones too): an Admin, or Office (any day) ticked (an older script
+ *  doesn't keep that tick, so nobody has it until the script that allows it). */
+const ofEditor = () => isAdmin() || canSee("office-edit");
 const OF_HIDE_API = 25;                                 // ... and with past-only numbers
 const OF_MANY_API = 49;                                 // ... and up to 40 numbers a person (20 before)
 let ofUsers = null;                                     // the logins, for Office people (this window only): it opens at once next time
@@ -15012,7 +15021,7 @@ const ofTypingNow = () => { const a = document.activeElement; return !!(a && a.t
 const ofThisYear = () => clockNow().getFullYear();
 
 async function ofLoad(year) {
-  if (!session || !canSee("office")) return;
+  if (!session || !ofCan()) return;
   const y = year || ofThisYear();
   if (ofLoading) return;
   ofLoading = true;
@@ -15064,6 +15073,11 @@ async function ofFlush() {
     for (const [k, d] of Object.entries(out.months || {})) ofData.months[k] = lbMerge(lbClone(d), lbClone(ofPending[k] || {}));
     ofSaveState = Object.keys(ofPending).length ? "pending" : "saved"; ofSaveErr = "";
   } catch (e) {
+    if (e && e.error === "only_today") {
+      ofSaveState = "refused"; ofSaveErr = "Only today's numbers can be typed: that wasn't saved. To fix another day, ask Mike.";
+      setTimeout(() => { ofLoad(); }, 0);
+      return;
+    }
     for (const w of writes) ofPending[w.key] = lbMerge(w.patch, ofPending[w.key] || {});
     ofSaveState = "error"; ofSaveErr = errText(e, "The numbers");
   } finally {
@@ -15079,6 +15093,7 @@ function ofShowSave() {
   if (!el) return;
   el.className = "lb-save " + ofSaveState;
   if (ofSaveState === "error") el.replaceChildren(h("span", { text: `Not saved yet. ${ofSaveErr}` }), " ", h("button", { class: "btn small", type: "button", onclick: () => ofFlush(), text: "Try again" }));
+  else if (ofSaveState === "refused") el.textContent = ofSaveErr;
   else el.textContent = ofSaveState === "pending" || ofSaveState === "saving" ? "Saving…" : ofSaveState === "saved" ? "All changes saved" : "Numbers save as you type.";
 }
 
@@ -15109,7 +15124,7 @@ function renderOffice() {
     return;
   }
   if (!OF_TABS[ofView.tab]) ofView.tab = "today";
-  const tabs = lbSeg(Object.entries(OF_TABS).map(([k, t]) => [k, k === "today" && admin ? "Enter numbers" : t]), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
+  const tabs = lbSeg(Object.entries(OF_TABS).map(([k, t]) => [k, k === "today" && ofEditor() ? "Enter numbers" : t]), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
   tabs.classList.add("of-tabs");
   const body = ofView.tab === "score" ? ofScoreEl() : ofTodayEl();
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
@@ -15121,21 +15136,21 @@ const ofBar = (n, goal) => h("div", { class: "of-bar" + (goal && n >= goal ? " d
 
 /* ---- my day: her calls by kind (adding up toward the goal) and her other numbers ---- */
 function ofTodayEl() {
-  const cfg = ofCfg(), admin = isAdmin(), y = ofData.year;
+  const cfg = ofCfg(), admin = isAdmin(), editor = ofEditor(), y = ofData.year;
   const today = lbToday();
   const day = lbIsDay(ofView.day) && ofView.day.startsWith(y + "-") ? ofView.day : today.startsWith(y + "-") ? today : `${y}-12-31`;
   const key = day.slice(0, 7);
   const people = cfg.people.filter(p => lbOnBoard(p, key));
-  let p = admin ? (people.find(x => x.name === ofView.who) || people[0] || null) : ofMe();
+  let p = editor ? (people.find(x => x.name === ofView.who) || people[0] || null) : ofMe();
   const go = d => { ofFlush(); ofView.day = d; renderOffice(); };
   const out = [];
   if (!p) {
-    out.push(h("div", { class: "panel" }, h("h2", { text: admin ? `No one in the office in ${lbMonthLong(Number(key.slice(5)))}` : "Your login isn't linked yet" }),
-      h("p", { class: "meta", text: admin ? "Check the months in People." : "Ask Mike to pick your login next to your name in Office > People. Until then you can see everyone under Scorecard." })));
+    out.push(h("div", { class: "panel" }, h("h2", { text: editor ? `No one in the office in ${lbMonthLong(Number(key.slice(5)))}` : "Your login isn't linked yet" }),
+      h("p", { class: "meta", text: editor ? (admin ? "Check the months in People." : "Ask Mike to check the months in Office > People.") : "Ask Mike to pick your login next to your name in Office > People. Until then you can see everyone under Scorecard." })));
     return out;
   }
   const first = `${y}-01-01`, last = `${y}-12-31`, mon = lbWeekStart(day);
-  if (admin) out.push(h("div", { class: "lb-bar" }, lbSeg(people.map(x => [x.name, x.name]), p.name, k => { ofFlush(); ofView.who = k; ofSaveView(); renderOffice(); }, "Who")));
+  if (editor) out.push(h("div", { class: "lb-bar" }, lbSeg(people.map(x => [x.name, x.name]), p.name, k => { ofFlush(); ofView.who = k; ofSaveView(); renderOffice(); }, "Who")));
   out.push(h("div", { class: "lb-daybar" },
     h("button", { class: "btn small", type: "button", id: "ofPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => go(lbAddDays(day, -1)) }, "‹"),
     lbDateInput({ id: "ofDay", value: day, min: first, max: last, "aria-label": "Day" }, v => go(v), first, last),
@@ -15150,8 +15165,9 @@ function ofTodayEl() {
     })));
   const e = ofEntry(ofData.months, day, p.name) || {};
   const goal = cfg.goal, work = ofWorkDay(day);
+  const locked = !editor && day !== today;   // another day: only Admins and Office (any day) change it
   const box = (f) => {
-    const mine = f.kind !== "admin" || admin;
+    const mine = (f.kind !== "admin" || editor) && !locked;
     return h("label", { class: "lb-box" + (mine ? "" : " ro") }, h("span", { text: f.label }),
       h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? "" : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
         onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
@@ -15161,10 +15177,11 @@ function ofTodayEl() {
   const outs = shown.filter(f => f.kind === "out"), nums = shown.filter(f => f.kind === "num"), adm = shown.filter(f => f.kind === "admin");
   out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
     h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
+    locked ? h("p", { class: "of-locked", id: "ofLocked", text: `Only today's numbers can be typed. To fix ${day < today ? "a past" : "another"} day, ask Mike.` }) : null,
     h("div", { class: "of-total" }, h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
     outs.length ? [h("h4", { class: "of-sec", text: `Calls (they add up to the ${goal} goal)` }), h("div", { class: `lb-boxes n${Math.min(3, outs.length)}` }, outs.map(box))] : null,
     nums.length ? [h("h4", { class: "of-sec", text: "Other numbers" }), h("div", { class: `lb-boxes n${Math.min(3, nums.length)}` }, nums.map(box))] : null,
-    adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : "Typed by admins (checked in the CRM)" }), h("div", { class: `lb-boxes n${Math.min(3, adm.length)}` }, adm.map(box))] : null,
+    adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : editor ? "Checked in the CRM" : "Typed by admins (checked in the CRM)" }), h("div", { class: `lb-boxes n${Math.min(3, adm.length)}` }, adm.map(box))] : null,
     h("p", { class: "lb-card-foot", id: "ofWeekFoot" })));
   out.push(h("p", { id: "ofSaveNote", class: "lb-save", role: "status" }));
   setTimeout(() => ofRefreshDay(day, p), 0);
