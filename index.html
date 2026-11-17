@@ -898,7 +898,7 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .cpb-sum { display: grid; gap: 2px; margin: 6px 0; } .cpb-sum small { color: var(--muted); }
 .cpb-list { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; } .cpb-list:empty { display: none; }
 .cpb-table td, .cpb-table th { vertical-align: top; } .cpb-table td small { display: block; color: var(--muted); font-size: .74rem; } .cpb-table td small.ok { color: var(--ok); } .cpb-table td small.bad { color: var(--due); }
-.cpb-table tr.off td, .cpb-table tr.out td { color: var(--muted); } .cpj h4 { margin: 12px 0 6px; } .cpj .cpb-list { max-height: 34vh; } .rp-before { display: block; margin-top: 4px; } .cpb-table td.l.pc { white-space: nowrap; } .cpb-table { width: 100%; } .cpb-table th.l, .cpb-table td.l { text-align: left; } .cpb-table td:first-child, .cpb-table th:first-child { width: 28px; } .cpb-table .cpb-f { width: 34%; min-width: 180px; white-space: normal; overflow-wrap: anywhere; } .cpb-table td.l { white-space: normal; } .cpb-table .mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: .8rem; }
+.cpb-table tr.off td, .cpb-table tr.out td { color: var(--muted); } .cpj h4 { margin: 12px 0 6px; } .cpj h4.cpj-warn { color: var(--due); } .cpj .cpb-list { max-height: 34vh; } .rp-before { display: block; margin-top: 4px; } .cpb-table td.l.pc { white-space: nowrap; } .cpb-table { width: 100%; } .cpb-table th.l, .cpb-table td.l { text-align: left; } .cpb-table td:first-child, .cpb-table th:first-child { width: 28px; } .cpb-table .cpb-f { width: 34%; min-width: 180px; white-space: normal; overflow-wrap: anywhere; } .cpb-table td.l { white-space: normal; } .cpb-table .mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: .8rem; }
 .cp-table tbody tr { cursor: pointer; } .cp-table tr.gone { opacity: .6; }
 .cp-table td small, .cp-table th small, .cp-items td small { display: block; }
 .cp-table th, .cp-table td, .cp-items th, .cp-items td { white-space: nowrap; }
@@ -13604,19 +13604,24 @@ async function openCpBeforeJobs() {
   const C = cpCents, place = x => repTown(x.addr) || x.addr;
   const draw = () => {
     if (!res) return;
-    const all = res.num.concat(res.addr), ok = all.filter(x => pick.has(x.id) && !done.has(x.id)), dn = all.filter(x => done.has(x.id));
+    const all = res.num.concat(res.short, res.addr), ok = all.filter(x => pick.has(x.id) && !done.has(x.id)), dn = all.filter(x => done.has(x.id));
     const tot = l => l.reduce((n, x) => n + (x.owed || 0), 0);
     sumEl.replaceChildren(h("b", { text: dn.length ? `✓ ${cpPlural(dn.length, "job")} marked paid to Monumental · ${C(tot(dn))} no longer owed` : all.length ? `${cpPlural(ok.length, "job")} to mark paid to Monumental · ${C(tot(ok))} shown as still owed now` : "No job to mark paid" }),
-      h("small", { text: [`${fmt(res.num.length)} by invoice #`, `${fmt(res.addr.length)} by street and amount`, res.partly.length ? `${fmt(res.partly.length)} only partly paid (not marked)` : ""].filter(Boolean).join(" · ") }));
+      h("small", { text: [`${fmt(res.num.length)} by invoice #`, res.short.length ? `${fmt(res.short.length)} paid less than owed (not ticked: check them)` : "", `${fmt(res.addr.length)} by street and amount`, res.partly.length ? `${fmt(res.partly.length)} only partly paid (not marked)` : ""].filter(Boolean).join(" · ") }));
     const row = x => h("tr", { "data-job": x.id, class: done.has(x.id) ? "done" : "" },
       h("td", null, h("input", { type: "checkbox", "aria-label": `Mark ${x.client || "this job"} paid`, checked: pick.has(x.id) || done.has(x.id), disabled: busy || done.has(x.id), onchange: e => { if (e.target.checked) pick.add(x.id); else pick.delete(x.id); armed = false; draw(); } })),
       h("td", { class: "l pc", text: x.day ? lbDayText(x.day) : "" }),
-      h("td", { class: "l" }, x.client || "(no name)", h("small", { text: [place(x), x.by === "address" ? `invoice for ${x.invClient || "this street"} · ${C(x.a)}` : ""].filter(Boolean).join(" · ") }), done.has(x.id) ? h("small", { class: "ok", text: "✓ Paid before VODA Hub" }) : null),
+      h("td", { class: "l" }, x.client || "(no name)", h("small", { text: [place(x), x.by === "address" ? `invoice for ${x.invClient || "this street"} · ${C(x.a)}` : ""].filter(Boolean).join(" · ") }),
+        x.paidA != null && x.owed > x.paidA + 100 ? h("small", { class: "bad", text: `Invoices paid ${C(x.paidA)} · still owed ${C(x.owed)}: ${C(x.owed - x.paidA)} more than paid` }) : null,
+        done.has(x.id) ? h("small", { class: "ok", text: "✓ Paid before VODA Hub" }) : null),
       h("td", { class: "l mono", text: (x.inv || []).join(" · ") || "(no #)" }), h("td", { text: C(x.owed || 0) }));
-    const table = (id, l) => h("table", { class: "lb-table cpb-table", id }, h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l pc", text: "Day" }), h("th", { class: "l", text: "Job" }), h("th", { class: "l", text: "Invoice #" }), h("th", { text: "Still owed now" }))), h("tbody", null, l.map(row)));
+    const table = (id, l, invH) => h("table", { class: "lb-table cpb-table", id }, h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { class: "l pc", text: "Day" }), h("th", { class: "l", text: "Job" }), h("th", { class: "l", text: invH || "Invoice # on the job" }), h("th", { text: "Still owed now" }))), h("tbody", null, l.map(row)));
     box.replaceChildren(...[
       res.num.length ? h("h4", { text: `Every invoice # on the job paid (${fmt(res.num.length)})` }) : null, res.num.length ? h("div", { class: "cpb-list" }, table("cpjNum", res.num)) : null,
-      res.addr.length ? h("h4", { text: `No invoice # on the job: a paid invoice at its street, for its amount (${fmt(res.addr.length)})` }) : null, res.addr.length ? h("div", { class: "cpb-list" }, table("cpjAddr", res.addr)) : null,
+      res.short.length ? h("h4", { class: "cpj-warn", text: `Invoices paid add up to less than what's still owed (${fmt(res.short.length)}): not ticked, check each` }) : null,
+      res.short.length ? h("p", { class: "meta", text: "Every invoice # on these jobs is paid, but they add up to less than Monumental's share still owed. The old Excel list sometimes put another job's invoice # on a job; tick one only if it's really paid in full." }) : null,
+      res.short.length ? h("div", { class: "cpb-list" }, table("cpjShort", res.short)) : null,
+      res.addr.length ? h("h4", { text: `No invoice # on the job: a paid invoice at its street, for its amount (${fmt(res.addr.length)})` }) : null, res.addr.length ? h("div", { class: "cpb-list" }, table("cpjAddr", res.addr, "Paid invoice #")) : null,
       res.partly.length ? h("h4", { text: `Only partly paid: left as they are (${fmt(res.partly.length)})` }) : null,
       res.partly.length ? h("div", { class: "cpb-list" }, h("table", { class: "lb-table cpb-table", id: "cpjPartly" }, h("thead", null, h("tr", null, h("th", { class: "l pc", text: "Day" }), h("th", { class: "l", text: "Job" }), h("th", { class: "l", text: "Paid" }), h("th", { class: "l", text: "Not on the paid list" }))),
         h("tbody", null, res.partly.map(x => h("tr", { "data-job": x.id }, h("td", { class: "l pc", text: x.day ? lbDayText(x.day) : "" }), h("td", { class: "l" }, x.client || "(no name)", h("small", { text: place(x) })), h("td", { class: "l mono", text: x.paid.join(" · ") }), h("td", { class: "l mono", text: x.open.join(" · ") })))))) : null].filter(Boolean));
@@ -13644,7 +13649,7 @@ async function openCpBeforeJobs() {
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() }), go))));
   try {
     res = await api("cpBeforeJobs", {}, 170000);
-    res.num = res.num || []; res.addr = res.addr || []; res.partly = res.partly || [];
+    res.num = res.num || []; res.short = res.short || []; res.addr = res.addr || []; res.partly = res.partly || [];
     res.num.concat(res.addr).forEach(x => pick.add(x.id));
     status.textContent = "";
   } catch (e) { status.textContent = ""; err.textContent = errText(e, "The jobs"); }
