@@ -11793,7 +11793,8 @@ function renderRevenue() {
   }
   const per = REV_PER[revView.per] ? revView.per : "week";
   const off = Math.min(0, Number(revView.off) || 0);
-  const r = revRange(per, off), today = lbToday(), to = r.to > today ? today : r.to;
+  // counted up to yesterday (today's numbers aren't in until the day is over); today only when picked by hand (Dates)
+  const r = revRange(per, off), today = lbToday(), last = per === "dates" ? today : lbAddDays(today, -1), to = r.to > last ? last : r.to;
   const cmp = Math.max(0, Math.min(REV_CMP_YEARS, Number(revView.cmp) || 0));
   const cf = revShift(r.from, cmp, per), ct = revShift(to, cmp, per);
   const len = revLen(r.from, r.to);
@@ -11805,7 +11806,7 @@ function renderRevenue() {
   const ranges = () => [[r.from, to, true]].concat(cmp ? [[cf, ct]] : []);
   const title = secTitle("Operations");
   const top = title ? h("div", { class: "lb-top" }, title) : null;
-  const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > today,
+  const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > last,
     title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure([[r.from, to]], true); } }, "Read again");
   // the period: Week / Month / Year with ‹ ›, or Dates (From – To), and what to compare it with
   const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; revView.from = from; revView.to = to2; revSaveView(); renderRevenue(); };
@@ -11831,17 +11832,18 @@ function renderRevenue() {
         h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: r.to >= today, onclick: () => step(1) }, "›"))
       : h("div", { class: "of-step" },
         h("button", { class: "btn small", type: "button", id: "revPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
-        h("strong", { id: "revRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
+        h("strong", { id: "revRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (to yesterday)" : "") }),
         h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
     tools);
-  const days = r.from > today ? {} : revDaysFor(r.from, to);
-  const old = cmp && r.from <= today ? revDaysFor(cf, ct) : {};
+  const days = r.from > last ? {} : revDaysFor(r.from, to);
+  const old = cmp && r.from <= last ? revDaysFor(cf, ct) : {};
   if (!days || !old) { box.replaceChildren(...[top, bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
   const s = revSum(days, r.from, to), c = cmp ? revSum(old, cf, ct) : null;
   const cmpName = cmp ? (cf.slice(0, 4) === ct.slice(0, 4) ? cf.slice(0, 4) : `${cf.slice(0, 4)}–${ct.slice(0, 4)}`) : "";
   const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
     revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…`
-      : s.read ? `From Housecall Pro · read ${revReadText(s.at)}` : r.from > today ? "" : "Not read from Housecall Pro yet.",
+      : s.read ? `From Housecall Pro · read ${revReadText(s.at)}` : r.from > last ? "" : "Not read from Housecall Pro yet.",
+    per !== "dates" && r.to >= today && r.from <= today ? h("span", { class: "rev-upto", id: "revUpto", text: ` · counted up to yesterday (${revSpanText(lbAddDays(today, -1), lbAddDays(today, -1))}); for today, pick Dates` }) : null,
     cmp && !revSync.busy ? h("span", { class: "rev-vs", id: "revVs", text: ` · compared with ${revSpanText(cf, ct)}${per === "week" ? " (the same weekdays)" : ""}` }) : null);
   const err = revSync.err ? h("p", { class: "dlg-err", id: "revErr" }, revSync.err, " ",
     h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; renderRevenue(); } }, "Try again")) : null;
@@ -11868,7 +11870,7 @@ function renderRevenue() {
       h("div", Object.assign({ "data-k": k, class: "rev-open" }, opener(k, r.from, to)), h("small", null, k !== "total" ? h("i", { class: "rev-dot " + k }) : null, t), h("b", { text: revShort(cents) }),
         c ? h("span", null, h("b", { class: "rev-ytag", text: cmpShort }), vs(cents, was)) : h("span", { text: revJobs(j) }))));
   // the table: each line's own days, and (comparing) the same days before
-  const lines = r.from > today ? [] : revLines(per, r, to, today);
+  const lines = r.from > last ? [] : revLines(per, r, to, last);
   const lineOld = L => (c && !L.future ? revSum(old, revShift(L.a, cmp, per), revShift(L.b, cmp, per)) : null);
   const openMonth = k => { const t = clockNow(); revView.per = "month"; revView.off = (Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1) - (t.getFullYear() * 12 + t.getMonth()); revSaveView(); renderRevenue(); };
   const attrs = L => Object.assign({ class: [L.cls, L.future ? "future" : ""].filter(Boolean).join(" ") },
@@ -11900,8 +11902,8 @@ function renderRevenue() {
   if (s.o[0] || s.o[1]) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
   notes.push(h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }));
   // Accounts receivable: what's still owed for the jobs of the period on screen (Week, Month, Year or the dates picked)
-  const arSpan = r.from > today ? "" : revSpanText(r.from, to);
-  const ar = (apiLevel && apiLevel < UNPAID_API) || r.from > today ? null : revArSum(days, r.from, to);
+  const arSpan = r.from > last ? "" : revSpanText(r.from, to);
+  const ar = (apiLevel && apiLevel < UNPAID_API) || r.from > last ? null : revArSum(days, r.from, to);
   const arOpen = dep => revArDlg(dep || "all", r.from, to);
   let arCard = null, arBar = null;
   if (ar) {
@@ -11938,7 +11940,7 @@ function renderRevenue() {
   let aside = arCard ? h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable and average job" }, arCard) : null;
   // beside the table (under it on a smaller screen): each department's average job for the period on screen (Week,
   // Month, Year or the dates picked), and for the days it's compared with
-  if (r.from <= today) {
+  if (r.from <= last) {
     const avg = (x, k) => { const v = k === "t" ? [x.cents, x.jobs] : x[k]; return { cents: v[0], jobs: v[1], avg: v[1] ? v[0] / v[1] : 0 }; };
     const ayName = cmpName, ayShort = cf.slice(0, 4) === ct.slice(0, 4) ? `’${cf.slice(2, 4)}` : `’${cf.slice(2, 4)}–’${ct.slice(2, 4)}`;
     aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable and average job" }, arCard,
@@ -11957,13 +11959,13 @@ function renderRevenue() {
   }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
-  const goalDays = (per === "week" || per === "dates") && r.from <= today ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
-  const goal = revGoalEl(r.from > today ? today : to, goalDays), slot = goal ? revGoalSlot() : "";
+  const goalDays = (per === "week" || per === "dates") && r.from <= last ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
+  const goal = revGoalEl(r.from > last ? last : to, goalDays), slot = goal ? revGoalSlot() : "";
   if (slot === "side") { if (aside) aside.prepend(goal); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, goal); }
   box.classList.toggle("goal3", slot === "wide");
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? goal : null, r.from > today ? null : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? goal : null, r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [goal] : []));
-  if (r.from <= today && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
+  if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
   // after the days on screen are read (their jobs tell each invoice's department)
   if (canSee("revenue")) setTimeout(() => { if (!revSync.busy) unsentLoad(false); }, 0);
 }
@@ -12337,7 +12339,8 @@ function revGoalEl(asOf, P) {
   // each month goal opens to what each department has left of it: its share of the goal (as in the year's goal), less
   // what it produced this month (the Bonus: Repairs less the contractors' pay)
   const shares = goalShares(yg, ys);
-  const daysLeft = asOf < lbToday() ? 0 : goalWorkDays(lbAddDays(asOf, 1), `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`);
+  // working days left after the last day counted (counted up to yesterday: today is one of them)
+  const daysLeft = asOf < lbAddDays(lbToday(), -1) ? 0 : goalWorkDays(lbAddDays(asOf, 1), `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`);
   if (mg) for (const [k, label] of GOAL_MONTH) {
     const g = mg[k];
     if (g == null) continue;
