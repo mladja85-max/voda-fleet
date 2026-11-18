@@ -746,6 +746,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 /* the day's rows: phone, one line per kind of call (its booked number beside it); wide, each row on one line */
 .of-line { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .of-line > .lb-box { grid-column: 1; }
+.lb-box.ro.of-auto input { font-weight: 700; background: var(--surface); border-style: dashed; color: var(--ink); cursor: default; }
 @supports (grid-template-rows: subgrid) {   /* name, box, % line: the boxes on a line stay level however the names wrap */
   .of-line { row-gap: 10px; }
   .of-line > .lb-box { grid-row: span 3; grid-template-rows: subgrid; row-gap: 3px; }
@@ -16130,13 +16131,16 @@ function ofTodayEl() {
   const shown = ofShown(p, e);   // a past-only number shows only on a day that has one
   // the rows: Outbound calls, Inbound calls, then Admins only (not shown to the office people: admins type them)
   const rows = ofRows(shown), outs = rows.out, nums = rows.in, adm = editor ? rows.admin : [];
-  const cols = Math.min(6, Math.max(4, outs.length, nums.length));   // wide screen: each row on one line, the boxes lined up
-  const line = (list) => h("div", { class: "of-line", style: `--n:${cols}` }, list.map(box));
+  const cols = Math.min(8, Math.max(4, outs.length + 1, nums.length));   // wide screen: each row on one line, the boxes lined up
+  const line = (list, end) => h("div", { class: "of-line", style: `--n:${cols}` }, list.map(box), end || null);
+  // the last Outbound box: # of outbound calls, added up from the calls (not the booked numbers); nobody types it
+  const auto = h("label", { class: "lb-box ro of-auto" }, h("span", { text: "# of outbound calls" }),
+    h("input", { type: "text", id: "ofOutBox", readonly: true, tabindex: "-1", "aria-readonly": "true" }), h("small", { class: "of-ratio of-auto-n", text: "Counted for you" }));
   out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
     h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
     locked ? h("p", { class: "of-locked", id: "ofLocked", text: `Only today's numbers can be typed. To fix ${day < today ? "a past" : "another"} day, ask Mike.` }) : null,
     h("div", { class: "of-total" }, h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
-    outs.length ? [h("h4", { class: "of-sec", id: "ofRowOut", text: "Outbound calls" }), h("p", { class: "of-sec-n", text: `The calls add up to the ${goal} goal; the booked numbers don't.` }), line(outs)] : null,
+    outs.length ? [h("h4", { class: "of-sec", id: "ofRowOut", text: "Outbound calls" }), h("p", { class: "of-sec-n", text: `The calls add up to the ${goal} goal; the booked numbers don't.` }), line(outs, auto)] : null,
     nums.length ? [h("h4", { class: "of-sec", id: "ofRowIn", text: "Inbound calls" }), line(nums)] : null,
     adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : editor ? "Checked in the CRM" : "Typed by admins (checked in the CRM)" }), line(adm)] : null,
     h("p", { class: "lb-card-foot", id: "ofWeekFoot" })));
@@ -16151,11 +16155,12 @@ function ofRefreshDay(day, p) {
   const cfg = ofCfg(), e = ofEntry(ofData.months, day, p.name) || {};
   const o = ofOut(p, e), goal = cfg.goal;
   $("ofOutNum").textContent = fmt(o);
+  if ($("ofOutBox")) $("ofOutBox").value = fmt(o);
   $("ofOutGoal").textContent = ofWorkDay(day) ? ` of ${goal} outgoing calls${o >= goal ? " · goal reached" : ` · ${goal - o} to go`}` : " outgoing calls";
   const bar = card.querySelector(".of-bar");
   bar.classList.toggle("done", o >= goal);
   bar.querySelector("i").style.width = `${Math.min(100, Math.round(o / goal * 100))}%`;
-  for (const el of card.querySelectorAll(".of-ratio")) {
+  for (const el of card.querySelectorAll(".of-ratio[data-of]")) {
     const f = p.fields.find(x => x.id === el.dataset.of), base = p.fields.find(x => x.id === f.of);
     const a = ofNum(e[f.id]), b = ofNum(e[f.of]);
     el.textContent = a != null && b ? `${ofPct(a / b)} ${/^sched/i.test(f.label) ? "scheduled" : "booked"}` : "";   // it sits beside its calls
