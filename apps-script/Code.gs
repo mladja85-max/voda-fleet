@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 91;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 92;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4332,6 +4332,7 @@ const EST_SHEET = "Estimates";
 const EST_COLS = ["Estimate id", "Estimate #", "Day (scheduled, else created)", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
   "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for", "Address", "State", "Phone"];
+const EST_RECHECK_DAYS = 60, EST_RECHECK_MAX = 50;   // a quick read also reads again the open estimates of the last 60 days (the newest 50)
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
 const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "5";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once; 5: the day it was scheduled for, read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
@@ -4563,6 +4564,26 @@ function estSync_(req, user) {
     next = older || !list.length || page >= (Number(r.data && r.data.total_pages) || 1) ? 0 : page + 1;
     if (!next) break;
   }
+  // approving or sending an option in Housecall Pro doesn't always move the estimate's "changed" time, so a quick read
+  // can miss it: on its last step, the estimates still open (the newest EST_RECHECK_MAX of the last EST_RECHECK_DAYS
+  // days) are read again one by one, and the ones that changed are kept with the rest
+  let rechecked = 0;
+  if (!backfill && !next) {
+    const seen = {};
+    got.forEach(function (e) { if (e && e.id) seen[String(e.id)] = true; });
+    const cut = dayOf(now - EST_RECHECK_DAYS * 864e5), had = estRows_(estSheet_(false));
+    const open = Object.keys(had).map(function (id) { return had[id]; })
+      .filter(function (r) { return String(r[9] || "open") === "open" && String(r[2]) >= cut && !seen[String(r[0])]; })
+      .sort(function (a, b) { return String(a[2]) < String(b[2]) ? 1 : String(a[2]) > String(b[2]) ? -1 : 0; }).slice(0, EST_RECHECK_MAX);
+    hcpGetAll_(open.map(function (r) { return { path: "/estimates/" + encodeURIComponent(String(r[0])), query: {} }; })).forEach(function (a, i) {
+      const e = a && !a.error && a.data ? (a.data.estimate || a.data) : null;
+      if (!e || !e.id) return;
+      rechecked++;
+      const was = open[i], row = estRow_(e, was, tz, "");
+      // what it is now: status, who decided and when, the amounts, its options, stage, people, tags, sent
+      if ([9, 10, 11, 12, 13, 14, 15, 16, 26, 27].some(function (c) { return String(row[c]) !== String(was[c] == null ? "" : was[c]); })) got.push(e);
+    });
+  }
   return withLock_(function () {
     // only what changed is written: an estimate already on the tab in its own row, a new one added at the bottom; many
     // changed (Read all) or the first read finished: the whole tab, newest first
@@ -4598,7 +4619,7 @@ function estSync_(req, user) {
     }
     s.getRange(1, 1, 1, W).setValues([EST_COLS]).setFontWeight("bold");
     if (!next) { if (backfill) { P.setProperty(EST_DONE, "yes"); P.setProperty(EST_SCHEMA, EST_V); } P.setProperty(EST_AT, String(now)); }
-    return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
+    return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, rechecked: rechecked, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
   });
 }
 /* ---------------- Past clients to call (Office) ----------------
