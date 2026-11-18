@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 82;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 83;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -5942,19 +5942,28 @@ function repAtStreet_(addr, key) {
   if (p.length < 2 || !w.some(function (x) { return /^\d+[a-z]?$/.test(x); })) return null;
   return w.some(function (x) { return x.replace(/[a-z]$/, "") === p[0]; }) && w.indexOf(p[1]) !== -1;
 }
+/** Does an invoice number carry this address, the way Monumental writes them: its house number, then the street's first
+ *  letters ("REB2-3511ANNANDALERD": 3511 Annandale Rd; "REB-5909-#102-FOUNDE": 5909 Founders Hill Dr, unit 102)? */
+function repNoAt_(n, addr) {
+  const k = repStreetKey_(addr).split(" ");
+  if (k.length < 2 || k[0].length < 3) return false;
+  const N = " " + String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, " ") + " ";
+  return new RegExp("[^0-9]" + k[0] + "[a-z0-9 ]{0,8}?" + k[1].slice(0, 4)).test(N);
+}
 /** The invoice numbers written in a job's "Their invoice #" (the old Excel list: "59404326-2 - $45,715.61****59404326-3");
  *  a "#" inside one is part of it ("REB-5909-#102-FOUNDE", "V2#3817-3854BLENHEI"), one in front isn't ("#1010731026-1"). */
 function repInvNos_(text) {
   return (String(text || "").match(/[A-Za-z0-9&#]+(?:-[A-Za-z0-9&#]+)+/g) || []).map(function (t) { return t.replace(/^#+/, ""); })
-    .filter(function (t) { return t.length >= 6 && (t.match(/\d/g) || []).length >= 4; })
+    .filter(function (t) { return t.length >= 6 && (t.match(/\d/g) || []).length >= 3; })   // REB-851NGLEBERD: a 3-digit house number
     .map(function (t) { return t.toUpperCase(); }).filter(function (t, i, a) { return a.indexOf(t) === i; });
 }
 /** The jobs Monumental is paid for by invoices paid before the app (Admins). Without ids, which: every invoice # on a job
  *  (its "Their invoice #" and the invoices saved on it) paid, or, a job with no invoice #, the only one at an invoice's
  *  street with Monumental's share within $1 of it; and those only partly paid. An invoice # typed in "Their invoice #" of a
  *  job at another street than the invoice's own (its PDF's address: typed on the wrong job) isn't that job's (one saved on
- *  the job from its PDF is): the job is listed to check
- *  (wrong; or marked, when it's already marked paid), and the invoice can still find its own job by its street.
+ *  the job from its PDF is, and so is one whose number carries the job's address: the PDF's house number mistyped): the
+ *  job is listed to check (wrong; or marked, when it's already marked paid), and the invoice can still find its own job by
+ *  its street (or the address its number carries).
  *  With ids: those jobs marked paid to Monumental with no day ("before"), and their invoices saved on them that are paid. */
 function cpBeforeJobs_(req, user) {
   const cs = cpSheet_(false), all = cpAll_(cs), s = repSheet_(true), rows = repRows_(s);
@@ -5977,7 +5986,7 @@ function cpBeforeJobs_(req, user) {
   });
   // typed in its "Their invoice #" (not saved on it from the PDF) at another street than the invoice's: another job's
   const away = function (r, n) {
-    return !!where[n] && repAtStreet_(r[4], where[n].st) === false && !repMonList_(r).some(function (v) { return String(v.n).toUpperCase() === n; });
+    return !!where[n] && repAtStreet_(r[4], where[n].st) === false && !repNoAt_(n, r[4]) && !repMonList_(r).some(function (v) { return String(v.n).toUpperCase() === n; });
   };
   const mon = Object.keys(rows).map(function (id) { return rows[id]; }).filter(function (r) { return !r[13] && repIsMon_(r); });
   const open = mon.filter(function (r) { return !r[25]; });
@@ -6012,9 +6021,11 @@ function cpBeforeJobs_(req, user) {
   before.forEach(function (x) {
     const n = String(x.i.n || "").toUpperCase(), jr = x.i.j ? rows[x.i.j] : null;
     if ((n && used[n]) || (x.i.j && !(jr && away(jr, n)))) return;   // saved on a job at another street: still its own job's
+    // at its street: the PDF's address, or the one its number carries (a PDF with the house number mistyped)
     const k = repStreetKey_(x.i.addr);
-    if (!k) return;
-    const c = open.filter(function (r) { return !taken[r[0]] && !nos(r).length && repStreetKey_(r[4]) === k && Math.abs(repSplit_(r).owed - x.i.a) <= 100; });
+    if (!k && !n) return;
+    const at = function (r) { return (!!k && (repStreetKey_(r[4]) === k || repAtStreet_(r[4], k) === true)) || (!!n && repNoAt_(n, r[4])); };
+    const c = open.filter(function (r) { return !taken[r[0]] && !nos(r).length && at(r) && Math.abs(repSplit_(r).owed - x.i.a) <= 100; });
     if (c.length !== 1) return;
     taken[c[0][0]] = true;
     addr.push(out(c[0], { inv: n ? [n] : [], b: [x.b], by: "address", a: x.i.a, invClient: String(x.i.client || "") }));
