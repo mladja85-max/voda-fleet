@@ -363,9 +363,6 @@ function doPost(e) {
       case "pcMark":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return pcMark_(req, user); }));
-      case "pcFind":
-        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(pcFind_(req));
       case "pcMarks":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(pcMarks_(req));
@@ -4928,31 +4925,6 @@ function pcRead_(req, user) {
   return { ok: true, ready: true, admin: admin, day: day, today: today, start: start, groups: groups, at: Number(P.getProperty(PC_AT)) || 0, now: tmNow_().getTime(),
     reread: admin && P.getProperty(PC_SCHEMA) !== PC_V, rereading: cur.stage === "back",
     sync: sync && !sync.ok ? { error: sync.error, status: sync.status || 0 } : null, sorts: admin ? sorts : undefined };
-}
-/** Everyone with Office: look a client up by name, company or phone (2+ letters, or 4+ digits), up to 15: their last
- *  finished job, the days they come up in each group, and, when they're not on a list, why (left off, no finished job read,
- *  over 36 months). For "why isn't this client on the list?". */
-function pcFind_(req) {
-  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone();
-  const today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
-  const q = String(req.q || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 60), digits = q.replace(/\D/g, "");
-  if (q.replace(/[^a-z]/g, "").length < 2 && digits.length < 4) return { ok: false, error: "bad_request" };
-  if (P.getProperty(PC_DONE) !== "yes") return { ok: true, ready: false, found: [] };
-  const K = pcKnown_(tz), words = q.split(" ").filter(function (w) { return /[a-z]/.test(w); });
-  const hits = Object.keys(K.cust).filter(function (c) {
-    const cu = K.cust[c], text = (String(cu[1] || "") + " " + String(cu[5] || "")).toLowerCase();
-    if (words.length && words.every(function (w) { return text.indexOf(w) !== -1; })) return true;
-    return digits.length >= 4 && !words.length && (String(cu[2] || "") + " " + String(cu[3] || "")).replace(/\D/g, "").indexOf(digits) !== -1;
-  });
-  const found = hits.slice(0, 15).map(function (c) {
-    const cu = K.cust[c], s = K.by[c] || { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0, tags: [] }, nm = pcName_(cu);
-    const x = { id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), addr: s.addr, last: s.last, type: s.type, jobs: s.jobs, first: s.first, read: s.all };
-    if (!s.last) return x;
-    x.due = PC_GROUPS.map(function (g) { const d = pcDue_(s.last, g); const m = K.marks[c + "|" + g + "|" + s.last]; return { g: g, day: d, m: m && m.r ? m : null }; });
-    x.left = pcLeft_(c, s, cu, K.never);
-    return x;
-  }).sort(function (a, b) { return (b.last || "") < (a.last || "") ? -1 : (b.last || "") > (a.last || "") ? 1 : a.name < b.name ? -1 : 1; });
-  return { ok: true, ready: true, today: today, found: found, more: Math.max(0, hits.length - 15) };
 }
 /** Everyone with Office: a call marked (no answer, voicemail, booked, don't call again; clear takes it back). Kept for the
  *  client's group and last finished job, so the next group starts unmarked. */
