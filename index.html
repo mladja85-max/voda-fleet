@@ -1214,6 +1214,28 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 @keyframes goal-glow { 50% { box-shadow: 0 0 0 1.5px rgba(255, 214, 90, 1), 0 16px 38px -14px rgba(14, 40, 120, .75), 0 0 48px -4px rgba(255, 190, 40, .7); } }
 @media (prefers-reduced-motion: reduce) { .goal, .goal.goal-intro::after, .goal.goal-intro .goal-bar i { animation: none; } .goal.goal-intro::after { display: none; } }
 .goal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* Daily revenue and Future revenue: two buttons on top of the company goal */
+.rev-bk { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rev-bk-b { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 1px; min-width: 0; padding: 9px 12px 10px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+.rev-bk-b small { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.rev-bk-b b { font-family: var(--font-display); font-size: 1.35rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rev-bk-b span { font-size: .76rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rev-bk-b:hover, .rev-bk-b:focus-visible { border-color: var(--accent); }
+.goal .rev-bk { margin-bottom: 4px; }
+.goal .rev-bk-b { color: #fff; background: rgba(255, 255, 255, .1); border: 0; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3); }
+.goal .rev-bk-b small { color: var(--gold); } .goal .rev-bk-b span { color: var(--gw); }
+.goal .rev-bk-b:hover, .goal .rev-bk-b:focus-visible { background: rgba(255, 255, 255, .2); box-shadow: inset 0 0 0 1.5px var(--gold); }
+.rev-bkd { display: grid; gap: 10px; }
+.rev-bk-total { display: grid; gap: 1px; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft); }
+.rev-bk-total small { font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.rev-bk-total b { font-family: var(--font-display); font-size: 2rem; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.rev-bk-total span { font-size: .82rem; color: var(--muted); }
+.rev-bk-t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.rev-bk-t th, .rev-bk-t td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: right; }
+.rev-bk-t th:first-child { text-align: left; } .rev-bk-t thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rev-bk-t tbody th { font-weight: 700; } .rev-bk-t tbody th .rev-dot { margin-right: 7px; }
+.rev-bk-t tfoot th, .rev-bk-t tfoot td { font-weight: 800; border-bottom: 0; } .rev-bk-t .rev-bk-m { font-weight: 700; }
 .goal-kicker { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .goal-ic { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #3a2400; background: radial-gradient(circle at 35% 30%, #fff1b8, var(--gold) 45%, var(--gold2));
   box-shadow: 0 0 14px rgba(255, 196, 40, .8); } .goal-ic svg { width: 17px; height: 17px; }
@@ -12120,11 +12142,13 @@ function renderRevenue() {
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
   const goalDays = (per === "week" || per === "dates") && r.from <= last ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
-  const goal = revGoalEl(r.from > last ? last : to, goalDays), slot = goal ? revGoalSlot() : "";
-  if (slot === "side") { if (aside) aside.prepend(goal); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, goal); }
+  const goal = revGoalEl(r.from > last ? last : to, goalDays), booked = revBookedEl();
+  if (goal && booked) goal.prepend(booked);   // Daily revenue and Future revenue: on top of the goal
+  const gbox = goal || booked, slot = gbox ? revGoalSlot() : "";
+  if (slot === "side") { if (aside) aside.prepend(gbox); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, gbox); }
   box.classList.toggle("goal3", slot === "wide");
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? goal : null, r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
-    ...(aside ? [aside] : []), ...(slot === "wide" ? [goal] : []));
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? gbox : null, r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
+    ...(aside ? [aside] : []), ...(slot === "wide" ? [gbox] : []));
   if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
   // after the days on screen are read (their jobs tell each invoice's department)
   if (canSee("revenue")) setTimeout(() => { if (!revSync.busy) unsentLoad(false); }, 0);
@@ -12326,6 +12350,73 @@ function revPriceEl() {
     priceOpen ? h("div", { class: "price-list", id: "priceList" }, shown.map(w => priceCard(w, P.mayCheck))) : null,
     priceOpen && !P.mayCheck ? h("p", { class: "price-sub", id: "priceWait", text: "Someone switched on for it marks them checked (Settings › Users › Checks price changes)." }) : null,
     priceOpen && n > 3 ? h("button", { class: "btn small ghost price-more", type: "button", id: "priceMore", onclick: () => { priceMore = !priceMore; renderRevenue(); } }, priceMore ? "Show fewer" : `Show all ${n}`) : null);
+}
+
+/* ---- Daily revenue and Future revenue (Operations, on top of the company goal): what's on the books in Housecall Pro
+   now, by department. Daily: every visit scheduled today; Future: from tomorrow to the last one booked. ---- */
+const REV_BOOKED_API = 94;
+const REV_BK_DEPTS = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
+const revBk = { today: null, future: null, busy: {}, err: {} };
+const REV_DEPTS_ALL = ["r", "c", "p", "o"];
+const revBkSum = d => REV_DEPTS_ALL.reduce((t, k) => ({ cents: t.cents + ((d[k] || {}).cents || 0), jobs: t.jobs + ((d[k] || {}).jobs || 0), visits: t.visits + ((d[k] || {}).visits || 0) }), { cents: 0, jobs: 0, visits: 0 });
+async function revBkLoad(when, force) {
+  const x = revBk[when];
+  if (revBk.busy[when] || (!force && x && Date.now() - x.got < 2 * 60e3)) return;
+  revBk.busy[when] = true; revBk.err[when] = "";
+  revBkDraw(when);
+  try { revBk[when] = Object.assign(await api("revBooked", { when }, 120000), { got: Date.now() }); }
+  catch (e) { revBk.err[when] = revErrText(e); }
+  revBk.busy[when] = false;
+  revBkDraw(when);
+  const b = $(when === "today" ? "revBkToday" : "revBkFuture");
+  if (b) b.replaceWith(revBkBtn(when));
+}
+/** The two buttons. */
+function revBookedEl() {
+  if (!canSee("revenue") || (apiLevel && apiLevel < REV_BOOKED_API)) return null;
+  // read once when shown (then every 15 minutes at most), so the buttons show the money
+  for (const w of ["today", "future"]) if (!revBk.busy[w] && !revBk.err[w] && (!revBk[w] || Date.now() - revBk[w].got > 15 * 60e3)) setTimeout(() => revBkLoad(w, false), 0);
+  return h("div", { class: "rev-bk", id: "revBooked" }, revBkBtn("today"), revBkBtn("future"));
+}
+function revBkBtn(when) {
+  const x = revBk[when], fresh = x && Date.now() - x.got < 15 * 60e3, t = fresh ? revBkSum(x.depts || {}) : null;
+  return h("button", { class: "rev-bk-b", type: "button", id: when === "today" ? "revBkToday" : "revBkFuture", onclick: () => revBkDlg(when) },
+    h("small", { text: when === "today" ? "Daily revenue" : "Future revenue" }),
+    h("b", { text: t ? lbMoney(t.cents / 100) : when === "today" ? "Today" : "On the books" }),
+    h("span", { text: t ? `${revJobs(t.jobs)}${when === "future" && x.to ? ` · to ${lbDayText(x.to)}` : ""}` : when === "today" ? "Scheduled today ›" : "From tomorrow on ›" }));
+}
+function revBkDlg(when) {
+  openDialog(h("h2", { text: when === "today" ? "Daily revenue" : "Future revenue" }), h("div", { class: "rev-bkd", id: "revBkBox", "data-when": when }),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", id: "revBkRead", onclick: () => revBkLoad(when, true) }, "Read again"),
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+  revBkDraw(when);
+  revBkLoad(when, false);
+}
+/** The window: each department's jobs, visits and money, and the total. */
+function revBkDraw(when) {
+  const box = $("revBkBox");
+  if (!box || box.dataset.when !== when) return;
+  const x = revBk[when], busy = revBk.busy[when], rb = $("revBkRead");
+  if (rb) { rb.disabled = !!busy; rb.textContent = busy ? "Reading…" : "Read again"; }
+  if (!x) { box.replaceChildren(revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : h("p", { class: "loading", text: "Reading Housecall Pro…" })); return; }
+  const d = x.depts || {}, t = revBkSum(d);
+  const span = when === "today" ? `Every visit scheduled today, ${lbDayText(x.from)}: done, under way or still to come.`
+    : x.to ? `Every visit booked from tomorrow, ${lbDayText(x.from)}, to the last one, ${lbDayText(x.to)}${x.to.slice(0, 4) !== x.from.slice(0, 4) ? `, ${x.to.slice(0, 4)}` : ""}.` : `Nothing booked from tomorrow, ${lbDayText(x.from)}, on.`;
+  const rows = REV_BK_DEPTS.filter(([k]) => k !== "o" || (d.o && d.o.visits)).map(([k, name]) => {
+    const a = d[k] || { cents: 0, jobs: 0, visits: 0 };
+    return h("tr", { "data-k": k }, h("th", { scope: "row" }, h("i", { class: "rev-dot " + k }), name),
+      h("td", { text: fmt(a.jobs) }), h("td", { class: "rev-bk-v", text: fmt(a.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(a.cents / 100) }));
+  });
+  box.replaceChildren(...[
+    h("p", { class: "meta", text: span }),
+    h("div", { class: "rev-bk-total" }, h("small", { text: when === "today" ? "Scheduled today" : "On the books" }), h("b", { id: "revBkTotal", text: lbMoney(t.cents / 100) }), h("span", { text: `${revJobs(t.jobs)} · ${fmt(t.visits)} visit${t.visits === 1 ? "" : "s"}` })),
+    h("table", { class: "rev-bk-t", id: "revBkTable" },
+      h("thead", null, h("tr", null, h("th", { text: "Department" }), h("th", { text: "Jobs" }), h("th", { class: "rev-bk-v", text: "Visits" }), h("th", { class: "rev-bk-m", text: "Revenue" }))),
+      h("tbody", null, rows),
+      h("tfoot", null, h("tr", null, h("th", { scope: "row", text: "Total" }), h("td", { text: fmt(t.jobs) }), h("td", { class: "rev-bk-v", text: fmt(t.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(t.cents / 100) })))),
+    h("p", { class: "hint", text: `From Housecall Pro, read ${fmtTime(new Date(x.got))}${busy ? " (reading again…)" : ""}. As on Operations: money on each visit; a job counts once, on its first visit (later visits, -2 and on, add money, not jobs); canceled ones left out. A job not scheduled yet has no day, so it isn't here.${x.more ? " Over 3,000 visits: the rest weren't read." : ""}` }),
+    revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : null].filter(Boolean));
 }
 
 /* ---- Company goal (Operations, beside Accounts receivable): the year's goal for each department and what's left of it

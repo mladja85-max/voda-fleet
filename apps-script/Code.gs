@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 93;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 94;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -380,6 +380,9 @@ function doPost(e) {
       case "revenue":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revRead_(req.year), user));
+      case "revBooked":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(revBooked_(req));
       case "revSync":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
@@ -4028,6 +4031,46 @@ function revPrivate_(out, user) {
     if (Array.isArray(js)) out.days[d][13] = js.map(function (x) { return [x[0], x[1], "", x[3], x[4], x[5], "", x[7], x[8]]; });
   });
   return out;
+}
+/** Operations' Daily revenue and Future revenue: what's on the books in Housecall Pro now, by department. when "today":
+ *  every visit scheduled today (done, under way or still to come); "future": every visit scheduled from tomorrow on, to
+ *  the last one booked. The same rules as Revenue: money on each visit, a job counted once (its first visit), canceled
+ *  left out; a job not scheduled yet has no day, so it isn't in either. */
+function revBooked_(req) {
+  const tz = Session.getScriptTimeZone(), today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
+  const future = req.when === "future", from = future ? tmAddDays_(today, 1) : today;
+  let jobs = [], more = false;
+  if (!future) {
+    const got = hcpJobsIn_(today, today);
+    if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
+    jobs = got.jobs; more = got.more;
+  } else {
+    for (let page = 1; page <= HCP_MAX_PAGES; page++) {
+      const r = hcpGet_("/jobs", { scheduled_start_min: hcpDayStart_(from), page: page, page_size: HCP_PAGE });
+      if (r.error) return { ok: false, error: r.error, status: r.status || 0 };
+      const got = Array.isArray(r.data && r.data.jobs) ? r.data.jobs : [];
+      for (let i = 0; i < got.length; i++) jobs.push(got[i]);
+      if (!got.length || page >= (Number(r.data && r.data.total_pages) || 0)) break;
+      if (page === HCP_MAX_PAGES) more = true;
+    }
+  }
+  const depts = {};
+  REV_DEPTS.forEach(function (k) { depts[k] = { cents: 0, jobs: 0, visits: 0 }; });
+  let last = "", seen = {};
+  jobs.forEach(function (job) {
+    if (!job || /cancel/i.test(String(job.work_status || "")) || (job.id && seen[job.id])) return;
+    if (job.id) seen[job.id] = true;
+    const start = new Date((job.schedule && job.schedule.scheduled_start) || "");
+    if (isNaN(start.getTime())) return;
+    const d = Utilities.formatDate(start, tz, "yyyy-MM-dd");
+    if (future ? d < from : d !== today) return;
+    const a = depts[revDept_(hcpJobType_(job))];
+    a.cents += Math.round(Number(job.total_amount) || 0);
+    a.visits++;
+    if (hcpFirstVisit_(job)) a.jobs++;
+    if (d > last) last = d;
+  });
+  return { ok: true, when: future ? "future" : "today", from: from, to: future ? last : today, depts: depts, more: more, at: new Date().toISOString() };
 }
 /** A client's name as Housecall Pro has it: the company, else first and last name. */
 function hcpClient_(job) {
