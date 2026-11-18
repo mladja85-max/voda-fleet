@@ -12818,10 +12818,10 @@ function renderRepairs(box) {
       { tabIndex: 0, role: "button", title: "List the jobs whose client still owes", onclick: () => { repOweOnly = !repOweOnly; renderRevenue(); },
         onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); repOweOnly = !repOweOnly; renderRevenue(); } } }),
     // what was charged without the credit card fees: what Monumental's 70% and VODA's 30% are worked out on
-    kp("net", "k-net", "Charged − CC", lbMoney((s.c - s.cc) / 100), s.cc ? `${lbMoney(s.cc / 100)} card fees off` : "no card fees"),
+    kp("net", "k-net", "Charged minus credit card", lbMoney((s.c - s.cc) / 100), s.cc ? `${lbMoney(s.cc / 100)} card fees off` : "no card fees"),
     kp("mon", "k-vn", "Monumental", lbMoney(s.mon / 100), (s.owed ? `${lbMoney(s.owed / 100)} still to pay` : "nothing left to pay") + (s.inv ? ` · ${lbMoney(s.inv / 100)} invoiced` : "")),
     kp("f", "k-vn", "Specialty contractors", lbMoney(s.f / 100), [...s.fNames].join(", ") || "none"),
-    kp("voda", "k-vd", "VODA", lbMoney(s.voda / 100), s.c - s.cc ? `${Math.round(s.voda / (s.c - s.cc) * 100)}% of charged − CC` : "–"));
+    kp("voda", "k-vd", "VODA", lbMoney(s.voda / 100), s.c - s.cc ? `${Math.round(s.voda / (s.c - s.cc) * 100)}% of charged minus credit card` : "–"));
   const ls = later.length ? repSum(later) : null;
   const laterNote = ls ? h("p", { class: "meta rp-later", id: "repLater", text: `Not in the totals: ${revJobs(ls.n)} scheduled after today, ${lbMoney(ls.c / 100)} charged (Monumental ${lbMoney(ls.mon / 100)}, VODA ${lbMoney(ls.voda / 100)}).` }) : null;
   // tapping Clients still owe: the jobs of the period (to date) whose client still owes, in the list, oldest first
@@ -12848,7 +12848,7 @@ function renderRepairs(box) {
     };
     const table = h("div", { class: "panel rp-tablewrap" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "repTable" },
       h("thead", null, h("tr", null, h("th", { text: "Job" }), h("th", { class: "cl" }, "Charged", h("small", { text: "Housecall Pro" })), h("th", { class: "cl" }, "Client paid", h("small", { text: "Housecall Pro" })),
-        h("th", { class: "cl cc" }, "Charged − CC", h("small", { text: "card fees off" })),
+        h("th", { class: "cl cc" }, "Charged minus credit card", h("small", { text: "card fees off" })),
         h("th", { class: "vn" }, "Specialty", h("small", { text: "VODA pays" })), h("th", { class: "vn" }, "Monumental", h("small", { text: "their share" })),
         h("th", { class: "vn" }, "Mon. still owed", h("small", { text: "after deposits" })), h("th", { class: "vd" }, "VODA", h("small", { text: "our share" })))),
       h("tbody", null, L.map(row), G.map(row)),
@@ -12863,7 +12863,7 @@ function renderRepairs(box) {
       return h("button", { class: "rp-card" + (j.gone ? " gone" : "") + (j.day > upTo ? " future" : ""), type: "button", "data-job": j.id, onclick: () => openRepJob(j.id) },
         h("span", { class: "top" }, h("b", { text: j.client || repStreetText(j.addr).split(",")[0] || "(no name)" }), h("span", { text: lbCash(j.c / 100) })),
         h("span", { class: "meta2" }, `${dt(j.day)}${j.inv ? ` · #${j.inv}${repNewJob(j) ? "" : " · later visit"}` : ""} `, repPayTag(j, today)),
-        x.fee ? h("span", { class: "rp-cc" }, `Charged − CC ${lbCash((j.c - x.fee) / 100)}`, h("small", { text: ` (${lbCash(x.fee / 100)} card fee)` })) : null,
+        x.fee ? h("span", { class: "rp-cc" }, `Charged minus credit card ${lbCash((j.c - x.fee) / 100)}`, h("small", { text: ` (${lbCash(x.fee / 100)} card fee)` })) : null,
         h("span", { class: "split" },
           h("span", { class: "vn" }, h("small", { text: "Monumental" }), x.mon ? lbCash(x.monAmt / 100) : "–"),
           h("span", { class: "vn" }, h("small", { text: j.t.mPaidAt ? "Paid" : repMonToPay(j) ? "Invoiced, to pay" : "Still owed" }), !x.mon ? "–" : j.t.mPaidAt ? repPaidDay(j.t.mPaidAt) : lbCash((repMonToPay(j) || x.owed) / 100)),
@@ -12880,7 +12880,7 @@ function renderRepairs(box) {
     });
     const nMonths = months.filter(m => counted.some(j => !j.gone && j.day.startsWith(m))).length || 1;
     body = [h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "repYear" },
-      h("thead", null, h("tr", null, ["Month", "Charged", "Clients paid", "Clients owe", "Charged − CC", "Monumental", "Specialty", "VODA"].map(t => h("th", { text: t })), h("th", { class: "pj", text: "Jobs" }))),
+      h("thead", null, h("tr", null, ["Month", "Charged", "Clients paid", "Clients owe", "Charged minus credit card", "Monumental", "Specialty", "VODA"].map(t => h("th", { text: t })), h("th", { class: "pj", text: "Jobs" }))),
       h("tbody", null, rows),
       h("tfoot", null,
         h("tr", null, h("th", { text: per === "year" ? (r.to >= today ? "Year to date" : "Year") : upTo < r.to ? "Total to date" : "Total" }), [s.c, s.paid, s.owes, s.c - s.cc, s.mon, s.f, s.voda].map(v => h("td", { text: lbMoney(v / 100) })), h("td", { class: "pj", text: fmt(s.n) })),
@@ -13065,6 +13065,14 @@ function repStreetKey(addr) {
   while (k + 1 < w.length && REP_DIRS.has(w[k])) k++;
   return w[k] ? { no: w[i].replace(/[a-z]$/, ""), name: w[k] } : null;
 }
+/** Does an invoice number carry this address, the way Monumental writes them: its house number, then the street's first
+ *  letters ("REB2-3511ANNANDALERD": 3511 Annandale Rd; "REB-5909-#102-FOUNDE": 5909 Founders Hill Dr, unit 102)? */
+function repNoAt(n, addr) {
+  const k = repStreetKey(addr);
+  if (!k || k.no.length < 3) return false;
+  const N = ` ${String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  return new RegExp(`[^0-9]${k.no}[a-z0-9 ]{0,8}?${k.name.slice(0, 4)}`).test(N);
+}
 /** The projects an invoice line may be for, best first: [{ j, score, why }] (address, invoice number, amount, name, day). */
 function repMonMatch(item, n, d, jobs) {
   const ka = repStreetKey(item.addr) || repStreetKey(item.name), words = new Set(repNorm(item.name).split(" ").filter(w => w.length > 2 && !/^(llc|inc|the|and|unit|apt|corp|company)$/.test(w)));
@@ -13075,7 +13083,9 @@ function repMonMatch(item, n, d, jobs) {
     const kj = repStreetKey(j.addr), why = [];
     let sc = 0;
     if (ka && kj && ka.no === kj.no) { if (ka.name === kj.name || (ka.name.length > 3 && kj.name.startsWith(ka.name.slice(0, 4)))) { sc += 6; why.push("address"); } else sc += 1; }
-    if (kj && N.includes(kj.no)) { sc += 2; if (!why.length) why.push("invoice number"); }
+    // the invoice number carries the job's address (when the PDF's is mistyped, or missing): as good as the address
+    if (kj && repNoAt(n, j.addr)) { if (why.includes("address")) sc += 2; else { sc += 6; why.push("invoice number"); } }
+    else if (kj && N.includes(kj.no)) { sc += 2; if (!why.length) why.push("invoice number"); }
     const share = repSplit(j).monAmt, diff = Math.abs(item.a - share);
     if (diff <= 100) { sc += 4; why.push("amount"); } else if (diff <= share * 0.1) sc += 2; else if (diff <= share * 0.3) sc += 1;
     if ([...words].some(w => ` ${repNorm(j.client)} `.includes(` ${w} `))) { sc += 2; why.push("name"); }
@@ -14049,12 +14059,12 @@ function repXlMatch(rows, jobs, paidOn, picks) {
   const look = (text, amt) => {
     const tw = repNorm(text).split(" "), ka = repStreetKey(text), lead = [];
     for (let n = 1; n <= 8; n++) lead[n] = ` ${tw.slice(0, n + 6).join(" ")} `;
-    return { lead, ka, no: (ka && ka.no) || streetNo(text), amt };
+    return { lead, ka, no: (ka && ka.no) || streetNo(text), amt, text };
   };
   const sig = (j, q) => {
     const I = info.get(j.id), kj = I.k, t = I.w.length && q.lead[Math.min(8, I.w.length)];
     return { nm: !!t && I.w.every(x => t.includes(` ${x} `)), am: q.amt > 0 && Math.abs(j.c - q.amt) <= 100,
-      addr: !!q.ka && !!kj && q.ka.no === kj.no && q.ka.name === kj.name, st: !!q.no && !!kj && kj.no === q.no };
+      addr: (!!q.ka && !!kj && q.ka.no === kj.no && q.ka.name === kj.name) || (!!kj && repNoAt(q.text, j.addr)), st: !!q.no && !!kj && kj.no === q.no };
   };
   const score = s => (s.nm ? 4 : 0) + (s.addr ? 4 : s.st ? 2 : 0) + (s.am ? 3 : 0);
   const why = s => "by " + [s.nm && "name", s.addr ? "address" : s.st && "street number", s.am && "amount"].filter(Boolean).join(" and ");
