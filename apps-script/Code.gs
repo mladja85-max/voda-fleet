@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 90;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 91;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -363,6 +363,9 @@ function doPost(e) {
       case "pcMark":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return pcMark_(req, user); }));
+      case "pcAssign":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return pcSetAssign_(req); }));
       case "pcMarks":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(pcMarks_(req));
@@ -4617,6 +4620,7 @@ const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Cre
 const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed"];
 const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who", "Call back on", "Note"];
 const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
+const PC_ASSIGN = "PC_ASSIGN";   // who calls each group: { "6": [user ids], ... }; a group nobody has is everyone's
 const PC_SCHEMA = "PC_SCHEMA", PC_V = "2";   // 2: the jobs' tags (read all again once)
 const PC_DONE = "PC_BACKFILL_DONE", PC_AT = "PC_SYNC_AT", PC_START = "PC_START", PC_CUR = "PC_CURSOR", PC_SORTS = "PC_SORTS", PC_BUSY = "PC_BUSY";
 const PC_RESULTS = { na: "Not now", vm: "Voicemail", booked: "Booked", dnc: "Don't call again", cb: "Call back", clear: "" };   // "na" was "No answer"
@@ -4869,6 +4873,42 @@ function pcLeft_(c, s, cu, never) {
 function pcCom_(s, cu) {
   return !!s.com || String(cu[4] || "").split(/\s*,\s*/).some(function (t) { return PC_COM.test(t); });
 }
+/** Who calls each group (Admins pick, under Past clients): { 6: [user ids], ... }, only the groups someone has. */
+function pcAssign_() {
+  let a = {};
+  try { a = JSON.parse(PropertiesService.getScriptProperties().getProperty(PC_ASSIGN) || "{}") || {}; } catch (e) { a = {}; }
+  const out = {};
+  PC_GROUPS.forEach(function (g) { const ids = Array.isArray(a[g]) ? a[g].map(String).filter(Boolean) : []; if (ids.length) out[g] = ids; });
+  return out;
+}
+/** The groups someone sees: Admins and Office (any day) all of them; anyone else the ones they're picked for and the
+ *  ones nobody is picked for. */
+function pcMine_(user, A) {
+  if (ofEditor_(user)) return PC_GROUPS.slice();
+  return PC_GROUPS.filter(function (g) { return !A[g] || A[g].indexOf(String(user.id)) !== -1; });
+}
+/** For Admins: each group's people, with their names ({ 6: [{ id, name }] }). */
+function pcAssignNames_(A) {
+  const names = {};
+  readUsers_(usersSheet_()).forEach(function (x) { names[x.u.id] = x.u.name; });
+  const out = {};
+  Object.keys(A).forEach(function (g) { out[g] = A[g].map(function (id) { return { id: id, name: names[id] || "(removed)" }; }); });
+  return out;
+}
+/** Admins: who calls each group ({ assign: { 6: [user ids], ... } }; an empty list: everyone). Only active people. */
+function pcSetAssign_(req) {
+  const a = req.assign && typeof req.assign === "object" ? req.assign : null;
+  if (!a) return { ok: false, error: "bad_request" };
+  const ok = {};
+  readUsers_(usersSheet_()).forEach(function (x) { if (x.u.status === "active") ok[x.u.id] = true; });
+  const out = {};
+  PC_GROUPS.forEach(function (g) {
+    const ids = Array.isArray(a[g]) ? a[g].map(String).filter(function (id, i, all) { return ok[id] && all.indexOf(id) === i; }) : [];
+    if (ids.length) out[g] = ids;
+  });
+  PropertiesService.getScriptProperties().setProperty(PC_ASSIGN, JSON.stringify(out));
+  return { ok: true, assign: pcAssignNames_(out) };
+}
 /** Everyone with Office: who to call on a day (yyyy-MM-dd; today when none), each group's { due, missed, more, left (due
  *  that day and left off: booked, do not call, commercial; and who, with why: leftOff) }, after reading what changed in
  *  Housecall Pro (at most every 15 minutes; one person's read at a time). */
@@ -4892,9 +4932,14 @@ function pcRead_(req, user) {
   }
   const start = P.getProperty(PC_START) || today;
   const K = pcKnown_(tz), by = K.by, cust = K.cust, marks = K.marks;
+  // the groups this person calls (Admins pick who calls which; a group nobody has is everyone's)
+  const A = pcAssign_(), mine = pcMine_(user, A), who = { mine: mine, assign: admin ? pcAssignNames_(A) : undefined };
+  const only = function (G) { Object.keys(G).forEach(function (g) { if (mine.indexOf(Number(g)) === -1) delete G[g]; }); return G; };
   const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")); };
   if (["week", "month", "year", "dates"].indexOf(String(req.per)) !== -1 && isDay(req.from) && isDay(req.to) && req.from <= req.to && req.to <= tmAddDays_(req.from, 366)) {
-    return Object.assign(pcPeriod_(K, String(req.per), String(req.from), String(req.to), today, start), { ok: true, ready: true, admin: admin, day: day, today: today, start: start,
+    const pr = pcPeriod_(K, String(req.per), String(req.from), String(req.to), today, start);
+    only(pr.groups);
+    return Object.assign(pr, who, { ok: true, ready: true, admin: admin, day: day, today: today, start: start,
       at: Number(P.getProperty(PC_AT)) || 0, now: tmNow_().getTime(), sync: sync && !sync.ok ? { error: sync.error, status: sync.status || 0 } : null,
       reread: admin && P.getProperty(PC_SCHEMA) !== PC_V, rereading: cur.stage === "back" });
   }
@@ -4948,9 +4993,9 @@ function pcRead_(req, user) {
   });
   let sorts = {};
   try { sorts = JSON.parse(P.getProperty(PC_SORTS) || "{}") || {}; } catch (e) { sorts = {}; }
-  return { ok: true, ready: true, admin: admin, day: day, today: today, start: start, groups: groups, at: Number(P.getProperty(PC_AT)) || 0, now: tmNow_().getTime(),
+  return Object.assign({ ok: true, ready: true, admin: admin, day: day, today: today, start: start, groups: only(groups), at: Number(P.getProperty(PC_AT)) || 0, now: tmNow_().getTime(),
     reread: admin && P.getProperty(PC_SCHEMA) !== PC_V, rereading: cur.stage === "back",
-    sync: sync && !sync.ok ? { error: sync.error, status: sync.status || 0 } : null, sorts: admin ? sorts : undefined };
+    sync: sync && !sync.ok ? { error: sync.error, status: sync.status || 0 } : null, sorts: admin ? sorts : undefined }, who);
 }
 /** A week, a month or a year (from..to): each group's clients whose day for it falls in the period (week and month: the
  *  list, by day, PC_PERIOD_MAX at most; year: counted by month, with what came of the calls), who's left off, and the
@@ -4998,6 +5043,7 @@ function pcPeriod_(K, per, from, to, today, start) {
 function pcMark_(req, user) {
   const c = String(req.id || ""), g = Number(req.g), last = String(req.last || ""), r = String(req.r || "");
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(c) || PC_GROUPS.indexOf(g) < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(last) || !Object.prototype.hasOwnProperty.call(PC_RESULTS, r)) return { ok: false, error: "bad_request" };
+  if (pcMine_(user, pcAssign_()).indexOf(g) === -1) return { ok: false, error: "not_yours" };   // another CSR's group
   const tz = Session.getScriptTimeZone(), when = tmNow_(), at = when.toISOString(), today = Utilities.formatDate(when, tz, "yyyy-MM-dd");
   const s = pcSheet_(PC_CALLS, PC_CALL_COLS);
   if (user.role !== "admin") {
