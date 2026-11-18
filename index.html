@@ -1185,6 +1185,14 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .price-ok { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: .82rem; color: var(--muted); }
 .price-ok > span { color: var(--ok); font-weight: 600; } .price-ok.bad { color: var(--due); }
 .price-hist { display: grid; gap: 8px; max-height: 60vh; overflow: auto; }
+.price-hbox { display: grid; gap: 10px; } .price-hbox .price-hist { max-height: 46vh; } .price-hbox .lb-bar { margin: 0; }
+.price-hsum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.price-hs { display: grid; gap: 1px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.price-hs small { font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.price-hs b { font-family: var(--font-display); font-size: 1.45rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.price-hs span { font-size: .76rem; color: var(--muted); }
+.price-hs.cut b { color: var(--due); } .price-hs.add b { color: var(--ok); }
+.price-hrow.open { box-shadow: inset 3px 0 0 var(--soon); } .price-hrow small.price-hopen { color: var(--soon); font-weight: 700; }
 .price-hrow { display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: .86rem; } .price-hrow small { color: var(--muted); }
 @media (max-width: 640px) { .price-head { grid-template-columns: 1fr; } .price-tools { justify-content: flex-start; }
   .price-card { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who tag" "amt act" "notes notes"; gap: 6px 10px; padding: 10px 12px 8px; } }
@@ -12214,8 +12222,75 @@ function priceCheckDlg(list) {
         } catch (e) { err.textContent = e && e.error === "gone" ? "Already checked by someone else. Close and look again." : errText(e, "It"); b.disabled = false; }
       } }))));
 }
-/** The last ones checked: who, when, what they found. */
+/** History: the price changes made in a period (Day, Week, Month, Year or Dates, as on Estimates; the day each was
+ *  noticed in Housecall Pro), checked or still to check, and the money removed, added and the net. Older Google
+ *  scripts: the last ones checked. */
+const PRICE_HIST_API = 93;
+const priceHistView = Object.assign({ per: "month", off: 0, from: "", to: "" }, store.get("voda.priceHist") || {});
 function priceHistoryDlg() {
+  if (apiLevel && apiLevel < PRICE_HIST_API) return priceHistoryOld();
+  const box = h("div", { class: "price-hbox", id: "priceHistBox" });
+  let seq = 0;
+  const draw = async () => {
+    const today = lbToday(), per = EST_PER[priceHistView.per] ? priceHistView.per : "month", off = Math.min(0, Number(priceHistView.off) || 0);
+    let r;
+    if (per === "dates") {
+      let from = lbOkDay(priceHistView.from, today) ? priceHistView.from : `${today.slice(0, 7)}-01`, to2 = lbOkDay(priceHistView.to, today) ? priceHistView.to : today;
+      if (to2 < from) [from, to2] = [to2, from];
+      if (revLen(from, to2) > 366) to2 = lbAddDays(from, 365);
+      r = { from, to: to2, label: revSpanText(from, to2) };
+    } else r = ofRange(per, off);
+    const to = r.to > today ? today : r.to, len = revLen(r.from, r.to);
+    const redraw = () => { store.set("voda.priceHist", priceHistView); draw(); };
+    const step = n => {
+      if (per === "dates") { priceHistView.from = lbAddDays(r.from, n * len); priceHistView.to = lbAddDays(r.to, n * len); }
+      else priceHistView.off = Math.min(0, off + n);
+      redraw();
+    };
+    const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; priceHistView.from = from; priceHistView.to = to2; redraw(); };
+    const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+      lbDateInput({ id, value, min: LB_FIRST_DAY, max: today, "aria-label": label }, onpick, LB_FIRST_DAY, today));
+    const prev = h("button", { class: "btn small", type: "button", id: "phPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹");
+    const next = h("button", { class: "btn small", type: "button", id: "phNext", "aria-label": "Later", disabled: per === "dates" ? r.to >= today : off >= 0, onclick: () => step(1) }, "›");
+    const bar = h("div", { class: "lb-bar price-hbar" },
+      lbSeg(Object.entries(EST_PER), per, k => {
+        if (k === "dates" && per !== "dates") { priceHistView.from = r.from; priceHistView.to = to; }   // Dates starts from the period on screen
+        priceHistView.per = k; priceHistView.off = 0; redraw();
+      }, "Period"),
+      per === "dates"
+        ? h("div", { class: "lb-daybar lb-payrange", id: "phDates" }, prev,
+          dateBox("phFrom", r.from, "From", v => pick(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
+          dateBox("phTo", r.to, "To", v => pick(v < r.from ? v : r.from, v)), next)
+        : h("div", { class: "of-step" }, prev, h("strong", { id: "phLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }), next));
+    if (r.from > today) { box.replaceChildren(bar, h("p", { class: "meta", text: "Nothing yet: that's ahead." })); return; }
+    box.replaceChildren(bar, h("p", { class: "loading", text: "Loading…" }));
+    const mine = ++seq;
+    let out;
+    try { out = await api("priceHistory", { from: r.from, to }); }
+    catch (e) { if (mine === seq && box.isConnected) box.replaceChildren(bar, h("p", { class: "dlg-err", text: errText(e, "The history") })); return; }
+    if (mine !== seq || !box.isConnected) return;
+    const t = out.tot || {}, cash = c => lbCash(Math.abs(c) / 100), list = out.list || [];
+    const sum = h("div", { class: "price-hsum", id: "phSum" },
+      h("div", { class: "price-hs cut" }, h("small", { text: "Removed" }), h("b", { text: t.removed ? `−${cash(t.removed)}` : "$0" }), h("span", { text: `${fmt(t.cuts || 0)} change${t.cuts === 1 ? "" : "s"}` })),
+      h("div", { class: "price-hs add" }, h("small", { text: "Added" }), h("b", { text: t.added ? `+${cash(t.added)}` : "$0" }), h("span", { text: `${fmt(t.raises || 0)} change${t.raises === 1 ? "" : "s"}` })),
+      h("div", { class: "price-hs net" + ((t.net || 0) < 0 ? " cut" : (t.net || 0) > 0 ? " add" : "") }, h("small", { text: "Net" }),
+        h("b", { text: t.net ? `${t.net < 0 ? "−" : "+"}${cash(t.net)}` : "$0" }), h("span", { text: t.open ? `${fmt(t.open)} still to check (${t.openNet < 0 ? "−" : "+"}${cash(t.openNet)})` : "all checked" })));
+    box.replaceChildren(bar, sum,
+      h("p", { class: "meta", text: `Price changes made ${per === "day" ? "on" : "in"} ${r.label.replace(/^Week of/, "the week of")}${r.to >= today && r.from <= today && per !== "day" ? " (so far)" : ""}: ${fmt(out.n || 0)}, the day each was noticed in Housecall Pro.` }),
+      list.length ? h("div", { class: "price-hist", id: "priceHist" }, list.map(w => h("div", { class: "price-hrow" + (w.status === "open" ? " open" : ""), "data-id": w.id },
+        h("b", null, hcpLink("job", w.job, `#${w.inv}`), ` ${w.client || ""}`),
+        h("span", { text: `${priceCash(w.was)} → ${priceCash(w.now)} (${priceChange(w)})${w.day ? ` · visit ${lbDayText(w.day)}` : ""} · changed ${priceWhen(w.noticed)}` }),
+        w.status === "open" ? h("small", { class: "price-hopen", text: "Still to check" })
+          : h("small", { text: `Checked by ${w.by || "?"}, ${priceWhen(w.at)}${w.note ? `: ${w.note}` : ""}` }))),
+        out.more ? h("p", { class: "meta", text: `…and ${fmt(out.more)} more (in the totals): pick a shorter period to see them.` }) : null)
+        : h("p", { class: "meta", text: "No price changes in these days." }));
+  };
+  openDialog(h("h2", { text: "Price changes" }), box,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+  draw();
+}
+/** An older Google script: the last ones checked. */
+function priceHistoryOld() {
   const list = (priceDoc && priceDoc.checked) || [];
   openDialog(h("h2", { text: "Price changes checked" }),
     list.length ? h("div", { class: "price-hist", id: "priceHist" }, list.map(w => h("div", { class: "price-hrow" },
