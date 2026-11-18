@@ -2480,11 +2480,11 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 /* the tiles' colors (a soft tint, like Operations): All estimates navy, Restoration blue (its row a lighter blue),
    Cleaning green, Repairs amber; a picked tile keeps its color, a little stronger */
 #estTiles .est-tile { --tc: var(--accent); }
-#estTiles .est-all { --tc: var(--est-all); } #estTiles .est-tile[data-g=c] { --tc: var(--ok); } #estTiles .est-tile[data-g=p] { --tc: var(--est-p); }
-#estTiles .est-all, #estTiles .est-tile[data-g=r], #estTiles .est-tile[data-g=c], #estTiles .est-tile[data-g=p] { background: color-mix(in srgb, var(--tc) 9%, var(--surface)); border-color: color-mix(in srgb, var(--tc) 32%, var(--line)); }
+#estTiles .est-all { --tc: var(--est-all); } #estTiles .est-tile[data-g=c] { --tc: var(--ok); } #estTiles .est-tile[data-g=p] { --tc: var(--est-p); } #estTiles .est-tile[data-g=v] { --tc: #0e8ea0; }
+#estTiles .est-all, #estTiles .est-tile[data-g=r], #estTiles .est-tile[data-g=c], #estTiles .est-tile[data-g=p], #estTiles .est-tile[data-g=v] { background: color-mix(in srgb, var(--tc) 9%, var(--surface)); border-color: color-mix(in srgb, var(--tc) 32%, var(--line)); }
 #estTiles .est-tile[data-g=p]:not(.picked) { background: color-mix(in srgb, var(--tc) 13%, var(--surface)); }   /* amber is light: a little more of it */
 #estRestRow .est-tile { background: color-mix(in srgb, var(--tc) 4%, var(--surface)); border-color: color-mix(in srgb, var(--tc) 20%, var(--line)); }
-#estTiles .est-all > small, #estTiles .est-tile[data-g=r] > small, #estTiles .est-tile[data-g=c] > small, #estTiles .est-tile[data-g=p] > small { color: color-mix(in srgb, var(--tc) 85%, var(--ink)); }
+#estTiles .est-all > small, #estTiles .est-tile[data-g=r] > small, #estTiles .est-tile[data-g=c] > small, #estTiles .est-tile[data-g=p] > small, #estTiles .est-tile[data-g=v] > small { color: color-mix(in srgb, var(--tc) 85%, var(--ink)); }
 #estTiles .est-tile[data-g=c] .est-dot, #estTiles .est-tile[data-g=p] .est-dot { background: var(--tc); }
 #estTiles .est-tile[aria-pressed="true"] { border-color: var(--tc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tc) 35%, transparent), var(--shadow); }
 #estTiles .est-tile.picked { background: color-mix(in srgb, var(--tc) 16%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 30%, transparent), var(--shadow); }
@@ -2511,7 +2511,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-bar { display: flex; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 4px; box-shadow: inset 0 0 0 1px var(--line); }
 .est-bar i { display: block; height: 100%; } .est-bar i.ok { background: var(--ok); } .est-bar i.op { background: color-mix(in srgb, var(--soon) 55%, transparent); }
 .est-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--muted); }
-.est-dot.w { background: var(--accent); } .est-dot.m { background: var(--mold); } .est-dot.c { background: var(--clean); } .est-dot.p { background: var(--soon); } .est-dot.u { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
+.est-dot.v { background: #0e8ea0; } .est-dot.w { background: var(--accent); } .est-dot.m { background: var(--mold); } .est-dot.c { background: var(--clean); } .est-dot.p { background: var(--soon); } .est-dot.u { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
 .est-how { font-size: .78rem; margin: 0; }
 .est-people h3, .est-list h3 { margin: 0; font-size: 1.05rem; }
 .est-list h3 small { color: var(--muted); font-weight: 500; font-size: .8rem; }
@@ -15238,7 +15238,7 @@ const EST_AUTO_API = 58;                                // ... and in charge fro
 const K_EST = "voda.est1", K_EST_VIEW = "voda.estView1";
 const EST_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates: "Dates" };
 // the groups: Restoration as water damage or mold (and the ones not sorted yet), Cleaning, Repairs, Other
-const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["f", "Fire/Smoke"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
+const EST_GROUPS = [["w", "Water damage"], ["m", "Mold"], ["f", "Fire/Smoke"], ["u", "Restoration · not sorted"], ["c", "Cleaning"], ["p", "Repairs"], ["v", "Freddy's Visits"], ["o", "Other"]];
 const EST_ST = { all: "All", open: "Open", notsent: "Not sent", approved: "Approved", declined: "Declined", canceled: "Canceled" };
 /** Open and not sent to the client yet (Housecall Pro: Scheduled, In progress, Completed; Sent, even a failed email, is sent). */
 /** Housecall Pro's status for an estimate's options ("Sent, Completed"), one at a time, as words ("in_progress" → "in progress"). */
@@ -15285,7 +15285,9 @@ function estOwners(e) {
 const estCanSee = () => canSee("estimates") || canSee("estimates-all");
 /** Housecall Pro's page for an estimate is its option's ("est_…"): the approved one, else the first (none read yet: ""). */
 const estOptId = e => { const o = Array.isArray(e.opts) ? e.opts : [], a = o.find(x => x && x[2] === "approved") || o[0]; return a && a[4] ? String(a[4]) : ""; };
-const estGroup = e => (e.dept === "r" ? (e.kind === "water" ? "w" : e.kind === "mold" ? "m" : e.kind === "fire" ? "f" : "u") : e.dept === "c" || e.dept === "p" ? e.dept : "o");
+/** Freddy's visits: Job type "Freddy Visit" (or a "Freddy visit" tag) on an estimate that's in no department. */
+const estFreddy = e => /\bfreddy\b/i.test(`${e.type || ""} ${e.tags || ""}`);
+const estGroup = e => (e.dept === "r" ? (e.kind === "water" ? "w" : e.kind === "mold" ? "m" : e.kind === "fire" ? "f" : "u") : e.dept === "c" || e.dept === "p" ? e.dept : estFreddy(e) ? "v" : "o");
 /** What an estimate is worth: the option approved, else its largest. */
 const estValue = e => (e.st === "approved" ? e.appr || e.est : e.est);
 function estForget() { estData = null; estOther = {}; store.del(K_EST); }
@@ -15480,9 +15482,9 @@ function renderEstimates() {
   // Restoration's own row: water damage, mold, not sorted and its supervisors (the With people)
   const has = g => list.some(e => grpOf.get(e) === g);
   const R_SUB = ["w", "m", "f", "u"], inKey = (g, k) => k === g || (k === "r" && R_SUB.includes(g));
-  const row1 = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]].filter(([k]) => k === "r" ? R_SUB.some(has) : k !== "o" || has("o"));
+  const row1 = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["v", "Freddy's Visits"], ["o", "Other"]].filter(([k]) => k === "r" ? R_SUB.some(has) : (k !== "o" && k !== "v") || has(k));
   const row2 = [["w", "Water damage"], ["m", "Mold"], ["f", "Fire/Smoke"], ["u", "Not sorted"]].filter(([k]) => k !== "u" || has("u"));
-  const keys = row1.concat(row2).map(([k]) => k), bases = ["w", "m", "f", "u", "c", "p", "o"].filter(has);
+  const keys = row1.concat(row2).map(([k]) => k), bases = ["w", "m", "f", "u", "c", "p", "v", "o"].filter(has);
   const sel = (estView.grps || []).filter(k => keys.includes(k)), allOn = !sel.length;
   // a tile adds its group to the ones picked (or takes it off): Restoration takes the place of water damage, mold and
   // not sorted, and one of them of Restoration; all of them picked, or All estimates: every estimate again. Water damage,
