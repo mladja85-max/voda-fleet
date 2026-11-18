@@ -1236,6 +1236,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .goal .rev-bk-b small { color: var(--gold); } .goal .rev-bk-b span { color: var(--gw); }
 .goal .rev-bk-b:hover, .goal .rev-bk-b:focus-visible { background: rgba(255, 255, 255, .2); box-shadow: inset 0 0 0 1.5px var(--gold); }
 .rev-bkd { display: grid; gap: 10px; }
+.rev-bk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .rev-bk-bar .of-step strong { min-width: 0; }
 .rev-bk-total { display: grid; gap: 1px; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft); }
 .rev-bk-total small { font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .rev-bk-total b { font-family: var(--font-display); font-size: 2rem; line-height: 1.05; font-variant-numeric: tabular-nums; }
@@ -12376,6 +12377,27 @@ function revPriceEl() {
 const REV_BOOKED_API = 94;
 const REV_BK_DEPTS = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
 const revBk = { today: null, future: null, busy: {}, err: {}, open: { today: "", future: "" } };   // open: the department listed ("t": all)
+/** Future revenue's period: Week (Sunday to Saturday) or Month from tomorrow on (› later), All (to the last one booked) or Dates. */
+const REV_BK_PER = { week: "Week", month: "Month", all: "All", dates: "Dates" };
+const revBkView = Object.assign({ per: "all", off: 0, from: "", to: "" }, store.get("voda.revBkPer") || {});
+function revBkRange(x) {
+  const tom = x.from, last = x.to || tom, per = REV_BK_PER[revBkView.per] ? revBkView.per : "all", off = Math.max(0, Number(revBkView.off) || 0);
+  if (per === "week") {
+    const sun = lbAddDays(lbWeekStart(tom), 7 * off), to = lbAddDays(sun, 6);
+    return { per, off, from: sun < tom ? tom : sun, to, label: `Week of ${lbWeekText(sun)}${to.slice(0, 4) !== tom.slice(0, 4) ? `, ${to.slice(0, 4)}` : ""}${off ? "" : " (from tomorrow)"}` };
+  }
+  if (per === "month") {
+    const t = Number(tom.slice(0, 4)) * 12 + Number(tom.slice(5, 7)) - 1 + off, y = Math.floor(t / 12), m = (t % 12) + 1, k = `${y}-${String(m).padStart(2, "0")}`;
+    const first = `${k}-01`;
+    return { per, off, from: first < tom ? tom : first, to: `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`, label: `${lbMonthLong(m)} ${y}${off ? "" : " (from tomorrow)"}` };
+  }
+  if (per === "dates") {
+    let from = lbIsDay(revBkView.from) && revBkView.from >= tom ? revBkView.from : tom, to = lbIsDay(revBkView.to) && revBkView.to >= tom ? revBkView.to : last;
+    if (to < from) [from, to] = [to, from];
+    return { per, off: 0, from, to, label: revSpanText(from, to) };
+  }
+  return { per: "all", off: 0, from: tom, to: last, label: "All booked" };
+}   // open: the department listed ("t": all)
 const REV_DEPTS_ALL = ["r", "c", "p", "o"];
 const revBkSum = d => REV_DEPTS_ALL.reduce((t, k) => ({ cents: t.cents + ((d[k] || {}).cents || 0), jobs: t.jobs + ((d[k] || {}).jobs || 0), visits: t.visits + ((d[k] || {}).visits || 0) }), { cents: 0, jobs: 0, visits: 0 });
 async function revBkLoad(when, force) {
@@ -12419,9 +12441,43 @@ function revBkDraw(when) {
   const x = revBk[when], busy = revBk.busy[when], rb = $("revBkRead");
   if (rb) { rb.disabled = !!busy; rb.textContent = busy ? "Reading…" : "Read again"; }
   if (!x) { box.replaceChildren(revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : h("p", { class: "loading", text: "Reading Housecall Pro…" })); return; }
-  const d = x.depts || {}, t = revBkSum(d);
+  // Future revenue: the period picked (Week, Month, All or Dates), worked out from the visits read (no new read)
+  const per = when === "future" && Array.isArray(x.jobs) ? revBkRange(x) : null;
+  const jobsIn = per ? x.jobs.filter(j => j[5] >= per.from && j[5] <= per.to) : x.jobs;
+  let d = x.depts || {};
+  if (per && per.per !== "all") {
+    d = {};
+    REV_DEPTS_ALL.forEach(k => { d[k] = { cents: 0, jobs: 0, visits: 0 }; });
+    for (const j of jobsIn) { const a = d[REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o"]; a.cents += j[4]; a.visits++; if (j[7]) a.jobs++; }
+  }
+  const t = revBkSum(d);
+  const yr = (a, b) => (b.slice(0, 4) !== a.slice(0, 4) ? `, ${b.slice(0, 4)}` : "");
   const span = when === "today" ? `Every visit scheduled today, ${lbDayText(x.from)}: done, under way or still to come.`
-    : x.to ? `Every visit booked from tomorrow, ${lbDayText(x.from)}, to the last one, ${lbDayText(x.to)}${x.to.slice(0, 4) !== x.from.slice(0, 4) ? `, ${x.to.slice(0, 4)}` : ""}.` : `Nothing booked from tomorrow, ${lbDayText(x.from)}, on.`;
+    : !x.to ? `Nothing booked from tomorrow, ${lbDayText(x.from)}, on.`
+    : !per || per.per === "all" ? `Every visit booked from tomorrow, ${lbDayText(x.from)}, to the last one, ${lbDayText(x.to)}${yr(x.from, x.to)}.`
+    : `Every visit booked from ${lbDayText(per.from)} to ${lbDayText(per.to)}${yr(per.from, per.to)}${per.to > x.to ? ` (the last one booked: ${lbDayText(x.to)}${yr(x.from, x.to)})` : ""}.`;
+  let bar = null;
+  if (per) {
+    const redraw = () => { store.set("voda.revBkPer", revBkView); revBk.open.future = ""; revBkDraw(when); };
+    const step = n => {
+      if (per.per === "dates") { const len = revLen(per.from, per.to); revBkView.from = lbAddDays(per.from, n * len); revBkView.to = lbAddDays(per.to, n * len); }
+      else revBkView.off = Math.max(0, per.off + n);
+      redraw();
+    };
+    const far = lbAddDays(x.from, 730);
+    const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }), lbDateInput({ id, value, min: x.from, max: far, "aria-label": label }, onpick, x.from, far));
+    const pick = (a, b) => { if (a > b) [a, b] = [b, a]; revBkView.from = a; revBkView.to = b; redraw(); };
+    const prev = h("button", { class: "btn small", type: "button", id: "revBkPrev", "aria-label": "Earlier", disabled: per.per === "all" || (per.per === "dates" ? per.from <= x.from : per.off <= 0), onclick: () => step(-1) }, "‹");
+    const next = h("button", { class: "btn small", type: "button", id: "revBkNext", "aria-label": "Later", disabled: per.per === "all", onclick: () => step(1) }, "›");
+    bar = h("div", { class: "rev-bk-bar" },
+      lbSeg(Object.entries(REV_BK_PER), per.per, k => {
+        if (k === "dates" && per.per !== "dates") { revBkView.from = per.from; revBkView.to = per.per === "all" ? x.to : per.to; }   // Dates starts from what's on screen
+        revBkView.per = k; revBkView.off = 0; redraw();
+      }, "Period"),
+      per.per === "dates" ? h("div", { class: "lb-daybar lb-payrange", id: "revBkDates" }, prev,
+        dateBox("revBkFrom", per.from, "From", v => pick(v, v > per.to ? v : per.to)), dateBox("revBkTo", per.to, "To", v => pick(v < per.from ? v : per.from, v)), next)
+        : per.per === "all" ? null : h("div", { class: "of-step" }, prev, h("strong", { id: "revBkLabel", text: per.label }), next));
+  }
   // a department's row (or Total): a tap lists its jobs, each opening in Housecall Pro; again: closes it
   const open = revBk.open[when] || "", canList = Array.isArray(x.jobs);
   const toggle = k => { revBk.open[when] = open === k ? "" : k; revBkDraw(when); };
@@ -12432,7 +12488,7 @@ function revBkDraw(when) {
     return h("tr", rowAttrs(k, name), h("th", { scope: "row" }, h("i", { class: "rev-dot " + k }), name, canList && a.visits ? h("span", { class: "rev-bk-chev", text: open === k ? " ▾" : " ▸" }) : null),
       h("td", { text: fmt(a.jobs) }), h("td", { class: "rev-bk-v", text: fmt(a.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(a.cents / 100) }));
   });
-  const list = canList && open ? x.jobs.filter(j => open === "t" || (REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o") === open) : [];
+  const list = canList && open ? jobsIn.filter(j => open === "t" || (REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o") === open) : [];
   const deptName = k => k === "t" ? "All departments" : (REV_BK_DEPTS.find(([c]) => c === k) || [, "Other"])[1];
   const jobsEl = !open ? null : h("div", { class: "rev-bk-jobs", id: "revBkJobs", "data-k": open },
     h("h4", null, open !== "t" ? h("i", { class: "rev-dot " + open }) : null, `${deptName(open)} · ${revJobs(list.filter(j => j[7]).length)}${list.some(j => !j[7]) ? ` · ${fmt(list.length)} visits` : ""}`),
@@ -12446,8 +12502,10 @@ function revBkDraw(when) {
         h("td", { text: revStatus(j[6]) }),
         h("td", { class: "rev-bk-m", text: lbCash(j[4] / 100) })))))) : h("p", { class: "meta", text: "No jobs here." }));
   box.replaceChildren(...[
-    h("p", { class: "meta", text: span }),
-    h("div", { class: "rev-bk-total" }, h("small", { text: when === "today" ? "Scheduled today" : "On the books" }), h("b", { id: "revBkTotal", text: lbMoney(t.cents / 100) }), h("span", { text: `${revJobs(t.jobs)} · ${fmt(t.visits)} visit${t.visits === 1 ? "" : "s"}` })),
+    bar,
+    h("p", { class: "meta", id: "revBkSpan", text: span }),
+    per && per.per !== "all" && x.more ? h("p", { class: "dlg-err", text: "Over 1,500 visits are booked: this period counts only the ones listed (All counts every one)." }) : null,
+    h("div", { class: "rev-bk-total" }, h("small", { text: when === "today" ? "Scheduled today" : per && per.per !== "all" ? "Booked in these days" : "On the books" }), h("b", { id: "revBkTotal", text: lbMoney(t.cents / 100) }), h("span", { text: `${revJobs(t.jobs)} · ${fmt(t.visits)} visit${t.visits === 1 ? "" : "s"}` })),
     h("table", { class: "rev-bk-t", id: "revBkTable" },
       h("thead", null, h("tr", null, h("th", { text: "Department" }), h("th", { text: "Jobs" }), h("th", { class: "rev-bk-v", text: "Visits" }), h("th", { class: "rev-bk-m", text: "Revenue" }))),
       h("tbody", null, rows),
