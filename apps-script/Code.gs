@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 94;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 95;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -410,8 +410,12 @@ function doPost(e) {
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return estReportsPut_(req); }));
       case "estSync":
-        if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(estSync_(req, user));
+        if (!canEst_(user) && !canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        // Office (Office › Estimates): what changed, never every estimate again
+        return json_(estSync_(canEst_(user) ? req : Object.assign({}, req, { full: false }), user));
+      case "ofEstimates":
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(estReadDept_(req.year, "c"));
       case "goals":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(goalsRead_(req.year));
@@ -4555,6 +4559,23 @@ function estRead_(year, user) {
   });
   const P = PropertiesService.getScriptProperties();
   return { ok: true, year: Number(y), estimates: list, years: Object.keys(years).map(Number).sort(), all: all, me: String(user.name || ""), reports: all ? estReports_() : {}, readAt: Number(P.getProperty(EST_AT)) || 0,
+    done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V, connected: !!hcpKey_() };
+}
+/** Office › Estimates: a year's estimates of one department (Cleaning), every one of them, as on Estimates (who's in
+ *  charge from Employees), and which years have any of it. */
+function estReadDept_(year, dept) {
+  const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  const rows = estRows_(estSheet_(false)), years = {}, roster = estRoster_(), list = [];
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id], e = estOut_(r, null);
+    if (e.dept !== dept) return;
+    if (r[2]) years[r[2].slice(0, 4)] = true;
+    if (String(r[2]).indexOf(y + "-") !== 0) return;
+    const lead = estLead_(r[16], roster);
+    list.push(estOut_(r, lead));
+  });
+  const P = PropertiesService.getScriptProperties();
+  return { ok: true, year: Number(y), dept: dept, estimates: list, years: Object.keys(years).map(Number).sort(), readAt: Number(P.getProperty(EST_AT)) || 0,
     done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V, connected: !!hcpKey_() };
 }
 /** Estimates › Reports: who's in charge of each department's report (a name), and the people with him (supervisors):
