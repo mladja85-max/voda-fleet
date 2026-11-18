@@ -15786,14 +15786,12 @@ const pcSaveView = () => store.set(K_PC_VIEW, { g: pcView.g, per: pcView.per, fr
 const pcPerOk = k => k === "day" || !apiLevel || apiLevel >= (k === "dates" ? PC_DATES_API : PC_PER_API);
 const pcPer = () => (PC_PER[pcView.per] && pcPerOk(pcView.per) ? pcView.per : "day");
 /** The period on screen, as on Estimates: Day, Week (Sunday to Saturday), Month or Year, ‹ › moving it (ahead too: to
- *  call ahead), or the From – To days picked (Dates, a year at most). */
+ *  call ahead), or Dates: one day picked on the calendar, shown as that Day (its lists, marks and call-backs). */
 function pcRange() {
   const per = pcPer(), today = lbToday();
   if (per === "dates") {
-    let from = lbIsDay(pcView.from) ? pcView.from : `${today.slice(0, 7)}-01`, to = lbIsDay(pcView.to) ? pcView.to : today;
-    if (to < from) [from, to] = [to, from];
-    if (revLen(from, to) > 366) to = lbAddDays(from, 365);
-    return { per, from, to, label: revSpanText(from, to) };
+    const day = lbIsDay(pcView.from) ? pcView.from : today;
+    return { per: "day", from: day, to: day, label: lbDayText(day), picked: true };
   }
   const r = ofRange(per, Number(pcView.off) || 0);
   return { per, from: r.from, to: r.to, label: r.label };
@@ -15956,11 +15954,10 @@ function pcEl() {
   const rg = pcRange(), per = rg.per, off = Number(pcView.off) || 0, len = revLen(rg.from, rg.to), far = lbAddDays(today, 366);
   const redraw = () => { pcSaveView(); pcLoad(); renderOffice(); };
   const step = n => {
-    if (per === "dates") { pcView.from = lbAddDays(rg.from, n * len); pcView.to = lbAddDays(rg.to, n * len); }
+    if (rg.picked) pcView.from = lbAddDays(rg.from, n);   // Dates: the day before / after
     else pcView.off = off + n;
     redraw();
   };
-  const pick = (from, to) => { if (from > to) [from, to] = [to, from]; pcView.from = from; pcView.to = to; redraw(); };
   const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
     lbDateInput({ id, value, min: LB_FIRST_DAY, max: far, "aria-label": label }, onpick, LB_FIRST_DAY, far));
   const pers = Object.entries(PC_PER).filter(([k]) => pcPerOk(k));
@@ -15969,14 +15966,14 @@ function pcEl() {
   const out = [];
   const read = pcData.at ? `Housecall Pro read ${pcWhen(new Date(pcData.at).toISOString())}` : "";
   out.push(h("div", { class: "lb-bar rev-bar-top pc-bar" },
-    pers.length > 1 ? lbSeg(pers, per, k => {
-      if (k === "dates" && per !== "dates") { pcView.from = rg.from; pcView.to = rg.to; }   // Dates starts from the period on screen
+    pers.length > 1 ? lbSeg(pers, pcPer(), k => {
+      if (k === "dates" && !rg.picked) pcView.from = rg.from;   // Dates starts from the first day on screen
       pcView.per = k; pcView.off = 0; redraw();
     }, "Period") : null,
-    per === "dates"
-      ? h("div", { class: "lb-daybar lb-payrange", id: "pcDates" }, prev,
-        dateBox("pcFrom", rg.from, "From", v => pick(v, v > rg.to ? lbAddDays(v, len - 1) : rg.to)),
-        dateBox("pcTo", rg.to, "To", v => pick(v < rg.from ? v : rg.from, v)), next)
+    rg.picked
+      ? h("div", { class: "lb-daybar", id: "pcDates" }, prev,
+        dateBox("pcOn", rg.from, "Day", v => { pcView.from = v; redraw(); }), next,
+        rg.from !== today ? h("button", { class: "btn ghost small", type: "button", id: "pcToday", onclick: () => { pcView.from = today; redraw(); } }, "Today") : null)
       : h("div", { class: "of-step" }, prev, h("strong", { id: "pcRangeLabel", text: rg.label + (per === "day" && rg.from === today ? " (today)" : "") }), next),
     h("div", { class: "rev-tools" }, h("button", { class: "btn small", type: "button", id: "pcRefresh", disabled: pcLoading, title: "Read what changed in Housecall Pro now",
       onclick: () => pcLoad(true) }, pcLoading ? "Reading…" : "Read again"),
