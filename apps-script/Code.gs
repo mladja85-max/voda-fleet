@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 83;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 84;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -363,6 +363,9 @@ function doPost(e) {
       case "pcMark":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return pcMark_(req, user); }));
+      case "pcFind":
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(pcFind_(req));
       case "pcMarks":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(pcMarks_(req));
@@ -4617,7 +4620,7 @@ const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Resu
 const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
 const PC_DONE = "PC_BACKFILL_DONE", PC_AT = "PC_SYNC_AT", PC_START = "PC_START", PC_CUR = "PC_CURSOR", PC_SORTS = "PC_SORTS", PC_BUSY = "PC_BUSY";
 const PC_RESULTS = { na: "No answer", vm: "Voicemail", booked: "Booked", dnc: "Don't call again", clear: "" };
-const PC_DNC = /do\s*n[o']?t\s*(call|contact|service)|\bdnc\b|no\s+(calls?|contact)\b/i;
+const PC_DNC = /do\s*n[o']?t\s*(call|contact|service)|\bdnc\b/i;   // "Do not call", "DNC" (not "No calls before 9")
 const PC_COM = /commercial|property\s*manag/i;
 
 /** yyyy-MM-dd plus n months, on the same day of the month (or the month's last day: Aug 31 + 6 months is Feb 28). */
@@ -4802,9 +4805,56 @@ function pcSyncStep_(req) {
 }
 function pcCount_(name) { const s = SpreadsheetApp.getActive().getSheetByName(name); return s ? s.getLastRow() - 1 : 0; }
 
+/** What the tabs know: each client's jobs summed up (by: customer id → { last finished day, its type and address, jobs,
+ *  first, com (a Commercial job type), open: [[day, created]] }), the customers (cust: id → row), the marks (key →
+ *  latest) and who's marked Don't call again (never: id → that mark). */
+function pcKnown_(tz) {
+  const jr = pcRows_(PC_JOBS, PC_JOB_COLS.length), cr = pcRows_(PC_CUST, PC_CUST_COLS.length), mr = pcRows_(PC_CALLS, PC_CALL_COLS.length);
+  const by = {};
+  jr.forEach(function (r) {
+    const c = String(r[1] || ""), st = String(r[3] || ""), d = pcDay_(r[4], tz), made = pcDay_(r[5], tz), type = String(r[6] || "");
+    if (!c) return;
+    const s = by[c] || (by[c] = { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0 });
+    s.all++;
+    if (PC_COM.test(type) && !s.com) s.com = type;
+    if (st === "done" && d) {
+      if (d > s.last || (d === s.last && !s.addr)) { s.last = d; s.type = type; s.addr = String(r[7] || ""); }
+      if (!s.first || d < s.first) s.first = d;
+      if (hcpFirstVisit_({ invoice_number: String(r[2] || "") })) s.jobs++;
+    } else if (st === "open") s.open.push([d, made]);
+  });
+  const cust = {};
+  cr.forEach(function (r) { cust[String(r[0])] = r; });
+  const marks = {}, never = {};
+  mr.forEach(function (r) {   // in the order made: the last one of each counts
+    const k = String(r[2]) + "|" + Number(r[3]) + "|" + pcDay_(r[4], tz);
+    marks[k] = { r: String(r[5] || ""), who: String(r[6] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "") };
+  });
+  Object.keys(marks).forEach(function (k) { if (marks[k].r === "dnc") never[k.split("|")[0]] = marks[k]; });
+  return { by: by, cust: cust, marks: marks, never: never };
+}
+/** A client's name as Housecall Pro shows it (the company when there is one: "Redfin"), and the person ("Amanda Maron"). */
+function pcName_(cu) {
+  const person = String(cu[1] || ""), co = String(cu[5] || "").trim();
+  return co ? { name: co, contact: person && person !== co ? person : "" } : { name: person, contact: "" };
+}
+/** Why a client is left off the lists, or null: a job booked since their last one (booked), do not call (dnc: marked
+ *  Don't call again here, a tag, Housecall Pro's do not service) or commercial (com: a Commercial job type, or a tag). */
+function pcLeft_(c, s, cu, never) {
+  const bk = s.open.filter(function (o) { return o[0] ? o[0] >= s.last : o[1] !== "" && o[1] >= s.last; });
+  if (bk.length) return { why: "booked", day: bk.map(function (o) { return o[0]; }).filter(Boolean).sort()[0] || "" };
+  if (never[c]) return { why: "dnc", who: never[c].who, at: never[c].at };
+  const tags = String(cu[4] || "").split(/\s*,\s*/).filter(Boolean);
+  const dt = tags.filter(function (t) { return PC_DNC.test(t); })[0];
+  if (dt) return { why: "dnc", tag: dt };
+  if (String(cu[6] || "") === "yes") return { why: "dnc", dns: true };
+  if (s.com) return { why: "com", jt: s.com };
+  const ct = tags.filter(function (t) { return PC_COM.test(t); })[0];
+  return ct ? { why: "com", tag: ct } : null;
+}
 /** Everyone with Office: who to call on a day (yyyy-MM-dd; today when none), each group's { due, missed, more, left (due
- *  today and left off: booked, do not call, commercial) }, after
- *  reading what changed in Housecall Pro (at most every 15 minutes; one person's read at a time). */
+ *  that day and left off: booked, do not call, commercial; and who, with why: leftOff) }, after reading what changed in
+ *  Housecall Pro (at most every 15 minutes; one person's read at a time). */
 function pcRead_(req, user) {
   const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = tmNow_().getTime();
   const today = Utilities.formatDate(new Date(now), tz, "yyyy-MM-dd");
@@ -4822,29 +4872,9 @@ function pcRead_(req, user) {
     P.deleteProperty(PC_BUSY);
   }
   const start = P.getProperty(PC_START) || today;
-  const jr = pcRows_(PC_JOBS, PC_JOB_COLS.length), cr = pcRows_(PC_CUST, PC_CUST_COLS.length), mr = pcRows_(PC_CALLS, PC_CALL_COLS.length);
-  const by = {};
-  jr.forEach(function (r) {
-    const c = String(r[1] || ""), st = String(r[3] || ""), d = pcDay_(r[4], tz), made = pcDay_(r[5], tz), type = String(r[6] || "");
-    if (!c) return;
-    const s = by[c] || (by[c] = { last: "", type: "", addr: "", jobs: 0, first: "", com: false, open: [] });
-    if (PC_COM.test(type)) s.com = true;
-    if (st === "done" && d) {
-      if (d > s.last || (d === s.last && !s.addr)) { s.last = d; s.type = type; s.addr = String(r[7] || ""); }
-      if (!s.first || d < s.first) s.first = d;
-      if (hcpFirstVisit_({ invoice_number: String(r[2] || "") })) s.jobs++;
-    } else if (st === "open") s.open.push([d, made]);
-  });
-  const cust = {};
-  cr.forEach(function (r) { cust[String(r[0])] = r; });
-  const marks = {}, never = {};
-  mr.forEach(function (r) {   // in the order made: the last one of each counts
-    const k = String(r[2]) + "|" + Number(r[3]) + "|" + pcDay_(r[4], tz);
-    marks[k] = { r: String(r[5] || ""), who: String(r[6] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "") };
-  });
-  Object.keys(marks).forEach(function (k) { if (marks[k].r === "dnc") never[k.split("|")[0]] = true; });
+  const K = pcKnown_(tz), by = K.by, cust = K.cust, marks = K.marks;
   const groups = {};
-  PC_GROUPS.forEach(function (g) { groups[g] = { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, com: 0 } }; });
+  PC_GROUPS.forEach(function (g) { groups[g] = { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, com: 0 }, leftOff: [] }; });
   Object.keys(by).forEach(function (c) {
     const s = by[c];
     if (!s.last) return;
@@ -4857,27 +4887,54 @@ function pcRead_(req, user) {
       if (d >= start && day < next) { g = PC_GROUPS[i]; due = d; missed = true; break; }
     }
     if (!g) return;
-    const cu = cust[c] || [];
-    const booked = s.open.some(function (o) { return o[0] ? o[0] >= s.last : o[1] !== "" && o[1] >= s.last; });
-    const dnc = !!never[c] || PC_DNC.test(String(cu[4] || "")) || String(cu[6] || "") === "yes";
-    const com = s.com || PC_COM.test(String(cu[4] || ""));
-    if (booked || dnc || com) { if (!missed) groups[g].left[booked ? "booked" : dnc ? "dnc" : "com"]++; return; }   // due today, left off
+    const cu = cust[c] || [], nm = pcName_(cu);
+    const left = pcLeft_(c, s, cu, K.never);
+    if (left) {   // due that day, left off: counted, and listed with why
+      if (!missed) { groups[g].left[left.why]++; groups[g].leftOff.push(Object.assign({ id: c, name: nm.name, contact: nm.contact, last: s.last, type: s.type }, left)); }
+      return;
+    }
     const m = marks[c + "|" + g + "|" + s.last] || null;
     if (missed && m && m.r) return;   // called on a day after it came up
     const list = groups[g][missed ? "missed" : "due"];
-    list.push({ id: c, name: String(cu[1] || ""), phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
+    list.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
       dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: due, m: m && m.r ? m : null });
   });
+  const byName = function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : a.id < b.id ? -1 : 1; };
   PC_GROUPS.forEach(function (g) {
     const G = groups[g];
-    G.due.sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : a.id < b.id ? -1 : 1; });
-    G.missed.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
+    G.due.sort(byName); G.leftOff.sort(byName);
+    G.missed.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : byName(a, b); });
     if (G.missed.length > PC_MISSED_MAX) { G.more = G.missed.length - PC_MISSED_MAX; G.missed = G.missed.slice(0, PC_MISSED_MAX); }
   });
   let sorts = {};
   try { sorts = JSON.parse(P.getProperty(PC_SORTS) || "{}") || {}; } catch (e) { sorts = {}; }
   return { ok: true, ready: true, admin: admin, day: day, today: today, start: start, groups: groups, at: Number(P.getProperty(PC_AT)) || 0, now: tmNow_().getTime(),
     sync: sync && !sync.ok ? { error: sync.error, status: sync.status || 0 } : null, sorts: admin ? sorts : undefined };
+}
+/** Everyone with Office: look a client up by name, company or phone (2+ letters, or 4+ digits), up to 15: their last
+ *  finished job, the days they come up in each group, and, when they're not on a list, why (left off, no finished job read,
+ *  over 36 months). For "why isn't this client on the list?". */
+function pcFind_(req) {
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone();
+  const today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
+  const q = String(req.q || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 60), digits = q.replace(/\D/g, "");
+  if (q.replace(/[^a-z]/g, "").length < 2 && digits.length < 4) return { ok: false, error: "bad_request" };
+  if (P.getProperty(PC_DONE) !== "yes") return { ok: true, ready: false, found: [] };
+  const K = pcKnown_(tz), words = q.split(" ").filter(function (w) { return /[a-z]/.test(w); });
+  const hits = Object.keys(K.cust).filter(function (c) {
+    const cu = K.cust[c], text = (String(cu[1] || "") + " " + String(cu[5] || "")).toLowerCase();
+    if (words.length && words.every(function (w) { return text.indexOf(w) !== -1; })) return true;
+    return digits.length >= 4 && !words.length && (String(cu[2] || "") + " " + String(cu[3] || "")).replace(/\D/g, "").indexOf(digits) !== -1;
+  });
+  const found = hits.slice(0, 15).map(function (c) {
+    const cu = K.cust[c], s = K.by[c] || { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0 }, nm = pcName_(cu);
+    const x = { id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), addr: s.addr, last: s.last, type: s.type, jobs: s.jobs, first: s.first, read: s.all };
+    if (!s.last) return x;
+    x.due = PC_GROUPS.map(function (g) { const d = pcDue_(s.last, g); const m = K.marks[c + "|" + g + "|" + s.last]; return { g: g, day: d, m: m && m.r ? m : null }; });
+    x.left = pcLeft_(c, s, cu, K.never);
+    return x;
+  }).sort(function (a, b) { return (b.last || "") < (a.last || "") ? -1 : (b.last || "") > (a.last || "") ? 1 : a.name < b.name ? -1 : 1; });
+  return { ok: true, ready: true, today: today, found: found, more: Math.max(0, hits.length - 15) };
 }
 /** Everyone with Office: a call marked (no answer, voicemail, booked, don't call again; clear takes it back). Kept for the
  *  client's group and last finished job, so the next group starts unmarked. */
