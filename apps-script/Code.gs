@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 84;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 85;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4614,14 +4614,18 @@ function estSync_(req, user) {
    opened, at most every 15 minutes). It all stays in this Sheet: the "Past client jobs" and "Past clients" tabs, and
    the marks in "Past client calls". ---------------- */
 const PC_JOBS = "Past client jobs", PC_CUST = "Past clients", PC_CALLS = "Past client calls";
-const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Created", "Job type", "Address", "Changed"];
+const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Created", "Job type", "Address", "Changed", "Tags"];
 const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed"];
 const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who"];
 const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
+const PC_SCHEMA = "PC_SCHEMA", PC_V = "2";   // 2: the jobs' tags (read all again once)
 const PC_DONE = "PC_BACKFILL_DONE", PC_AT = "PC_SYNC_AT", PC_START = "PC_START", PC_CUR = "PC_CURSOR", PC_SORTS = "PC_SORTS", PC_BUSY = "PC_BUSY";
 const PC_RESULTS = { na: "No answer", vm: "Voicemail", booked: "Booked", dnc: "Don't call again", clear: "" };
 const PC_DNC = /do\s*n[o']?t\s*(call|contact|service)|\bdnc\b/i;   // "Do not call", "DNC" (not "No calls before 9")
 const PC_COM = /commercial|property\s*manag/i;
+// moved out of the area ("Moved to another state", "Out of state", "Left the area", "Moved away"); "Moved out" or
+// "Move out" alone isn't: they may still be in the area
+const PC_AWAY = /\bout\s*of\s*(the\s*)?(state|country|(service\s*)?area)\b|\b(an?other|other|different)\s*(state|country)\b|\bleft\s*the\s*(state|country|area)\b|\bmoved\s*away\b/i;
 
 /** yyyy-MM-dd plus n months, on the same day of the month (or the month's last day: Aug 31 + 6 months is Feb 28). */
 function pcAddMonths_(day, n) {
@@ -4662,7 +4666,8 @@ function pcJobRow_(job, tz) {
   const day = st === "done" ? dayOf(sch) || dayOf(fin) || dayOf(job.updated_at) : dayOf(sch);
   const a = job.address || {};
   const addr = [a.street, a.street_line_2, a.city].filter(Boolean).join(", ").replace(/\s+/g, " ").trim().slice(0, 120);
-  return [String(job.id), cid, String(job.invoice_number || "").slice(0, 30), st, day, dayOf(job.created_at), hcpJobType_(job).slice(0, 80), addr, String(job.updated_at || "").slice(0, 40)];
+  const tags = Array.isArray(job.tags) ? job.tags.map(function (t) { return String((t && t.name) || t || "").trim(); }).filter(Boolean).join(", ").slice(0, 300) : "";
+  return [String(job.id), cid, String(job.invoice_number || "").slice(0, 30), st, day, dayOf(job.created_at), hcpJobType_(job).slice(0, 80), addr, String(job.updated_at || "").slice(0, 40), tags];
 }
 /** A customer as the "Past clients" tab keeps one (what Housecall Pro didn't send stays as it was). */
 function pcCustRow_(cu, old) {
@@ -4680,7 +4685,7 @@ function pcSheet_(name, cols) {
     s = ss.insertSheet(name);
     s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
     if (typeof s.setFrozenRows === "function") s.setFrozenRows(1);
-  }
+  } else if (typeof s.getLastColumn === "function" && s.getLastColumn() < cols.length) s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");   // a column added since
   return s;
 }
 function pcRows_(name, W) {
@@ -4729,11 +4734,12 @@ function pcSorted_(list, by) {
 function pcSync_(req, pages) {
   const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = tmNow_().getTime();
   if (!hcpKey_()) return { ok: false, error: "no_key" };
-  if (req.full === true) { P.deleteProperty(PC_DONE); P.deleteProperty(PC_CUR); }
   const done = P.getProperty(PC_DONE) === "yes";
   let cur = {};
   try { cur = JSON.parse(P.getProperty(PC_CUR) || "{}") || {}; } catch (e) { cur = {}; }
-  if (!cur.stage || (done && cur.stage === "back") || (!done && cur.stage !== "back")) {
+  // read it all again: the lists keep working meanwhile (from what's on the tabs)
+  if (req.full === true) cur = { stage: "back", page: 1, by: "created_at", at: now, full: true };
+  if (!cur.stage || (done && cur.stage === "back" && !cur.full) || (!done && cur.stage !== "back")) {
     cur = done ? { stage: "jobs", page: 1, by: "updated_at", at: now, since: (Number(P.getProperty(PC_AT)) || 0) - 15 * 60e3 } : { stage: "back", page: 1, by: "created_at", at: now };
   }
   let sorts = {};
@@ -4786,12 +4792,12 @@ function pcSync_(req, pages) {
     return { jobs: wroteJobs, customers: wroteCust };
   });
   if (backDone) {
-    P.setProperty(PC_DONE, "yes"); P.setProperty(PC_AT, String(cur.at)); P.deleteProperty(PC_CUR);
+    P.setProperty(PC_DONE, "yes"); P.setProperty(PC_AT, String(cur.at)); P.deleteProperty(PC_CUR); P.setProperty(PC_SCHEMA, PC_V);
     if (!P.getProperty(PC_START)) P.setProperty(PC_START, today);
   } else if (passDone) { P.setProperty(PC_AT, String(cur.at)); P.deleteProperty(PC_CUR); }
   else P.setProperty(PC_CUR, JSON.stringify(cur));
   P.setProperty(PC_SORTS, JSON.stringify(sorts));
-  return { ok: true, done: P.getProperty(PC_DONE) === "yes", next: !backDone && !passDone, read: jobs.length + custs.length, wrote: out,
+  return { ok: true, done: P.getProperty(PC_DONE) === "yes", full: !!cur.full && !backDone, next: !backDone && !passDone, read: jobs.length + custs.length, wrote: out,
     stage: cur.stage, page: cur.page, pages: total, at: Number(P.getProperty(PC_AT)) || 0, sorts: sorts };
 }
 /** Admin: a step of the first read (or all of it again: full), from the app's "Read from Housecall Pro". */
@@ -4814,8 +4820,9 @@ function pcKnown_(tz) {
   jr.forEach(function (r) {
     const c = String(r[1] || ""), st = String(r[3] || ""), d = pcDay_(r[4], tz), made = pcDay_(r[5], tz), type = String(r[6] || "");
     if (!c) return;
-    const s = by[c] || (by[c] = { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0 });
+    const s = by[c] || (by[c] = { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0, tags: [] });
     s.all++;
+    if (String(r[9] || "")) s.tags.push([d || made, String(r[9]), String(r[2] || "")]);
     if (PC_COM.test(type) && !s.com) s.com = type;
     if (st === "done" && d) {
       if (d > s.last || (d === s.last && !s.addr)) { s.last = d; s.type = type; s.addr = String(r[7] || ""); }
@@ -4839,15 +4846,23 @@ function pcName_(cu) {
   return co ? { name: co, contact: person && person !== co ? person : "" } : { name: person, contact: "" };
 }
 /** Why a client is left off the lists, or null: a job booked since their last one (booked), do not call (dnc: marked
- *  Don't call again here, a tag, Housecall Pro's do not service) or commercial (com: a Commercial job type, or a tag). */
+ *  Don't call again here, a tag on the customer or on their last job, Housecall Pro's do not service), moved out of the
+ *  area (away: a tag such as "Moved to another state"; not "Moved out") or commercial (com: a Commercial job type, or a
+ *  tag). */
 function pcLeft_(c, s, cu, never) {
   const bk = s.open.filter(function (o) { return o[0] ? o[0] >= s.last : o[1] !== "" && o[1] >= s.last; });
   if (bk.length) return { why: "booked", day: bk.map(function (o) { return o[0]; }).filter(Boolean).sort()[0] || "" };
   if (never[c]) return { why: "dnc", who: never[c].who, at: never[c].at };
   const tags = String(cu[4] || "").split(/\s*,\s*/).filter(Boolean);
-  const dt = tags.filter(function (t) { return PC_DNC.test(t); })[0];
-  if (dt) return { why: "dnc", tag: dt };
+  // the tags on their last job and any since (an older job's tag may be out of date): [tag, job #]
+  const jt = [];
+  (s.tags || []).forEach(function (x) { if (x[0] && x[0] >= s.last) x[1].split(/\s*,\s*/).filter(Boolean).forEach(function (t) { jt.push([t, x[2]]); }); });
+  const first = function (re) { const t = tags.filter(function (v) { return re.test(v); })[0]; if (t) return { tag: t }; const j = jt.filter(function (v) { return re.test(v[0]); })[0]; return j ? { tag: j[0], inv: j[1] } : null; };
+  const dt = first(PC_DNC);
+  if (dt) return Object.assign({ why: "dnc" }, dt);
   if (String(cu[6] || "") === "yes") return { why: "dnc", dns: true };
+  const aw = first(PC_AWAY);
+  if (aw) return Object.assign({ why: "away" }, aw);
   if (s.com) return { why: "com", jt: s.com };
   const ct = tags.filter(function (t) { return PC_COM.test(t); })[0];
   return ct ? { why: "com", tag: ct } : null;
@@ -4866,7 +4881,9 @@ function pcRead_(req, user) {
     return { ok: true, ready: false, admin: admin, key: !!hcpKey_(), started: cur.stage === "back", rows: pcCount_(PC_JOBS) };
   }
   let sync = null;
-  if (req.sync !== false && now - (Number(P.getProperty(PC_AT)) || 0) > PC_STALE && now - (Number(P.getProperty(PC_BUSY)) || 0) > 90e3) {
+  let cur = {};
+  try { cur = JSON.parse(P.getProperty(PC_CUR) || "{}") || {}; } catch (e) { cur = {}; }
+  if (req.sync !== false && cur.stage !== "back" && now - (Number(P.getProperty(PC_AT)) || 0) > PC_STALE && now - (Number(P.getProperty(PC_BUSY)) || 0) > 90e3) {
     P.setProperty(PC_BUSY, String(now));
     try { sync = pcSync_({}, PC_READ_PAGES); } catch (e) { sync = { ok: false, error: "server", message: String((e && e.message) || e).slice(0, 200) }; }
     P.deleteProperty(PC_BUSY);
@@ -4874,7 +4891,7 @@ function pcRead_(req, user) {
   const start = P.getProperty(PC_START) || today;
   const K = pcKnown_(tz), by = K.by, cust = K.cust, marks = K.marks;
   const groups = {};
-  PC_GROUPS.forEach(function (g) { groups[g] = { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, com: 0 }, leftOff: [] }; });
+  PC_GROUPS.forEach(function (g) { groups[g] = { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, away: 0, com: 0 }, leftOff: [] }; });
   Object.keys(by).forEach(function (c) {
     const s = by[c];
     if (!s.last) return;
@@ -4909,6 +4926,7 @@ function pcRead_(req, user) {
   let sorts = {};
   try { sorts = JSON.parse(P.getProperty(PC_SORTS) || "{}") || {}; } catch (e) { sorts = {}; }
   return { ok: true, ready: true, admin: admin, day: day, today: today, start: start, groups: groups, at: Number(P.getProperty(PC_AT)) || 0, now: tmNow_().getTime(),
+    reread: admin && P.getProperty(PC_SCHEMA) !== PC_V, rereading: cur.stage === "back",
     sync: sync && !sync.ok ? { error: sync.error, status: sync.status || 0 } : null, sorts: admin ? sorts : undefined };
 }
 /** Everyone with Office: look a client up by name, company or phone (2+ letters, or 4+ digits), up to 15: their last
@@ -4927,7 +4945,7 @@ function pcFind_(req) {
     return digits.length >= 4 && !words.length && (String(cu[2] || "") + " " + String(cu[3] || "")).replace(/\D/g, "").indexOf(digits) !== -1;
   });
   const found = hits.slice(0, 15).map(function (c) {
-    const cu = K.cust[c], s = K.by[c] || { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0 }, nm = pcName_(cu);
+    const cu = K.cust[c], s = K.by[c] || { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0, tags: [] }, nm = pcName_(cu);
     const x = { id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), addr: s.addr, last: s.last, type: s.type, jobs: s.jobs, first: s.first, read: s.all };
     if (!s.last) return x;
     x.due = PC_GROUPS.map(function (g) { const d = pcDue_(s.last, g); const m = K.marks[c + "|" + g + "|" + s.last]; return { g: g, day: d, m: m && m.r ? m : null }; });

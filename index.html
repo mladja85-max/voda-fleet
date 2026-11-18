@@ -15714,6 +15714,8 @@ function pcEl() {
     h("span", { class: "pc-upd meta", text: read }),
     h("button", { class: "btn ghost small", type: "button", id: "pcRefresh", disabled: pcLoading, onclick: () => pcLoad() }, pcLoading ? "Loading…" : "Refresh")));
   if (pcErr) out.push(h("p", { class: "dlg-err", text: pcErr }));
+  if (pcData.reread && !pcData.rereading) out.push(h("div", { class: "panel pc-reread", id: "pcReread" }, h("p", { class: "meta", text: "One more step (Admins): read Housecall Pro all again once, so the lists also use the tags on jobs (moved to another state, do not call). A few minutes; the lists keep working for everyone meanwhile." }),
+    h("button", { class: "btn primary small", type: "button", id: "pcRereadGo", onclick: () => pcBackfill(true) }, "Read all again now")));
   if (pcData.sync && pcData.sync.error) out.push(h("p", { class: "meta pc-note", text: `Couldn't read what changed in Housecall Pro just now (${revErrText(pcData.sync).replace(/\.$/, "")}). These lists are from the last read.` }));
   if (lbDate(day).getDay() === 0 || lbHoliday(day)) out.push(h("p", { class: "meta pc-note", id: "pcClosed", text: `${lbDate(day).getDay() === 0 ? "Sunday" : "A closed day"}: the clients who come up today are on ${lbDayText(pcNextOpen(day))}'s lists.` }));
   out.push(pcFindEl());
@@ -15728,7 +15730,7 @@ function pcEl() {
       missed ? h("small", { class: "pc-miss", text: `+${missed} missed` }) : null);
   })));
   const g = PC_GROUPS.includes(pcView.g) ? pcView.g : 6, x = grp(g);
-  const L = x.left || {}, left = [L.booked ? `${L.booked} booked since` : "", L.dnc ? `${L.dnc} do not call` : "", L.com ? `${L.com} commercial` : ""].filter(Boolean);
+  const L = x.left || {}, left = [L.booked ? `${L.booked} booked since` : "", L.dnc ? `${L.dnc} do not call` : "", L.away ? `${L.away} moved away` : "", L.com ? `${L.com} commercial` : ""].filter(Boolean);
   const list = h("div", { class: "panel pc-list", id: "pcList" },
     h("h2", { text: `${g} months since the last service` }),
     h("p", { class: "meta", text: `Clients whose last finished job was ${g} months before ${day === today ? "today" : lbDayText(day)}. ${x.due.length === 1 ? "1 client" : `${x.due.length} clients`}.` }),
@@ -15777,7 +15779,9 @@ function pcRowEl(r, g, missed) {
 /** Why a client is left off the lists, in words. */
 function pcWhyText(x) {
   if (x.why === "booked") return x.day ? `Booked: a job on ${pcDate(x.day)}` : "Booked: a job waiting to be scheduled";
-  if (x.why === "dnc") return x.who ? `Marked Don't call again by ${x.who}${x.at ? ` (${pcWhen(x.at)})` : ""}` : x.tag ? `Do not call: tag “${x.tag}” in Housecall Pro` : "Do not call: “Do not service” in Housecall Pro";
+  const on = x.inv ? ` (job #${x.inv})` : "";
+  if (x.why === "dnc") return x.who ? `Marked Don't call again by ${x.who}${x.at ? ` (${pcWhen(x.at)})` : ""}` : x.tag ? `Do not call: tag “${x.tag}” in Housecall Pro${on}` : "Do not call: “Do not service” in Housecall Pro";
+  if (x.why === "away") return `Moved away: tag “${x.tag}” in Housecall Pro${on}`;
   if (x.why === "com") return x.jt ? `Commercial: job type “${x.jt}”` : `Commercial: tag “${x.tag}” in Housecall Pro`;
   return "";
 }
