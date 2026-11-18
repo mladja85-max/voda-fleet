@@ -4939,7 +4939,7 @@ const OF_RETIRED = ["fu", "fus", "other"];
 /** Does she track exactly the scorecard's numbers (as on the Excel: the 8 of OF_DEFAULT_FIELDS)? */
 const ofHasCard = fields => OF_DEFAULT_FIELDS.every(d => fields.some(f => f.id === d.id && f.label === d.label && f.kind === d.kind && !f.hide))
   && fields.filter(f => !f.hide).length === OF_DEFAULT_FIELDS.length;
-/** Every CSR's numbers (Enter numbers' three rows): Outbound calls (each call and what it booked), Inbound calls, Admins
+/** Every CSR's numbers (Office Calls' three rows): Outbound calls (each call and what it booked), Inbound calls, Admins
  *  only. A number she already has (same id, or the same kind of number under another name) keeps its history. */
 const OF_CSR_FIELDS = [
   { id: "fb", label: "Feedback calls (yesterday's clients)", kind: "out", re: /^feedback/i },
@@ -15805,7 +15805,7 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "My day", score: "Scorecard", pc: "Past clients" };
+const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients" };
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const ofCfg = () => ofCleanConfig(ofData && ofData.config);
 /** The office person linked to this login. */
@@ -15911,7 +15911,7 @@ function renderOffice() {
       h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => openOfPeople() }, "People"),
       h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => openOfExcel() }, "Load from Excel")) : null);
   if (!OF_TABS[ofView.tab]) ofView.tab = "today";
-  const tabs = lbSeg(Object.entries(OF_TABS).map(([k, t]) => [k, k === "today" && ofEditor() ? "Enter numbers" : t]), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
+  const tabs = lbSeg(Object.entries(OF_TABS), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
   tabs.classList.add("of-tabs");
   if (!cfg.people.length && ofView.tab !== "pc") {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
@@ -16397,7 +16397,7 @@ function ofSplit(rows, val) {
   const sum = list => list.reduce((t, f) => t + (ofNum(val(f)) || 0), 0);
   return { inN: sum(rows.in.filter(f => !f.of)), bk: sum(rows.out.concat(rows.in).filter(f => f.of)) };
 }
-/** The three totals, on Enter numbers and the Scorecard alike: Incoming calls, Outbound calls (the goal: a line and its
+/** The three totals, on Office Calls and the Scorecard alike: Incoming calls, Outbound calls (the goal: a line and its
  *  bar), Booked appointments. live: the day card's (filled in by ofRefreshDay). */
 function ofTotsEl(t) {
   const n = v => (v == null ? "" : fmt(v));
@@ -16420,7 +16420,7 @@ function ofTodayEl() {
   const out = [];
   if (!p) {
     out.push(h("div", { class: "panel" }, h("h2", { text: editor ? `No one in the office in ${lbMonthLong(Number(key.slice(5)))}` : "Your login isn't linked yet" }),
-      h("p", { class: "meta", text: editor ? (admin ? "Check the months in People." : "Ask Mike to check the months in Office > People.") : "Ask Mike to pick your login next to your name in Office > People. Until then you can see everyone under Scorecard." })));
+      h("p", { class: "meta", text: editor ? (admin ? "Check the months in People." : "Ask Mike to check the months in Office > People.") : "Ask Mike to pick your login next to your name in Office > People. Until then you can see everyone under Office Scorecard." })));
     return out;
   }
   const first = `${y}-01-01`, last = `${y}-12-31`, mon = lbWeekStart(day);
@@ -16533,10 +16533,10 @@ function ofScoreEl() {
   const editor = ofEditor();
   out.push(h("ol", { class: "lb-list", id: "ofList" }, rows.map(({ p, s }, i) => {
     const workDays = s.days.filter(d => d.work);
-    // laid out like Enter numbers: the three totals, then Outbound calls, Inbound calls and Admins only (admins see it)
+    // laid out like Office Calls: the three totals, then Outbound calls, Inbound calls and Admins only (admins see it)
     const rr = ofRows(ofShownIn(p, s.had)), sp = ofSplit(rr, f => s.sums[f.id]);
     const lone = rr.out.filter(f => f.kind === "out").length < 2;   // one kind of call: its total is the Outbound calls above
-    const num = (f, i, row) => {   // the same boxes as on Enter numbers, to read (a booked one beside its calls)
+    const num = (f, i, row) => {   // the same boxes as on Office Calls, to read (a booked one beside its calls)
       const ratio = ofRatio(s.sums, f), kid = f.of && i > 0 && (row[i - 1].id === f.of || row[i - 1].of === f.of);
       return h("div", { class: "lb-box ro" + (kid ? " kid" : ""), "data-k": f.id }, h("span", { text: ofFieldName(f) }),
         h("div", { class: "of-in" }, h("div", { class: "of-val", text: fmt(s.sums[f.id]) }),
@@ -16658,7 +16658,7 @@ function openOfPeople() {
     }
     return out;
   };
-  /* ---- one tap a person: the CSR numbers (Enter numbers' three rows); her history stays ---- */
+  /* ---- one tap a person: the CSR numbers (Office Calls' three rows); her history stays ---- */
   const cardBox = h("div", { class: "of-card", id: "ofCardBox", hidden: true });
   let cardDone = "";
   const drawCard = () => {
@@ -16666,7 +16666,7 @@ function openOfPeople() {
     if (!need.length) { cardBox.hidden = !cardDone; cardBox.replaceChildren(...(cardDone ? [h("p", { class: "hint ok", id: "ofCardDone", text: cardDone })] : [])); return; }
     cardBox.hidden = false;
     cardBox.replaceChildren(
-      h("p", { class: "hint", text: "The CSR numbers, in Enter numbers' rows. Outbound: Feedback calls, Pricing follow-ups and booked, Past clients and booked, Confirmation calls. Inbound: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed / Online Booking and booked. Admins only: Scheduled / completed. What she typed before keeps counting (past only)." }),
+      h("p", { class: "hint", text: "The CSR numbers, in Office Calls' rows. Outbound: Feedback calls, Pricing follow-ups and booked, Past clients and booked, Confirmation calls. Inbound: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed / Online Booking and booked. Admins only: Scheduled / completed. What she typed before keeps counting (past only)." }),
       cardDone ? h("p", { class: "hint ok", id: "ofCardDone", text: cardDone }) : null,
       h("div", { class: "of-card-b" }, need.map(el => h("button", { class: "btn small primary", type: "button", "data-csr": nameOf(el), onclick: ev => useCsr(ev.currentTarget, el) }, `Use the CSR numbers for ${nameOf(el)}`))));
   };
