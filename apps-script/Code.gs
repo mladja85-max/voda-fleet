@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 88;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 89;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -600,7 +600,7 @@ function appendRows_(sheet, width, rows) {
 
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
-const ROLES = ["admin", "tech"];
+const ROLES = ["admin", "tech", "csr"];   // csr: a Non-admin in the office (sees what's ticked, like a Non-admin)
 const ADMIN_ACTIONS = ["hcpTest", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
   "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
@@ -799,7 +799,7 @@ function invite_(req) {
   const access = req.access === undefined ? ACCESS_DEFAULT.slice() : cleanAccess_(req.access);
   if (!access) return { ok: false, error: "bad_request" };
   const u = { id: "u-" + Utilities.getUuid().replace(/-/g, "").slice(0, 10), username: "", name: name,
-    role: req.role === "admin" ? "admin" : "tech", status: "invited", salt: "", hash: "", ver: 1, created: new Date().toISOString(), lastLogin: "",
+    role: ROLES.indexOf(req.role) !== -1 ? req.role : "tech", status: "invited", salt: "", hash: "", ver: 1, created: new Date().toISOString(), lastLogin: "",
     access: accessText_(access) };
   const code = newInvite_(u);
   writeUser_(s, 0, u);
@@ -833,9 +833,10 @@ function saveUser_(req) {
     if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   }
   if (x.u.role !== role || x.u.status !== status) {
+    const sameRights = x.u.status === status && (x.u.role === "admin") === (role === "admin");   // Non-admin <-> CSR: what they see stays the ticks
     x.u.role = role;
     x.u.status = status;
-    x.u.ver = Number(x.u.ver) + 1;      // takes effect on their phone straight away
+    if (!sameRights) x.u.ver = Number(x.u.ver) + 1;      // takes effect on their phone straight away (Non-admin <-> CSR: they stay signed in)
     writeUser_(s, x.rowIndex, x.u);
   }
   return { ok: true, user: publicUser_(x.u) };

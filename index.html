@@ -5147,6 +5147,9 @@ function parseNum(s) {
 }
 const byId = id => trucks.find(t => t.id === id);
 const isAdmin = () => !!(session && session.role === "admin");
+const CSR_API = 89;                       // the Google script version with the CSR role (a Non-admin in the office)
+const CSR_SEES = ["office"];              // what picking CSR ticks (it can still be changed)
+const roleText = r => (r === "admin" ? "Admin" : r === "csr" ? "CSR" : "Non-admin");
 /** Technicians may change only TM hours, and only on trucks with a truckmount. */
 const canEditHrs = t => !!(session && progOf(t));
 const progOf = t => PROGRAMS[t.tm] || null;
@@ -7783,7 +7786,7 @@ function openSettings() {
   openDialog(
     h("h3", { id: "dlgTitle", text: "Settings" }),
     h("div", { class: "st-me" }, h("span", { class: "st-av", "aria-hidden": "true", text: (name[0] || "?").toUpperCase() }),
-      h("span", null, h("b", { text: name }), h("small", { text: `${session && session.username ? "@" + session.username + " · " : ""}${isAdmin() ? "Admin" : "Non-admin"}` }))),
+      h("span", null, h("b", { text: name }), h("small", { text: `${session && session.username ? "@" + session.username + " · " : ""}${roleText(session && session.role)}` }))),
     team.length ? h("p", { class: "st-grp", text: "Team and pay" }) : null,
     team.length ? h("div", { class: "st-list", id: "st-team" }, team) : null,
     isAdmin() && apiLevel >= 10 ? h("p", { class: "st-grp", text: "Trucks" }) : null,
@@ -7853,8 +7856,12 @@ async function openUsers() {
           onclick: () => call("settingsOwner", { id: u.id, on: !hasSt }, `${u.name} ${hasSt ? "can't change Settings any more" : "can change Settings now"}`) }, "Changes settings")
       : hasSt ? h("span", { class: "user-meta", text: "Changes settings" }) : null;
     const status = u.status === "invited" ? `Invite not used yet (code works until ${fmtWhen(u.inviteUntil)})` : u.status === "disabled" ? "Turned off" : `Last sign-in: ${fmtAt(u.lastLogin)}`;
-    const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => call("saveUser", { id: u.id, role: e.target.value }, `${u.name} is now ${e.target.value === "admin" ? "an Admin" : "a Non-admin"}`) },
-      h("option", { value: "tech", text: "Non-admin" }), h("option", { value: "admin", text: "Admin" }));
+    const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => {
+        const r = e.target.value, data = { id: u.id, role: r }, mine = access.filter(a => a !== "pricecheck");
+        if (r === "csr" && CSR_SEES.some(a => !mine.includes(a))) data.access = mine.concat(CSR_SEES.filter(a => !mine.includes(a)));   // a CSR sees Office (kept: what was ticked)
+        call("saveUser", data, `${u.name} is now ${r === "admin" ? "an Admin" : r === "csr" ? "a CSR" + (data.access ? " (sees Office)" : "") : "a Non-admin"}`);
+      } },
+      h("option", { value: "tech", text: "Non-admin" }), apiLevel >= CSR_API || u.role === "csr" ? h("option", { value: "csr", text: "CSR" }) : null, h("option", { value: "admin", text: "Admin" }));
     role.value = u.role;
     const access = Array.isArray(u.access) ? u.access.slice() : ["trucks"];
     // Payroll: only admins switched on see it; an admin who sees it switches it for the others (the first time: anyone)
@@ -7922,12 +7929,19 @@ async function openUsers() {
   let inviteBox = null;
   const inviteAccess = ["trucks"];
   const inviteChips = apiLevel >= SUP_API ? accessChips(inviteAccess, () => {}, "u-acc") : null;
-  const roleSel = h("select", { id: "u-role", onchange: () => { if (inviteChips) inviteChips.hidden = roleSel.value === "admin"; } },
-    h("option", { value: "tech", text: "Non-admin" }), h("option", { value: "admin", text: "Admin" }));
+  const roleSel = h("select", { id: "u-role", onchange: () => {
+      if (!inviteChips) return;
+      inviteChips.hidden = roleSel.value === "admin";
+      if (roleSel.value === "csr") {   // a CSR: Office ticked (the rest can still be ticked)
+        inviteAccess.splice(0, inviteAccess.length, ...CSR_SEES);
+        for (const b of inviteChips.querySelectorAll("button[data-acc]")) b.setAttribute("aria-pressed", String(inviteAccess.includes(b.dataset.acc)));
+      }
+    } },
+    h("option", { value: "tech", text: "Non-admin" }), apiLevel >= CSR_API ? h("option", { value: "csr", text: "CSR" }) : null, h("option", { value: "admin", text: "Admin" }));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
     h("p", { text: apiLevel >= SUP_API
-      ? "Admins see and do everything. Non-admins see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "")
+      ? "Admins see and do everything. Non-admins see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "") + (apiLevel >= CSR_API ? " CSRs are Non-admins in the office: picking CSR ticks Office, you can tick more for them the same way, and only CSRs can be linked under Office › People." : "")
       : "Admins can do everything. Non-admins can view everything and update only TM hours on truckmount trucks." }),
     stBox,
     inviteBox = h("fieldset", { hidden: !can }, h("legend", { text: "Invite someone" }),
@@ -16264,8 +16278,9 @@ function openOfPeople() {
     return f;
   });
   // the logins: from the last time this window opened (it opens at once), checked again in the background
+  // the logins to link: the CSRs (and whoever is linked already)
   const loginOpts = (sel, cur) => sel.replaceChildren(h("option", { value: "", text: "Not linked" }),
-    ...(ofUsers || []).map(u => h("option", { value: u.id, text: `${u.name} (${u.username})`, selected: u.id === cur })),
+    ...(ofUsers || []).filter(u => apiLevel < CSR_API || u.role === "csr" || u.id === cur).map(u => h("option", { value: u.id, text: `${u.name} (${u.username})`, selected: u.id === cur })),
     ...(cur && !(ofUsers || []).some(u => u.id === cur) ? [h("option", { value: cur, text: ofUsers ? "(a login that was removed)" : "Linked (loading the logins…)", selected: true })] : []));
   const personEl = (p, isNew) => {
     const fields = h("div", { class: "of-fields" }, p.fields.map(f => fieldRow(f, p.fields)));
