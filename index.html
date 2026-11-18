@@ -537,6 +537,11 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .seg-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: .95rem; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 /* the picked option is filled in VODA blue, so it's clear what's selected */
 .seg-btn { transition: background-color .15s ease, color .15s ease; }
+/* Office's four tabs on a phone: two by two, every name whole */
+@media (max-width: 600px) {
+  .seg.of-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
+  .seg.of-tabs .seg-btn { justify-content: center; text-align: center; white-space: nowrap; padding: 9px 6px; }
+}
 .seg-btn:hover:not([aria-selected="true"]) { color: var(--ink); }
 .seg-btn:active { transform: scale(.97); }
 .seg-btn[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
@@ -657,7 +662,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .lb-when { display: flex; gap: 8px; flex-wrap: wrap; }
 /* ---- office scorecards ---- */
 .pc-groups { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-@media (max-width: 560px) { .pc-groups { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .pc-groups { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  /* a phone: the groups smaller, so the list comes sooner */
+  .pc-groups .pc-g { padding: 7px 9px; gap: 1px; }
+  .pc-groups .pc-g b { font-size: .68rem; letter-spacing: .03em; }
+  .pc-groups .pc-g .pc-n { font-size: 1.55rem; }
+  .pc-groups .pc-g small { font-size: .72rem; }
+  .pc-upd-more { display: none; }   /* a phone: just when it was read */
+}
 .pc-g { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface);
   color: var(--ink); font: inherit; cursor: pointer; text-align: left; box-shadow: var(--shadow); min-width: 0; }
 .pc-g b { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
@@ -760,6 +773,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .of-tot span { white-space: nowrap; order: 1; }
   .of-tot b { order: 2; }   /* the numbers all on the right */
   .of-tot .of-bar { position: absolute; left: 14px; right: 14px; bottom: 5px; height: 4px; margin: 0; }
+}
+/* a phone: the three totals one under the other, each a slim line (name, the goal, the number) */
+@media (max-width: 600px) {
+  .of-tots { grid-template-columns: 1fr; grid-template-rows: none; gap: 6px; }
+  .of-tot { grid-row: auto; display: flex; align-items: baseline; gap: 8px; padding: 7px 12px 10px; }
+  .of-tot small { margin-right: auto; font-size: .7rem; }
+  .of-tot span { white-space: nowrap; order: 1; font-size: .74rem; }
+  .of-tot b { order: 2; font-size: 1.5rem; }
+  .of-tot .of-bar { position: absolute; left: 12px; right: 12px; bottom: 4px; height: 4px; margin: 0; }
 }
 .of-sec-row { display: grid; gap: 2px; }
 .of-sec-row .of-sec { margin: 2px 0 0; }
@@ -1557,6 +1579,7 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
   .rev-strip span { display: block; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   #revTable .pj, #revTable .oth { display: none; }
   .rev-bar-top .rev-tools { width: 100%; justify-content: space-between; }
+  .rev-bar-top .rev-tools.rev-tools-fit { width: auto; margin-left: auto; }   /* Office: Read again beside ‹ › when it fits */
   #revTable td .rev-was { padding: 3px 4px 4px; font-size: .7rem; }
   #revTable td .rev-was .rev-ch { display: block; }
   #revTable td .rev-was .rev-ytag { display: block; width: max-content; margin: 0 0 1px auto; padding: 0 3px; }
@@ -16264,10 +16287,10 @@ function pcEl() {
         dateBox("pcOn", rg.from, "Day", v => { pcView.from = v; redraw(); }), next,
         rg.from !== today ? h("button", { class: "btn ghost small", type: "button", id: "pcToday", onclick: () => { pcView.from = today; redraw(); } }, "Today") : null)
       : h("div", { class: "of-step" }, prev, h("strong", { id: "pcRangeLabel", text: rg.label + (per === "day" && rg.from === today ? " (today)" : "") }), next),
-    h("div", { class: "rev-tools" }, h("button", { class: "btn small", type: "button", id: "pcRefresh", disabled: pcLoading, title: "Read what changed in Housecall Pro now",
+    h("div", { class: "rev-tools rev-tools-fit" }, h("button", { class: "btn small", type: "button", id: "pcRefresh", disabled: pcLoading, title: "Read what changed in Housecall Pro now",
       onclick: () => pcLoad(true) }, pcLoading ? "Reading…" : "Read again"),
       admin && pcData.assign ? h("button", { class: "btn small", type: "button", id: "pcAssignBtn", title: "Pick who calls each group", onclick: openPcAssign }, "Who calls which") : null)));
-  out.push(h("p", { class: "lb-sub pc-upd", id: "pcUpd", text: read ? `${read} · it reads what changed every 15 minutes while this is open, and Read again reads it now` : "" }));
+  out.push(h("p", { class: "lb-sub pc-upd", id: "pcUpd" }, read, read ? h("span", { class: "pc-upd-more", text: " · it reads what changed every 15 minutes while this is open, and Read again reads it now" }) : null));
   if (pcErr) out.push(h("p", { class: "dlg-err", text: pcErr }));
   if (pcData.reread && !pcData.rereading) out.push(h("div", { class: "panel pc-reread", id: "pcReread" }, h("p", { class: "meta", text: "One more step (Admins): read Housecall Pro all again once, so the lists also use the tags on jobs (moved to another state, do not call). A few minutes; the lists keep working for everyone meanwhile." }),
     h("button", { class: "btn primary small", type: "button", id: "pcRereadGo", onclick: () => pcBackfill(true) }, "Read all again now")));
@@ -16769,7 +16792,7 @@ function ofEstEl() {
         h("button", { class: "btn small", type: "button", id: "ofEstPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
         h("strong", { id: "ofEstLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
         h("button", { class: "btn small", type: "button", id: "ofEstNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
-    h("div", { class: "rev-tools" }, h("button", { class: "btn small", type: "button", id: "ofEstRead", disabled: ofEstSync.busy || !doc.connected,
+    h("div", { class: "rev-tools rev-tools-fit" }, h("button", { class: "btn small", type: "button", id: "ofEstRead", disabled: ofEstSync.busy || !doc.connected,
       title: "Read what changed in Housecall Pro", onclick: () => ofEstRun() }, ofEstSync.busy ? "Reading…" : "Read again")));
   const status = h("p", { class: "lb-sub rev-status" + (ofEstSync.busy ? " busy" : ""), id: "ofEstStatus", role: "status" },
     !doc.connected ? "Housecall Pro isn't connected right now." : ofEstSync.busy ? "Reading estimates from Housecall Pro…"
