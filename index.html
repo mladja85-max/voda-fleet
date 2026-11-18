@@ -736,10 +736,18 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
 .of-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .2s ease; }
 .of-bar.done i { background: var(--ok); }
-.of-total { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 8px; margin: 2px 0 6px; }
-.of-total b { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; }
-.of-total span { color: var(--muted); font-weight: 600; }
-.of-total .of-bar { grid-column: 1 / -1; }
+.of-tots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 8px; }
+.of-tot { display: grid; align-content: start; gap: 3px; min-width: 0; padding: 9px 11px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.of-tot small { font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
+.of-tot b { font-family: var(--font-display); font-size: 2.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.of-tot span { color: var(--muted); font-weight: 600; font-size: .8rem; }
+.of-tot .of-bar { margin-top: 3px; height: 8px; }
+.of-tot.out { background: var(--surface); border-color: var(--accent); }
+@supports (grid-template-rows: subgrid) {   /* the labels and numbers level across the three, however the labels wrap */
+  .of-tots { grid-template-rows: repeat(4, auto); row-gap: 0; }
+  .of-tot { grid-row: span 4; grid-template-rows: subgrid; row-gap: 3px; }
+}
+@media (max-width: 420px) { .of-tot { padding: 8px 9px; } .of-tot b { font-size: 1.8rem; } }
 .of-sec { margin: 10px 0 2px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .lb-box.ro input { background: var(--surface-2); color: var(--muted); }
 .of-sec-n { margin: -4px 0 8px; font-size: .8rem; color: var(--muted); }
@@ -4905,14 +4913,14 @@ function ofWithTasks(fields, list) {
 const OF_ROWS = {
   out: [["fb", /^feedback/i], ["price", /^pricing follow/i], ["priceb", /booked from pricing/i], ["past", /^past clients/i], ["pastb", /booked from past/i], ["conf", /^confirmation/i],
     ["vm", /voicemail follow/i], ["vmb", /booked from voicemail/i], ["est", /estimate follow/i], ["estb", /booked from estimate/i]],
-  in: [["opp", /^opportunit/i], ["sched", /^scheduled jobs/i], ["gg", /^google guaranteed/i], ["ggs", /^booked from google|^scheduled google/i]] };
+  in: [["opp", /^opportunit/i], ["sched", /^scheduled jobs(\/estimates)?$/i], ["gg", /^google guaranteed/i], ["ggs", /^booked from google|^scheduled google/i]] };
 function ofRows(fields) {
   const at = (f, list) => list.findIndex(([id, re]) => f.id === id || re.test(f.label));
   const rows = { out: [], in: [], admin: [] }, kids = [];
   for (const f of fields) {
     if (f.kind === "admin") { rows.admin.push(f); continue; }
     const o = at(f, OF_ROWS.out), i = at(f, OF_ROWS.in);
-    if (o < 0 && i < 0 && f.of && fields.some(x => x.id === f.of)) { kids.push(f); continue; }   // "booked from …" of hers: right after its calls
+    if (f.of && fields.some(x => x.id === f.of && x.kind !== "admin")) { kids.push(f); continue; }   // "booked from …": right after its own calls
     rows[o >= 0 ? "out" : i >= 0 ? "in" : f.kind === "out" ? "out" : "in"].push(f);
   }
   for (const k of ["out", "in"]) {
@@ -16135,7 +16143,11 @@ function ofTodayEl() {
   out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
     h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
     locked ? h("p", { class: "of-locked", id: "ofLocked", text: `Only today's numbers can be typed. To fix ${day < today ? "a past" : "another"} day, ask Mike.` }) : null,
-    h("div", { class: "of-total" }, h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
+    // the day's totals, counted from the boxes: Incoming calls, Outbound calls (with the goal), Booked appointments
+    h("div", { class: "of-tots", id: "ofTots" },
+      h("div", { class: "of-tot" }, h("small", { text: "Incoming calls" }), h("b", { id: "ofInNum" })),
+      h("div", { class: "of-tot out" }, h("small", { text: "Outbound calls" }), h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
+      h("div", { class: "of-tot" }, h("small", { text: "Booked appointments" }), h("b", { id: "ofBkNum" }))),
     outs.length ? [h("h4", { class: "of-sec", id: "ofRowOut", text: "Outbound calls" }), h("p", { class: "of-sec-n", text: `The calls add up to the ${goal} goal; the booked numbers don't.` }), line(outs)] : null,
     nums.length ? [h("h4", { class: "of-sec", id: "ofRowIn", text: "Inbound calls" }), line(nums)] : null,
     adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : editor ? "Checked in the CRM" : "Typed by admins (checked in the CRM)" }), line(adm)] : null,
@@ -16151,7 +16163,11 @@ function ofRefreshDay(day, p) {
   const cfg = ofCfg(), e = ofEntry(ofData.months, day, p.name) || {};
   const o = ofOut(p, e), goal = cfg.goal;
   $("ofOutNum").textContent = fmt(o);
-  $("ofOutGoal").textContent = ofWorkDay(day) ? ` of ${goal} outgoing calls${o >= goal ? " · goal reached" : ` · ${goal - o} to go`}` : " outgoing calls";
+  $("ofOutGoal").textContent = ofWorkDay(day) ? `of ${goal} · ${o >= goal ? "goal reached" : `${goal - o} to go`}` : "no goal today";
+  // Incoming: the inbound calls (not what they booked); Booked appointments: every "booked from …" / "scheduled" number
+  const rows = ofRows(ofShown(p, e)), sum = list => list.reduce((t, f) => t + (ofNum(e[f.id]) || 0), 0);
+  $("ofInNum").textContent = fmt(sum(rows.in.filter(f => !f.of)));
+  $("ofBkNum").textContent = fmt(sum(rows.out.concat(rows.in).filter(f => f.of)));
   const bar = card.querySelector(".of-bar");
   bar.classList.toggle("done", o >= goal);
   bar.querySelector("i").style.width = `${Math.min(100, Math.round(o / goal * 100))}%`;
