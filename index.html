@@ -15601,7 +15601,7 @@ function renderOffice() {
    in this window only: the clients' names and phones aren't saved on the device. ---- */
 const PC_API = 81;                                       // the Google script version with Past clients
 const PC_GROUPS = [6, 12, 18, 24, 36];
-const PC_MARKS = [["na", "No answer"], ["vm", "Voicemail"], ["booked", "Booked"], ["dnc", "Don't call again"]];
+const PC_MARKS = [["na", "Not now"], ["vm", "Voicemail"], ["booked", "Booked"], ["dnc", "Don't call again"]];
 const PC_MARK_TEXT = Object.fromEntries(PC_MARKS);
 const PC_DEPT = { r: "Restoration", c: "Cleaning", p: "Repairs" };
 const K_PC_VIEW = "voda.pcView1";
@@ -15790,7 +15790,7 @@ function pcAdminEnd(out, admin) {
   }
   return out;
 }
-/** All called: the navy summary ("All 4 called", "1 booked · 2 voicemail · 1 no answer"). */
+/** All called: the navy summary ("All 4 called", "1 booked · 2 voicemail · 1 not now"). */
 const pcDoneEl = (n, res) => h("div", { class: "pc-donebox", id: "pcDone" }, h("span", { class: "pc-donei", "aria-hidden": "true", text: "✓" }),
   h("div", null, h("b", { text: `All ${fmt(n)} called` }), res ? h("small", { text: res }) : null));
 /** All called: the calls fold away behind "Show the 4 calls" (kept open for that list while this window is open).
@@ -15811,7 +15811,7 @@ function pcTally(x, today) {
   t.not += 0; t.called = t.booked + t.vm + t.na + t.dnc;
   return t;
 }
-const pcResText = t => [t.booked ? `${t.booked} booked` : "", t.vm ? `${t.vm} voicemail` : "", t.na ? `${t.na} no answer` : "", t.dnc ? `${t.dnc} don't call again` : "",
+const pcResText = t => [t.booked ? `${t.booked} booked` : "", t.vm ? `${t.vm} voicemail` : "", t.na ? `${t.na} not now` : "", t.dnc ? `${t.dnc} don't call again` : "",
   t.not ? `${t.not} not called` : "", t.ahead ? `${t.ahead} still to call` : ""].filter(Boolean).join(" · ");
 /** A week, a month or a year: the 5 groups with what came of their calls; week and month list every client by day (to
  *  call ahead or catch up), the year counts them month by month (tap a month to open it). */
@@ -15842,7 +15842,7 @@ function pcPeriodEl(rg, today) {
   if (year) {
     // month by month: tap one to open it
     const C = n => (n ? fmt(n) : "–"), months = Array.from({ length: 12 }, (_, i) => `${rg.from.slice(0, 4)}-${String(i + 1).padStart(2, "0")}`);
-    const head = ["Month", "Came up", "Called", "Booked", "Voicemail", "No answer", "Don't call", "Not called", "To call"];
+    const head = ["Month", "Came up", "Called", "Booked", "Voicemail", "Not now", "Don't call", "Not called", "To call"];
     const cells = m => { const v = pcTally({ tot: (x.months || {})[m] || {} }, today); return [v.due, v.called, v.booked, v.vm, v.na, v.dnc, v.not, v.ahead]; };
     list.append(h("div", { class: "pc-ywrap" }, h("table", { class: "lb-table pc-ytab", id: "pcYear" },
       h("thead", null, h("tr", null, head.map((k, i) => h("th", { class: i ? "" : "l", text: k })))),
@@ -15868,11 +15868,11 @@ function pcAllCalled(x) {
   const all = (x.due || []).concat(x.missed || []);
   return all.length > 0 && !x.more && all.every(r => r.m && r.m.r);
 }
-/** "1 booked · 2 voicemail · 1 no answer" */
+/** "1 booked · 2 voicemail · 1 not now" */
 function pcSumText(x) {
   const n = {};
   for (const r of (x.due || []).concat(x.missed || [])) if (r.m && r.m.r) n[r.m.r] = (n[r.m.r] || 0) + 1;
-  return [["booked", "booked"], ["vm", "voicemail"], ["na", "no answer"], ["dnc", "don't call again"]].filter(([k]) => n[k]).map(([k, t]) => `${n[k]} ${t}`).join(" · ");
+  return [["booked", "booked"], ["vm", "voicemail"], ["na", "not now"], ["dnc", "don't call again"]].filter(([k]) => n[k]).map(([k, t]) => `${n[k]} ${t}`).join(" · ");
 }
 function pcRowEl(r, g, missed) {
   const m = r.m, key = `${r.id}|${g}`, sure = pcSure === key;
