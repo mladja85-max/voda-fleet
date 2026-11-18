@@ -736,12 +736,34 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
 .of-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .2s ease; }
 .of-bar.done i { background: var(--ok); }
-.of-total { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 8px; margin: 2px 0 6px; }
-.of-total b { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; }
-.of-total span { color: var(--muted); font-weight: 600; }
-.of-total .of-bar { grid-column: 1 / -1; }
+.of-tots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 8px; }
+.of-tot { display: grid; align-content: start; gap: 3px; min-width: 0; padding: 9px 11px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.of-tot small { font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
+.of-tot b { font-family: var(--font-display); font-size: 2.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.of-tot span { color: var(--muted); font-weight: 600; font-size: .8rem; }
+.of-tot .of-bar { margin-top: 3px; height: 8px; }
+.of-tot.out { background: var(--surface); border-color: var(--accent); }
+@supports (grid-template-rows: subgrid) {   /* the labels and numbers level across the three, however the labels wrap */
+  .of-tots { grid-template-rows: repeat(4, auto); row-gap: 0; }
+  .of-tot { grid-row: span 4; grid-template-rows: subgrid; row-gap: 3px; }
+}
+@media (max-width: 420px) { .of-tot { padding: 8px 9px; } .of-tot b { font-size: 1.8rem; } }
 .of-sec { margin: 10px 0 2px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .lb-box.ro input { background: var(--surface-2); color: var(--muted); }
+.of-sec-n { margin: -4px 0 8px; font-size: .8rem; color: var(--muted); }
+/* the day's rows: phone, one line per kind of call (its booked number beside it); wide, each row on one line */
+.of-line { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.of-line > .lb-box { grid-column: 1; }
+@supports (grid-template-rows: subgrid) {   /* name, box, % line: the boxes on a line stay level however the names wrap */
+  .of-line { row-gap: 10px; }
+  .of-line > .lb-box { grid-row: span 3; grid-template-rows: subgrid; row-gap: 3px; }
+  .of-day .of-line > .lb-box > span { min-height: 0; }
+}
+.of-line > .lb-box.kid { grid-column: 2; }
+@media (min-width: 900px) {
+  .of-line { grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr)); }
+  .of-line > .lb-box, .of-line > .lb-box.kid { grid-column: auto; }
+}
 .of-ratio { color: var(--muted); font-size: .78rem; }
 .of-step { display: flex; align-items: center; gap: 8px; }
 .of-step strong { min-width: 10em; text-align: center; }
@@ -4885,6 +4907,36 @@ function ofWithTasks(fields, list) {
   for (const f of out) if (!f.hide) delete f.hide;
   return out;
 }
+/** The day's numbers in rows, the same for every office person: Outbound calls, Inbound calls, then Admins only.
+ *  Known numbers go in this order (by id, or by name for one added by hand); any other number of hers: a call toward the
+ *  goal under Outbound, anything else under Inbound, after the known ones. */
+const OF_ROWS = {
+  out: [["fb", /^feedback/i], ["price", /^pricing follow/i], ["priceb", /booked from pricing/i], ["past", /^past clients/i], ["pastb", /booked from past/i], ["conf", /^confirmation/i],
+    ["vm", /voicemail follow/i], ["vmb", /booked from voicemail/i], ["est", /estimate follow/i], ["estb", /booked from estimate/i]],
+  in: [["opp", /^opportunit/i], ["sched", /^scheduled jobs(\/estimates)?$/i], ["gg", /^google guaranteed/i], ["ggs", /^booked from google|^scheduled google/i]] };
+function ofRows(fields) {
+  const at = (f, list) => list.findIndex(([id, re]) => f.id === id || re.test(f.label));
+  const rows = { out: [], in: [], admin: [] }, kids = [];
+  for (const f of fields) {
+    if (f.kind === "admin") { rows.admin.push(f); continue; }
+    const o = at(f, OF_ROWS.out), i = at(f, OF_ROWS.in);
+    if (f.of && fields.some(x => x.id === f.of && x.kind !== "admin")) { kids.push(f); continue; }   // "booked from …": right after its own calls
+    rows[o >= 0 ? "out" : i >= 0 ? "in" : f.kind === "out" ? "out" : "in"].push(f);
+  }
+  for (const k of ["out", "in"]) {
+    const rank = f => { const n = at(f, OF_ROWS[k]); return n >= 0 ? n : 100 + fields.indexOf(f); };
+    rows[k].sort((a, b) => rank(a) - rank(b));
+  }
+  for (const f of kids) {
+    const k = ["out", "in"].find(r => rows[r].some(x => x.id === f.of)) || "in", row = rows[k];
+    let n = row.findIndex(x => x.id === f.of) + 1;
+    while (n < row.length && row[n].of === f.of) n++;
+    row.splice(n, 0, f);
+  }
+  return rows;
+}
+/** A number's name on screen (the Google one's full name: Booked from Google Guaranteed / Online Booking). */
+const ofFieldName = f => (/^(booked from google \/ online|scheduled google guaranteed)$/i.test(f.label) ? "Booked from Google Guaranteed / Online Booking" : f.label);
 /** Does she already have this task list? */
 const ofHasTasks = (fields, list) => list.every(t => fields.some(f => f.id === t.id && f.label === t.label && f.kind === t.kind && !f.hide));
 /** The numbers to type that day: everything but the past-only ones, unless that day has a number in one. */
@@ -16075,22 +16127,30 @@ function ofTodayEl() {
   const e = ofEntry(ofData.months, day, p.name) || {};
   const goal = cfg.goal, work = ofWorkDay(day);
   const locked = !editor && day !== today;   // another day: only Admins and Office (any day) change it
-  const box = (f) => {
+  const box = (f, i, row) => {
     const mine = (f.kind !== "admin" || editor) && !locked;
-    return h("label", { class: "lb-box" + (mine ? "" : " ro") }, h("span", { text: f.label }),
+    const kid = f.of && i > 0 && (row[i - 1].id === f.of || row[i - 1].of === f.of);   // beside its calls (phone: same line)
+    return h("label", { class: "lb-box" + (mine ? "" : " ro") + (kid ? " kid" : ""), "data-k": f.id }, h("span", { text: ofFieldName(f) }),
       h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? "" : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
         onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
       f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : null);
   };
   const shown = ofShown(p, e);   // a past-only number shows only on a day that has one
-  const outs = shown.filter(f => f.kind === "out"), nums = shown.filter(f => f.kind === "num"), adm = shown.filter(f => f.kind === "admin");
+  // the rows: Outbound calls, Inbound calls, then Admins only (not shown to the office people: admins type them)
+  const rows = ofRows(shown), outs = rows.out, nums = rows.in, adm = editor ? rows.admin : [];
+  const cols = Math.min(6, Math.max(4, outs.length, nums.length));   // wide screen: each row on one line, the boxes lined up
+  const line = (list) => h("div", { class: "of-line", style: `--n:${cols}` }, list.map(box));
   out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
     h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
     locked ? h("p", { class: "of-locked", id: "ofLocked", text: `Only today's numbers can be typed. To fix ${day < today ? "a past" : "another"} day, ask Mike.` }) : null,
-    h("div", { class: "of-total" }, h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
-    outs.length ? [h("h4", { class: "of-sec", text: `Calls (they add up to the ${goal} goal)` }), h("div", { class: `lb-boxes n${Math.min(3, outs.length)}` }, outs.map(box))] : null,
-    nums.length ? [h("h4", { class: "of-sec", text: "Other numbers" }), h("div", { class: `lb-boxes n${Math.min(3, nums.length)}` }, nums.map(box))] : null,
-    adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : editor ? "Checked in the CRM" : "Typed by admins (checked in the CRM)" }), h("div", { class: `lb-boxes n${Math.min(3, adm.length)}` }, adm.map(box))] : null,
+    // the day's totals, counted from the boxes: Incoming calls, Outbound calls (with the goal), Booked appointments
+    h("div", { class: "of-tots", id: "ofTots" },
+      h("div", { class: "of-tot" }, h("small", { text: "Incoming calls" }), h("b", { id: "ofInNum" })),
+      h("div", { class: "of-tot out" }, h("small", { text: "Outbound calls" }), h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
+      h("div", { class: "of-tot" }, h("small", { text: "Booked appointments" }), h("b", { id: "ofBkNum" }))),
+    outs.length ? [h("h4", { class: "of-sec", id: "ofRowOut", text: "Outbound calls" }), h("p", { class: "of-sec-n", text: `The calls add up to the ${goal} goal; the booked numbers don't.` }), line(outs)] : null,
+    nums.length ? [h("h4", { class: "of-sec", id: "ofRowIn", text: "Inbound calls" }), line(nums)] : null,
+    adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : editor ? "Checked in the CRM" : "Typed by admins (checked in the CRM)" }), line(adm)] : null,
     h("p", { class: "lb-card-foot", id: "ofWeekFoot" })));
   out.push(h("p", { id: "ofSaveNote", class: "lb-save", role: "status" }));
   setTimeout(() => ofRefreshDay(day, p), 0);
@@ -16103,14 +16163,18 @@ function ofRefreshDay(day, p) {
   const cfg = ofCfg(), e = ofEntry(ofData.months, day, p.name) || {};
   const o = ofOut(p, e), goal = cfg.goal;
   $("ofOutNum").textContent = fmt(o);
-  $("ofOutGoal").textContent = ofWorkDay(day) ? ` of ${goal} outgoing calls${o >= goal ? " · goal reached" : ` · ${goal - o} to go`}` : " outgoing calls";
+  $("ofOutGoal").textContent = ofWorkDay(day) ? `of ${goal} · ${o >= goal ? "goal reached" : `${goal - o} to go`}` : "no goal today";
+  // Incoming: the inbound calls (not what they booked); Booked appointments: every "booked from …" / "scheduled" number
+  const rows = ofRows(ofShown(p, e)), sum = list => list.reduce((t, f) => t + (ofNum(e[f.id]) || 0), 0);
+  $("ofInNum").textContent = fmt(sum(rows.in.filter(f => !f.of)));
+  $("ofBkNum").textContent = fmt(sum(rows.out.concat(rows.in).filter(f => f.of)));
   const bar = card.querySelector(".of-bar");
   bar.classList.toggle("done", o >= goal);
   bar.querySelector("i").style.width = `${Math.min(100, Math.round(o / goal * 100))}%`;
   for (const el of card.querySelectorAll(".of-ratio")) {
     const f = p.fields.find(x => x.id === el.dataset.of), base = p.fields.find(x => x.id === f.of);
     const a = ofNum(e[f.id]), b = ofNum(e[f.of]);
-    el.textContent = a != null && b ? `${ofPct(a / b)} of ${base.label}` : "";   // as typed: "Google", "6M"
+    el.textContent = a != null && b ? `${ofPct(a / b)} ${/^sched/i.test(f.label) ? "scheduled" : "booked"}` : "";   // it sits beside its calls
   }
   const mon = lbWeekStart(day), sw = ofSummary(cfg, ofData.months, p, mon, lbAddDays(mon, 6) > lbToday() ? lbToday() : lbAddDays(mon, 6));
   $("ofWeekFoot").textContent = `Week of ${lbWeekText(mon)}: ${fmt(sw.out)} outgoing calls · ${goal} reached on ${sw.hit} of ${sw.worked} day${sw.worked === 1 ? "" : "s"} worked`;
@@ -16169,9 +16233,9 @@ function ofScoreEl() {
         per === "week" || per === "month" ? h("div", { class: "of-days", "aria-label": "Outgoing calls each work day" }, workDays.map(d => h("span", {
           class: "of-dd" + (d.day > today ? " future" : !d.worked ? " none" : d.out >= s.goal ? " ok" : " low"), title: `${lbDayText(d.day)}: ${d.worked ? `${d.out} outgoing calls` : "nothing typed"}`,
           text: d.day > today ? "" : d.worked ? String(d.out) : "·" }))) : null,
-        h("div", { class: "of-nums" }, ((vis) => vis.filter(f => f.kind !== "out" || vis.filter(x => x.kind === "out").length > 1))(ofShownIn(p, s.had)).map(f => {
+        h("div", { class: "of-nums" }, ((vis) => vis.filter(f => f.kind !== "out" || vis.filter(x => x.kind === "out").length > 1))(((r) => r.out.concat(r.in, r.admin))(ofRows(ofShownIn(p, s.had)))).map(f => {
           const ratio = ofRatio(s.sums, f);
-          return h("div", { class: "lb-m" }, h("span", { text: f.label }), h("b", null, fmt(s.sums[f.id]), ratio != null ? h("i", { text: ofPct(ratio) }) : null));
+          return h("div", { class: "lb-m" }, h("span", { text: ofFieldName(f) }), h("b", null, fmt(s.sums[f.id]), ratio != null ? h("i", { text: ofPct(ratio) }) : null));
         }))));
   })));
   out.push(h("p", { class: "hint", text: `The goal is ${cfg.goal} outgoing calls a day, Monday to Friday (closed on New Year's Day, July 4, Thanksgiving and Christmas), counted on the days each person has numbers. Every kind of outgoing call adds up.` }));
