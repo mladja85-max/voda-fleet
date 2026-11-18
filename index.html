@@ -1191,6 +1191,15 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .price-hs small { font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .price-hs b { font-family: var(--font-display); font-size: 1.45rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .price-hs span { font-size: .76rem; color: var(--muted); }
+.price-hs b { white-space: nowrap; }   /* the sign stays with its number */
+/* a phone: one total a line (name and what's in it on the left, the amount on the right) */
+@media (max-width: 560px) {
+  .price-hsum { grid-template-columns: 1fr; gap: 6px; }
+  .price-hs { grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; padding: 8px 12px; }
+  .price-hs small { grid-column: 1; grid-row: 1; }
+  .price-hs span { grid-column: 1; grid-row: 2; }
+  .price-hs b { grid-column: 2; grid-row: 1 / span 2; font-size: 1.4rem; text-align: right; }
+}
 .price-hs.cut b { color: var(--due); } .price-hs.add b { color: var(--ok); }
 .price-hrow.open { box-shadow: inset 3px 0 0 var(--soon); } .price-hrow small.price-hopen { color: var(--soon); font-weight: 700; }
 .price-hrow { display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: .86rem; } .price-hrow small { color: var(--muted); }
