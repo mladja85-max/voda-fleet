@@ -689,16 +689,21 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pc-g.done { background: var(--pc-navy); border-color: var(--pc-navy); color: #e6eefc; }
 .pc-g.done b, .pc-g.done small { color: #b9cdf5; } .pc-g.done .pc-n { color: #fff; }
 .pc-g.done.on { box-shadow: inset 0 0 0 2px #8fb3ff; }
-.pc-list.done { background: var(--pc-navy); border-color: var(--pc-navy); color: #e6eefc; }
-.pc-list.done h2, .pc-list.done h3, .pc-list.done .pc-name, .pc-list.done .pc-name a { color: #fff; }
-.pc-list.done .meta, .pc-list.done .pc-left, .pc-list.done .pc-tel2 { color: #b9cdf5; }
-.pc-list.done .pc-tel, .pc-list.done .linkish, .pc-list.done .btn.ghost { color: #cfe0ff; }
-.pc-list.done .pc-row { border-top-color: rgba(255, 255, 255, .18); }
-.pc-list.done .pc-leftlist { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .25); }
-.pc-list.done .pc-why { color: #ffb4ab; }
-.pc-list.done .pc-chip.pc-na { background: #e6eefc; color: var(--pc-navy); border-color: transparent; }
+.pc-list.done { background: var(--accent-soft); border: 1.5px solid var(--pc-navy); }
+.pc-list.done h2 { color: var(--accent); }
+.pc-donebox { display: flex; gap: 12px; align-items: center; background: var(--pc-navy); color: #e6eefc; border-radius: 12px; padding: 12px 16px; margin: 8px 0 10px; }
+.pc-donei { flex: none; width: 2rem; height: 2rem; border: 2px solid #e6eefc; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+.pc-donebox b { display: block; color: #fff; font-size: 1.05rem; } .pc-donebox small { display: block; color: #b9cdf5; font-size: .9rem; }
+.pc-fold { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 8px 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 .pc-sum { display: inline-block; margin: 2px 0 8px; padding: 5px 12px; border-radius: 12px; background: #e6eefc; color: var(--pc-navy); font-size: .92rem; }
 .pc-sum b { font-weight: 700; }
+.pc-per { margin-left: 4px; }
+.pc-sum.open { background: var(--accent-soft); color: var(--accent); }
+.pc-dayh { margin-top: 16px; } .pc-dayh.now { color: var(--accent); }
+.pc-ywrap { overflow-x: auto; margin-top: 6px; }
+.pc-ytab { width: 100%; min-width: 640px; } .pc-ytab td, .pc-ytab th { text-align: right; } .pc-ytab .l { text-align: left; }
+.pc-ytab tr.pc-ym { cursor: pointer; } .pc-ytab tr.pc-ym:hover td { background: var(--accent-soft); } .pc-ytab tr.none td { color: var(--muted); cursor: default; }
+.pc-ytab td.pc-bad { color: var(--due); font-weight: 700; } .pc-ytab tfoot td { font-weight: 700; border-top: 2px solid var(--accent); }
 .pc-msec { margin-top: 18px; }
 .pc-admin { margin-top: 10px; }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
@@ -15600,7 +15605,20 @@ const PC_MARKS = [["na", "No answer"], ["vm", "Voicemail"], ["booked", "Booked"]
 const PC_MARK_TEXT = Object.fromEntries(PC_MARKS);
 const PC_DEPT = { r: "Restoration", c: "Cleaning", p: "Repairs" };
 const K_PC_VIEW = "voda.pcView1";
-const pcView = Object.assign({ g: 6, day: "" }, store.get(K_PC_VIEW) || {}, { day: "" });
+const pcView = Object.assign({ g: 6, day: "", per: "day" }, store.get(K_PC_VIEW) || {}, { day: "" });
+const PC_PER_API = 86;                                   // the Google script version with Week, Month and Year
+const PC_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
+const pcSaveView = () => store.set(K_PC_VIEW, { g: pcView.g, per: pcView.per });
+const pcPer = () => (PC_PER[pcView.per] && (pcView.per === "day" || !apiLevel || apiLevel >= PC_PER_API) ? pcView.per : "day");
+/** The period on screen: the day picked, or its week (Sunday to Saturday), month or year. */
+function pcRange() {
+  const d = pcDay(), per = pcPer();
+  if (per === "week") { const f = lbWeekStart(d); return { per, from: f, to: lbAddDays(f, 6) }; }
+  if (per === "month") { const k = d.slice(0, 7); return { per, from: `${k}-01`, to: `${k}-${String(lbDaysIn(k)).padStart(2, "0")}` }; }
+  if (per === "year") return { per, from: `${d.slice(0, 4)}-01-01`, to: `${d.slice(0, 4)}-12-31` };
+  return { per, from: d, to: d };
+}
+const pcRangeKey = () => { const r = pcRange(); return `${r.per}|${r.from}|${r.to}`; };
 let pcData = null, pcLoading = false, pcErr = "", pcSyncing = null, pcMarksAt = 0, pcPolling = false, pcPolledAt = 0, pcLoadedAt = 0;
 let pcSure = "", pcSureTimer = 0, pcLeftOpen = false;
 const pcDay = () => (lbIsDay(pcView.day) ? pcView.day : lbToday());
@@ -15612,11 +15630,11 @@ function pcNextOpen(day) { let d = day; for (let i = 0; i < 7 && (lbDate(d).getD
 
 async function pcLoad() {
   if (pcLoading || !session || !ofCan()) return;
-  const day = pcDay();
+  const day = pcDay(), rg = pcRange(), key = pcRangeKey();
   pcLoading = true;
   try {
-    const out = await api("pcRead", { day }, 120000);
-    pcData = out; pcErr = ""; pcMarksAt = out.now || 0; pcPolledAt = pcLoadedAt = performance.now();
+    const out = await api("pcRead", rg.per === "day" ? { day } : { day, per: rg.per, from: rg.from, to: rg.to }, 120000);
+    pcData = Object.assign(out, { key }); pcErr = ""; pcMarksAt = out.now || 0; pcPolledAt = pcLoadedAt = performance.now();
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { pcLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
     pcErr = e && e.error === "bad_request" && (Number(e.api) || 0) < PC_API ? "old" : revErrText(e);
@@ -15636,7 +15654,7 @@ async function pcPoll() {
     let changed = false;
     for (const m of out.marks || []) {
       const G = pcData.groups && pcData.groups[m.g];
-      if (!G) continue;
+      if (!G || !G.due) continue;   // a year: counted, not listed
       for (const r of G.due.concat(G.missed)) if (r.id === m.id && r.last === m.last && !(r.m && r.m.saving)) { r.m = m.r ? { r: m.r, who: m.who, at: m.at } : null; changed = true; }
     }
     if (changed && pcShowing() && !dlg.open && !ofTypingNow()) renderOffice();
@@ -15701,7 +15719,7 @@ function pcEl() {
   }
   if (pcSyncing) return [pcSyncingEl()];
   const day = pcDay();
-  if (!pcData || (pcData.ready && pcData.day !== day)) {
+  if (!pcData || (pcData.ready && pcData.key !== pcRangeKey())) {
     if (pcErr && !pcLoading) return [h("div", { class: "panel" }, h("p", { class: "dlg-err", text: pcErr }), h("button", { class: "btn", type: "button", id: "pcRetry", onclick: () => { pcErr = ""; pcLoad(); renderOffice(); } }, "Try again"))];
     if (!pcLoading) pcLoad();
     return [h("p", { class: "loading", text: offline ? "Past clients need a connection. Try again when you're back online." : "Loading the past clients…" })];
@@ -15709,28 +15727,34 @@ function pcEl() {
   if (!pcData.ready) return [pcSetupEl()];
   const today = lbToday(), admin = isAdmin();
   const go = d => { pcView.day = d === today ? "" : d; pcLoad(); renderOffice(); };
+  const rg = pcRange(), per = rg.per;
+  const step = n => per === "week" ? lbAddDays(day, 7 * n) : per === "month" ? `${lbAddMonths(day.slice(0, 7), n)}-01` : per === "year" ? `${Number(day.slice(0, 4)) + n}-01-01` : lbAddDays(day, n);
+  const perSeg = !apiLevel || apiLevel >= PC_PER_API ? lbSeg(Object.entries(PC_PER), per, k => { pcView.per = k; pcSaveView(); pcLoad(); renderOffice(); }, "Period") : null;
+  if (perSeg) perSeg.classList.add("pc-per");
   const out = [];
   const read = pcData.at ? `Housecall Pro read ${pcWhen(new Date(pcData.at).toISOString())}` : "";
   out.push(h("div", { class: "lb-daybar pc-daybar" },
-    h("button", { class: "btn small", type: "button", id: "pcPrev", "aria-label": "Previous day", onclick: () => go(lbAddDays(day, -1)) }, "‹"),
+    h("button", { class: "btn small", type: "button", id: "pcPrev", "aria-label": `Previous ${per}`, onclick: () => go(step(-1)) }, "‹"),
     lbDateInput({ id: "pcDay", value: day, "aria-label": "Day" }, v => go(v)),
-    h("button", { class: "btn small", type: "button", id: "pcNext", "aria-label": "Next day", onclick: () => go(lbAddDays(day, 1)) }, "›"),
-    day !== today ? h("button", { class: "btn ghost small", type: "button", id: "pcToday", onclick: () => go(today) }, "Today") : null,
+    h("button", { class: "btn small", type: "button", id: "pcNext", "aria-label": `Next ${per}`, onclick: () => go(step(1)) }, "›"),
+    perSeg,
+    today < rg.from || today > rg.to ? h("button", { class: "btn ghost small", type: "button", id: "pcToday", onclick: () => go(today) }, "Today") : null,
     h("span", { class: "pc-upd meta", text: read }),
     h("button", { class: "btn ghost small", type: "button", id: "pcRefresh", disabled: pcLoading, onclick: () => pcLoad() }, pcLoading ? "Loading…" : "Refresh")));
   if (pcErr) out.push(h("p", { class: "dlg-err", text: pcErr }));
   if (pcData.reread && !pcData.rereading) out.push(h("div", { class: "panel pc-reread", id: "pcReread" }, h("p", { class: "meta", text: "One more step (Admins): read Housecall Pro all again once, so the lists also use the tags on jobs (moved to another state, do not call). A few minutes; the lists keep working for everyone meanwhile." }),
     h("button", { class: "btn primary small", type: "button", id: "pcRereadGo", onclick: () => pcBackfill(true) }, "Read all again now")));
   if (pcData.sync && pcData.sync.error) out.push(h("p", { class: "meta pc-note", text: `Couldn't read what changed in Housecall Pro just now (${revErrText(pcData.sync).replace(/\.$/, "")}). These lists are from the last read.` }));
+  if (per !== "day") return out.concat(pcPeriodEl(rg, today));
   if (lbDate(day).getDay() === 0 || lbHoliday(day)) out.push(h("p", { class: "meta pc-note", id: "pcClosed", text: `${lbDate(day).getDay() === 0 ? "Sunday" : "A closed day"}: the clients who come up today are on ${lbDayText(pcNextOpen(day))}'s lists.` }));
   const G = pcData.groups || {};
   const grp = g => G[g] || { due: [], missed: [], more: 0, left: {} };
   out.push(h("div", { class: "pc-groups", role: "tablist", "aria-label": "Months since the last service" }, PC_GROUPS.map(g => {
     const x = grp(g), open = x.due.filter(r => !r.m).length, missed = x.missed.filter(r => !r.m).length + (x.more || 0), done = pcAllCalled(x);
     return h("button", { type: "button", class: "pc-g" + (pcView.g === g ? " on" : "") + (done ? " done" : ""), role: "tab", "aria-selected": String(pcView.g === g), "data-g": String(g),
-      onclick: () => { pcView.g = g; store.set(K_PC_VIEW, { g }); renderOffice(); } },
+      onclick: () => { pcView.g = g; pcSaveView(); renderOffice(); } },
       h("b", { text: `${g} months` }), h("span", { class: "pc-n", text: String(x.due.length) }),
-      done ? h("small", { class: "pc-gdone", text: "✓ all called" }) : h("small", { text: !x.due.length ? "none this day" : open ? `${open} to call` : "all marked" }),
+      done ? h("small", { class: "pc-gdone", text: "✓ done" }) : h("small", { text: !x.due.length ? "none this day" : open ? `${open} to call` : "all marked" }),
       missed ? h("small", { class: "pc-miss", text: `+${missed} missed` }) : null);
   })));
   const g = PC_GROUPS.includes(pcView.g) ? pcView.g : 6, x = grp(g);
@@ -15738,13 +15762,15 @@ function pcEl() {
   const done = pcAllCalled(x);
   const list = h("div", { class: "panel pc-list" + (done ? " done" : ""), id: "pcList" },
     h("h2", { text: `${g} months since the last service` }),
-    done ? h("p", { class: "pc-sum", id: "pcDone" }, h("b", { text: `✓ All ${x.due.length + x.missed.length} called` }), pcSumText(x) ? ` · ${pcSumText(x)}` : "") : null,
+    done ? pcDoneEl(x.due.length + x.missed.length, pcSumText(x)) : null,
     h("p", { class: "meta", text: `Clients whose last finished job was ${g} months before ${day === today ? "today" : lbDayText(day)}. ${x.due.length === 1 ? "1 client" : `${x.due.length} clients`}.` }),
     left.length ? h("p", { class: "pc-left" }, h("button", { class: "linkish", type: "button", id: "pcLeft", "aria-expanded": String(pcLeftOpen), onclick: () => { pcLeftOpen = !pcLeftOpen; renderOffice(); } },
       `Left off: ${left.join(" · ")}. ${pcLeftOpen ? "Hide who" : "See who and why"}`)) : null,
     left.length && pcLeftOpen ? h("div", { class: "pc-leftlist", id: "pcLeftList" }, (x.leftOff || []).map(y => h("div", { class: "pc-lo", "data-id": y.id },
       h("span", { class: "pc-name" }, hcpLink("cust", y.id, y.name || "(no name)")), y.contact ? h("span", { class: "meta pc-contact", text: ` ${y.contact}` }) : null,
       h("div", { class: "meta", text: [`Last service ${pcDate(y.last)}`, y.type].filter(Boolean).join(" · ") }), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
+  const shut = done && pcFold(list, `${pcRangeKey()}|${g}`, x.due.length + x.missed.length);
+  if (shut) { out.push(list); return pcAdminEnd(out, admin); }
   if (x.due.length) list.append(...x.due.map(r => pcRowEl(r, g, false)));
   else list.append(h("p", { class: "meta pc-none", text: "Nobody comes up in this group on this day." }));
   const missed = x.missed.filter(r => !r.m || r.m.saving || r.m.r);
@@ -15754,12 +15780,87 @@ function pcEl() {
     if (x.more) list.append(h("p", { class: "meta", text: `…and ${x.more} more. Mark these and they'll show.` }));
   }
   out.push(list);
+  return pcAdminEnd(out, admin);
+}
+function pcAdminEnd(out, admin) {
   if (admin) {
     const sure = pcSure === "all";
     out.push(h("p", { class: "meta pc-admin" }, `Admins: the lists start ${pcDate(pcData.start)}. `,
       h("button", { class: "btn ghost small" + (sure ? " danger" : ""), type: "button", id: "pcReadAll", onclick: () => (sure ? pcBackfill(true) : pcAskSure("all")) }, sure ? "Sure? Read it all again" : "Read all again from Housecall Pro")));
   }
   return out;
+}
+/** All called: the navy summary ("All 4 called", "1 booked · 2 voicemail · 1 no answer"). */
+const pcDoneEl = (n, res) => h("div", { class: "pc-donebox", id: "pcDone" }, h("span", { class: "pc-donei", "aria-hidden": "true", text: "✓" }),
+  h("div", null, h("b", { text: `All ${fmt(n)} called` }), res ? h("small", { text: res }) : null));
+/** All called: the calls fold away behind "Show the 4 calls" (kept open for that list while this window is open).
+ *  Returns true when they're folded. */
+const pcOpenDone = new Set();
+function pcFold(list, key, n) {
+  const open = pcOpenDone.has(key);
+  list.append(h("button", { class: "pc-fold", type: "button", id: "pcShowCalls", "aria-expanded": String(open), onclick: () => { if (open) pcOpenDone.delete(key); else pcOpenDone.add(key); renderOffice(); } },
+    h("span", { text: open ? "Hide the calls" : `Show the ${n === 1 ? "call" : `${fmt(n)} calls`}` }), h("span", { "aria-hidden": "true", text: open ? "⌃" : "⌄" })));
+  return !open;
+}
+/** What came of a period's calls: { due, called, booked, vm, na, dnc, not (their day went by without a mark), ahead (today
+ *  or later, not marked yet) }, from the list (as marked on this screen), or the year's counts. */
+function pcTally(x, today) {
+  if (!x.due || !Array.isArray(x.due)) { const t = x.tot || {}; return Object.assign({ due: 0, booked: 0, vm: 0, na: 0, dnc: 0, not: 0, ahead: 0 }, t, { called: (t.booked || 0) + (t.vm || 0) + (t.na || 0) + (t.dnc || 0) }); }
+  const t = { due: x.due.length + (x.more || 0), booked: 0, vm: 0, na: 0, dnc: 0, not: 0, ahead: 0 };
+  for (const r of x.due) { if (r.m && r.m.r) t[r.m.r] = (t[r.m.r] || 0) + 1; else if (r.due < today) t.not++; else t.ahead++; }
+  t.not += 0; t.called = t.booked + t.vm + t.na + t.dnc;
+  return t;
+}
+const pcResText = t => [t.booked ? `${t.booked} booked` : "", t.vm ? `${t.vm} voicemail` : "", t.na ? `${t.na} no answer` : "", t.dnc ? `${t.dnc} don't call again` : "",
+  t.not ? `${t.not} not called` : "", t.ahead ? `${t.ahead} still to call` : ""].filter(Boolean).join(" · ");
+/** A week, a month or a year: the 5 groups with what came of their calls; week and month list every client by day (to
+ *  call ahead or catch up), the year counts them month by month (tap a month to open it). */
+function pcPeriodEl(rg, today) {
+  const G = pcData.groups || {}, year = rg.per === "year";
+  const grp = g => G[g] || (year ? { months: {}, tot: {}, left: {} } : { due: [], missed: [], more: 0, left: {}, leftOff: [] });
+  const span = rg.per === "week" ? `the week of ${lbDayText(rg.from)} – ${lbDayText(rg.to)}` : rg.per === "month" ? `${lbMonthLong(Number(rg.from.slice(5, 7)))} ${rg.from.slice(0, 4)}` : rg.from.slice(0, 4);
+  const out = [h("div", { class: "pc-groups", role: "tablist", "aria-label": "Months since the last service" }, PC_GROUPS.map(g => {
+    const t = pcTally(grp(g), today), done = t.due > 0 && t.called === t.due;
+    return h("button", { type: "button", class: "pc-g" + (pcView.g === g ? " on" : "") + (done ? " done" : ""), role: "tab", "aria-selected": String(pcView.g === g), "data-g": String(g),
+      onclick: () => { pcView.g = g; pcSaveView(); renderOffice(); } },
+      h("b", { text: `${g} months` }), h("span", { class: "pc-n", text: fmt(t.due) }),
+      h("small", { class: done ? "pc-gdone" : "", text: !t.due ? "none" : done ? "✓ done" : `${fmt(t.called)} of ${fmt(t.due)} called` }),
+      t.not ? h("small", { class: "pc-miss", text: `${fmt(t.not)} not called` }) : null);
+  }))];
+  const g = PC_GROUPS.includes(pcView.g) ? pcView.g : 6, x = grp(g), t = pcTally(x, today), done = t.due > 0 && t.called === t.due;
+  const L = x.left || {}, left = [L.booked ? `${L.booked} booked since` : "", L.dnc ? `${L.dnc} do not call` : "", L.away ? `${L.away} moved away` : "", L.com ? `${L.com} commercial` : ""].filter(Boolean);
+  const list = h("div", { class: "panel pc-list" + (done ? " done" : ""), id: "pcList" },
+    h("h2", { text: `${g} months since the last service` }),
+    done ? pcDoneEl(t.due, pcResText(t)) : t.due ? h("p", { class: "pc-sum open", id: "pcRes" }, h("b", { text: `${fmt(t.called)} of ${fmt(t.due)} called` }), pcResText(t) ? ` · ${pcResText(t)}` : "") : null,
+    h("p", { class: "meta", text: `Clients whose ${g}-month day falls in ${span}. ${t.due === 1 ? "1 client" : `${fmt(t.due)} clients`}.` }),
+    pcData.start && rg.from < pcData.start ? h("p", { class: "meta pc-note", id: "pcBefore", text: `The lists started ${pcDate(pcData.start)}: days before it aren't counted (calls then weren't marked here).` }) : null,
+    left.length ? h("p", { class: "pc-left" }, year ? `Left off: ${left.join(" · ")}.` : h("button", { class: "linkish", type: "button", id: "pcLeft", "aria-expanded": String(pcLeftOpen), onclick: () => { pcLeftOpen = !pcLeftOpen; renderOffice(); } },
+      `Left off: ${left.join(" · ")}. ${pcLeftOpen ? "Hide who" : "See who and why"}`)) : null,
+    !year && left.length && pcLeftOpen ? h("div", { class: "pc-leftlist", id: "pcLeftList" }, (x.leftOff || []).map(y => h("div", { class: "pc-lo", "data-id": y.id },
+      h("span", { class: "pc-name" }, hcpLink("cust", y.id, y.name || "(no name)")), y.contact ? h("span", { class: "meta pc-contact", text: ` ${y.contact}` }) : null,
+      h("div", { class: "meta", text: [lbDayText(y.due), `last service ${pcDate(y.last)}`, y.type].filter(Boolean).join(" · ") }), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
+  if (year) {
+    // month by month: tap one to open it
+    const C = n => (n ? fmt(n) : "–"), months = Array.from({ length: 12 }, (_, i) => `${rg.from.slice(0, 4)}-${String(i + 1).padStart(2, "0")}`);
+    const head = ["Month", "Came up", "Called", "Booked", "Voicemail", "No answer", "Don't call", "Not called", "To call"];
+    const cells = m => { const v = pcTally({ tot: (x.months || {})[m] || {} }, today); return [v.due, v.called, v.booked, v.vm, v.na, v.dnc, v.not, v.ahead]; };
+    list.append(h("div", { class: "pc-ywrap" }, h("table", { class: "lb-table pc-ytab", id: "pcYear" },
+      h("thead", null, h("tr", null, head.map((k, i) => h("th", { class: i ? "" : "l", text: k })))),
+      h("tbody", null, months.map(m => { const v = cells(m); return h("tr", { "data-m": m, class: v[0] ? "pc-ym" : "pc-ym none", tabindex: v[0] ? "0" : null, title: v[0] ? "Open this month" : null,
+        onclick: () => { if (!v[0]) return; pcView.per = "month"; pcView.day = m + "-01"; pcSaveView(); pcLoad(); renderOffice(); },
+        onkeydown: e => { if (e.key === "Enter" && v[0]) e.currentTarget.click(); } }, h("td", { class: "l", text: lbMonthLong(Number(m.slice(5))) }), v.map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) }))); })),
+      h("tfoot", null, h("tr", null, h("td", { class: "l", text: "Year" }), [t.due, t.called, t.booked, t.vm, t.na, t.dnc, t.not, t.ahead].map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) })))))));
+    return out.concat([list]);
+  }
+  if (!x.due.length) list.append(h("p", { class: "meta pc-none", text: "Nobody comes up in this group in this period." }));
+  if (done && pcFold(list, `${pcRangeKey()}|${g}`, t.due)) return out.concat([list]);
+  let at = "";
+  for (const r of x.due) {
+    if (r.due !== at) { at = r.due; const n = x.due.filter(y => y.due === at).length; list.append(h("h3", { class: "of-sec pc-dayh" + (at === today ? " now" : ""), text: `${lbDayText(at)}${at === today ? " (today)" : ""} · ${n}` })); }
+    list.append(pcRowEl(r, g, false));
+  }
+  if (x.more) list.append(h("p", { class: "meta", text: `…and ${fmt(x.more)} more: pick a shorter period to see them.` }));
+  return out.concat([list]);
 }
 /** Every client on the group's list that day has a mark (any: No answer too), nothing left under Missed: the CSR went
  *  through them all. */
