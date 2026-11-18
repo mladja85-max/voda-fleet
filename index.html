@@ -704,6 +704,13 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pc-ytab { width: 100%; min-width: 640px; } .pc-ytab td, .pc-ytab th { text-align: right; } .pc-ytab .l { text-align: left; }
 .pc-ytab tr.pc-ym { cursor: pointer; } .pc-ytab tr.pc-ym:hover td { background: var(--accent-soft); } .pc-ytab tr.none td { color: var(--muted); cursor: default; }
 .pc-ytab td.pc-bad { color: var(--due); font-weight: 700; } .pc-ytab tfoot td { font-weight: 700; border-top: 2px solid var(--accent); }
+.pc-g small.pc-cbn { color: var(--accent); font-weight: 700; } .pc-g.done small.pc-cbn { color: #cfe0ff; }
+.pc-cbh { color: var(--accent); }
+.pc-said { margin-top: 3px; font-size: .88rem; color: var(--muted); font-style: italic; } .pc-said.due { color: var(--accent); font-style: normal; font-weight: 600; }
+.pc-chip.pc-cb { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.pc-cbpick { grid-column: 1 / -1; display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.pc-cbq { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .pc-cbq .btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pc-cbpick input[type=text] { width: 100%; } .pc-cbgo { display: flex; justify-content: flex-end; gap: 8px; }
 .pc-msec { margin-top: 18px; }
 .pc-admin { margin-top: 10px; }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
@@ -15601,8 +15608,9 @@ function renderOffice() {
    in this window only: the clients' names and phones aren't saved on the device. ---- */
 const PC_API = 81;                                       // the Google script version with Past clients
 const PC_GROUPS = [6, 12, 18, 24, 36];
-const PC_MARKS = [["na", "Not now"], ["vm", "Voicemail"], ["booked", "Booked"], ["dnc", "Don't call again"]];
-const PC_MARK_TEXT = Object.fromEntries(PC_MARKS);
+const PC_MARKS = [["na", "Not now"], ["vm", "Voicemail"], ["booked", "Booked"], ["cb", "Call back…"], ["dnc", "Don't call again"]];
+const PC_MARK_TEXT = Object.assign(Object.fromEntries(PC_MARKS), { cb: "Call back" });
+const PC_CB_API = 88;                                    // the Google script version with call-backs
 const PC_DEPT = { r: "Restoration", c: "Cleaning", p: "Repairs" };
 const K_PC_VIEW = "voda.pcView1";
 const pcView = Object.assign({ g: 6, per: "day", off: 0, from: "", to: "" }, store.get(K_PC_VIEW) || {}, { off: 0 });
@@ -15628,6 +15636,7 @@ function pcRange() {
 const pcRangeKey = () => { const r = pcRange(); return `${r.per}|${r.from}|${r.to}`; };
 let pcData = null, pcLoading = false, pcErr = "", pcSyncing = null, pcMarksAt = 0, pcPolling = false, pcPolledAt = 0, pcLoadedAt = 0;
 let pcSure = "", pcSureTimer = 0, pcLeftOpen = false;
+let pcCbOpen = "";                                       // the row whose Call back… picker is open
 const pcDay = () => pcRange().from;   // Day: its day
 const pcShowing = () => view.tab === "office" && ofView.tab === "pc";
 const pcDate = day => { const d = lbDate(day); return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; };
@@ -15643,6 +15652,7 @@ async function pcLoad(force) {
     const q = rg.per === "day" ? { day } : { day, per: rg.per, from: rg.from, to: rg.to };
     if (force === true) q.force = true;   // Read again: Housecall Pro now, not up to 15 minutes later
     const out = await api("pcRead", q, 120000);
+    for (const G of Object.values(out.groups || {})) for (const r of G.callbacks || []) r.cbAt = r.m && r.m.at;   // the call-back that brought them back
     pcData = Object.assign(out, { key }); pcErr = ""; pcMarksAt = out.now || 0; pcPolledAt = pcLoadedAt = performance.now();
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { pcLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -15664,7 +15674,7 @@ async function pcPoll() {
     for (const m of out.marks || []) {
       const G = pcData.groups && pcData.groups[m.g];
       if (!G || !G.due) continue;   // a year: counted, not listed
-      for (const r of G.due.concat(G.missed)) if (r.id === m.id && r.last === m.last && !(r.m && r.m.saving)) { r.m = m.r ? { r: m.r, who: m.who, at: m.at } : null; changed = true; }
+      for (const r of G.due.concat(G.missed, G.callbacks || [])) if (r.id === m.id && r.last === m.last && !(r.m && r.m.saving)) { r.m = m.r ? Object.assign({ r: m.r, who: m.who, at: m.at }, m.r === "cb" ? { cb: m.cb, note: m.note, day: m.day } : {}) : null; changed = true; }
     }
     if (changed && pcShowing() && !dlg.open && !ofTypingNow()) renderOffice();
   } catch (e) { /* next time */ } finally { pcPolling = false; }
@@ -15675,13 +15685,13 @@ setInterval(() => {
 }, 5000);
 
 /** A call marked (or taken back: "clear"), on the screen at once; put back as it was when it couldn't be saved. */
-async function pcMark(r, g, res) {
-  pcSure = ""; clearTimeout(pcSureTimer);
+async function pcMark(r, g, res, cb) {
+  pcSure = ""; clearTimeout(pcSureTimer); pcCbOpen = "";
   const was = r.m;
-  r.m = res === "clear" ? null : { r: res, who: session ? session.name || "" : "", at: new Date().toISOString(), saving: true };
+  r.m = res === "clear" ? null : Object.assign({ r: res, who: session ? session.name || "" : "", at: new Date().toISOString(), saving: true }, cb || {});
   renderOffice();
   try {
-    const out = await api("pcMark", { id: r.id, g, last: r.last, r: res });
+    const out = await api("pcMark", Object.assign({ id: r.id, g, last: r.last, r: res }, cb || {}));
     r.m = out.m && out.m.r ? out.m : null;
   } catch (e) {
     r.m = e && e.error === "locked" && e.m ? e.m : was;
@@ -15775,27 +15785,35 @@ function pcEl() {
   const G = pcData.groups || {};
   const grp = g => G[g] || { due: [], missed: [], more: 0, left: {} };
   out.push(h("div", { class: "pc-groups", role: "tablist", "aria-label": "Months since the last service" }, PC_GROUPS.map(g => {
-    const x = grp(g), open = x.due.filter(r => !r.m).length, missed = x.missed.filter(r => !r.m).length + (x.more || 0), done = pcAllCalled(x);
+    const x = grp(g), open = x.due.filter(r => !r.m).length, missed = x.missed.filter(r => !r.m).length + (x.more || 0), done = pcAllCalled(x), cbs = (x.callbacks || []).filter(pcCbPending).length;
     return h("button", { type: "button", class: "pc-g" + (pcView.g === g ? " on" : "") + (done ? " done" : ""), role: "tab", "aria-selected": String(pcView.g === g), "data-g": String(g),
       onclick: () => { pcView.g = g; pcSaveView(); renderOffice(); } },
       h("b", { text: `${g} months` }), h("span", { class: "pc-n", text: String(x.due.length) }),
       done ? h("small", { class: "pc-gdone", text: "✓ done" }) : h("small", { text: !x.due.length ? "none this day" : open ? `${open} to call` : "all marked" }),
-      missed ? h("small", { class: "pc-miss", text: `+${missed} missed` }) : null);
+      missed ? h("small", { class: "pc-miss", text: `+${missed} missed` }) : null,
+      cbs ? h("small", { class: "pc-cbn", text: `+${cbs} call back${cbs === 1 ? "" : "s"}` }) : null);
   })));
   const g = PC_GROUPS.includes(pcView.g) ? pcView.g : 6, x = grp(g);
   const L = x.left || {}, left = [L.booked ? `${L.booked} booked since` : "", L.dnc ? `${L.dnc} do not call` : "", L.away ? `${L.away} moved away` : "", L.com ? `${L.com} commercial` : ""].filter(Boolean);
   const done = pcAllCalled(x);
   const list = h("div", { class: "panel pc-list" + (done ? " done" : ""), id: "pcList" },
     h("h2", { text: `${g} months since the last service` }),
-    done ? pcDoneEl(x.due.length + x.missed.length, pcSumText(x)) : null,
+    done ? pcDoneEl(x.due.length + x.missed.length + (x.callbacks || []).length, pcSumText(x)) : null,
     h("p", { class: "meta", text: `Clients whose last finished job was ${g} months before ${day === today ? "today" : lbDayText(day)}. ${x.due.length === 1 ? "1 client" : `${x.due.length} clients`}.` }),
     left.length ? h("p", { class: "pc-left" }, h("button", { class: "linkish", type: "button", id: "pcLeft", "aria-expanded": String(pcLeftOpen), onclick: () => { pcLeftOpen = !pcLeftOpen; renderOffice(); } },
       `Left off: ${left.join(" · ")}. ${pcLeftOpen ? "Hide who" : "See who and why"}`)) : null,
     left.length && pcLeftOpen ? h("div", { class: "pc-leftlist", id: "pcLeftList" }, (x.leftOff || []).map(y => h("div", { class: "pc-lo", "data-id": y.id },
       h("span", { class: "pc-name" }, hcpLink("cust", y.id, y.name || "(no name)")), y.contact ? h("span", { class: "meta pc-contact", text: ` ${y.contact}` }) : null,
       h("div", { class: "meta", text: [`Last service ${pcDate(y.last)}`, y.type].filter(Boolean).join(" · ") }), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
-  const shut = done && pcFold(list, `${pcRangeKey()}|${g}`, x.due.length + x.missed.length);
+  const shut = done && pcFold(list, `${pcRangeKey()}|${g}`, x.due.length + x.missed.length + (x.callbacks || []).length);
   if (shut) { out.push(list); return pcAdminEnd(out, admin); }
+  // call-backs first: clients who asked to be called on this day (or one gone by), with what they said
+  const cbs = x.callbacks || [];
+  if (cbs.length) {
+    const toMake = cbs.filter(pcCbPending).length;
+    list.append(h("h3", { class: "of-sec pc-cbh", id: "pcCbH", text: toMake ? `Call backs (${toMake})` : `Call backs (${cbs.length}), all made` }), ...cbs.map(r => pcRowEl(r, g, false, true)),
+      h("h3", { class: "of-sec pc-dueh", text: `${day === today ? "Due today" : "Due this day"} (${x.due.length})` }));
+  }
   if (x.due.length) list.append(...x.due.map(r => pcRowEl(r, g, false)));
   else list.append(h("p", { class: "meta pc-none", text: "Nobody comes up in this group on this day." }));
   const missed = x.missed.filter(r => !r.m || r.m.saving || r.m.r);
@@ -15830,13 +15848,13 @@ function pcFold(list, key, n) {
 /** What came of a period's calls: { due, called, booked, vm, na, dnc, not (their day went by without a mark), ahead (today
  *  or later, not marked yet) }, from the list (as marked on this screen), or the year's counts. */
 function pcTally(x, today) {
-  if (!x.due || !Array.isArray(x.due)) { const t = x.tot || {}; return Object.assign({ due: 0, booked: 0, vm: 0, na: 0, dnc: 0, not: 0, ahead: 0 }, t, { called: (t.booked || 0) + (t.vm || 0) + (t.na || 0) + (t.dnc || 0) }); }
-  const t = { due: x.due.length + (x.more || 0), booked: 0, vm: 0, na: 0, dnc: 0, not: 0, ahead: 0 };
+  if (!x.due || !Array.isArray(x.due)) { const t = x.tot || {}; return Object.assign({ due: 0, booked: 0, vm: 0, na: 0, dnc: 0, cb: 0, not: 0, ahead: 0 }, t, { called: (t.booked || 0) + (t.vm || 0) + (t.na || 0) + (t.dnc || 0) + (t.cb || 0) }); }
+  const t = { due: x.due.length + (x.more || 0), booked: 0, vm: 0, na: 0, dnc: 0, cb: 0, not: 0, ahead: 0 };
   for (const r of x.due) { if (r.m && r.m.r) t[r.m.r] = (t[r.m.r] || 0) + 1; else if (r.due < today) t.not++; else t.ahead++; }
-  t.not += 0; t.called = t.booked + t.vm + t.na + t.dnc;
+  t.called = t.booked + t.vm + t.na + t.dnc + t.cb;
   return t;
 }
-const pcResText = t => [t.booked ? `${t.booked} booked` : "", t.vm ? `${t.vm} voicemail` : "", t.na ? `${t.na} not now` : "", t.dnc ? `${t.dnc} don't call again` : "",
+const pcResText = t => [t.booked ? `${t.booked} booked` : "", t.vm ? `${t.vm} voicemail` : "", t.na ? `${t.na} not now` : "", t.dnc ? `${t.dnc} don't call again` : "", t.cb ? `${t.cb} call back` : "",
   t.not ? `${t.not} not called` : "", t.ahead ? `${t.ahead} still to call` : ""].filter(Boolean).join(" · ");
 /** A week, a month or a year: the 5 groups with what came of their calls; week and month list every client by day (to
  *  call ahead or catch up), the year counts them month by month (tap a month to open it). */
@@ -15870,14 +15888,14 @@ function pcPeriodEl(rg, today) {
     const C = n => (n ? fmt(n) : "–"), months = [];
     for (let k = rg.from.slice(0, 7); k <= rg.to.slice(0, 7); k = lbAddMonths(k, 1)) months.push(k);
     const multi = months[0].slice(0, 4) !== months[months.length - 1].slice(0, 4);
-    const head = ["Month", "Came up", "Called", "Booked", "Voicemail", "Not now", "Don't call", "Not called", "To call"];
-    const cells = m => { const v = pcTally({ tot: (x.months || {})[m] || {} }, today); return [v.due, v.called, v.booked, v.vm, v.na, v.dnc, v.not, v.ahead]; };
+    const head = ["Month", "Came up", "Called", "Booked", "Voicemail", "Not now", "Call back", "Don't call", "Not called", "To call"];
+    const cells = m => { const v = pcTally({ tot: (x.months || {})[m] || {} }, today); return [v.due, v.called, v.booked, v.vm, v.na, v.cb, v.dnc, v.not, v.ahead]; };
     list.append(h("div", { class: "pc-ywrap" }, h("table", { class: "lb-table pc-ytab", id: "pcYear" },
       h("thead", null, h("tr", null, head.map((k, i) => h("th", { class: i ? "" : "l", text: k })))),
       h("tbody", null, months.map(m => { const v = cells(m); return h("tr", { "data-m": m, class: v[0] ? "pc-ym" : "pc-ym none", tabindex: v[0] ? "0" : null, title: v[0] ? "Open this month" : null,
         onclick: () => { if (!v[0]) return; const t = lbToday(); pcView.per = "month"; pcView.off = (Number(m.slice(0, 4)) - Number(t.slice(0, 4))) * 12 + Number(m.slice(5)) - Number(t.slice(5, 7)); pcSaveView(); pcLoad(); renderOffice(); },
-        onkeydown: e => { if (e.key === "Enter" && v[0]) e.currentTarget.click(); } }, h("td", { class: "l", text: lbMonthLong(Number(m.slice(5))) + (multi ? ` ${m.slice(0, 4)}` : "") }), v.map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) }))); })),
-      h("tfoot", null, h("tr", null, h("td", { class: "l", text: rg.per === "year" ? "Year" : "Total" }), [t.due, t.called, t.booked, t.vm, t.na, t.dnc, t.not, t.ahead].map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) })))))));
+        onkeydown: e => { if (e.key === "Enter" && v[0]) e.currentTarget.click(); } }, h("td", { class: "l", text: lbMonthLong(Number(m.slice(5))) + (multi ? ` ${m.slice(0, 4)}` : "") }), v.map((n, i) => h("td", { class: i === 7 && n ? "pc-bad" : "", text: C(n) }))); })),
+      h("tfoot", null, h("tr", null, h("td", { class: "l", text: rg.per === "year" ? "Year" : "Total" }), [t.due, t.called, t.booked, t.vm, t.na, t.cb, t.dnc, t.not, t.ahead].map((n, i) => h("td", { class: i === 7 && n ? "pc-bad" : "", text: C(n) })))))));
     return out.concat([list]);
   }
   if (!x.due.length) list.append(h("p", { class: "meta pc-none", text: "Nobody comes up in this group in this period." }));
@@ -15893,38 +15911,71 @@ function pcPeriodEl(rg, today) {
 /** Every client on the group's list that day has a mark (any: No answer too), nothing left under Missed: the CSR went
  *  through them all. */
 function pcAllCalled(x) {
-  const all = (x.due || []).concat(x.missed || []);
-  return all.length > 0 && !x.more && all.every(r => r.m && r.m.r);
+  const all = (x.due || []).concat(x.missed || []), cbs = x.callbacks || [];
+  return all.length + cbs.length > 0 && !x.more && all.every(r => r.m && r.m.r) && !cbs.some(pcCbPending);   // and every call-back made
 }
 /** "1 booked · 2 voicemail · 1 not now" */
 function pcSumText(x) {
   const n = {};
-  for (const r of (x.due || []).concat(x.missed || [])) if (r.m && r.m.r) n[r.m.r] = (n[r.m.r] || 0) + 1;
-  return [["booked", "booked"], ["vm", "voicemail"], ["na", "not now"], ["dnc", "don't call again"]].filter(([k]) => n[k]).map(([k, t]) => `${n[k]} ${t}`).join(" · ");
+  for (const r of (x.due || []).concat(x.missed || [], (x.callbacks || []).filter(y => !pcCbPending(y)))) if (r.m && r.m.r) n[r.m.r] = (n[r.m.r] || 0) + 1;
+  return [["booked", "booked"], ["vm", "voicemail"], ["na", "not now"], ["cb", "call back"], ["dnc", "don't call again"]].filter(([k]) => n[k]).map(([k, t]) => `${n[k]} ${t}`).join(" · ");
 }
-function pcRowEl(r, g, missed) {
-  const m = r.m, key = `${r.id}|${g}`, sure = pcSure === key;
+/** A call-back still to make: the row's mark is still the call-back that brought it back (not marked again yet). */
+const pcCbPending = r => !!(r.cbAt && r.m && r.m.r === "cb" && r.m.at === r.cbAt);
+function pcRowEl(r, g, missed, cbRow) {
+  const pend = cbRow && pcCbPending(r);
+  const m = pend ? null : r.m, key = `${r.id}|${g}`, sure = pcSure === key;
   const tel = (r.phone || "").replace(/\D/g, "");
   const tel2 = (r.phone2 || "").replace(/\D/g, "");
   const what = r.type || PC_DEPT[r.dept] || "";
   const jobs = r.jobs > 1 && r.first ? `${r.jobs} jobs since ${MONTHS[Number(r.first.slice(5, 7)) - 1]} ${r.first.slice(0, 4)}` : r.jobs === 1 ? "1 job" : "";
+  const canCb = !apiLevel || apiLevel >= PC_CB_API;
   const acts = m
-    ? h("div", { class: "pc-done" }, h("span", { class: `pc-chip pc-${m.r}`, text: PC_MARK_TEXT[m.r] || m.r }),
+    ? h("div", { class: "pc-done" }, h("span", { class: `pc-chip pc-${m.r}`, text: m.r === "cb" && m.cb ? `Call back ${lbDayText(m.cb)}` : PC_MARK_TEXT[m.r] || m.r, title: m.note || null }),
       h("span", { class: "meta", text: [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · ") }),
       m.saving ? null : pcMarkOpen(m) ? h("button", { class: "btn ghost small", type: "button", "data-act": "clear", onclick: () => pcMark(r, g, "clear") }, "Change")
         : h("span", { class: "meta pc-lock", title: "Marked on an earlier day: it stays as it is (an admin can change it)", text: "Locked" }))
-    : h("div", { class: "pc-acts" }, PC_MARKS.map(([k, t]) => k === "dnc"
+    : h("div", { class: "pc-acts" }, PC_MARKS.filter(([k]) => k !== "cb" || canCb).map(([k, t]) => k === "dnc"
       ? h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": k, onclick: () => (sure ? pcMark(r, g, k) : pcAskSure(key)) }, sure ? "Sure? Tap again" : t)
+      : k === "cb" ? h("button", { class: "btn small" + (pcCbOpen === key ? " primary" : ""), type: "button", "data-r": k, "aria-expanded": String(pcCbOpen === key),
+        onclick: () => { pcCbOpen = pcCbOpen === key ? "" : key; renderOffice(); } }, t)
       : h("button", { class: "btn small", type: "button", "data-r": k, onclick: () => pcMark(r, g, k) }, t)));
+  // what the client said last time: on a call-back (to make, or set on this row)
+  const said = pend ? `From ${lbDayText(r.m.day || r.m.at.slice(0, 10))} (${r.m.who}): ${r.m.note || "call back"}${r.due < pcRange().from ? ` · was due ${lbDayText(r.due)}` : ""}`
+    : m && m.r === "cb" && m.note ? `“${m.note}”` : "";
   return h("div", { class: "pc-row" + (m ? " marked" : ""), "data-id": r.id },
     h("div", { class: "pc-main" },
       h("div", { class: "pc-top" }, h("span", { class: "pc-name" }, hcpLink("cust", r.id, r.name || "(no name)")), r.contact ? h("span", { class: "meta pc-contact", text: r.contact }) : null,
         tel ? h("a", { class: "pc-tel", href: `tel:+1${tel.slice(-10)}` }, r.phone) : h("span", { class: "meta", text: "no phone" }),
         tel2 ? h("a", { class: "pc-tel pc-tel2", href: `tel:+1${tel2.slice(-10)}` }, r.phone2) : null),
       r.addr ? h("div", { class: "meta", text: r.addr }) : null,
-      h("div", { class: "meta pc-last", text: [`Last service ${pcDate(r.last)}`, what, jobs, missed ? `came up ${lbDayText(r.due)}` : ""].filter(Boolean).join(" · ") })),
-    acts);
+      h("div", { class: "meta pc-last", text: [`Last service ${pcDate(r.last)}`, what, jobs, missed ? `came up ${lbDayText(r.due)}` : ""].filter(Boolean).join(" · ") }),
+      said ? h("div", { class: "pc-said" + (pend ? " due" : ""), text: said }) : null),
+    acts, !m && pcCbOpen === key ? pcCbPicker(r, g) : null);
 }
+/** Call back…: when (1 week, 2 weeks, 1 month, 3 months, or a day) and a short note of what the client said. */
+function pcCbPicker(r, g) {
+  const today = lbToday(), max = lbAddDays(today, 366);
+  const inMonths = n => { const k = lbAddMonths(today.slice(0, 7), n), d = Math.min(Number(today.slice(8)), lbDaysIn(k)); return `${k}-${String(d).padStart(2, "0")}`; };
+  const st = pcCbState[`${r.id}|${g}`] || (pcCbState[`${r.id}|${g}`] = { cb: lbAddDays(today, 14), note: "" });
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const day = h("input", { type: "date", id: "pcCbDay", value: st.cb, min: lbAddDays(today, 1), max, "aria-label": "Call back on", onchange: e => { st.cb = e.target.value; renderOffice(); } });
+  const note = h("input", { type: "text", id: "pcCbNote", maxlength: "140", value: st.note, placeholder: "What the client said: not ready, after 5 PM…", "aria-label": "What the client said",
+    oninput: e => { st.note = e.target.value; } });
+  const quick = [["1 week", lbAddDays(today, 7)], ["2 weeks", lbAddDays(today, 14)], ["1 month", inMonths(1)], ["3 months", inMonths(3)]];
+  const on = pcNextOpen(st.cb);
+  return h("div", { class: "pc-cbpick", id: "pcCbPick" },
+    h("div", { class: "pc-cbq" }, quick.map(([t, d]) => h("button", { class: "btn small" + (st.cb === d ? " on" : ""), type: "button", "data-cb": t, onclick: () => { st.cb = d; renderOffice(); } }, t)), day),
+    note,
+    h("p", { class: "meta", text: lbIsDay(st.cb) ? `Comes back in this list on ${lbDayText(on)}, ${on.slice(0, 4)}${on !== st.cb ? " (the next working day)" : ""}.` : "" }),
+    err,
+    h("div", { class: "pc-cbgo" }, h("button", { class: "btn ghost small", type: "button", onclick: () => { pcCbOpen = ""; renderOffice(); } }, "Cancel"),
+      h("button", { class: "btn small primary", type: "button", id: "pcCbSave", onclick: () => {
+        if (!lbIsDay(st.cb) || st.cb <= today || st.cb > max) { err.textContent = "Pick a day after today, a year at most."; return; }
+        pcMark(r, g, "cb", { cb: st.cb, note: st.note.trim() }); delete pcCbState[`${r.id}|${g}`];
+      } }, "Save call back")));
+}
+const pcCbState = {};
 /** Why a client is left off the lists, in words. */
 function pcWhyText(x) {
   if (x.why === "booked") return x.day ? `Booked: a job on ${pcDate(x.day)}` : "Booked: a job waiting to be scheduled";

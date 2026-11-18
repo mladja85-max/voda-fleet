@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 87;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 88;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4613,11 +4613,11 @@ function estSync_(req, user) {
 const PC_JOBS = "Past client jobs", PC_CUST = "Past clients", PC_CALLS = "Past client calls";
 const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Created", "Job type", "Address", "Changed", "Tags"];
 const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed"];
-const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who"];
+const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who", "Call back on", "Note"];
 const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
 const PC_SCHEMA = "PC_SCHEMA", PC_V = "2";   // 2: the jobs' tags (read all again once)
 const PC_DONE = "PC_BACKFILL_DONE", PC_AT = "PC_SYNC_AT", PC_START = "PC_START", PC_CUR = "PC_CURSOR", PC_SORTS = "PC_SORTS", PC_BUSY = "PC_BUSY";
-const PC_RESULTS = { na: "No answer", vm: "Voicemail", booked: "Booked", dnc: "Don't call again", clear: "" };
+const PC_RESULTS = { na: "Not now", vm: "Voicemail", booked: "Booked", dnc: "Don't call again", cb: "Call back", clear: "" };   // "na" was "No answer"
 const PC_DNC = /do\s*n[o']?t\s*(call|contact|service)|\bdnc\b/i;   // "Do not call", "DNC" (not "No calls before 9")
 const PC_COM = /commercial|property\s*manag/i;
 // moved out of the area ("Moved to another state", "Out of state", "Left the area", "Moved away"); "Moved out" or
@@ -4833,6 +4833,7 @@ function pcKnown_(tz) {
   mr.forEach(function (r) {   // in the order made: the last one of each counts
     const k = String(r[2]) + "|" + Number(r[3]) + "|" + pcDay_(r[4], tz);
     marks[k] = { r: String(r[5] || ""), who: String(r[6] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "") };
+    if (marks[k].r === "cb") { marks[k].cb = pcDay_(r[7], tz); marks[k].note = String(r[8] || ""); marks[k].day = pcDay_(r[1], tz); }
   });
   Object.keys(marks).forEach(function (k) { if (marks[k].r === "dnc") never[k.split("|")[0]] = marks[k]; });
   return { by: by, cust: cust, marks: marks, never: never };
@@ -4894,7 +4895,7 @@ function pcRead_(req, user) {
       reread: admin && P.getProperty(PC_SCHEMA) !== PC_V, rereading: cur.stage === "back" });
   }
   const groups = {};
-  PC_GROUPS.forEach(function (g) { groups[g] = { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, away: 0, com: 0 }, leftOff: [] }; });
+  PC_GROUPS.forEach(function (g) { groups[g] = { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, away: 0, com: 0 }, leftOff: [], callbacks: [] }; });
   Object.keys(by).forEach(function (c) {
     const s = by[c];
     if (!s.last) return;
@@ -4919,10 +4920,25 @@ function pcRead_(req, user) {
     list.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
       dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: due, m: m && m.r ? m : null });
   });
+  // call-backs whose day has come (a Sunday or closed day: the next working day), not called back yet: in their own group,
+  // day after day until marked (today and later only). Gone when a job was finished since (the clock started over) or
+  // they're left off now (booked since, do not call, moved away, commercial)
+  if (day >= today) Object.keys(marks).forEach(function (k) {
+    const m = marks[k];
+    if (m.r !== "cb" || !m.cb || pcWorkDay_(m.cb) > day) return;
+    const p = k.split("|"), c = p[0], g = Number(p[1]), s = by[c];
+    if (!s || s.last !== p[2] || !groups[g]) return;
+    const cu = cust[c] || [];
+    if (pcLeft_(c, s, cu, K.never)) return;
+    const nm = pcName_(cu);
+    groups[g].callbacks.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
+      dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: pcWorkDay_(m.cb), m: m });
+  });
   const byName = function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : a.id < b.id ? -1 : 1; };
   PC_GROUPS.forEach(function (g) {
     const G = groups[g];
     G.due.sort(byName); G.leftOff.sort(byName);
+    G.callbacks.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : byName(a, b); });
     G.missed.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : byName(a, b); });
     if (G.missed.length > PC_MISSED_MAX) { G.more = G.missed.length - PC_MISSED_MAX; G.missed = G.missed.slice(0, PC_MISSED_MAX); }
   });
@@ -4940,7 +4956,7 @@ const PC_PERIOD_MAX = 1500;
 function pcPeriod_(K, per, from, to, today, start) {
   // a year, or Dates over 3 months: counted month by month
   const year = per === "year" || (per === "dates" && tmAddDays_(from, 92) <= to), groups = {};
-  const res = function () { return { due: 0, booked: 0, vm: 0, na: 0, dnc: 0, not: 0, ahead: 0 }; };
+  const res = function () { return { due: 0, booked: 0, vm: 0, na: 0, dnc: 0, cb: 0, not: 0, ahead: 0 }; };
   PC_GROUPS.forEach(function (g) { groups[g] = year ? { months: {}, tot: res(), left: { booked: 0, dnc: 0, away: 0, com: 0 } } : { due: [], missed: [], more: 0, left: { booked: 0, dnc: 0, away: 0, com: 0 }, leftOff: [], tot: res() }; });
   Object.keys(K.by).forEach(function (c) {
     const s = K.by[c];
@@ -4973,7 +4989,8 @@ function pcPeriod_(K, per, from, to, today, start) {
 }
 /** Everyone with Office: a call marked (not now, voicemail, booked, don't call again; clear takes it back). Kept for the
  *  client's group and last finished job, so the next group starts unmarked. A mark made on an earlier day can't be
- *  changed or taken back (locked), except by an Admin. */
+ *  changed or taken back (locked), except by an Admin, or a call-back (cb: the day to call again, and a note of what the
+ *  client said): it's marked again when they're called back. */
 function pcMark_(req, user) {
   const c = String(req.id || ""), g = Number(req.g), last = String(req.last || ""), r = String(req.r || "");
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(c) || PC_GROUPS.indexOf(g) < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(last) || !Object.prototype.hasOwnProperty.call(PC_RESULTS, r)) return { ok: false, error: "bad_request" };
@@ -4983,12 +5000,17 @@ function pcMark_(req, user) {
     // once the day it was marked is over, a call's mark stays as it is (a client not marked carries over until marked)
     let last_ = null;
     pcRows_(PC_CALLS, PC_CALL_COLS.length).forEach(function (x) { if (String(x[2]) === c && Number(x[3]) === g && pcDay_(x[4], tz) === last) last_ = x; });
-    if (last_ && String(last_[5] || "") && pcDay_(last_[1], tz) < today) return { ok: false, error: "locked", m: { r: String(last_[5]), who: String(last_[6] || ""), at: last_[0] instanceof Date ? last_[0].toISOString() : String(last_[0] || "") } };
+    if (last_ && String(last_[5] || "") && String(last_[5]) !== "cb" && pcDay_(last_[1], tz) < today) return { ok: false, error: "locked", m: { r: String(last_[5]), who: String(last_[6] || ""), at: last_[0] instanceof Date ? last_[0].toISOString() : String(last_[0] || "") } };
   }
+  // a call-back: on a day after today (a year at most), with a short note of what the client said
+  const cb = r === "cb" ? String(req.cb || "") : "", note = r === "cb" ? String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140) : "";
+  if (r === "cb" && (!/^\d{4}-\d{2}-\d{2}$/.test(cb) || cb <= today || cb > tmAddDays_(today, 366))) return { ok: false, error: "bad_value", field: "cb" };
   const first = Math.max(2, s.getLastRow() + 1);
   if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
-  s.getRange(first, 1, 1, PC_CALL_COLS.length).setNumberFormat("@").setValues([[at, Utilities.formatDate(when, tz, "yyyy-MM-dd"), c, String(g), last, r === "clear" ? "" : r, user.name]]);
-  return { ok: true, m: { r: r === "clear" ? "" : r, who: user.name, at: at } };
+  s.getRange(first, 1, 1, PC_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, c, String(g), last, r === "clear" ? "" : r, user.name, cb, note]]);
+  const m = { r: r === "clear" ? "" : r, who: user.name, at: at };
+  if (cb) { m.cb = cb; m.note = note; m.day = today; }
+  return { ok: true, m: m };
 }
 /** Everyone with Office: the marks made since `since` (ms), to show what the others marked. */
 function pcMarks_(req) {
@@ -4997,7 +5019,9 @@ function pcMarks_(req) {
   pcRows_(PC_CALLS, PC_CALL_COLS.length).forEach(function (r) {
     const at = r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "");
     if ((Date.parse(at) || 0) < since) return;   // one made in the same millisecond again (showing it twice changes nothing)
-    out.push({ id: String(r[2]), g: Number(r[3]), last: pcDay_(r[4], tz), r: String(r[5] || ""), who: String(r[6] || ""), at: at });
+    const x = { id: String(r[2]), g: Number(r[3]), last: pcDay_(r[4], tz), r: String(r[5] || ""), who: String(r[6] || ""), at: at };
+    if (x.r === "cb") { x.cb = pcDay_(r[7], tz); x.note = String(r[8] || ""); x.day = pcDay_(r[1], tz); }
+    out.push(x);
   });
   return { ok: true, marks: out.slice(-500), now: tmNow_().getTime() };
 }
