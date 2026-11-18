@@ -15605,35 +15605,44 @@ const PC_MARKS = [["na", "Not now"], ["vm", "Voicemail"], ["booked", "Booked"], 
 const PC_MARK_TEXT = Object.fromEntries(PC_MARKS);
 const PC_DEPT = { r: "Restoration", c: "Cleaning", p: "Repairs" };
 const K_PC_VIEW = "voda.pcView1";
-const pcView = Object.assign({ g: 6, day: "", per: "day" }, store.get(K_PC_VIEW) || {}, { day: "" });
+const pcView = Object.assign({ g: 6, per: "day", off: 0, from: "", to: "" }, store.get(K_PC_VIEW) || {}, { off: 0 });
 const PC_PER_API = 86;                                   // the Google script version with Week, Month and Year
-const PC_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
-const pcSaveView = () => store.set(K_PC_VIEW, { g: pcView.g, per: pcView.per });
-const pcPer = () => (PC_PER[pcView.per] && (pcView.per === "day" || !apiLevel || apiLevel >= PC_PER_API) ? pcView.per : "day");
-/** The period on screen: the day picked, or its week (Sunday to Saturday), month or year. */
+const PC_DATES_API = 87;                                 // ... and Dates, Read again now, the marks of earlier days locked
+const PC_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates: "Dates" };
+const pcSaveView = () => store.set(K_PC_VIEW, { g: pcView.g, per: pcView.per, from: pcView.from, to: pcView.to });
+const pcPerOk = k => k === "day" || !apiLevel || apiLevel >= (k === "dates" ? PC_DATES_API : PC_PER_API);
+const pcPer = () => (PC_PER[pcView.per] && pcPerOk(pcView.per) ? pcView.per : "day");
+/** The period on screen, as on Estimates: Day, Week (Sunday to Saturday), Month or Year, ‹ › moving it (ahead too: to
+ *  call ahead), or the From – To days picked (Dates, a year at most). */
 function pcRange() {
-  const d = pcDay(), per = pcPer();
-  if (per === "week") { const f = lbWeekStart(d); return { per, from: f, to: lbAddDays(f, 6) }; }
-  if (per === "month") { const k = d.slice(0, 7); return { per, from: `${k}-01`, to: `${k}-${String(lbDaysIn(k)).padStart(2, "0")}` }; }
-  if (per === "year") return { per, from: `${d.slice(0, 4)}-01-01`, to: `${d.slice(0, 4)}-12-31` };
-  return { per, from: d, to: d };
+  const per = pcPer(), today = lbToday();
+  if (per === "dates") {
+    let from = lbIsDay(pcView.from) ? pcView.from : `${today.slice(0, 7)}-01`, to = lbIsDay(pcView.to) ? pcView.to : today;
+    if (to < from) [from, to] = [to, from];
+    if (revLen(from, to) > 366) to = lbAddDays(from, 365);
+    return { per, from, to, label: revSpanText(from, to) };
+  }
+  const r = ofRange(per, Number(pcView.off) || 0);
+  return { per, from: r.from, to: r.to, label: r.label };
 }
 const pcRangeKey = () => { const r = pcRange(); return `${r.per}|${r.from}|${r.to}`; };
 let pcData = null, pcLoading = false, pcErr = "", pcSyncing = null, pcMarksAt = 0, pcPolling = false, pcPolledAt = 0, pcLoadedAt = 0;
 let pcSure = "", pcSureTimer = 0, pcLeftOpen = false;
-const pcDay = () => (lbIsDay(pcView.day) ? pcView.day : lbToday());
+const pcDay = () => pcRange().from;   // Day: its day
 const pcShowing = () => view.tab === "office" && ofView.tab === "pc";
 const pcDate = day => { const d = lbDate(day); return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; };
 const pcWhen = at => { const d = new Date(at); if (isNaN(d.getTime())) return ""; const t = fmtTime(d); return lbDayKey(d) === lbToday() ? t : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${t}`; };
 /** The working day a closed day's clients are called on. */
 function pcNextOpen(day) { let d = day; for (let i = 0; i < 7 && (lbDate(d).getDay() === 0 || lbHoliday(d)); i++) d = lbAddDays(d, 1); return d; }
 
-async function pcLoad() {
+async function pcLoad(force) {
   if (pcLoading || !session || !ofCan()) return;
   const day = pcDay(), rg = pcRange(), key = pcRangeKey();
   pcLoading = true;
   try {
-    const out = await api("pcRead", rg.per === "day" ? { day } : { day, per: rg.per, from: rg.from, to: rg.to }, 120000);
+    const q = rg.per === "day" ? { day } : { day, per: rg.per, from: rg.from, to: rg.to };
+    if (force === true) q.force = true;   // Read again: Housecall Pro now, not up to 15 minutes later
+    const out = await api("pcRead", q, 120000);
     pcData = Object.assign(out, { key }); pcErr = ""; pcMarksAt = out.now || 0; pcPolledAt = pcLoadedAt = performance.now();
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { pcLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -15646,7 +15655,7 @@ async function pcLoad() {
 /** What the others marked since the last look (and the whole lists again every 15 minutes, or on a new day). */
 async function pcPoll() {
   if (pcPolling || !pcData || !pcData.ready) return;
-  if ((!pcView.day && pcData.day !== lbToday()) || performance.now() - pcLoadedAt > 15 * 60e3) { pcLoad(); return; }
+  if (pcData.key !== pcRangeKey() || performance.now() - pcLoadedAt > 15 * 60e3) { pcLoad(); return; }   // a new day, or 15 minutes on
   pcPolling = true; pcPolledAt = performance.now();
   try {
     const out = await api("pcMarks", { since: pcMarksAt });
@@ -15675,11 +15684,14 @@ async function pcMark(r, g, res) {
     const out = await api("pcMark", { id: r.id, g, last: r.last, r: res });
     r.m = out.m && out.m.r ? out.m : null;
   } catch (e) {
-    r.m = was;
-    toast(e && e.error === "offline" ? "No connection: that call wasn't marked. Try again when you're back online." : "That call wasn't marked. " + errText(e, "The mark"));
+    r.m = e && e.error === "locked" && e.m ? e.m : was;
+    toast(e && e.error === "locked" ? "That call was marked on an earlier day: it stays as it is. Ask Mike to change it."
+      : e && e.error === "offline" ? "No connection: that call wasn't marked. Try again when you're back online." : "That call wasn't marked. " + errText(e, "The mark"));
   }
   if (pcShowing()) renderOffice();
 }
+/** May this mark still be changed: made today (once its day is over it stays as it is), or by an admin. */
+const pcMarkOpen = m => isAdmin() || !m.at || lbDayKey(new Date(m.at)) === lbToday();
 function pcAskSure(key) {
   pcSure = key; clearTimeout(pcSureTimer);
   pcSureTimer = setTimeout(() => { pcSure = ""; if (pcShowing()) renderOffice(); }, 5000);
@@ -15726,21 +15738,34 @@ function pcEl() {
   }
   if (!pcData.ready) return [pcSetupEl()];
   const today = lbToday(), admin = isAdmin();
-  const go = d => { pcView.day = d === today ? "" : d; pcLoad(); renderOffice(); };
-  const rg = pcRange(), per = rg.per;
-  const step = n => per === "week" ? lbAddDays(day, 7 * n) : per === "month" ? `${lbAddMonths(day.slice(0, 7), n)}-01` : per === "year" ? `${Number(day.slice(0, 4)) + n}-01-01` : lbAddDays(day, n);
-  const perSeg = !apiLevel || apiLevel >= PC_PER_API ? lbSeg(Object.entries(PC_PER), per, k => { pcView.per = k; pcSaveView(); pcLoad(); renderOffice(); }, "Period") : null;
-  if (perSeg) perSeg.classList.add("pc-per");
+  const rg = pcRange(), per = rg.per, off = Number(pcView.off) || 0, len = revLen(rg.from, rg.to), far = lbAddDays(today, 366);
+  const redraw = () => { pcSaveView(); pcLoad(); renderOffice(); };
+  const step = n => {
+    if (per === "dates") { pcView.from = lbAddDays(rg.from, n * len); pcView.to = lbAddDays(rg.to, n * len); }
+    else pcView.off = off + n;
+    redraw();
+  };
+  const pick = (from, to) => { if (from > to) [from, to] = [to, from]; pcView.from = from; pcView.to = to; redraw(); };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+    lbDateInput({ id, value, min: LB_FIRST_DAY, max: far, "aria-label": label }, onpick, LB_FIRST_DAY, far));
+  const pers = Object.entries(PC_PER).filter(([k]) => pcPerOk(k));
+  const prev = h("button", { class: "btn small", type: "button", id: "pcPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹");
+  const next = h("button", { class: "btn small", type: "button", id: "pcNext", "aria-label": "Later", disabled: rg.from > far, onclick: () => step(1) }, "›");
   const out = [];
   const read = pcData.at ? `Housecall Pro read ${pcWhen(new Date(pcData.at).toISOString())}` : "";
-  out.push(h("div", { class: "lb-daybar pc-daybar" },
-    h("button", { class: "btn small", type: "button", id: "pcPrev", "aria-label": `Previous ${per}`, onclick: () => go(step(-1)) }, "‹"),
-    lbDateInput({ id: "pcDay", value: day, "aria-label": "Day" }, v => go(v)),
-    h("button", { class: "btn small", type: "button", id: "pcNext", "aria-label": `Next ${per}`, onclick: () => go(step(1)) }, "›"),
-    perSeg,
-    today < rg.from || today > rg.to ? h("button", { class: "btn ghost small", type: "button", id: "pcToday", onclick: () => go(today) }, "Today") : null,
-    h("span", { class: "pc-upd meta", text: read }),
-    h("button", { class: "btn ghost small", type: "button", id: "pcRefresh", disabled: pcLoading, onclick: () => pcLoad() }, pcLoading ? "Loading…" : "Refresh")));
+  out.push(h("div", { class: "lb-bar rev-bar-top pc-bar" },
+    pers.length > 1 ? lbSeg(pers, per, k => {
+      if (k === "dates" && per !== "dates") { pcView.from = rg.from; pcView.to = rg.to; }   // Dates starts from the period on screen
+      pcView.per = k; pcView.off = 0; redraw();
+    }, "Period") : null,
+    per === "dates"
+      ? h("div", { class: "lb-daybar lb-payrange", id: "pcDates" }, prev,
+        dateBox("pcFrom", rg.from, "From", v => pick(v, v > rg.to ? lbAddDays(v, len - 1) : rg.to)),
+        dateBox("pcTo", rg.to, "To", v => pick(v < rg.from ? v : rg.from, v)), next)
+      : h("div", { class: "of-step" }, prev, h("strong", { id: "pcRangeLabel", text: rg.label + (per === "day" && rg.from === today ? " (today)" : "") }), next),
+    h("div", { class: "rev-tools" }, h("button", { class: "btn small", type: "button", id: "pcRefresh", disabled: pcLoading, title: "Read what changed in Housecall Pro now",
+      onclick: () => pcLoad(true) }, pcLoading ? "Reading…" : "Read again"))));
+  out.push(h("p", { class: "lb-sub pc-upd", id: "pcUpd", text: read ? `${read} · it reads what changed every 15 minutes while this is open, and Read again reads it now` : "" }));
   if (pcErr) out.push(h("p", { class: "dlg-err", text: pcErr }));
   if (pcData.reread && !pcData.rereading) out.push(h("div", { class: "panel pc-reread", id: "pcReread" }, h("p", { class: "meta", text: "One more step (Admins): read Housecall Pro all again once, so the lists also use the tags on jobs (moved to another state, do not call). A few minutes; the lists keep working for everyone meanwhile." }),
     h("button", { class: "btn primary small", type: "button", id: "pcRereadGo", onclick: () => pcBackfill(true) }, "Read all again now")));
@@ -15816,9 +15841,10 @@ const pcResText = t => [t.booked ? `${t.booked} booked` : "", t.vm ? `${t.vm} vo
 /** A week, a month or a year: the 5 groups with what came of their calls; week and month list every client by day (to
  *  call ahead or catch up), the year counts them month by month (tap a month to open it). */
 function pcPeriodEl(rg, today) {
-  const G = pcData.groups || {}, year = rg.per === "year";
+  const G = pcData.groups || {}, year = rg.per === "year" || !!pcData.byMonth;   // a year (or Dates over 3 months): month by month
   const grp = g => G[g] || (year ? { months: {}, tot: {}, left: {} } : { due: [], missed: [], more: 0, left: {}, leftOff: [] });
-  const span = rg.per === "week" ? `the week of ${lbDayText(rg.from)} – ${lbDayText(rg.to)}` : rg.per === "month" ? `${lbMonthLong(Number(rg.from.slice(5, 7)))} ${rg.from.slice(0, 4)}` : rg.from.slice(0, 4);
+  const span = rg.per === "week" ? `the week of ${lbDayText(rg.from)} – ${lbDayText(rg.to)}` : rg.per === "month" ? `${lbMonthLong(Number(rg.from.slice(5, 7)))} ${rg.from.slice(0, 4)}`
+    : rg.per === "dates" ? revSpanText(rg.from, rg.to) : rg.from.slice(0, 4);
   const out = [h("div", { class: "pc-groups", role: "tablist", "aria-label": "Months since the last service" }, PC_GROUPS.map(g => {
     const t = pcTally(grp(g), today), done = t.due > 0 && t.called === t.due;
     return h("button", { type: "button", class: "pc-g" + (pcView.g === g ? " on" : "") + (done ? " done" : ""), role: "tab", "aria-selected": String(pcView.g === g), "data-g": String(g),
@@ -15841,15 +15867,17 @@ function pcPeriodEl(rg, today) {
       h("div", { class: "meta", text: [lbDayText(y.due), `last service ${pcDate(y.last)}`, y.type].filter(Boolean).join(" · ") }), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
   if (year) {
     // month by month: tap one to open it
-    const C = n => (n ? fmt(n) : "–"), months = Array.from({ length: 12 }, (_, i) => `${rg.from.slice(0, 4)}-${String(i + 1).padStart(2, "0")}`);
+    const C = n => (n ? fmt(n) : "–"), months = [];
+    for (let k = rg.from.slice(0, 7); k <= rg.to.slice(0, 7); k = lbAddMonths(k, 1)) months.push(k);
+    const multi = months[0].slice(0, 4) !== months[months.length - 1].slice(0, 4);
     const head = ["Month", "Came up", "Called", "Booked", "Voicemail", "Not now", "Don't call", "Not called", "To call"];
     const cells = m => { const v = pcTally({ tot: (x.months || {})[m] || {} }, today); return [v.due, v.called, v.booked, v.vm, v.na, v.dnc, v.not, v.ahead]; };
     list.append(h("div", { class: "pc-ywrap" }, h("table", { class: "lb-table pc-ytab", id: "pcYear" },
       h("thead", null, h("tr", null, head.map((k, i) => h("th", { class: i ? "" : "l", text: k })))),
       h("tbody", null, months.map(m => { const v = cells(m); return h("tr", { "data-m": m, class: v[0] ? "pc-ym" : "pc-ym none", tabindex: v[0] ? "0" : null, title: v[0] ? "Open this month" : null,
-        onclick: () => { if (!v[0]) return; pcView.per = "month"; pcView.day = m + "-01"; pcSaveView(); pcLoad(); renderOffice(); },
-        onkeydown: e => { if (e.key === "Enter" && v[0]) e.currentTarget.click(); } }, h("td", { class: "l", text: lbMonthLong(Number(m.slice(5))) }), v.map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) }))); })),
-      h("tfoot", null, h("tr", null, h("td", { class: "l", text: "Year" }), [t.due, t.called, t.booked, t.vm, t.na, t.dnc, t.not, t.ahead].map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) })))))));
+        onclick: () => { if (!v[0]) return; const t = lbToday(); pcView.per = "month"; pcView.off = (Number(m.slice(0, 4)) - Number(t.slice(0, 4))) * 12 + Number(m.slice(5)) - Number(t.slice(5, 7)); pcSaveView(); pcLoad(); renderOffice(); },
+        onkeydown: e => { if (e.key === "Enter" && v[0]) e.currentTarget.click(); } }, h("td", { class: "l", text: lbMonthLong(Number(m.slice(5))) + (multi ? ` ${m.slice(0, 4)}` : "") }), v.map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) }))); })),
+      h("tfoot", null, h("tr", null, h("td", { class: "l", text: rg.per === "year" ? "Year" : "Total" }), [t.due, t.called, t.booked, t.vm, t.na, t.dnc, t.not, t.ahead].map((n, i) => h("td", { class: i === 6 && n ? "pc-bad" : "", text: C(n) })))))));
     return out.concat([list]);
   }
   if (!x.due.length) list.append(h("p", { class: "meta pc-none", text: "Nobody comes up in this group in this period." }));
@@ -15883,7 +15911,8 @@ function pcRowEl(r, g, missed) {
   const acts = m
     ? h("div", { class: "pc-done" }, h("span", { class: `pc-chip pc-${m.r}`, text: PC_MARK_TEXT[m.r] || m.r }),
       h("span", { class: "meta", text: [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · ") }),
-      m.saving ? null : h("button", { class: "btn ghost small", type: "button", "data-act": "clear", onclick: () => pcMark(r, g, "clear") }, "Change"))
+      m.saving ? null : pcMarkOpen(m) ? h("button", { class: "btn ghost small", type: "button", "data-act": "clear", onclick: () => pcMark(r, g, "clear") }, "Change")
+        : h("span", { class: "meta pc-lock", title: "Marked on an earlier day: it stays as it is (an admin can change it)", text: "Locked" }))
     : h("div", { class: "pc-acts" }, PC_MARKS.map(([k, t]) => k === "dnc"
       ? h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": k, onclick: () => (sure ? pcMark(r, g, k) : pcAskSure(key)) }, sure ? "Sure? Tap again" : t)
       : h("button", { class: "btn small", type: "button", "data-r": k, onclick: () => pcMark(r, g, k) }, t)));
