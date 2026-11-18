@@ -15526,6 +15526,23 @@ function renderEstimates() {
       onclick: () => { estView.st = k; redraw(); } }, h("span", { class: "est-sl", text: t }), h("i", { class: "est-n", text: fmt(stCount(k)) }), h("i", { class: "est-d", text: revShort(stCents(k)) })))),
     whoSel, search,
     sel.length || who || q || estView.st !== "all" ? h("button", { class: "btn small ghost", type: "button", id: "estClear", onclick: () => { Object.assign(estView, { grps: [], st: "all", who: "", q: "" }); redraw(); } }, "Show all") : null);
+  const row = e => estRowEl(e, today);
+  const more = shown.length - estShown;
+  const listBox = h("div", { class: "panel est-list" },
+    h("h3", null, `Estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
+    filters,
+    shown.length ? h("div", { class: "est-rows", id: "estRows" },
+      h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
+      shown.slice(0, estShown).map(row))
+      : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates in these days."
+        : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
+    more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
+  box.replaceChildren(...[...head, tiles, people, how, listBox].filter(Boolean));
+}
+
+/** An estimate's row (Estimates and Office › Estimates): day, #, client and address, group, amount, status (approved
+ *  or declined by whom and when; open: not sent or its stage, and for how long), who's in charge. */
+function estRowEl(e, today) {
   const grpName = e => { const g = estGroup(e); return g === "u" ? "Restoration" : EST_GROUPS.find(x => x[0] === g)[1]; };
   const stEl = e => {
     const dec = e.dec ? lbDayKey(new Date(e.dec)) : "";
@@ -15552,19 +15569,8 @@ function renderEstimates() {
       h("span", { class: "est-in" }, e.inc ? h("b", { text: e.inc }) : h("span", { class: "muted", text: "Nobody assigned" }),
         e.inc && (e.incRole || others.length) ? h("small", { text: [LB_ROLES[e.incRole] || "", others.length ? `with ${others.join(", ")}` : ""].filter(Boolean).join(" · ") }) : null));
   };
-  const more = shown.length - estShown;
-  const listBox = h("div", { class: "panel est-list" },
-    h("h3", null, `Estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
-    filters,
-    shown.length ? h("div", { class: "est-rows", id: "estRows" },
-      h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
-      shown.slice(0, estShown).map(row))
-      : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates in these days."
-        : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
-    more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
-  box.replaceChildren(...[...head, tiles, people, how, listBox].filter(Boolean));
+  return row(e);
 }
-
 /* ---- Estimates › Reports: a department's report for the meeting (a week, a month or a year): estimates created and
    approved, the approval rate, what the department produced and how far it is from its goal, each against the period
    before; what the open estimates are likely to bring (their age: how often, in the past, estimates still open at that
@@ -15805,7 +15811,8 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients" };
+const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates" };
+const OF_EST_API = 95;                                   // the Google script version with Office › Estimates (Cleaning's)
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const ofCfg = () => ofCleanConfig(ofData && ofData.config);
 /** The office person linked to this login. */
@@ -15911,15 +15918,15 @@ function renderOffice() {
       h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => openOfPeople() }, "People"),
       h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => openOfExcel() }, "Load from Excel")) : null);
   if (!OF_TABS[ofView.tab]) ofView.tab = "today";
-  const tabs = lbSeg(Object.entries(OF_TABS), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
+  const tabs = lbSeg(Object.entries(OF_TABS).filter(([k]) => k !== "est" || !apiLevel || apiLevel >= OF_EST_API), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
   tabs.classList.add("of-tabs");
-  if (!cfg.people.length && ofView.tab !== "pc") {
+  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est") {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
       ofErr ? h("p", { class: "dlg-err", text: ofErr }) : "");
     return;
   }
-  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofTodayEl();
+  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : ofTodayEl();
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
   if (ofView.tab === "today") ofShowSave();
 }
@@ -16560,6 +16567,129 @@ function ofScoreEl() {
   })));
   out.push(h("p", { class: "hint", text: `The goal is ${cfg.goal} outgoing calls a day, Monday to Friday (closed on New Year's Day, July 4, Thanksgiving and Christmas), counted on the days each person has numbers. Every kind of outgoing call adds up.` }));
   return out;
+}
+
+/* ---- Office › Estimates: every Cleaning estimate, as on Estimates (Day, Week, Month, Year or Dates; the list with its
+   status, person and search), for everyone with Office. Read again reads what changed in Housecall Pro. ---- */
+const ofEstView = Object.assign({ per: "month", off: 0, from: "", to: "", st: "all", who: "", q: "" }, store.get("voda.ofEst") || {});
+const ofEstDocs = {}, ofEstLoading = {};
+let ofEstErr = "", ofEstShown = 100;
+const ofEstSync = { busy: false, tried: 0, err: "" };
+async function ofEstLoad(y) {
+  if (ofEstLoading[y] || !session || !ofCan()) return;
+  ofEstLoading[y] = true;
+  try { ofEstDocs[y] = await api("ofEstimates", { year: y }); ofEstErr = ""; }
+  catch (e) { ofEstErr = errText(e, "The estimates"); }
+  ofEstLoading[y] = false;
+  if (view.tab === "office" && ofView.tab === "est" && !ofTypingNow()) renderOffice();
+}
+/** The estimates scheduled (or made) from..to, every year they touch; null while a year is still loading. */
+function ofEstFor(from, to) {
+  const out = [];
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) {
+    const d = ofEstDocs[y];
+    if (!d) { ofEstLoad(y); return null; }
+    for (const e of d.estimates || []) if (e.day >= from && e.day <= to) out.push(e);
+  }
+  return out;
+}
+/** Read again: what changed in Housecall Pro (a few pages a step), then the years on screen again. */
+async function ofEstRun() {
+  if (ofEstSync.busy || !session || !navigator.onLine) return;
+  Object.assign(ofEstSync, { busy: true, tried: Date.now(), err: "" });
+  if (ofView.tab === "est") renderOffice();
+  let page = 1, sort = "";
+  try {
+    for (let i = 0; i < 40; i++) {
+      const out = await api("estSync", Object.assign({ page }, sort ? { sort } : {}), 170000);
+      if (!out.next) break;
+      page = out.next; sort = out.by || "";
+    }
+  } catch (e) { ofEstSync.err = revErrText(e); }
+  ofEstSync.busy = false;
+  await Promise.all(Object.keys(ofEstDocs).map(y => { delete ofEstDocs[y]; return ofEstLoad(Number(y)); }));
+  if (view.tab === "office" && ofView.tab === "est") renderOffice();
+}
+function ofEstEl() {
+  if (apiLevel && apiLevel < OF_EST_API) return [h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+    h("p", { class: "meta", text: "Office › Estimates needs the newest Google script: Deploy › Manage deployments › pencil › New version › Deploy." }))];
+  const today = lbToday(), y = Number(today.slice(0, 4)), doc = ofEstDocs[y];
+  if (!doc) {
+    if (!ofEstErr) ofEstLoad(y);
+    return [ofEstErr ? h("p", { class: "dlg-err" }, ofEstErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { ofEstErr = ""; ofEstLoad(y); renderOffice(); } }, "Try again"))
+      : h("p", { class: "loading", text: "Loading the Cleaning estimates…" })];
+  }
+  // read what changed when the last read is 10 minutes old (a minute between tries)
+  if (doc.connected && !ofEstSync.busy && Date.now() - ofEstSync.tried > 60e3 && (!doc.done || Date.now() - doc.readAt > 10 * 60e3)) setTimeout(() => ofEstRun(), 0);
+  const per = EST_PER[ofEstView.per] ? ofEstView.per : "month", off = Math.min(0, Number(ofEstView.off) || 0);
+  let r;
+  if (per === "dates") {
+    let from = lbOkDay(ofEstView.from, today) ? ofEstView.from : `${today.slice(0, 7)}-01`, to2 = lbOkDay(ofEstView.to, today) ? ofEstView.to : today;
+    if (to2 < from) [from, to2] = [to2, from];
+    r = { from, to: to2, label: revSpanText(from, to2) };
+  } else r = ofRange(per, off);
+  const to = r.to > today ? today : r.to, len = revLen(r.from, r.to);
+  const redraw = () => { ofEstShown = 100; store.set("voda.ofEst", ofEstView); renderOffice(); };
+  const step = n => {
+    if (per === "dates") { ofEstView.from = lbAddDays(r.from, n * len); ofEstView.to = lbAddDays(r.to, n * len); }
+    else ofEstView.off = Math.min(0, off + n);
+    redraw();
+  };
+  const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; ofEstView.from = from; ofEstView.to = to2; redraw(); };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+    lbDateInput({ id, value, min: LB_FIRST_DAY, max: today, "aria-label": label }, onpick, LB_FIRST_DAY, today));
+  const bar = h("div", { class: "lb-bar rev-bar-top" },
+    lbSeg(Object.entries(EST_PER), per, k => {
+      if (k === "dates" && per !== "dates") { ofEstView.from = r.from; ofEstView.to = to; }   // Dates starts from the period on screen
+      ofEstView.per = k; ofEstView.off = 0; redraw();
+    }, "Period"),
+    per === "dates"
+      ? h("div", { class: "lb-daybar lb-payrange", id: "ofEstDates" },
+        h("button", { class: "btn small", type: "button", id: "ofEstPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        dateBox("ofEstFrom", r.from, "From", v => pick(v, v > r.to ? lbAddDays(v, len - 1) : r.to)),
+        dateBox("ofEstTo", r.to, "To", v => pick(v < r.from ? v : r.from, v)),
+        h("button", { class: "btn small", type: "button", id: "ofEstNext", "aria-label": "Later", disabled: r.to >= today, onclick: () => step(1) }, "›"))
+      : h("div", { class: "of-step" },
+        h("button", { class: "btn small", type: "button", id: "ofEstPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        h("strong", { id: "ofEstLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
+        h("button", { class: "btn small", type: "button", id: "ofEstNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    h("div", { class: "rev-tools" }, h("button", { class: "btn small", type: "button", id: "ofEstRead", disabled: ofEstSync.busy || !doc.connected,
+      title: "Read what changed in Housecall Pro", onclick: () => ofEstRun() }, ofEstSync.busy ? "Reading…" : "Read again")));
+  const status = h("p", { class: "lb-sub rev-status" + (ofEstSync.busy ? " busy" : ""), id: "ofEstStatus", role: "status" },
+    !doc.connected ? "Housecall Pro isn't connected right now." : ofEstSync.busy ? "Reading estimates from Housecall Pro…"
+      : doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)} · Cleaning estimates only` : "Not read from Housecall Pro yet.");
+  const head = [bar, status, ofEstSync.err ? h("p", { class: "dlg-err", text: ofEstSync.err }) : null];
+  const list = r.from > today ? [] : ofEstFor(r.from, to);
+  if (!list) return head.concat(h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` }));
+  // the list: status, person, search; newest first
+  const names = e => [e.inc].concat(String(e.emps || "").split(", ")).filter(Boolean);
+  const people = [...new Set(list.flatMap(names))].sort((a, b) => a.localeCompare(b));
+  const who = people.includes(ofEstView.who) ? ofEstView.who : "";
+  const q = String(ofEstView.q || "").trim().toLowerCase();
+  const base = list.filter(e => (!who || names(e).includes(who)) && (!q || [e.client, e.n, e.addr, e.type, e.emps, e.inc, e.lead, e.tags].some(v => String(v || "").toLowerCase().includes(q))));
+  const stOf = k => (k === "all" ? base : k === "notsent" ? base.filter(estNotSent) : base.filter(e => e.st === k));
+  const stCents = k => stOf(k).reduce((n, e) => n + (estValue(e) || 0), 0);
+  const shown = stOf(ofEstView.st in EST_ST ? ofEstView.st : "all").slice().sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
+  const whoSel = h("select", { id: "ofEstWho", "aria-label": "In charge", onchange: ev => { ofEstView.who = ev.target.value; redraw(); } },
+    h("option", { value: "", text: "Everyone" }), people.map(n => h("option", { value: n, text: n })));
+  whoSel.value = who;
+  const search = h("input", { type: "search", id: "ofEstFind", placeholder: "Client, estimate #, address…", value: ofEstView.q || "", "aria-label": "Search estimates",
+    oninput: ev => { ofEstView.q = ev.target.value; ofEstShown = 100; const at = ev.target.selectionStart; renderOffice(); const f = $("ofEstFind"); if (f) { f.focus(); try { f.setSelectionRange(at, at); } catch (x) { /* fine */ } } } });
+  const filters = h("div", { class: "est-filters" },
+    h("div", { class: "seg est-stseg", role: "tablist", "aria-label": "Status" }, Object.entries(EST_ST).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "data-k": k,
+      "aria-selected": String((ofEstView.st in EST_ST ? ofEstView.st : "all") === k), title: `${t}: ${fmt(stOf(k).length)} estimate${stOf(k).length === 1 ? "" : "s"}, ${lbMoney(Math.round(stCents(k) / 100))}`,
+      onclick: () => { ofEstView.st = k; redraw(); } }, h("span", { class: "est-sl", text: t }), h("i", { class: "est-n", text: fmt(stOf(k).length) }), h("i", { class: "est-d", text: revShort(stCents(k)) })))),
+    whoSel, search,
+    who || q || ofEstView.st !== "all" ? h("button", { class: "btn small ghost", type: "button", id: "ofEstClear", onclick: () => { Object.assign(ofEstView, { st: "all", who: "", q: "" }); redraw(); } }, "Show all") : null);
+  const more = shown.length - ofEstShown;
+  return head.concat(h("div", { class: "panel est-list", id: "ofEstList" },
+    h("h3", null, `Cleaning estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
+    filters,
+    shown.length ? h("div", { class: "est-rows", id: "ofEstRows" },
+      h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
+      shown.slice(0, ofEstShown).map(e => estRowEl(e, today)))
+      : h("p", { class: "lb-sub", id: "ofEstNone", text: list.length ? "No estimates match." : `No Cleaning estimates in ${r.label}.` }),
+    more > 0 ? h("button", { class: "btn small", type: "button", id: "ofEstMore", onclick: () => { ofEstShown += 100; renderOffice(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null));
 }
 
 /* ---- admins: the people, their numbers and their logins ---- */
