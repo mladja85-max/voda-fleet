@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 95;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 96;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4040,6 +4040,7 @@ function revPrivate_(out, user) {
  *  every visit scheduled today (done, under way or still to come); "future": every visit scheduled from tomorrow on, to
  *  the last one booked. The same rules as Revenue: money on each visit, a job counted once (its first visit), canceled
  *  left out; a job not scheduled yet has no day, so it isn't in either. */
+const REV_BOOKED_MAX = 1500;   // visits listed (the totals count them all)
 function revBooked_(req) {
   const tz = Session.getScriptTimeZone(), today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
   const future = req.when === "future", from = future ? tmAddDays_(today, 1) : today;
@@ -4058,7 +4059,7 @@ function revBooked_(req) {
       if (page === HCP_MAX_PAGES) more = true;
     }
   }
-  const depts = {};
+  const depts = {}, list = [];
   REV_DEPTS.forEach(function (k) { depts[k] = { cents: 0, jobs: 0, visits: 0 }; });
   let last = "", seen = {};
   jobs.forEach(function (job) {
@@ -4068,13 +4069,16 @@ function revBooked_(req) {
     if (isNaN(start.getTime())) return;
     const d = Utilities.formatDate(start, tz, "yyyy-MM-dd");
     if (future ? d < from : d !== today) return;
-    const a = depts[revDept_(hcpJobType_(job))];
-    a.cents += Math.round(Number(job.total_amount) || 0);
+    const k = revDept_(hcpJobType_(job)), a = depts[k], cents = Math.round(Number(job.total_amount) || 0), first = hcpFirstVisit_(job);
+    a.cents += cents;
     a.visits++;
-    if (hcpFirstVisit_(job)) a.jobs++;
+    if (first) a.jobs++;
     if (d > last) last = d;
+    // each visit, to list and open in Housecall Pro: [job id, invoice #, client, department, cents, day, status, first visit]
+    list.push([String(job.id || ""), String(job.invoice_number || ""), hcpClient_(job), k, cents, d, String(job.work_status || "").slice(0, 40), first ? 1 : 0]);
   });
-  return { ok: true, when: future ? "future" : "today", from: from, to: future ? last : today, depts: depts, more: more, at: new Date().toISOString() };
+  list.sort(function (a, b) { return a[5] < b[5] ? -1 : a[5] > b[5] ? 1 : b[4] - a[4]; });
+  return { ok: true, when: future ? "future" : "today", from: from, to: future ? last : today, depts: depts, jobs: list.slice(0, REV_BOOKED_MAX), more: more || list.length > REV_BOOKED_MAX, at: new Date().toISOString() };
 }
 /** A client's name as Housecall Pro has it: the company, else first and last name. */
 function hcpClient_(job) {
