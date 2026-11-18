@@ -683,6 +683,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pc-chip.pc-dnc { background: var(--due-bg); color: var(--due); border-color: transparent; }
 .pc-row.marked .pc-name, .pc-row.marked .pc-name a { color: var(--muted); }
 .pc-contact { font-size: .9rem; }
+.pc-com { font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); align-self: center; }
 .pc-leftlist { margin: 4px 0 8px; padding: 6px 12px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface-2); }
 .pc-lo { padding: 6px 0; border-top: 1px solid var(--line); } .pc-lo:first-child { border-top: 0; }
 .pc-why { color: var(--due); font-size: .88rem; font-weight: 600; }
@@ -15693,7 +15694,7 @@ function renderOffice() {
 }
 /* ---- Past clients to call: the clients whose last finished job in Housecall Pro was 6, 12, 18, 24 or 36 months before
    the day picked (a Sunday or a closed day moves to the next working day), less anyone booked since, tagged do not call,
-   commercial, or marked Don't call again. Each call is marked, so two people don't call the same client. The lists stay
+   moved away, or marked Don't call again (commercial clients are on them too, marked Commercial). Each call is marked, so two people don't call the same client. The lists stay
    in this window only: the clients' names and phones aren't saved on the device. ---- */
 const PC_API = 81;                                       // the Google script version with Past clients
 const PC_GROUPS = [6, 12, 18, 24, 36];
@@ -16034,7 +16035,8 @@ function pcRowEl(r, g, missed, cbRow) {
     : m && m.r === "cb" && m.note ? `“${m.note}”` : "";
   return h("div", { class: "pc-row" + (m ? " marked" : ""), "data-id": r.id },
     h("div", { class: "pc-main" },
-      h("div", { class: "pc-top" }, h("span", { class: "pc-name" }, hcpLink("cust", r.id, r.name || "(no name)")), r.contact ? h("span", { class: "meta pc-contact", text: r.contact }) : null,
+      h("div", { class: "pc-top" }, h("span", { class: "pc-name" }, hcpLink("cust", r.id, r.name || "(no name)")), r.com ? h("span", { class: "pc-com", text: "Commercial" }) : null,
+        r.contact ? h("span", { class: "meta pc-contact", text: r.contact }) : null,
         tel ? h("a", { class: "pc-tel", href: `tel:+1${tel.slice(-10)}` }, r.phone) : h("span", { class: "meta", text: "no phone" }),
         tel2 ? h("a", { class: "pc-tel pc-tel2", href: `tel:+1${tel2.slice(-10)}` }, r.phone2) : null),
       r.addr ? h("div", { class: "meta", text: r.addr }) : null,

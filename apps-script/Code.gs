@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 89;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 90;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4602,8 +4602,9 @@ function estSync_(req, user) {
    The office calls past clients 6, 12, 18, 24 and 36 months after their last finished job (a finished job restarts the
    clock; an estimate doesn't). The day of a visit is its scheduled day (or the day it was finished). Left off the lists:
    a client with a job booked since their last one (scheduled, in progress or still to be scheduled); a "do not call" tag
-   on the customer in Housecall Pro (or Housecall Pro's "do not service"); commercial clients (a Commercial job type, or a
-   commercial / property manager tag); anyone marked "Don't call again" here. A day that falls on a Sunday or a day the
+   on the customer in Housecall Pro (or Housecall Pro's "do not service"); anyone marked "Don't call again" here.
+   Commercial clients (a Commercial job type, or a commercial / property manager tag) are on the lists too, marked
+   Commercial. A day that falls on a Sunday or a day the
    company is closed moves to the next working day. Each call is marked (No answer, Voicemail, Booked, Don't call again)
    with who and when. A client in a group whose day went by without a mark (since the lists started) stays in "Missed"
    until marked or the next group's day.
@@ -4846,8 +4847,8 @@ function pcName_(cu) {
 }
 /** Why a client is left off the lists, or null: a job booked since their last one (booked), do not call (dnc: marked
  *  Don't call again here, a tag on the customer or on their last job, Housecall Pro's do not service), moved out of the
- *  area (away: a tag such as "Moved to another state"; not "Moved out") or commercial (com: a Commercial job type, or a
- *  tag). */
+ *  area (away: a tag such as "Moved to another state"; not "Moved out"). Commercial clients aren't left off: they're
+ *  called too (marked com on the list: pcCom_). */
 function pcLeft_(c, s, cu, never) {
   const bk = s.open.filter(function (o) { return o[0] ? o[0] >= s.last : o[1] !== "" && o[1] >= s.last; });
   if (bk.length) return { why: "booked", day: bk.map(function (o) { return o[0]; }).filter(Boolean).sort()[0] || "" };
@@ -4861,10 +4862,12 @@ function pcLeft_(c, s, cu, never) {
   if (dt) return Object.assign({ why: "dnc" }, dt);
   if (String(cu[6] || "") === "yes") return { why: "dnc", dns: true };
   const aw = first(PC_AWAY);
-  if (aw) return Object.assign({ why: "away" }, aw);
-  if (s.com) return { why: "com", jt: s.com };
-  const ct = tags.filter(function (t) { return PC_COM.test(t); })[0];
-  return ct ? { why: "com", tag: ct } : null;
+  return aw ? Object.assign({ why: "away" }, aw) : null;
+}
+/** A commercial client (a Commercial job type, or a commercial / property manager tag on the customer): on the lists,
+ *  marked Commercial. */
+function pcCom_(s, cu) {
+  return !!s.com || String(cu[4] || "").split(/\s*,\s*/).some(function (t) { return PC_COM.test(t); });
 }
 /** Everyone with Office: who to call on a day (yyyy-MM-dd; today when none), each group's { due, missed, more, left (due
  *  that day and left off: booked, do not call, commercial; and who, with why: leftOff) }, after reading what changed in
@@ -4919,11 +4922,11 @@ function pcRead_(req, user) {
     if (missed && m && m.r) return;   // called on a day after it came up
     const list = groups[g][missed ? "missed" : "due"];
     list.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
-      dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: due, m: m && m.r ? m : null });
+      dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: due, m: m && m.r ? m : null, com: pcCom_(s, cu) });
   });
   // call-backs whose day has come (a Sunday or closed day: the next working day), not called back yet: in their own group,
   // day after day until marked (today and later only). Gone when a job was finished since (the clock started over) or
-  // they're left off now (booked since, do not call, moved away, commercial)
+  // they're left off now (booked since, do not call, moved away)
   if (day >= today) Object.keys(marks).forEach(function (k) {
     const m = marks[k];
     if (m.r !== "cb" || !m.cb || pcWorkDay_(m.cb) > day) return;
@@ -4933,7 +4936,7 @@ function pcRead_(req, user) {
     if (pcLeft_(c, s, cu, K.never)) return;
     const nm = pcName_(cu);
     groups[g].callbacks.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
-      dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: pcWorkDay_(m.cb), m: m });
+      dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: pcWorkDay_(m.cb), m: m, com: pcCom_(s, cu) });
   });
   const byName = function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : a.id < b.id ? -1 : 1; };
   PC_GROUPS.forEach(function (g) {
@@ -4979,7 +4982,7 @@ function pcPeriod_(K, per, from, to, today, start) {
       if (year) { const k = d.slice(0, 7); add(G.months[k] || (G.months[k] = res())); return; }
       if (G.due.length >= PC_PERIOD_MAX) { G.more++; return; }
       G.due.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
-        dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: d, m: m && m.r ? m : null });
+        dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: d, m: m && m.r ? m : null, com: pcCom_(s, cu) });
     });
   });
   if (!year) PC_GROUPS.forEach(function (g) {
