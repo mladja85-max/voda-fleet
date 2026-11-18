@@ -1236,6 +1236,16 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-bk-t th:first-child { text-align: left; } .rev-bk-t thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .rev-bk-t tbody th { font-weight: 700; } .rev-bk-t tbody th .rev-dot { margin-right: 7px; }
 .rev-bk-t tfoot th, .rev-bk-t tfoot td { font-weight: 800; border-bottom: 0; } .rev-bk-t .rev-bk-m { font-weight: 700; }
+.rev-bk-row { cursor: pointer; } .rev-bk-row:hover, .rev-bk-row:focus-visible { background: var(--accent-soft); outline: none; } .rev-bk-row.on { background: var(--accent-soft); }
+.rev-bk-chev { color: var(--accent); font-size: .8em; }
+.rev-bk-jobs { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.rev-bk-jobs h4 { margin: 0; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; }
+.rev-bk-jobs .lb-scroll { max-height: 42vh; overflow: auto; }
+.rev-bk-jt { width: 100%; border-collapse: collapse; font-size: .86rem; font-variant-numeric: tabular-nums; }
+.rev-bk-jt th, .rev-bk-jt td { padding: 6px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.rev-bk-jt td:nth-child(3) { white-space: normal; } .rev-bk-jt .rev-bk-m { text-align: right; font-weight: 700; }
+.rev-bk-jt thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); position: sticky; top: 0; background: var(--surface-2); }
+.rev-bk-jt tr.later td { color: var(--muted); } .rev-bk-tap { margin: 0; }
 .goal-kicker { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .goal-ic { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #3a2400; background: radial-gradient(circle at 35% 30%, #fff1b8, var(--gold) 45%, var(--gold2));
   box-shadow: 0 0 14px rgba(255, 196, 40, .8); } .goal-ic svg { width: 17px; height: 17px; }
@@ -12356,7 +12366,7 @@ function revPriceEl() {
    now, by department. Daily: every visit scheduled today; Future: from tomorrow to the last one booked. ---- */
 const REV_BOOKED_API = 94;
 const REV_BK_DEPTS = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
-const revBk = { today: null, future: null, busy: {}, err: {} };
+const revBk = { today: null, future: null, busy: {}, err: {}, open: { today: "", future: "" } };   // open: the department listed ("t": all)
 const REV_DEPTS_ALL = ["r", "c", "p", "o"];
 const revBkSum = d => REV_DEPTS_ALL.reduce((t, k) => ({ cents: t.cents + ((d[k] || {}).cents || 0), jobs: t.jobs + ((d[k] || {}).jobs || 0), visits: t.visits + ((d[k] || {}).visits || 0) }), { cents: 0, jobs: 0, visits: 0 });
 async function revBkLoad(when, force) {
@@ -12403,18 +12413,39 @@ function revBkDraw(when) {
   const d = x.depts || {}, t = revBkSum(d);
   const span = when === "today" ? `Every visit scheduled today, ${lbDayText(x.from)}: done, under way or still to come.`
     : x.to ? `Every visit booked from tomorrow, ${lbDayText(x.from)}, to the last one, ${lbDayText(x.to)}${x.to.slice(0, 4) !== x.from.slice(0, 4) ? `, ${x.to.slice(0, 4)}` : ""}.` : `Nothing booked from tomorrow, ${lbDayText(x.from)}, on.`;
+  // a department's row (or Total): a tap lists its jobs, each opening in Housecall Pro; again: closes it
+  const open = revBk.open[when] || "", canList = Array.isArray(x.jobs);
+  const toggle = k => { revBk.open[when] = open === k ? "" : k; revBkDraw(when); };
+  const rowAttrs = (k, label) => canList ? { "data-k": k, class: "rev-bk-row" + (open === k ? " on" : ""), role: "button", tabindex: "0", "aria-expanded": String(open === k),
+    title: open === k ? "Hide the jobs" : `Show ${label}'s jobs`, onclick: () => toggle(k), onkeydown: ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggle(k); } } } : { "data-k": k };
   const rows = REV_BK_DEPTS.filter(([k]) => k !== "o" || (d.o && d.o.visits)).map(([k, name]) => {
     const a = d[k] || { cents: 0, jobs: 0, visits: 0 };
-    return h("tr", { "data-k": k }, h("th", { scope: "row" }, h("i", { class: "rev-dot " + k }), name),
+    return h("tr", rowAttrs(k, name), h("th", { scope: "row" }, h("i", { class: "rev-dot " + k }), name, canList && a.visits ? h("span", { class: "rev-bk-chev", text: open === k ? " ▾" : " ▸" }) : null),
       h("td", { text: fmt(a.jobs) }), h("td", { class: "rev-bk-v", text: fmt(a.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(a.cents / 100) }));
   });
+  const list = canList && open ? x.jobs.filter(j => open === "t" || (REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o") === open) : [];
+  const deptName = k => k === "t" ? "All departments" : (REV_BK_DEPTS.find(([c]) => c === k) || [, "Other"])[1];
+  const jobsEl = !open ? null : h("div", { class: "rev-bk-jobs", id: "revBkJobs", "data-k": open },
+    h("h4", null, open !== "t" ? h("i", { class: "rev-dot " + open }) : null, `${deptName(open)} · ${revJobs(list.filter(j => j[7]).length)}${list.some(j => !j[7]) ? ` · ${fmt(list.length)} visits` : ""}`),
+    list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "rev-bk-jt", id: "revBkJobsTable" },
+      h("thead", null, h("tr", null, h("th", { text: "Day" }), h("th", { text: "Job" }), h("th", { text: "Client" }), open === "t" ? h("th", { text: "Department" }) : null, h("th", { text: "Status" }), h("th", { class: "rev-bk-m", text: "Amount" }))),
+      h("tbody", null, list.map(j => h("tr", { "data-job": j[0], class: j[7] ? "" : "later" },
+        h("td", { class: "rev-bk-day", text: lbDayText(j[5]) }),
+        h("td", null, j[1] ? hcpLink("job", j[0], `#${j[1]}`) : hcpLink("job", j[0], "Open")),
+        h("td", null, j[2] || "–", j[7] ? null : h("small", { class: "rv-sm", text: " (a later visit)" })),
+        open === "t" ? h("td", null, h("i", { class: "rev-dot " + (REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o") }), deptName(REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o")) : null,
+        h("td", { text: revStatus(j[6]) }),
+        h("td", { class: "rev-bk-m", text: lbCash(j[4] / 100) })))))) : h("p", { class: "meta", text: "No jobs here." }));
   box.replaceChildren(...[
     h("p", { class: "meta", text: span }),
     h("div", { class: "rev-bk-total" }, h("small", { text: when === "today" ? "Scheduled today" : "On the books" }), h("b", { id: "revBkTotal", text: lbMoney(t.cents / 100) }), h("span", { text: `${revJobs(t.jobs)} · ${fmt(t.visits)} visit${t.visits === 1 ? "" : "s"}` })),
     h("table", { class: "rev-bk-t", id: "revBkTable" },
       h("thead", null, h("tr", null, h("th", { text: "Department" }), h("th", { text: "Jobs" }), h("th", { class: "rev-bk-v", text: "Visits" }), h("th", { class: "rev-bk-m", text: "Revenue" }))),
       h("tbody", null, rows),
-      h("tfoot", null, h("tr", null, h("th", { scope: "row", text: "Total" }), h("td", { text: fmt(t.jobs) }), h("td", { class: "rev-bk-v", text: fmt(t.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(t.cents / 100) })))),
+      h("tfoot", null, h("tr", rowAttrs("t", "every department"), h("th", { scope: "row" }, "Total", canList && t.visits ? h("span", { class: "rev-bk-chev", text: open === "t" ? " ▾" : " ▸" }) : null),
+        h("td", { text: fmt(t.jobs) }), h("td", { class: "rev-bk-v", text: fmt(t.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(t.cents / 100) })))),
+    jobsEl,
+    canList && !open && t.visits ? h("p", { class: "meta rev-bk-tap", text: "Tap a department (or Total) to see its jobs; each job # opens in Housecall Pro." }) : null,
     h("p", { class: "hint", text: `From Housecall Pro, read ${fmtTime(new Date(x.got))}${busy ? " (reading again…)" : ""}. As on Operations: money on each visit; a job counts once, on its first visit (later visits, -2 and on, add money, not jobs); canceled ones left out. A job not scheduled yet has no day, so it isn't here.${x.more ? " Over 3,000 visits: the rest weren't read." : ""}` }),
     revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : null].filter(Boolean));
 }
