@@ -537,6 +537,11 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .seg-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: .95rem; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 /* the picked option is filled in VODA blue, so it's clear what's selected */
 .seg-btn { transition: background-color .15s ease, color .15s ease; }
+/* Office's four tabs on a phone: two by two, every name whole */
+@media (max-width: 600px) {
+  .seg.of-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
+  .seg.of-tabs .seg-btn { justify-content: center; text-align: center; white-space: nowrap; padding: 9px 6px; }
+}
 .seg-btn:hover:not([aria-selected="true"]) { color: var(--ink); }
 .seg-btn:active { transform: scale(.97); }
 .seg-btn[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
