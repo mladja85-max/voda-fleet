@@ -737,27 +737,36 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
 .of-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .2s ease; }
 .of-bar.done i { background: var(--ok); }
-.of-tots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 8px; }
-.of-tot { display: grid; align-content: start; gap: 3px; min-width: 0; padding: 9px 11px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
-.of-tot small { font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
-.of-tot b { font-family: var(--font-display); font-size: 2.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
-.of-tot span { color: var(--muted); font-weight: 600; font-size: .8rem; }
-.of-tot .of-bar { margin-top: 3px; height: 8px; }
+.of-tots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.of-tot { position: relative; display: grid; align-content: start; gap: 2px; min-width: 0; padding: 7px 10px 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.of-tot small { font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
+.of-tot b { font-family: var(--font-display); font-size: 1.7rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.of-tot span { color: var(--muted); font-weight: 600; font-size: .78rem; }
+.of-tot .of-bar { margin-top: 2px; height: 6px; }
 .of-tot.out { background: var(--surface); border-color: var(--accent); }
-@supports (grid-template-rows: subgrid) {   /* the labels and numbers level across the three, however the labels wrap */
+@supports (grid-template-rows: subgrid) {   /* phone: the labels and numbers level across the three, however the labels wrap */
   .of-tots { grid-template-rows: repeat(4, auto); row-gap: 0; }
-  .of-tot { grid-row: span 4; grid-template-rows: subgrid; row-gap: 3px; }
+  .of-tot { grid-row: span 4; grid-template-rows: subgrid; row-gap: 2px; }
 }
-@media (max-width: 420px) { .of-tot { padding: 8px 9px; } .of-tot b { font-size: 1.8rem; } }
-.of-sec { margin: 10px 0 2px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.lb-box.ro input { background: var(--surface-2); color: var(--muted); }
-.of-sec-n { margin: -4px 0 8px; font-size: .8rem; color: var(--muted); }
+/* wide: each total on one slim line (name, the goal, the number), the goal's bar along the bottom */
+@media (min-width: 900px) {
+  .of-tots { grid-template-rows: none; }
+  .of-tot { grid-row: auto; display: flex; align-items: baseline; gap: 10px; padding: 7px 14px 11px; }
+  .of-tot small { margin-right: auto; font-size: .72rem; }
+  .of-tot span { white-space: nowrap; order: 1; }
+  .of-tot b { order: 2; }   /* the numbers all on the right */
+  .of-tot .of-bar { position: absolute; left: 14px; right: 14px; bottom: 5px; height: 4px; margin: 0; }
+}
+.of-sec-row { display: grid; gap: 2px; }
+.of-sec-row .of-sec { margin: 2px 0 0; }
+.of-sec-n { margin: 0; font-size: .8rem; color: var(--muted); }
+@media (min-width: 900px) { .of-sec-row { display: flex; align-items: baseline; gap: 12px; } }
 /* the day's rows: phone, one line per kind of call (its booked number beside it); wide, each row on one line */
 .of-line { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .of-line > .lb-box { grid-column: 1; }
-@supports (grid-template-rows: subgrid) {   /* name, box, % line: the boxes on a line stay level however the names wrap */
-  .of-line { row-gap: 10px; }
-  .of-line > .lb-box { grid-row: span 3; grid-template-rows: subgrid; row-gap: 3px; }
+@supports (grid-template-rows: subgrid) {   /* name, box: the boxes on a line stay level however the names wrap */
+  .of-line { row-gap: 8px; }
+  .of-line > .lb-box { grid-row: span 2; grid-template-rows: subgrid; row-gap: 3px; }
   .of-day .of-line > .lb-box > span { min-height: 0; }
 }
 .of-line > .lb-box.kid { grid-column: 2; }
@@ -765,6 +774,12 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .of-line { grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr)); }
   .of-line > .lb-box, .of-line > .lb-box.kid { grid-column: auto; }
 }
+.of-in { position: relative; }
+.of-in .of-ratio { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: .72rem; white-space: nowrap; }
+.of-in:has(.of-ratio) input { padding-right: 6.6em; }
+.of-day .of-in input { padding-top: 6px; padding-bottom: 6px; }
+.of-dayrow { display: grid; gap: 8px; }
+@media (min-width: 900px) { .of-dayrow { display: flex; align-items: center; gap: 16px; } .of-dayrow .lb-week { flex: 1; } }
 .of-ratio { color: var(--muted); font-size: .78rem; }
 .of-step { display: flex; align-items: center; gap: 8px; }
 .of-step strong { min-width: 10em; text-align: center; }
@@ -776,7 +791,14 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-dd.ok { background: color-mix(in srgb, var(--ok) 22%, var(--surface)); color: var(--ok); border-color: transparent; }
 .of-dd.low { background: color-mix(in srgb, var(--soon) 18%, var(--surface)); color: var(--soon); border-color: transparent; }
 .of-dd.future { opacity: .35; }
-.of-nums { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; padding-top: 6px; border-top: 1px solid var(--line); }
+.of-nums { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; }
+.of-secs { grid-column: 1 / -1; display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.of-ssec h5 { margin: 0 0 4px; font-size: .74rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); }
+.of-ssec .lb-box > span { white-space: normal; line-height: 1.25; display: flex; align-items: flex-end; }
+.of-val { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 9px; }
+.of-in:has(.of-ratio) .of-val { padding-right: 6.6em; }
+.of-row-stats { grid-column: 3; margin: 0; justify-self: end; text-align: right; font-size: .82rem; }
+@media (max-width: 560px) { .of-row-stats { grid-column: 1 / -1; justify-self: start; text-align: left; } }
 .of-nums .lb-m b i { margin-left: 6px; font-style: normal; color: var(--muted); font-weight: 600; }
 .of-people { display: grid; gap: 12px; }
 .of-person { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; background: var(--surface-2); }
@@ -16110,6 +16132,22 @@ function pcSetupEl() {
 const ofPct = v => `${Math.round(v * 100)}%`;
 /** The bar toward a goal: green when it's reached. */
 const ofBar = (n, goal) => h("div", { class: "of-bar" + (goal && n >= goal ? " done" : "") }, h("i", { style: `width:${goal ? Math.min(100, Math.round(n / goal * 100)) : 0}%` }));
+/** From the numbers (val: a number's value): incoming (the inbound calls, not what they booked) and booked (every
+ *  "booked from …" / scheduled number, outbound and inbound). */
+function ofSplit(rows, val) {
+  const sum = list => list.reduce((t, f) => t + (ofNum(val(f)) || 0), 0);
+  return { inN: sum(rows.in.filter(f => !f.of)), bk: sum(rows.out.concat(rows.in).filter(f => f.of)) };
+}
+/** The three totals, on Enter numbers and the Scorecard alike: Incoming calls, Outbound calls (the goal: a line and its
+ *  bar), Booked appointments. live: the day card's (filled in by ofRefreshDay). */
+function ofTotsEl(t) {
+  const n = v => (v == null ? "" : fmt(v));
+  return h("div", { class: "of-tots", id: t.live ? "ofTots" : null },
+    h("div", { class: "of-tot", "data-t": "in" }, h("small", { text: "Incoming calls" }), h("b", { id: t.live ? "ofInNum" : null, text: n(t.inN) })),
+    h("div", { class: "of-tot out", "data-t": "out" }, h("small", { text: "Outbound calls" }), h("b", { id: t.live ? "ofOutNum" : null, text: n(t.out) }),
+      h("span", { id: t.live ? "ofOutGoal" : null, text: t.goal || "" }), ofBar(t.out || 0, t.max)),
+    h("div", { class: "of-tot", "data-t": "bk" }, h("small", { text: "Booked appointments" }), h("b", { id: t.live ? "ofBkNum" : null, text: n(t.bk) })));
+}
 
 /* ---- my day: her calls by kind (adding up toward the goal) and her other numbers ---- */
 function ofTodayEl() {
@@ -16128,7 +16166,7 @@ function ofTodayEl() {
   }
   const first = `${y}-01-01`, last = `${y}-12-31`, mon = lbWeekStart(day);
   if (editor) out.push(h("div", { class: "lb-bar" }, lbSeg(people.map(x => [x.name, x.name]), p.name, k => { ofFlush(); ofView.who = k; ofSaveView(); renderOffice(); }, "Who")));
-  out.push(h("div", { class: "lb-daybar" },
+  out.push(h("div", { class: "of-dayrow" }, h("div", { class: "lb-daybar" },
     h("button", { class: "btn small", type: "button", id: "ofPrevDay", "aria-label": "Previous day", disabled: day <= first, onclick: () => go(lbAddDays(day, -1)) }, "‹"),
     lbDateInput({ id: "ofDay", value: day, min: first, max: last, "aria-label": "Day" }, v => go(v), first, last),
     h("button", { class: "btn small", type: "button", id: "ofNextDay", "aria-label": "Next day", disabled: day >= last, onclick: () => go(lbAddDays(day, 1)) }, "›"),
@@ -16139,7 +16177,7 @@ function ofTodayEl() {
       const e = ofEntry(ofData.months, d, p.name);
       return h("button", { type: "button", class: "lb-wd" + (d === day ? " on" : "") + (ofTyped(p, e) ? " has" : ""), "data-day": d, "aria-pressed": String(d === day), onclick: () => go(d) },
         h("small", { text: LB_WD[dt.getDay()] }), String(dt.getDate()));
-    })));
+    }))));
   const e = ofEntry(ofData.months, day, p.name) || {};
   const goal = cfg.goal, work = ofWorkDay(day);
   const locked = !editor && day !== today;   // another day: only Admins and Office (any day) change it
@@ -16147,26 +16185,23 @@ function ofTodayEl() {
     const mine = (f.kind !== "admin" || editor) && !locked;
     const kid = f.of && i > 0 && (row[i - 1].id === f.of || row[i - 1].of === f.of);   // beside its calls (phone: same line)
     return h("label", { class: "lb-box" + (mine ? "" : " ro") + (kid ? " kid" : ""), "data-k": f.id }, h("span", { text: ofFieldName(f) }),
-      h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? "" : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
-        onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
-      f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : null);
+      h("div", { class: "of-in" },   // the % booked sits inside the box, on the right
+        h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? "" : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
+          onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
+        f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : null));
   };
   const shown = ofShown(p, e);   // a past-only number shows only on a day that has one
   // the rows: Outbound calls, Inbound calls, then Admins only (not shown to the office people: admins type them)
   const rows = ofRows(shown), outs = rows.out, nums = rows.in, adm = editor ? rows.admin : [];
-  const cols = Math.min(6, Math.max(4, outs.length, nums.length));   // wide screen: each row on one line, the boxes lined up
-  const line = (list) => h("div", { class: "of-line", style: `--n:${cols}` }, list.map(box));
+  const line = (list) => h("div", { class: "of-line", style: `--n:${Math.min(6, Math.max(4, list.length))}` }, list.map(box));   // wide screen: each row on one line
   out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
     h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
     locked ? h("p", { class: "of-locked", id: "ofLocked", text: `Only today's numbers can be typed. To fix ${day < today ? "a past" : "another"} day, ask Mike.` }) : null,
     // the day's totals, counted from the boxes: Incoming calls, Outbound calls (with the goal), Booked appointments
-    h("div", { class: "of-tots", id: "ofTots" },
-      h("div", { class: "of-tot" }, h("small", { text: "Incoming calls" }), h("b", { id: "ofInNum" })),
-      h("div", { class: "of-tot out" }, h("small", { text: "Outbound calls" }), h("b", { id: "ofOutNum" }), h("span", { id: "ofOutGoal" }), ofBar(0, goal)),
-      h("div", { class: "of-tot" }, h("small", { text: "Booked appointments" }), h("b", { id: "ofBkNum" }))),
-    outs.length ? [h("h4", { class: "of-sec", id: "ofRowOut", text: "Outbound calls" }), h("p", { class: "of-sec-n", text: `The calls add up to the ${goal} goal; the booked numbers don't.` }), line(outs)] : null,
-    nums.length ? [h("h4", { class: "of-sec", id: "ofRowIn", text: "Inbound calls" }), line(nums)] : null,
-    adm.length ? [h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : editor ? "Checked in the CRM" : "Typed by admins (checked in the CRM)" }), line(adm)] : null,
+    ofTotsEl({ live: true, max: goal }),
+    outs.length ? [h("div", { class: "of-sec-row" }, h("h4", { class: "of-sec", id: "ofRowOut", text: "Outbound calls" }), h("p", { class: "of-sec-n", text: `The calls add up to the ${goal} goal; the booked numbers don't.` })), line(outs)] : null,
+    nums.length ? [h("div", { class: "of-sec-row" }, h("h4", { class: "of-sec", id: "ofRowIn", text: "Inbound calls" })), line(nums)] : null,
+    adm.length ? [h("div", { class: "of-sec-row" }, h("h4", { class: "of-sec", text: admin ? "Admins only (checked in the CRM)" : editor ? "Checked in the CRM" : "Typed by admins (checked in the CRM)" })), line(adm)] : null,
     h("p", { class: "lb-card-foot", id: "ofWeekFoot" })));
   out.push(h("p", { id: "ofSaveNote", class: "lb-save", role: "status" }));
   setTimeout(() => ofRefreshDay(day, p), 0);
@@ -16181,9 +16216,9 @@ function ofRefreshDay(day, p) {
   $("ofOutNum").textContent = fmt(o);
   $("ofOutGoal").textContent = ofWorkDay(day) ? `of ${goal} · ${o >= goal ? "goal reached" : `${goal - o} to go`}` : "no goal today";
   // Incoming: the inbound calls (not what they booked); Booked appointments: every "booked from …" / "scheduled" number
-  const rows = ofRows(ofShown(p, e)), sum = list => list.reduce((t, f) => t + (ofNum(e[f.id]) || 0), 0);
-  $("ofInNum").textContent = fmt(sum(rows.in.filter(f => !f.of)));
-  $("ofBkNum").textContent = fmt(sum(rows.out.concat(rows.in).filter(f => f.of)));
+  const sp = ofSplit(ofRows(ofShown(p, e)), f => e[f.id]);
+  $("ofInNum").textContent = fmt(sp.inN);
+  $("ofBkNum").textContent = fmt(sp.bk);
   const bar = card.querySelector(".of-bar");
   bar.classList.toggle("done", o >= goal);
   bar.querySelector("i").style.width = `${Math.min(100, Math.round(o / goal * 100))}%`;
@@ -16236,23 +16271,33 @@ function ofScoreEl() {
   rows.sort((a, b) => b.s.pct - a.s.pct || b.s.out - a.s.out || a.p.name.localeCompare(b.p.name));
   const places = lbRanks(rows.map(x => Math.round(x.s.pct * 1000)), false, true);
   if (!rows.length) { out.push(h("p", { class: "meta", text: "No one in the office then." })); return out; }
+  const editor = ofEditor();
   out.push(h("ol", { class: "lb-list", id: "ofList" }, rows.map(({ p, s }, i) => {
     const workDays = s.days.filter(d => d.work);
+    // laid out like Enter numbers: the three totals, then Outbound calls, Inbound calls and Admins only (admins see it)
+    const rr = ofRows(ofShownIn(p, s.had)), sp = ofSplit(rr, f => s.sums[f.id]);
+    const lone = rr.out.filter(f => f.kind === "out").length < 2;   // one kind of call: its total is the Outbound calls above
+    const num = (f, i, row) => {   // the same boxes as on Enter numbers, to read (a booked one beside its calls)
+      const ratio = ofRatio(s.sums, f), kid = f.of && i > 0 && (row[i - 1].id === f.of || row[i - 1].of === f.of);
+      return h("div", { class: "lb-box ro" + (kid ? " kid" : ""), "data-k": f.id }, h("span", { text: ofFieldName(f) }),
+        h("div", { class: "of-in" }, h("div", { class: "of-val", text: fmt(s.sums[f.id]) }),
+          ratio != null ? h("small", { class: "of-ratio", text: `${ofPct(ratio)} ${/^sched/i.test(f.label) ? "scheduled" : "booked"}` }) : null));
+    };
+    const sec = (title, list, id) => (list.length ? h("div", { class: "of-ssec", "data-sec": id }, h("h5", { text: title }),
+      h("div", { class: "of-line", style: `--n:${Math.min(6, Math.max(4, list.length))}` }, list.map(num))) : null);
     return h("li", { class: `lb-row of-row p${s.worked ? places[i] : 9}`, "data-person": p.name },
       h("div", { class: "of-row-in" },
         h("span", { class: "lb-place", text: s.worked ? String(places[i]) : "–" }),
         h("span", { class: "lb-name" }, h("strong", { text: p.name })),
-        h("span", { class: "lb-right" }, h("span", { class: "lb-score" }, h("small", { text: "Calls" }), fmt(s.out))),
-        h("div", { class: "of-row-goal" },
-          ofBar(s.out, s.target),
-          h("p", { class: "lb-stats", text: s.worked ? `${ofPct(s.pct)} of ${fmt(s.target)} (${s.worked} day${s.worked === 1 ? "" : "s"} worked × ${s.goal}) · ${s.goal}+ on ${s.hit} of ${s.worked} · ${fmt(Math.round(s.avg))} a day` : "No numbers typed" })),
+        h("p", { class: "lb-stats of-row-stats", text: s.worked ? `${s.worked} day${s.worked === 1 ? "" : "s"} worked × ${s.goal} · ${s.goal}+ on ${s.hit} of ${s.worked} · ${fmt(Math.round(s.avg))} a day` : "No numbers typed" }),
+        h("div", { class: "of-row-goal" }, ofTotsEl({ inN: sp.inN, out: s.out, bk: sp.bk, max: s.target, goal: s.worked ? `${ofPct(s.pct)} of ${fmt(s.target)}` : "" })),
         per === "week" || per === "month" ? h("div", { class: "of-days", "aria-label": "Outgoing calls each work day" }, workDays.map(d => h("span", {
           class: "of-dd" + (d.day > today ? " future" : !d.worked ? " none" : d.out >= s.goal ? " ok" : " low"), title: `${lbDayText(d.day)}: ${d.worked ? `${d.out} outgoing calls` : "nothing typed"}`,
           text: d.day > today ? "" : d.worked ? String(d.out) : "·" }))) : null,
-        h("div", { class: "of-nums" }, ((vis) => vis.filter(f => f.kind !== "out" || vis.filter(x => x.kind === "out").length > 1))(((r) => r.out.concat(r.in, r.admin))(ofRows(ofShownIn(p, s.had)))).map(f => {
-          const ratio = ofRatio(s.sums, f);
-          return h("div", { class: "lb-m" }, h("span", { text: ofFieldName(f) }), h("b", null, fmt(s.sums[f.id]), ratio != null ? h("i", { text: ofPct(ratio) }) : null));
-        }))));
+        h("div", { class: "of-secs" },
+          sec("Outbound calls", lone ? rr.out.filter(f => f.kind !== "out") : rr.out, "out"),
+          sec("Inbound calls", rr.in, "in"),
+          editor ? sec("Admins only (checked in the CRM)", rr.admin, "admin") : null)));
   })));
   out.push(h("p", { class: "hint", text: `The goal is ${cfg.goal} outgoing calls a day, Monday to Friday (closed on New Year's Day, July 4, Thanksgiving and Christmas), counted on the days each person has numbers. Every kind of outgoing call adds up.` }));
   return out;
