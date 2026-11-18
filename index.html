@@ -825,7 +825,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 /* Office people: every number and who tracks it (tap a name); each person's numbers one by one, folded */
 .of-sec { margin: 8px 0 0; font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; letter-spacing: .03em; }
 .of-card { display: grid; gap: 6px; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--accent-soft); }
-.of-card .hint { margin: 0; } .of-card .btn { justify-self: start; white-space: normal; text-align: left; max-width: 100%; } .of-card .hint.ok { color: var(--ok); font-weight: 700; }
+.of-card .hint { margin: 0; } .of-card-b { display: flex; flex-wrap: wrap; gap: 6px; } .of-card .btn { justify-self: start; white-space: normal; text-align: left; max-width: 100%; } .of-card .hint.ok { color: var(--ok); font-weight: 700; }
 .of-opts { display: grid; gap: 8px; }
 .of-locked { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--soon-bg); color: var(--soon); font-weight: 700; font-size: .86rem; }
 /* Attendance: people across, days down (the day and the names stay in view while scrolling) */
@@ -4909,6 +4909,45 @@ const OF_RETIRED = ["fu", "fus", "other"];
 /** Does she track exactly the scorecard's numbers (as on the Excel: the 8 of OF_DEFAULT_FIELDS)? */
 const ofHasCard = fields => OF_DEFAULT_FIELDS.every(d => fields.some(f => f.id === d.id && f.label === d.label && f.kind === d.kind && !f.hide))
   && fields.filter(f => !f.hide).length === OF_DEFAULT_FIELDS.length;
+/** Every CSR's numbers (Enter numbers' three rows): Outbound calls (each call and what it booked), Inbound calls, Admins
+ *  only. A number she already has (same id, or the same kind of number under another name) keeps its history. */
+const OF_CSR_FIELDS = [
+  { id: "fb", label: "Feedback calls (yesterday's clients)", kind: "out", re: /^feedback/i },
+  { id: "price", label: "Pricing follow-ups (not booked yet)", kind: "out", re: /^pricing follow/i },
+  { id: "priceb", label: "Booked from pricing calls", kind: "num", of: "price", re: /booked from pricing/i },
+  { id: "past", label: "Past clients (6M, 1Y, 18M, 2Y, 3Y)", kind: "out", re: /^past clients/i },
+  { id: "pastb", label: "Booked from past clients", kind: "num", of: "past", re: /booked from past/i },
+  { id: "conf", label: "Confirmation calls (tomorrow)", kind: "out", re: /^confirmation/i },
+  { id: "opp", label: "Opportunity calls", kind: "num", re: /^opportunit/i },
+  { id: "sched", label: "Scheduled jobs/estimates", kind: "num", of: "opp", re: /^scheduled jobs(\/estimates)?$/i },
+  { id: "gg", label: "Google Guaranteed / Online Booking", kind: "num", re: /^google guaranteed/i },
+  { id: "ggs", label: "Booked from Google / Online", kind: "num", of: "gg", re: /^booked from google|^scheduled google/i },   // on screen in full (ofFieldName; a name holds 40 letters)
+  { id: "done", label: "Scheduled / completed", kind: "admin", re: /^scheduled \/ completed/i }];
+/** Is she on the CSR numbers (all of them, nothing else)? */
+const ofHasCsr = fields => OF_CSR_FIELDS.every(d => fields.some(f => !f.hide && f.label === d.label && f.kind === d.kind))
+  && fields.filter(f => !f.hide).length === OF_CSR_FIELDS.length;
+/** Her numbers as the CSR numbers; her other numbers: past only when she has a number in them some day (`used`: those
+ *  ids), else taken off. */
+function ofWithCsr(fields, used) {
+  const took = new Set(), idOf = {};
+  const out = OF_CSR_FIELDS.map(d => {
+    const had = fields.find(x => x.id === d.id && !took.has(x.id)) || fields.find(x => !took.has(x.id) && x.kind !== "admin" === (d.kind !== "admin") && d.re.test(x.label));
+    const id = had ? had.id : d.id;
+    took.add(id); idOf[d.id] = id;
+    return { id, label: d.label, kind: d.kind, of: d.of || "" };
+  });
+  for (const f of out) if (f.of) f.of = idOf[f.of];
+  const names = new Set(out.map(f => f.label.toLowerCase()));
+  for (const f of fields) {
+    if (took.has(f.id) || !(used && used.has(f.id))) continue;
+    const label = names.has(f.label.trim().toLowerCase()) ? `${f.label.slice(0, 34)} (old)` : f.label;
+    names.add(label.toLowerCase());
+    const old = Object.assign({}, f, { label, hide: true });
+    if (old.of && !out.some(x => x.id === old.of) && !fields.some(x => x.id === old.of && used.has(x.id))) old.of = "";
+    out.push(old);
+  }
+  return out;
+}
 /** A person's numbers as the scorecard's 8 (one she already has keeps its history under its scorecard name); her other
  *  numbers: past only when she has a number in them some day (`used`: those ids), else taken off. */
 function ofWithCard(fields, used) {
@@ -16389,7 +16428,7 @@ function openOfPeople() {
   const personEl = (p, isNew) => {
     const fields = h("div", { class: "of-fields" }, p.fields.map(f => fieldRow(f, p.fields)));
     const list = !isNew && OF_TASK_LISTS[Object.keys(OF_TASK_LISTS).find(k => k.toLowerCase() === p.name.toLowerCase())];
-    const tasks = list && !ofHasTasks(p.fields, list) && !ofHasCard(p.fields) ? h("div", { class: "of-tasks" },
+    const tasks = list && !ofHasTasks(p.fields, list) && !ofHasCard(p.fields) && !ofHasCsr(p.fields) ? h("div", { class: "of-tasks" },
       h("p", { class: "hint", text: `${p.name}'s task list: ${list.filter(t => t.kind === "out").map(t => t.label.toLowerCase()).join(", ")} (they add up to the goal), what each one booked, and Google Guaranteed / Online Booking (tracked, not in the goal).` }),
       h("button", { class: "btn small primary", type: "button", "data-tasks": p.name, onclick: ev => {
         const next = ofWithTasks(rowsOf(fields), list);
@@ -16456,47 +16495,40 @@ function openOfPeople() {
     }
     return out;
   };
-  /* ---- one tap: everyone working now on the scorecard's 8 numbers (as on the Excel) ---- */
+  /* ---- one tap a person: the CSR numbers (Enter numbers' three rows); her history stays ---- */
   const cardBox = h("div", { class: "of-card", id: "ofCardBox", hidden: true });
   let cardDone = "";
   const drawCard = () => {
-    const need = workEls().filter(el => !ofHasCard(rowsOf(el)));
+    const need = workEls().filter(el => !ofHasCsr(rowsOf(el)));
     if (!need.length) { cardBox.hidden = !cardDone; cardBox.replaceChildren(...(cardDone ? [h("p", { class: "hint ok", id: "ofCardDone", text: cardDone })] : [])); return; }
     cardBox.hidden = false;
-    const names = need.map(nameOf), list2 = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
     cardBox.replaceChildren(
-      h("p", { class: "hint", text: "Same as the Excel: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed leads and Scheduled, Follow-up calls and Scheduled from follow-ups, Other outgoing calls, Scheduled / completed. Numbers with the same meaning under other names keep their history (past only); ones never typed are taken off." }),
-      h("button", { class: "btn small primary", type: "button", id: "ofUseCard", onclick: ev => useCard(ev.currentTarget) }, `Use the scorecard's 8 numbers for ${list2}`));
+      h("p", { class: "hint", text: "The CSR numbers, in Enter numbers' rows. Outbound: Feedback calls, Pricing follow-ups and booked, Past clients and booked, Confirmation calls. Inbound: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed / Online Booking and booked. Admins only: Scheduled / completed. What she typed before keeps counting (past only)." }),
+      cardDone ? h("p", { class: "hint ok", id: "ofCardDone", text: cardDone }) : null,
+      h("div", { class: "of-card-b" }, need.map(el => h("button", { class: "btn small primary", type: "button", "data-csr": nameOf(el), onclick: ev => useCsr(ev.currentTarget, el) }, `Use the CSR numbers for ${nameOf(el)}`))));
   };
-  const useCard = async b => {
-    b.disabled = true; b.textContent = "Checking their history…"; err.textContent = "";
+  const useCsr = async (b, el) => {
+    b.disabled = true; b.textContent = "Checking her history…"; err.textContent = "";
     try {
-      const els = workEls().filter(el => !ofHasCard(rowsOf(el)));
-      // the numbers each one has ever typed (every year she's been here): those stay as past only
-      const used = new Map(els.map(el => [nameOf(el).toLowerCase(), new Set()]));
-      const yTo = Number(lbToday().slice(0, 4)), yFrom = Math.min(yTo, ...els.map(el => Number(((el.querySelector(".p-from") || {}).value || "").slice(0, 4)) || 2023));
+      // the numbers she has ever typed (every year she's been here): those stay as past only
+      const used = new Set(), who = nameOf(el).toLowerCase();
+      const yTo = Number(lbToday().slice(0, 4)), yFrom = Math.min(yTo, Number(((el.querySelector(".p-from") || {}).value || "").slice(0, 4)) || 2023);
       for (let y = yFrom; y <= yTo; y++) {
-        // the sheet's (fresh), and for this year what's on this phone too (a day still being saved)
         const sets = [((await api("office", { year: y })) || {}).months || {}];
-        if (ofData && ofData.year === y && ofData.months) sets.push(ofData.months);
+        if (ofData && ofData.year === y && ofData.months) sets.push(ofData.months);   // a day still being saved on this phone
         for (const months of sets) for (const doc of Object.values(months)) for (const day of Object.values((doc && doc.days) || {})) for (const [n, e] of Object.entries(day || {})) {
-          const set = used.get(String(n).toLowerCase());
-          if (set && e && typeof e === "object") for (const [k, v] of Object.entries(e)) if (k !== "at" && k !== "by" && v != null && v !== "") set.add(k);
+          if (String(n).toLowerCase() === who && e && typeof e === "object") for (const [k, v] of Object.entries(e)) if (k !== "at" && k !== "by" && v != null && v !== "") used.add(k);
         }
       }
       if (!list.isConnected) return;
-      const said = [];
-      for (const el of els) {
-        const was = rowsOf(el), next = ofWithCard(was, used.get(nameOf(el).toLowerCase()));
-        el.querySelector(".of-fields").replaceChildren(...next.map(f => fieldRow(f, next)));
-        const t = el.querySelector(".of-tasks"); if (t) t.remove();
-        const past = next.filter(f => f.hide).length, off = was.filter(f => !next.some(x => x.id === f.id)).length;
-        said.push(`${nameOf(el)}: 8 numbers${past ? `, ${past} past only` : ""}${off ? `, ${off} never typed taken off` : ""}`);
-      }
-      cardDone = `Done. ${said.join("; ")}. Tap Save to keep it (Cancel leaves it as it was).`;
+      const was = rowsOf(el), next = ofWithCsr(was, used);
+      el.querySelector(".of-fields").replaceChildren(...next.map(f => fieldRow(f, next)));
+      const t = el.querySelector(".of-tasks"); if (t) t.remove();
+      const past = next.filter(f => f.hide).length, off = was.filter(f => !next.some(x => x.id === f.id)).length;
+      cardDone = `${nameOf(el)}: the CSR numbers${past ? `, ${past} past only` : ""}${off ? `, ${off} never typed taken off` : ""}. Tap Save to keep it (Cancel leaves it as it was).`;
       drawOpts();
     } catch (e) {
-      err.textContent = errText(e, "Their history");
+      err.textContent = errText(e, "Her history");
       b.disabled = false; b.textContent = "Try again";
     }
   };
