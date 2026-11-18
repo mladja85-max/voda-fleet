@@ -708,9 +708,29 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pc-cbh { color: var(--accent); }
 .pc-said { margin-top: 3px; font-size: .88rem; color: var(--muted); font-style: italic; } .pc-said.due { color: var(--accent); font-style: normal; font-weight: 600; }
 .pc-chip.pc-cb { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
-.pc-cbpick { grid-column: 1 / -1; display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
-.pc-cbq { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .pc-cbq .btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.pc-cbpick input[type=text] { width: 100%; } .pc-cbgo { display: flex; justify-content: flex-end; gap: 8px; }
+.pc-cbpick { grid-column: 1 / -1; display: grid; gap: 10px; margin-top: 4px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.pc-cbhead { display: flex; align-items: center; gap: 10px; }
+.pc-cbicon { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 1.15rem; font-weight: 700; flex: none; }
+.pc-cbhead b { display: block; font-size: 1rem; } .pc-cbhead small { color: var(--muted); font-size: .85rem; }
+.pc-cblab { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.pc-cbopt { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.pc-cbq { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 640px) { .pc-cbq { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pc-cbday { grid-column: 1 / -1; } }
+.pc-cbchip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--surface-2);
+  color: var(--ink); font: inherit; text-align: left; cursor: pointer; min-width: 0; transition: border-color .15s, background .15s; }
+.pc-cbchip:hover { border-color: var(--accent); }
+.pc-cbchip b { font-size: .95rem; } .pc-cbchip small { color: var(--muted); font-size: .8rem; }
+.pc-cbchip.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); } .pc-cbchip.on b, .pc-cbchip.on small { color: var(--accent); }
+.pc-cbday input { width: 100%; min-width: 0; border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; font-size: .8rem; }
+.pc-cbday.on input { color: var(--accent); font-weight: 600; }
+.pc-cbnote { position: relative; }
+.pc-cbnote textarea { width: 100%; resize: vertical; min-height: 64px; font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px 22px; }
+.pc-cbnote textarea:focus, .pc-cbchip:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pc-cbcount { position: absolute; right: 12px; bottom: 8px; font-size: .72rem; color: var(--muted); pointer-events: none; }
+.pc-cberr:empty { display: none; }
+.pc-cbfoot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.pc-cbwhen { margin: 0; padding: 6px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: .88rem; font-weight: 600; }
+.pc-cbgo { display: flex; gap: 8px; margin-left: auto; }
 .pc-msec { margin-top: 18px; }
 .pc-admin { margin-top: 10px; }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
@@ -15958,25 +15978,39 @@ function pcRowEl(r, g, missed, cbRow) {
 }
 /** Call back…: when (1 week, 2 weeks, 1 month, 3 months, or a day) and a short note of what the client said. */
 function pcCbPicker(r, g) {
-  const today = lbToday(), max = lbAddDays(today, 366);
+  const today = lbToday(), max = lbAddDays(today, 366), key = `${r.id}|${g}`;
   const inMonths = n => { const k = lbAddMonths(today.slice(0, 7), n), d = Math.min(Number(today.slice(8)), lbDaysIn(k)); return `${k}-${String(d).padStart(2, "0")}`; };
-  const st = pcCbState[`${r.id}|${g}`] || (pcCbState[`${r.id}|${g}`] = { cb: lbAddDays(today, 14), note: "" });
-  const err = h("p", { class: "dlg-err", role: "alert" });
-  const day = h("input", { type: "date", id: "pcCbDay", value: st.cb, min: lbAddDays(today, 1), max, "aria-label": "Call back on", onchange: e => { st.cb = e.target.value; renderOffice(); } });
-  const note = h("input", { type: "text", id: "pcCbNote", maxlength: "140", value: st.note, placeholder: "What the client said: not ready, after 5 PM…", "aria-label": "What the client said",
-    oninput: e => { st.note = e.target.value; } });
+  const st = pcCbState[key] || (pcCbState[key] = { cb: lbAddDays(today, 14), note: "" });
+  const err = h("p", { class: "dlg-err pc-cberr", role: "alert" });
   const quick = [["1 week", lbAddDays(today, 7)], ["2 weeks", lbAddDays(today, 14)], ["1 month", inMonths(1)], ["3 months", inMonths(3)]];
-  const on = pcNextOpen(st.cb);
-  return h("div", { class: "pc-cbpick", id: "pcCbPick" },
-    h("div", { class: "pc-cbq" }, quick.map(([t, d]) => h("button", { class: "btn small" + (st.cb === d ? " on" : ""), type: "button", "data-cb": t, onclick: () => { st.cb = d; renderOffice(); } }, t)), day),
-    note,
-    h("p", { class: "meta", text: lbIsDay(st.cb) ? `Comes back in this list on ${lbDayText(on)}, ${on.slice(0, 4)}${on !== st.cb ? " (the next working day)" : ""}.` : "" }),
+  const custom = !quick.some(([, d]) => d === st.cb);
+  const short = d => { const x = lbDate(d); return `${LB_WD[x.getDay()]}, ${MONTHS[x.getMonth()]} ${x.getDate()}`; };
+  const set = d => { st.cb = d; err.textContent = ""; renderOffice(); };
+  const on = lbIsDay(st.cb) ? pcNextOpen(st.cb) : "";
+  const count = h("span", { class: "pc-cbcount", text: `${st.note.length}/140` });
+  const save = () => {
+    if (!lbIsDay(st.cb) || st.cb <= today || st.cb > max) { err.textContent = "Pick a day after today, a year at most."; return; }
+    pcMark(r, g, "cb", { cb: st.cb, note: st.note.trim() }); delete pcCbState[key];
+  };
+  return h("div", { class: "pc-cbpick", id: "pcCbPick", role: "group", "aria-label": `Call back ${r.name || ""}` },
+    h("div", { class: "pc-cbhead" }, h("span", { class: "pc-cbicon", "aria-hidden": "true", text: "↻" }),
+      h("div", null, h("b", { text: "Call back" }), h("small", { text: r.name || "" }))),
+    h("span", { class: "pc-cblab", text: "When" }),
+    h("div", { class: "pc-cbq", role: "radiogroup", "aria-label": "When to call back" },
+      quick.map(([t, d]) => h("button", { class: "pc-cbchip" + (st.cb === d ? " on" : ""), type: "button", role: "radio", "aria-checked": String(st.cb === d), "data-cb": t, onclick: () => set(d) },
+        h("b", { text: t }), h("small", { text: short(d) }))),
+      h("label", { class: "pc-cbchip pc-cbday" + (custom ? " on" : "") }, h("b", { text: "Pick a day" }),
+        h("input", { type: "date", id: "pcCbDay", value: st.cb, min: lbAddDays(today, 1), max, "aria-label": "Call back on", onchange: e => set(e.target.value) }))),
+    h("label", { class: "pc-cblab", for: "pcCbNote" }, "What did the client say? ", h("span", { class: "pc-cbopt", text: "optional" })),
+    h("div", { class: "pc-cbnote" },
+      h("textarea", { id: "pcCbNote", rows: "2", maxlength: "140", placeholder: "Not ready yet, call after 5 PM…", "aria-label": "What the client said",
+        oninput: e => { st.note = e.target.value; count.textContent = `${st.note.length}/140`; },
+        onkeydown: e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } } }, st.note), count),
     err,
-    h("div", { class: "pc-cbgo" }, h("button", { class: "btn ghost small", type: "button", onclick: () => { pcCbOpen = ""; renderOffice(); } }, "Cancel"),
-      h("button", { class: "btn small primary", type: "button", id: "pcCbSave", onclick: () => {
-        if (!lbIsDay(st.cb) || st.cb <= today || st.cb > max) { err.textContent = "Pick a day after today, a year at most."; return; }
-        pcMark(r, g, "cb", { cb: st.cb, note: st.note.trim() }); delete pcCbState[`${r.id}|${g}`];
-      } }, "Save call back")));
+    h("div", { class: "pc-cbfoot" },
+      h("p", { class: "pc-cbwhen", id: "pcCbWhen", text: on ? `Back in the ${g}-month list on ${short(on)}, ${on.slice(0, 4)}${on !== st.cb ? " (next working day)" : ""}` : "Pick a day" }),
+      h("div", { class: "pc-cbgo" }, h("button", { class: "btn ghost small", type: "button", onclick: () => { pcCbOpen = ""; renderOffice(); } }, "Cancel"),
+        h("button", { class: "btn small primary", type: "button", id: "pcCbSave", onclick: save }, "Save call back"))));
 }
 const pcCbState = {};
 /** Why a client is left off the lists, in words. */
