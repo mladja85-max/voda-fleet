@@ -685,14 +685,6 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pc-leftlist { margin: 4px 0 8px; padding: 6px 12px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface-2); }
 .pc-lo { padding: 6px 0; border-top: 1px solid var(--line); } .pc-lo:first-child { border-top: 0; }
 .pc-why { color: var(--due); font-size: .88rem; font-weight: 600; }
-.pc-find { margin: 10px 0 0; }
-.pc-findbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.pc-findbar input { flex: 1 1 260px; min-width: 0; max-width: 460px; }
-.pc-found { margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 4px 14px; box-shadow: var(--shadow); }
-.pc-fr { padding: 10px 0; border-top: 1px solid var(--line); } .pc-fr:first-child { border-top: 0; }
-.pc-st { font-weight: 700; margin-top: 2px; } .pc-st.off { color: var(--due); }
-.pc-days { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: .82rem; color: var(--muted); }
-.pc-day.now { color: var(--accent); font-weight: 700; } .pc-day.past { text-decoration: line-through; text-decoration-color: var(--line); }
 .pc-msec { margin-top: 18px; }
 .pc-admin { margin-top: 10px; }
 .of-bar { height: 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
@@ -15597,7 +15589,6 @@ const K_PC_VIEW = "voda.pcView1";
 const pcView = Object.assign({ g: 6, day: "" }, store.get(K_PC_VIEW) || {}, { day: "" });
 let pcData = null, pcLoading = false, pcErr = "", pcSyncing = null, pcMarksAt = 0, pcPolling = false, pcPolledAt = 0, pcLoadedAt = 0;
 let pcSure = "", pcSureTimer = 0, pcLeftOpen = false;
-const pcFound = { q: "", busy: false, res: null, err: "" };   // Look up a client (this window only)
 const pcDay = () => (lbIsDay(pcView.day) ? pcView.day : lbToday());
 const pcShowing = () => view.tab === "office" && ofView.tab === "pc";
 const pcDate = day => { const d = lbDate(day); return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; };
@@ -15718,7 +15709,6 @@ function pcEl() {
     h("button", { class: "btn primary small", type: "button", id: "pcRereadGo", onclick: () => pcBackfill(true) }, "Read all again now")));
   if (pcData.sync && pcData.sync.error) out.push(h("p", { class: "meta pc-note", text: `Couldn't read what changed in Housecall Pro just now (${revErrText(pcData.sync).replace(/\.$/, "")}). These lists are from the last read.` }));
   if (lbDate(day).getDay() === 0 || lbHoliday(day)) out.push(h("p", { class: "meta pc-note", id: "pcClosed", text: `${lbDate(day).getDay() === 0 ? "Sunday" : "A closed day"}: the clients who come up today are on ${lbDayText(pcNextOpen(day))}'s lists.` }));
-  out.push(pcFindEl());
   const G = pcData.groups || {};
   const grp = g => G[g] || { due: [], missed: [], more: 0, left: {} };
   out.push(h("div", { class: "pc-groups", role: "tablist", "aria-label": "Months since the last service" }, PC_GROUPS.map(g => {
@@ -15784,47 +15774,6 @@ function pcWhyText(x) {
   if (x.why === "away") return `Moved away: tag “${x.tag}” in Housecall Pro${on}`;
   if (x.why === "com") return x.jt ? `Commercial: job type “${x.jt}”` : `Commercial: tag “${x.tag}” in Housecall Pro`;
   return "";
-}
-async function pcLookUp() {
-  const q = pcFound.q.trim();
-  if (pcFound.busy) return;
-  if (q.replace(/[^a-z]/gi, "").length < 2 && q.replace(/\D/g, "").length < 4) { pcFound.err = "Type at least 2 letters of a name, or 4 digits of a phone."; pcFound.res = null; renderOffice(); return; }
-  pcFound.busy = true; pcFound.err = ""; renderOffice();
-  try { pcFound.res = await api("pcFind", { q }, 90000); }
-  catch (e) { pcFound.res = null; pcFound.err = e && e.error === "bad_request" && (Number(e.api) || 0) < 84 ? "Update the Google script first (Code.gs, then Deploy › New version)." : revErrText(e); }
-  pcFound.busy = false;
-  if (pcShowing()) renderOffice();
-}
-/** Look up a client: where they are in the groups, or why they're not on a list. */
-function pcFindEl() {
-  const box = h("div", { class: "pc-find", id: "pcFind" },
-    h("div", { class: "pc-findbar" },
-      h("input", { id: "pcFindQ", type: "text", enterkeyhint: "search", value: pcFound.q, placeholder: "Look up a client: name, company or phone", "aria-label": "Look up a client", autocomplete: "off",
-        oninput: e => { pcFound.q = e.target.value; }, onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); pcLookUp(); } } }),
-      h("button", { class: "btn small", type: "button", id: "pcFindGo", disabled: pcFound.busy, onclick: () => pcLookUp() }, pcFound.busy ? "Looking…" : "Look up"),
-      pcFound.res || pcFound.err ? h("button", { class: "btn ghost small", type: "button", id: "pcFindClear", onclick: () => { pcFound.q = ""; pcFound.res = null; pcFound.err = ""; renderOffice(); } }, "Clear") : null));
-  if (pcFound.err) box.append(h("p", { class: "dlg-err", text: pcFound.err }));
-  const r = pcFound.res;
-  if (!r) return box;
-  if (!r.found.length) { box.append(h("p", { class: "meta", id: "pcFindNone", text: `No client named that among the jobs read from Housecall Pro (the last 3½ years). Someone with no job yet, or only estimates, isn't here.` })); return box; }
-  const today = r.today;
-  box.append(h("div", { class: "pc-found", id: "pcFindOut" }, r.found.map(x => {
-    let st = "";
-    if (!x.last) st = x.read ? "No finished job: only open or canceled ones, so not on a list yet." : "No jobs read for this client.";
-    else if (x.left) st = `Not on the lists. ${pcWhyText(x.left)}.`;
-    else {
-      const now = x.due.find(d => d.day === today), next = x.due.find(d => d.day > today), past = x.due.filter(d => d.day < today).pop();
-      st = now ? `On today's ${now.g}-month list.` : next ? `Next: the ${next.g}-month list on ${lbDayText(next.day)}, ${next.day.slice(0, 4)}.${past ? ` Came up for ${past.g} months on ${pcDate(past.day)}.` : ""}` : "Over 36 months since the last service: off the lists.";
-    }
-    return h("div", { class: "pc-fr", "data-id": x.id },
-      h("div", { class: "pc-top" }, h("span", { class: "pc-name" }, hcpLink("cust", x.id, x.name || "(no name)")), x.contact ? h("span", { class: "meta pc-contact", text: x.contact }) : null,
-        x.phone ? h("span", { class: "meta", text: x.phone }) : null),
-      x.last ? h("div", { class: "meta", text: [`Last service ${pcDate(x.last)}`, x.type, x.jobs === 1 ? "1 job" : x.jobs > 1 ? `${x.jobs} jobs since ${pcDate(x.first)}` : ""].filter(Boolean).join(" · ") }) : null,
-      h("div", { class: "pc-st" + (x.left || !x.last ? " off" : ""), text: st }),
-      x.due ? h("div", { class: "pc-days" }, x.due.map(d => h("span", { class: "pc-day" + (d.day === today ? " now" : d.day < today ? " past" : "") },
-        `${d.g} mo: ${pcDate(d.day)}`, d.m ? h("b", { text: ` · ${PC_MARK_TEXT[d.m.r] || d.m.r} (${d.m.who})` }) : null))) : null);
-  }), r.more ? h("p", { class: "meta", text: `…and ${r.more} more: type more of the name.` }) : null));
-  return box;
 }
 function pcSyncingEl() {
   const s = pcSyncing, pct = s.pages ? Math.min(100, Math.round(s.page / s.pages * 100)) : 0;
