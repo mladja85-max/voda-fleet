@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 92;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 93;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -392,6 +392,9 @@ function doPost(e) {
       case "priceScan":
         if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(priceList_(user, true));
+      case "priceHistory":
+        if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(priceHistory_(req));
       case "priceCheck":
         if (!canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return priceCheck_(req, user); }));
@@ -5420,6 +5423,28 @@ function priceList_(user, scan) {
   const open = all.filter(function (x) { return x.status === "open"; }).sort(function (a, b) { return a.last < b.last ? 1 : -1; });
   const checked = all.filter(function (x) { return x.status === "checked"; }).sort(function (a, b) { return a.at < b.at ? 1 : -1; }).slice(0, 50);
   return { ok: true, open: open, checked: checked, scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err, trigger: trigger, connected: !!hcpKey_(), mayCheck: canPriceCheck_(user) };
+}
+/** History by dates ({ from, to }: yyyy-MM-dd, a year at most): every price change made in those days (the day it was
+ *  noticed in Housecall Pro), checked or still to check, newest first; and the money: removed (cuts), added (raises),
+ *  the net, how many of each, and how many still to check. */
+const PRICE_HIST_MAX = 400;
+function priceHistory_(req) {
+  const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")); };
+  const from = String(req.from || ""), to = String(req.to || "");
+  if (!isDay(from) || !isDay(to) || from > to || to > tmAddDays_(from, 366)) return { ok: false, error: "bad_request" };
+  const tz = Session.getScriptTimeZone(), s = SpreadsheetApp.getActive().getSheetByName(PRICE_SHEET);
+  const rows = s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, PRICE_COLS.length).getValues().filter(function (r) { return r[0]; }) : [];
+  const dayOf = function (v) { const d = v instanceof Date ? v : new Date(String(v || "")); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, "yyyy-MM-dd"); };
+  const list = rows.filter(function (r) { const d = dayOf(r[1]); return d && d >= from && d <= to && (String(r[16]) === "open" || String(r[16]) === "checked"); }).map(priceOut_)
+    .sort(function (a, b) { return a.noticed < b.noticed ? 1 : a.noticed > b.noticed ? -1 : 0; });
+  const t = { removed: 0, added: 0, cuts: 0, raises: 0, open: 0, openNet: 0 };
+  list.forEach(function (w) {
+    const d = w.now - w.was;
+    if (d < 0) { t.removed += -d; t.cuts++; } else if (d > 0) { t.added += d; t.raises++; }
+    if (w.status === "open") { t.open++; t.openNet += d; }
+  });
+  t.net = t.added - t.removed;
+  return { ok: true, from: from, to: to, tot: t, n: list.length, list: list.slice(0, PRICE_HIST_MAX), more: Math.max(0, list.length - PRICE_HIST_MAX) };
 }
 /** An admin switched on for it: marks warnings checked ({ ids, note }), with his name and when. */
 function priceCheck_(req, user) {
