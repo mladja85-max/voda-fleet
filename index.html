@@ -358,6 +358,14 @@ button { font: inherit; color: inherit; }
 .dot.due { background: var(--due); } .dot.soon { background: var(--soon); } .dot.ok { background: var(--ok); }
 details.paperwork summary, details.how summary { cursor: pointer; font-weight: 700; color: var(--accent); }
 .how ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: .88rem; }
+/* a long explanation, folded: one small grey line, a tap opens it */
+details.how-fold { margin: 2px 0; min-width: 0; }
+details.how-fold > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font-size: .8rem; font-weight: 600; }
+details.how-fold > summary::-webkit-details-marker { display: none; }
+details.how-fold > summary::before { content: "i"; display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1.5px solid currentColor; border-radius: 50%;
+  font: italic 800 .62rem/1 Georgia, "Times New Roman", serif; flex: none; }
+details.how-fold[open] > summary { color: var(--accent); }
+details.how-fold > :not(summary) { display: block; margin: 2px 0 6px; }
 .empty-ok { margin: 0; color: var(--ok); font-weight: 600; }
 
 /* ---- details panel ---- */
@@ -5275,6 +5283,13 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 const $ = id => document.getElementById(id);
+/** A long explanation folded to one small "ⓘ How it's counted" line: a tap opens it, and it stays open while the page redraws. */
+const howOpen = new Set();
+function howFold(key, body, label = "How it's counted") {
+  if (!body) return null;
+  return h("details", { class: "how-fold", "data-how": key, open: howOpen.has(key), ontoggle: ev => { ev.target.open ? howOpen.add(key) : howOpen.delete(key); } },
+    h("summary", { text: label }), body);
+}
 /** Phones and tablets: don't put the cursor in a box on its own, or the keyboard pops up before anyone taps. */
 function isTouch() { try { return matchMedia("(pointer: coarse)").matches; } catch (e) { return false; } }
 function parseNum(s) {
@@ -8079,9 +8094,9 @@ async function openUsers() {
     h("option", { value: "tech", text: "Non-admin" }), apiLevel >= CSR_API ? h("option", { value: "csr", text: "CSR" }) : null, h("option", { value: "admin", text: "Admin" }));
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
-    h("p", { text: apiLevel >= SUP_API
+    howFold("usersHow", h("p", { text: apiLevel >= SUP_API
       ? "Admins see and do everything. Non-admins see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "") + (apiLevel >= CSR_API ? " CSRs are Non-admins in the office: picking CSR ticks Office, you can tick more for them the same way, and only CSRs can be linked under Office › People." : "")
-      : "Admins can do everything. Non-admins can view everything and update only TM hours on truckmount trucks." }),
+      : "Admins can do everything. Non-admins can view everything and update only TM hours on truckmount trucks." }), "How access works"),
     stBox,
     inviteBox = h("fieldset", { hidden: !can }, h("legend", { text: "Invite someone" }),
       h("div", { class: "grid2" },
@@ -10142,7 +10157,7 @@ function lbTrucksEl(day) {
   return h("div", { class: "lb-enter", id: "lbEnter" },
     h("p", { class: "lb-sub", id: "lbDayTotal", text: lbDayTotalText(day) }),
     teams.length ? teams.map(card) : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Settings › Employees.` }),
-    h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card; Sale jobs is how many of the day's jobs he sold on (left blank: all of them). + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest. The days above: the left half turns green once the day's revenue is typed, the right half blue once a sale is." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }),
+    howFold("lbDayHow", h("p", { class: "hint", text: jobs ? "Work day: 1 for a full day, 0.5 for half. Every card starts with the day's totals: its number of jobs and its revenue. + Sale opens his sales that day in the card; Sale jobs is how many of the day's jobs he sold on (left blank: all of them). + Help adds who worked with him: type his jobs and his dollars by hand, the truck keeps the rest. The days above: the left half turns green once the day's revenue is typed, the right half blue once a sale is." : "Work day: 1 for a full day, 0.5 for half. Shared job? Type it for each truck, as in the sheet." }), "How it works"),
     jobs ? h("p", { class: "hint lbj-hist" }, "Every job, sale and split is kept. ", h("button", { class: "btn small", type: "button", id: "lbJobHist", onclick: () => openJobHistory({ from: `${key}-01`, to: day }) }, "Job history")) : null);
 }
 
@@ -10456,7 +10471,7 @@ function lbSalesEl(day) {
       : lbCard(t, "s", day, LB_SALE, lbEntry((d.s || {})[t.name], LB_SALE.length), lbSaleFoot(day, t.name), lbHelpEl(day, t.name, true),
         i => i === 2 && !lbDayKinds(day, lbEntry((d.s || {})[t.name], LB_SALE.length)).includes(2)))
       : h("p", { class: "meta", text: `No teams on the board in ${lbMonthLong(Number(key.slice(5)))}. Check Settings › Employees.` }),
-    h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: how many of his jobs that day he sold on, for sale per job (the same number as Sale jobs on Revenue & sales). A truck typed by job on Revenue & sales gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }));
+    howFold("lbSaleHow", h("p", { class: "hint", text: apiLevel >= LB_JOBS_API ? "Jobs: how many of his jobs that day he sold on, for sale per job (the same number as Sale jobs on Revenue & sales). A truck typed by job on Revenue & sales gets his sales from his jobs; when a shared job's sales are split, each helper's share shows on his own card." : "Jobs: the technician's jobs that day, for sale per job." }), "How it works"));
 }
 /** A team's 5-star reviews: that day, the month (with any total typed for the whole month the older way) and the year. */
 /** A person's 5-star reviews so far: in the day's month, and in its year up to that month (typed days and earlier totals). */
@@ -10667,7 +10682,7 @@ async function openPayRates() {
   const wait = h("span", { class: "pay-wait", id: "payWait", role: "status", text: had ? "Checking the sheet for newer rates…" : "Loading the saved rates…" });
   openDialog(
     h("h3", { id: "dlgTitle", text: "Pay rates" }),
-    h("p", { class: "hint", text: "Each person's pay: the day rate, the commission on revenue and on each kind of sale, and his usual share of a shared job (what a % split starts with; blank = an equal share). Only admins switched on for Payroll see this. Roles are set in Settings › Employees." }),
+    howFold("payHow", h("p", { class: "hint", text: "Each person's pay: the day rate, the commission on revenue and on each kind of sale, and his usual share of a shared job (what a % split starts with; blank = an equal share). Only admins switched on for Payroll see this. Roles are set in Settings › Employees." }), "How it works"),
     h("div", { class: "pay-top" }, h("button", { class: "btn small", type: "button", id: "payPeople", onclick: () => { closeDialog(); openLbTeams(); } }, "Add or remove people…"), wait),
     people.length ? list : h("p", { class: "meta", text: "No one yet. Add people in Settings › Employees." }),
     err,
@@ -11479,7 +11494,7 @@ function openLbReviewsXl() {
   let found = [];
   openDialog(
     h("h3", { id: "dlgTitle", text: "Not on the leaderboard: their reviews from Excel" }),
-    h("p", { class: "hint", text: "Choose an Excel copy of 5. Revenue per truck. The app reads the REVIEWS table on every month tab and lists the names there that aren't a team (helpers). Loading adds them to Not on the leaderboard and saves their monthly counts; trucks, sales and the teams' reviews stay as they are." }),
+    howFold("lbRvXlHow", h("p", { class: "hint", text: "Choose an Excel copy of 5. Revenue per truck. The app reads the REVIEWS table on every month tab and lists the names there that aren't a team (helpers). Loading adds them to Not on the leaderboard and saves their monthly counts; trucks, sales and the teams' reviews stay as they are." }), "How it works"),
     h("input", { type: "file", id: "lbRvXlFile", accept: ".xlsx", onchange: async e => {
       err.textContent = ""; res.hidden = true; found = [];
       lbSetAka(lbData && lbData.config);
@@ -11516,7 +11531,7 @@ function openLbReviewsXl() {
                 h("td", { text: [...new Set(x.years)].sort().join(", ") }),
                 h("td", { text: fmt(x.total) }));
             })))),
-          h("p", { class: "hint", text: "Ticked: everyone in the newest year's sheet. Untick anyone who shouldn't be on the reviews board. A month already typed for them in the app is replaced by the sheet's count." })]
+          howFold("lbRvTickHow", h("p", { class: "hint", text: "Ticked: everyone in the newest year's sheet. Untick anyone who shouldn't be on the reviews board. A month already typed for them in the app is replaced by the sheet's count." }), "How it works")]
           : [h("p", { class: "meta", text: "Everyone in the REVIEWS tables is already a team. Nothing to add." })]));
         res.hidden = false;
         $("lbRvXlGo").disabled = !found.length;
@@ -11587,7 +11602,7 @@ function openLbMove() {
   };
   openDialog(
     h("h3", { id: "dlgTitle", text: "Move numbers to another name" }),
-    h("p", { class: "hint", text: "For when the sheet kept the old name on a truck after someone else took it over. Truck days, technician sales and reviews move to the other name for the months you pick." }),
+    howFold("lbMoveHow", h("p", { class: "hint", text: "For when the sheet kept the old name on a truck after someone else took it over. Truck days, technician sales and reviews move to the other name for the months you pick." }), "How it works"),
     h("div", { class: "lb-move-grid" },
       h("div", { class: "field" }, h("label", { for: "lbMvFrom", text: "Numbers now under" }), sel("lbMvFrom", all.map(n => [n, n]), all.includes("Kenneth") ? "Kenneth" : all[0])),
       h("div", { class: "field" }, h("label", { for: "lbMvTo", text: "Belong to" }), sel("lbMvTo", cfg.teams.map(t => [t.name, t.name]), cfg.teams.some(t => t.name === "Harry") ? "Harry" : (cfg.teams[0] || {}).name)),
@@ -11634,7 +11649,7 @@ function openLbHistory() {
   const refresh = () => { const b = $("lbHistGo"); if (!b) return; armed = false; b.disabled = !picked().length; b.textContent = label(); };
   openDialog(
     h("h3", { id: "dlgTitle", text: "Load numbers from Excel" }),
-    h("p", { class: "hint", text: "Choose Excel copies of 5. Revenue per truck and 2. Technician monthly sales (File > Download > Microsoft Excel). The app reads every year in them, shows what it found, and saves only the years you tick." }),
+    howFold("lbHistHow", h("p", { class: "hint", text: "Choose Excel copies of 5. Revenue per truck and 2. Technician monthly sales (File > Download > Microsoft Excel). The app reads every year in them, shows what it found, and saves only the years you tick." }), "How it works"),
     h("input", { type: "file", id: "lbHistFiles", accept: ".xlsx", multiple: true, onchange: async e => {
       err.textContent = ""; res.hidden = true; hists = {}; armed = false;
       lbSetAka(lbData && lbData.config);
@@ -11721,10 +11736,11 @@ function openLbHistory() {
             h("thead", null, h("tr", null, ["Year", "Months", "Revenue", "Tech sales", "Reviews", "Teams"].map(c => h("th", { text: c })))),
             h("tbody", null, rows))),
           checks.length ? h("h4", { text: "Sheet against the app" }) : null,
-          checks.length ? h("p", { class: "hint", text: "Each person's revenue, jobs, work days, tech sales and reviews for each month, as the sheet has them and as the app has them now. Nothing is saved until you tap Load." }) : null,
+          checks.length ? howFold("lbHistCheckHow", h("p", { class: "hint", text: "Each person's revenue, jobs, work days, tech sales and reviews for each month, as the sheet has them and as the app has them now. Nothing is saved until you tap Load." }), "How it works") : null,
           ...checks,
           keepEl,
-          h("p", { class: "hint", text: `Everyone already in Employees keeps what's set there (unit, role, the days on and off the leaderboard, the order); anyone new in the sheet is added with the months they had a truck.${older.length ? ` ${older[0]}–${older[older.length - 1]} are only in the technician sales sheet (no truck revenue), so they aren't loaded.` : ""}` }),
+          howFold("lbHistKeepHow", h("p", { class: "hint", text: "Everyone already in Employees keeps what's set there (unit, role, the days on and off the leaderboard, the order); anyone new in the sheet is added with the months they had a truck." }), "How it works"),
+          older.length ? h("p", { class: "hint", text: `${older[0]}–${older[older.length - 1]} are only in the technician sales sheet (no truck revenue), so they aren't loaded.` }) : null,
           all.warnings.length || all.notes.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${all.warnings.length + all.notes.length})` }),
             all.warnings.length ? h("ul", { class: "lb-notes warn" }, all.warnings.map(w => h("li", { text: w }))) : null,
             all.notes.length ? h("ul", { class: "lb-notes" }, all.notes.map(w => h("li", { text: w }))) : null) : null].filter(Boolean));
@@ -12125,7 +12141,7 @@ function renderRevenue() {
       h("thead", null, head), h("tbody", null, rows), h("tfoot", null, row(null, s.read ? s : null, c, true)))));
   const notes = [];
   if (s.o[0] || s.o[1]) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
-  notes.push(h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }));
+  notes.push(howFold("revHow", h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }), "How it's counted"));
   // Accounts receivable: what's still owed for the jobs of the period on screen (Week, Month, Year or the dates picked)
   const arSpan = r.from > last ? "" : revSpanText(r.from, to);
   const ar = (apiLevel && apiLevel < UNPAID_API) || r.from > last ? null : revArSum(days, r.from, to);
@@ -12388,7 +12404,7 @@ function revPriceEl() {
         h("span", { class: "price-title" }, h("strong", { text: `${n} price change${n === 1 ? "" : "s"} in Housecall Pro to check` }),
           h("span", { class: "price-show", text: priceOpen ? "Hide ▴" : "Show ▾" }))),
       h("div", { class: "price-tools" }, ...tools, priceOpen && P.mayCheck && n > 1 ? btn(`Mark all ${n} checked`, "priceAll", () => priceCheckDlg(P.open)) : null)),
-    priceOpen ? h("p", { class: "price-sub", text: `Amounts changed more than a day after the job (changes on the day of the job, or before it, aren't counted). Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` }) : null,
+    priceOpen ? howFold("priceHow", h("p", { class: "price-sub", text: `Amounts changed more than a day after the job (changes on the day of the job, or before it, aren't counted). Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` }), "How it's counted") : null,
     setup, err,
     priceOpen ? h("div", { class: "price-list", id: "priceList" }, shown.map(w => priceCard(w, P.mayCheck))) : null,
     priceOpen && !P.mayCheck ? h("p", { class: "price-sub", id: "priceWait", text: "Someone switched on for it marks them checked (Settings › Users › Checks price changes)." }) : null,
@@ -12536,7 +12552,8 @@ function revBkDraw(when) {
         h("td", { text: fmt(t.jobs) }), h("td", { class: "rev-bk-v", text: fmt(t.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(t.cents / 100) })))),
     jobsEl,
     canList && !open && t.visits ? h("p", { class: "meta rev-bk-tap", text: "Tap a department (or Total) to see its jobs; each job # opens in Housecall Pro." }) : null,
-    h("p", { class: "hint", text: `From Housecall Pro, read ${fmtTime(new Date(x.got))}${busy ? " (reading again…)" : ""}. As on Operations: money on each visit; a job counts once, on its first visit (later visits, -2 and on, add money, not jobs); canceled ones left out. A job not scheduled yet has no day, so it isn't here.${x.more ? " Over 3,000 visits: the rest weren't read." : ""}` }),
+    h("p", { class: "hint", text: `From Housecall Pro, read ${fmtTime(new Date(x.got))}${busy ? " (reading again…)" : ""}.${x.more ? " Over 3,000 visits: the rest weren't read." : ""}` }),
+    howFold("revBkHow", h("p", { class: "hint", text: "As on Operations: money on each visit; a job counts once, on its first visit (later visits, -2 and on, add money, not jobs); canceled ones left out. A job not scheduled yet has no day, so it isn't here." })),
     revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : null].filter(Boolean));
 }
 
@@ -12824,7 +12841,7 @@ function goalEdit(y, m) {
     h("p", { class: "meta", text: mg && mg.from !== m ? `${lbMonthLong(Number(m.slice(5)))} uses ${lbMonthLong(Number(mg.from.slice(5)))}'s goals now. Saving gives it its own; later months start with them until you change them.`
       : "Later months start with these until you change them." }),
     h("div", { class: "grid3" }, GOAL_MONTH.map(([k, name]) => box(`gm-${k}`, `${name} $`, mg ? mg[k] : null))),
-    h("p", { class: "hint", text: "The Bonus goal counts all the revenue less what the repair contractors are paid (Monumental's share and specialty contractors, from Repairs Payroll). Leave a goal blank to not use it." }),
+    howFold("goalHow", h("p", { class: "hint", text: "The Bonus goal counts all the revenue less what the repair contractors are paid (Monumental's share and specialty contractors, from Repairs Payroll). Leave a goal blank to not use it." }), "How it's counted"),
     err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
       h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
@@ -13366,7 +13383,7 @@ function renderRepairs(box) {
       cpWait.length ? `Contractor payroll: ${cpPlural(cpWait.length, "batch")} waiting ↓` : "Contractor payroll ↓") : null);
   const imp = isAdmin() ? h("p", { class: "rp-actions" }, h("button", { class: "btn small", type: "button", id: "repImportBtn", onclick: () => openRepImport() }, "Import the old Excel list…"),
     h("button", { class: "btn small", type: "button", id: "repClearPaidBtn", onclick: () => openRepClearPaid() }, "Mark all as not paid to Monumental…")) : null;
-  const hint = h("p", { class: "hint", text: "Specialty contractors are paid by VODA and come off the top. Monumental gets its materials back plus 70% of what's left; VODA gets 30%, plus 30% on Monumental's materials (materials ÷ 0.7 × 0.3). Extra pay to Monumental comes out of VODA's share. Credit card fees aren't split (jobs already paid to Monumental keep the split they were paid on). The list holds the jobs tagged “repair - Monumental Flooring” in Housecall Pro, whatever their job type." });
+  const hint = howFold("repHow", h("p", { class: "hint", text: "Specialty contractors are paid by VODA and come off the top. Monumental gets its materials back plus 70% of what's left; VODA gets 30%, plus 30% on Monumental's materials (materials ÷ 0.7 × 0.3). Extra pay to Monumental comes out of VODA's share. Credit card fees aren't split (jobs already paid to Monumental keep the split they were paid on). The list holds the jobs tagged “repair - Monumental Flooring” in Housecall Pro, whatever their job type." }), "How the split works");
   const cp = cpAside();
   box.replaceChildren(h("div", { class: "rev-main" }, ...[top, sub, bar, status, err, tiles, invBtn, ...body, hint, imp].flat().filter(Boolean)), ...(cp ? [cp] : []));
   if (!repSync.busy && !repSync.err) setTimeout(() => repEnsure(months, false), 0);
@@ -13760,9 +13777,9 @@ function openRepMonInv() {
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Monumental invoices" }),
     apiLevel && apiLevel < REP_INV_API ? h("p", { class: "dlg-err", text: "First update the Google script: paste the new Code.gs from GitHub and deploy a new version." }) : null,
-    h("p", { class: "hint", text: canSend
+    howFold("cpPdfHow", h("p", { class: "hint", text: canSend
       ? "Pick one or more of Monumental's invoice PDFs. Each is matched to its project by the address, then the amount and name. Matching ones are ticked; one that doesn't match stays out unless you tick it, and you can untick any. Send: the ticked ones are saved on their jobs as “to pay” and emailed to accounting with their PDFs and the pay stub (the PDFs are kept in a private folder in your Google Drive)."
-      : "Pick one or more of Monumental's invoice PDFs. They're read on this device (not uploaded anywhere); each is matched to its project by the address, then the amount and name. Matching ones are ticked; one that doesn't match stays out unless you tick it. Save: the ticked ones are recorded on their jobs as “to pay”." }),
+      : "Pick one or more of Monumental's invoice PDFs. They're read on this device (not uploaded anywhere); each is matched to its project by the address, then the amount and name. Matching ones are ticked; one that doesn't match stays out unless you tick it. Save: the ticked ones are recorded on their jobs as “to pay”." }), "How it works"),
     file, status, list,
     h("div", { class: "rp-invfoot" }, sumBox, toBox), err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }), save, send))));
@@ -14067,7 +14084,7 @@ function openCpBeforeLoad() {
   const pdfs = h("input", { type: "file", id: "cpbFiles", class: "drop-in", accept: ".pdf,application/pdf", multiple: true, onchange: e => read(e.target.files) });
   openDialog(h("div", { class: "rp-dlg cpb-dlg" },
     h("h3", { id: "dlgTitle", text: "Invoices paid before VODA Hub" }),
-    h("p", { class: "hint", text: "Pick the folder with Monumental's invoices you've paid (every PDF in it and its folders is read), or the PDFs. Those already in the app — paid or waiting for accounting, the same invoice # and amount — are left as they are. The rest are marked paid, with no paid date, in one batch (Paid before VODA Hub), so none of them can be sent for payment again. The same # on another amount is another invoice: an admin can still send it. Nothing is emailed." }),
+    howFold("cpbHow", h("p", { class: "hint", text: "Pick the folder with Monumental's invoices you've paid (every PDF in it and its folders is read), or the PDFs. Those already in the app — paid or waiting for accounting, the same invoice # and amount — are left as they are. The rest are marked paid, with no paid date, in one batch (Paid before VODA Hub), so none of them can be sent for payment again. The same # on another amount is another invoice: an admin can still send it. Nothing is emailed." }), "How it works"),
     h("div", { class: "cpb-pick" }, h("label", { class: "btn", for: "cpbFolder" }, "Pick the folder"), folder, h("label", { class: "btn", for: "cpbFiles" }, "Pick PDFs"), pdfs),
     status, sumEl, list, err,
     h("div", { class: "dlg-foot" }, h("button", { class: "btn", type: "button", id: "cpbToJobs", hidden: true, onclick: () => openCpBeforeJobs() }, "Next: mark their jobs paid"),
@@ -14168,7 +14185,7 @@ async function openCpBeforeJobs() {
   };
   openDialog(h("div", { class: "rp-dlg cpb-dlg" },
     h("h3", { id: "dlgTitle", text: "Jobs paid by invoices paid before VODA Hub" }),
-    h("p", { class: "hint", text: "Repairs Payroll still shows these jobs as owed to Monumental. A job is marked paid (no date) when every invoice # on it — typed in “Their invoice #” (the old Excel list) or saved on it — is on the paid list; a job with no invoice # when a paid invoice is for its street and Monumental's share (within $1). Jobs only partly paid are listed, not marked. An invoice # typed on a job at another address than its PDF's is listed to fix, not counted for that job." }),
+    howFold("cpbJobsHow", h("p", { class: "hint", text: "Repairs Payroll still shows these jobs as owed to Monumental. A job is marked paid (no date) when every invoice # on it — typed in “Their invoice #” (the old Excel list) or saved on it — is on the paid list; a job with no invoice # when a paid invoice is for its street and Monumental's share (within $1). Jobs only partly paid are listed, not marked. An invoice # typed on a job at another address than its PDF's is listed to fix, not counted for that job." }), "How it works"),
     status, sumEl, box, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() }), go))));
   try {
@@ -14342,7 +14359,7 @@ function openCpBatch(id) {
   } }, "Email accounting again");
   openDialog(h("div", { class: "rp-dlg cp-dlg" },
     h("h3", { id: "dlgTitle", text: `Batch ${b.id} · ${b.vendor}` }), steps,
-    h("p", { class: "hint", text: "Check each invoice against its PDF (tap its number to open it) and confirm what's paid on it. Untick one to leave it out: it goes back to not sent. Then record the payment: the jobs are marked paid and the pay stub goes to " + vs + "." }),
+    howFold("cpBatchHow", h("p", { class: "hint", text: "Check each invoice against its PDF (tap its number to open it) and confirm what's paid on it. Untick one to leave it out: it goes back to not sent. Then record the payment: the jobs are marked paid and the pay stub goes to " + vs + "." }), "How it works"),
     h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
       h("thead", null, h("tr", null, h("th", { class: "c", text: "OK" }), h("th", { class: "l", text: "Invoice" }), h("th", { class: "l pc", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: "Pay" }))),
       h("tbody", null, rows), foot)),
@@ -14376,7 +14393,7 @@ async function openTmMail() {
   };
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "TM hrs email" }),
-    h("p", { class: "hint", text: "Monday at 7 AM: the truckmount trucks to check that day. Then every morning (not Sundays or closed days): the trucks that missed it, each with when its TM hrs were last entered, until every one is done or marked Not available. Nothing is sent once they're all done." }),
+    howFold("tmMailHow", h("p", { class: "hint", text: "Monday at 7 AM: the truckmount trucks to check that day. Then every morning (not Sundays or closed days): the trucks that missed it, each with when its TM hrs were last entered, until every one is done or marked Not available. Nothing is sent once they're all done." }), "How it works"),
     h("label", { class: "check" }, on, h("span", { text: "Send the TM hrs email" })),
     h("div", { class: "field" }, h("label", { for: "tmMailTo", text: "Send to" }), to,
       h("small", { class: "meta", text: "One or more addresses, separated by commas." })),
@@ -14404,7 +14421,7 @@ async function openCpParties() {
   draw();
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Payroll emails" }),
-    h("p", { class: "hint", text: "Who gets Contractor Payroll's emails. Accounting / payroll: your own people, who get the invoices and the pay stub. Vendor: the contractor's people (Monumental's office), who get only the pay stub once it's paid. Each email lists only its own kind, and any other address can be typed. Kept on the Payroll emails tab of the Google Sheet." }),
+    howFold("cpMailHow", h("p", { class: "hint", text: "Who gets Contractor Payroll's emails. Accounting / payroll: your own people, who get the invoices and the pay stub. Vendor: the contractor's people (Monumental's office), who get only the pay stub once it's paid. Each email lists only its own kind, and any other address can be typed. Kept on the Payroll emails tab of the Google Sheet." }), "How it works"),
     box,
     h("div", null, h("button", { class: "btn", type: "button", id: "cpAddParty", onclick: () => { list.push({ name: "", email: "", kind: list.some(p => p.kind === "accounting") ? "vendor" : "accounting" }); draw(); const n = box.querySelectorAll(".cp-pname"); if (n.length) n[n.length - 1].focus(); } }, "+ Add an address")),
     h("div", { class: "field cp-reply" }, h("label", { for: "cpReplyTo", text: "Vendors' questions go to" }), reply,
@@ -14752,7 +14769,7 @@ function openRepImport() {
   openDialog(h("div", { class: "rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Import the old Excel list" }),
     apiLevel && apiLevel < REP_IMPORT_API ? h("p", { class: "dlg-err", text: "First update the Google script: paste the new Code.gs from GitHub and deploy a new version." }) : null,
-    h("p", { class: "hint", text: "Choose the Excel copy of the REPAIRS ONLY list (File > Download > Microsoft Excel). The app reads those months from Housecall Pro, finds each job in the list (by name, address and amount), and saves its vendor costs: specialty contractor, Monumental's materials and deposit, their invoice number, and any extra pay. Every job found is set to Monumental's 70/30 split. Nothing is saved until you press Save." }),
+    howFold("repImpHow", h("p", { class: "hint", text: "Choose the Excel copy of the REPAIRS ONLY list (File > Download > Microsoft Excel). The app reads those months from Housecall Pro, finds each job in the list (by name, address and amount), and saves its vendor costs: specialty contractor, Monumental's materials and deposit, their invoice number, and any extra pay. Every job found is set to Monumental's 70/30 split. Nothing is saved until you press Save." }), "How it works"),
     file, status,
     h("h4", { text: "Paid to Monumental" }),
     h("p", { class: "meta", text: "Invoice numbers colored purple in the Excel are paid: those jobs are marked paid to Monumental, jobs already in the app too. The rest are left as they are. Paid on: the date below, or, left empty, each job's day in Housecall Pro (a Date VODA paid typed in the Excel is kept)." }),
@@ -15249,7 +15266,7 @@ function mktLeadsDlg() {
   } }, "Save");
   openDialog(h("div", { class: "mkt-dlg" },
     h("h3", { id: "dlgTitle", text: "Lead sources" }),
-    h("p", { class: "hint", text: "Each Lead source set on jobs in Housecall Pro, and the row it counts in. Repeat clients and Referrals go by the Job type (… - REPEAT, … - REFERRAL), whatever the Lead source." }),
+    howFold("mktLeadHow", h("p", { class: "hint", text: "Each Lead source set on jobs in Housecall Pro, and the row it counts in. Repeat clients and Referrals go by the Job type (… - REPEAT, … - REFERRAL), whatever the Lead source." }), "How it works"),
     order.length ? h("button", { class: "btn small", type: "button", id: "mktLeadReset", title: "Every Lead source back to the row suggested by its name (then Save)",
       onclick: () => { for (const [lead, sel] of Object.entries(sels)) sel.value = mktGuess(lead); dlgDirty = true; } }, "Use the suggested matches") : null,
     list, err,
@@ -15317,7 +15334,7 @@ function mktImportDlg() {
   };
   openDialog(h("div", { class: "mkt-dlg rp-dlg" },
     h("h3", { id: "dlgTitle", text: "Import your spreadsheets" }),
-    h("p", { class: "hint", text: "Choose the Excel copies (File > Download > Microsoft Excel) of Clients Per Month and Summary Advertising. The app reads each month's totals by source, and the ad spend; nothing is saved until you press Save. Importing again replaces what was imported before." }),
+    howFold("mktImpHow", h("p", { class: "hint", text: "Choose the Excel copies (File > Download > Microsoft Excel) of Clients Per Month and Summary Advertising. The app reads each month's totals by source, and the ad spend; nothing is saved until you press Save. Importing again replaces what was imported before." }), "How it works"),
     h("div", { class: "grid2" }, cpmIn, saIn), status, out, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
 }
@@ -15631,7 +15648,7 @@ function renderEstimates() {
       // water damage, mold, the supervisors, then the ones not sorted
       h("div", { class: "est-row2", id: "estRestRow", style: `--c:${subN}` }, row2.filter(([k]) => k !== "u").map(kindTile), crew.map(crewTile),
         row2.filter(([k]) => k === "u").map(kindTile))] : null);
-  const how = h("p", { class: "lb-sub est-how" }, "Each estimate counts on the day it was scheduled for in Housecall Pro (its visit), or the day it was made if it has no schedule. Approval rate: estimates approved (by the client or the office) out of every estimate in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage, Mold or Fire/Smoke: the estimate's tag in Housecall Pro (two kinds of tag: not sorted). In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his, then Water damage, Mold or Fire/Smoke for only his of that kind (those tiles show his numbers while he's picked). Tap tiles to pick any mix. Freddy's Visits: Job type Freddy Visit (or the tag) in no department: visits, not estimates, so they're counted (done, to come) and left out of every rate and of All estimates.");
+  const how = howFold("estHow", h("p", { class: "lb-sub est-how" }, "Each estimate counts on the day it was scheduled for in Housecall Pro (its visit), or the day it was made if it has no schedule. Approval rate: estimates approved (by the client or the office) out of every estimate in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage, Mold or Fire/Smoke: the estimate's tag in Housecall Pro (two kinds of tag: not sorted). In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his, then Water damage, Mold or Fire/Smoke for only his of that kind (those tiles show his numbers while he's picked). Tap tiles to pick any mix. Freddy's Visits: Job type Freddy Visit (or the tag) in no department: visits, not estimates, so they're counted (done, to come) and left out of every rate and of All estimates."), "How it's counted");
   // the people (whoever sees them all): a tile each, under the groups; without names in Reports, a word on where to set them
   const inGrp = allOn ? list : listAll.filter(e => sel.some(k => inKey(grpOf.get(e), k)));
   const onlyVisits = sel.length === 1 && sel[0] === "v";   // Freddy's visits alone: no estimate statuses
@@ -15769,7 +15786,7 @@ function estReportsDlg() {
       isAdmin() ? h("div", { class: "er-edit" }, h("label", null, h("span", { text: "In charge" }), lead), h("label", null, h("span", { text: "With" }), team), save) : null);
   };
   openDialog(h("h3", { id: "dlgTitle", text: "Reports" }),
-    h("p", { class: "hint", text: "A department's estimates for the meeting: a week, a month or a year; what was created, approved and produced, the goal, what the open estimates are likely to bring, and who to follow up. The names also decide By person in charge on Estimates: each one under With gets the estimates he's assigned to in Housecall Pro; In charge gets the rest." }),
+    howFold("erDlgHow", h("p", { class: "hint", text: "A department's estimates for the meeting: a week, a month or a year; what was created, approved and produced, the goal, what the open estimates are likely to bring, and who to follow up. The names also decide By person in charge on Estimates: each one under With gets the estimates he's assigned to in Housecall Pro; In charge gets the rest." }), "How it works"),
     h("div", { class: "er-list" }, EST_REP_DEPTS.map(row)),
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
 }
@@ -15849,7 +15866,7 @@ function estReportEl(d, name) {
       h("thead", null, h("tr", null, ["Age", "Open", "$ open", "Chance", "Likely"].map((x, i) => h("th", { class: i ? "num" : "", text: x })))),
       h("tbody", null, F.rows.map(x => h("tr", null, h("td", { text: x.label }), h("td", { class: "num", text: fmt(x.n) }), h("td", { class: "num", text: lbMoney(x.val / 100) }),
         h("td", { class: "num", title: `${fmt(x.hist)} past estimates` }, x.hist ? `${Math.round(x.p * 100)}%` : "–"), h("td", { class: "num" }, h("b", { text: lbMoney(x.likely / 100) })))))),
-    h("small", { class: "er-note", text: `Chance: of ${poss} estimates since January 1 of last year still open at that age, how many were approved later. Newer estimates close more often; the older, the less.` }));
+    howFold("erChance", h("small", { class: "er-note", text: `Chance: of ${poss} estimates since January 1 of last year still open at that age, how many were approved later. Newer estimates close more often; the older, the less.` }), "How it's counted"));
   const fu = h("div", { class: "er-fu", id: "erFollow" },
     F.follow.length ? h("table", { class: "er-table" },
       h("thead", null, h("tr", null, ["Client", "#", "Age", "$", "Chance", "In charge"].map((x, i) => h("th", { class: i >= 2 && i <= 4 ? "num" : "", text: x })))),
@@ -15865,7 +15882,7 @@ function estReportEl(d, name) {
       h("td", { class: "num" }, h("b", { text: estPct(k.cur.appr, k.cur.n) })), h("td", { class: "num", text: lbMoney(k.likely / 100) })))));
   const people = estPeopleTable(R.people.map(([n, st]) => [n, n, st]), { id: "erPeople", cls: "er-table" });
   return h("div", { class: "er", "data-d": d }, head, tiles,
-    kinds ? [h("h4", { text: "Water damage, mold and fire" }), kinds, h("small", { class: "er-note", text: "Estimates and rate: the ones scheduled in these days (no schedule: made). Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." })] : null,
+    kinds ? [h("h4", { text: "Water damage, mold and fire" }), kinds, howFold("erKinds", h("small", { class: "er-note", text: "Estimates and rate: the ones scheduled in these days (no schedule: made). Approved: approved in these days. Likely: what the open ones are likely to bring (the chances below)." }), "How it's counted")] : null,
     h("h4", { text: "Goal" }), goalEl, h("h4", { text: "Open estimates: what they're likely to bring" }), pipe,
     h("h4", { text: "Follow up first" }), fu, h("h4", { text: "By person in charge" }), R.people.length ? people : h("p", { class: "lb-sub", text: "No estimates in these days." }));
 }
@@ -16174,7 +16191,7 @@ async function openPcAssign() {
     } catch (e) { err.textContent = errText(e, "Nothing"); save.disabled = false; save.textContent = "Save"; }
   } }, "Save");
   openDialog(h("h3", { id: "dlgTitle", text: "Who calls which group" }),
-    h("p", { class: "meta", text: "Tap the CSRs for each group (one or more). Each one then sees only her groups, and the ones nobody is picked for. You, the other admins and Office (any day) see them all." }),
+    howFold("pcAssignHow", h("p", { class: "meta", text: "Tap the CSRs for each group (one or more). Each one then sees only her groups, and the ones nobody is picked for. You, the other admins and Office (any day) see them all." }), "How it works"),
     box, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }), save)));
   try {
@@ -16704,7 +16721,7 @@ function ofScoreEl() {
           sec("Inbound calls", rr.in, "in"),
           editor ? sec("Admins only (checked in the CRM)", rr.admin, "admin") : null)));
   })));
-  out.push(h("p", { class: "hint", text: `The goal is ${cfg.goal} outgoing calls a day, Monday to Friday (closed on New Year's Day, July 4, Thanksgiving and Christmas), counted on the days each person has numbers. Every kind of outgoing call adds up.` }));
+  out.push(howFold("ofGoalHow", h("p", { class: "hint", text: `The goal is ${cfg.goal} outgoing calls a day, Monday to Friday (closed on New Year's Day, July 4, Thanksgiving and Christmas), counted on the days each person has numbers. Every kind of outgoing call adds up.` }), "How it's counted"));
   return out;
 }
 
@@ -16935,7 +16952,7 @@ function openOfPeople() {
     if (!need.length) { cardBox.hidden = !cardDone; cardBox.replaceChildren(...(cardDone ? [h("p", { class: "hint ok", id: "ofCardDone", text: cardDone })] : [])); return; }
     cardBox.hidden = false;
     cardBox.replaceChildren(
-      h("p", { class: "hint", text: "The CSR numbers, in Office Calls' rows. Outbound: Feedback calls, Pricing follow-ups and booked, Past clients and booked, Confirmation calls. Inbound: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed / Online Booking and booked. Admins only: Scheduled / completed. What she typed before keeps counting (past only)." }),
+      howFold("ofCsrHow", h("p", { class: "hint", text: "The CSR numbers, in Office Calls' rows. Outbound: Feedback calls, Pricing follow-ups and booked, Past clients and booked, Confirmation calls. Inbound: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed / Online Booking and booked. Admins only: Scheduled / completed. What she typed before keeps counting (past only)." }), "How it works"),
       cardDone ? h("p", { class: "hint ok", id: "ofCardDone", text: cardDone }) : null,
       h("div", { class: "of-card-b" }, need.map(el => h("button", { class: "btn small primary", type: "button", "data-csr": nameOf(el), onclick: ev => useCsr(ev.currentTarget, el) }, `Use the CSR numbers for ${nameOf(el)}`))));
   };
@@ -17022,11 +17039,11 @@ function openOfPeople() {
   };
   openDialog(
     h("h3", { id: "dlgTitle", text: "Office people" }),
-    h("p", { class: "hint", text: "Each person types her own day under her login. Calls that count toward the goal add up to her outgoing calls; admin-only numbers (like Scheduled / completed) are typed by admins after checking the CRM. A login also needs Office ticked in Settings > Users." }),
+    howFold("ofPeopleHow", h("p", { class: "hint", text: "Each person types her own day under her login. Calls that count toward the goal add up to her outgoing calls; admin-only numbers (like Scheduled / completed) are typed by admins after checking the CRM. A login also needs Office ticked in Settings > Users." }), "How it works"),
     canHide ? null : h("p", { class: "dlg-err", id: "ofHideOld", text: "To use the task lists and past-only numbers, update the Google script first: paste the newest Code.gs, then Deploy > Manage deployments > New version. Refresh the app after that." }),
     h("label", { class: "of-mo" }, h("span", { text: "Outgoing calls goal (a day, Monday to Friday)" }), h("input", { type: "text", inputmode: "numeric", id: "ofGoal", value: String(cfg.goal) })),
     h("h4", { class: "of-sec", text: "Numbers and who tracks them" }),
-    h("p", { class: "hint", text: "Tap a name to give her the number, or tap it again to take it off her: she stops typing it, and what she typed so far still counts (past only). New number: something new to follow up on, for whoever you pick. Only the people working now are here (no To month, or this month on)." }),
+    howFold("ofNumsHow", h("p", { class: "hint", text: "Tap a name to give her the number, or tap it again to take it off her: she stops typing it, and what she typed so far still counts (past only). New number: something new to follow up on, for whoever you pick. Only the people working now are here (no To month, or this month on)." }), "How it works"),
     cardBox,
     opts,
     h("button", { class: "btn small", type: "button", id: "ofNewOptBtn", onclick: () => openNew() }, "+ New number"),
@@ -17091,7 +17108,7 @@ function openOfExcel() {
       hist.unnamed.length ? h("div", { class: "of-unnamed" }, h("p", { class: "dlg-err", text: "These have numbers but no name at the top. Type who it was:" }),
         hist.unnamed.map(u => h("label", { class: "of-mo" }, h("span", { text: `${u.month}, ${u.side} side` }), h("input", { type: "text", "data-k": u.key, value: names[u.key] || "", onchange: ev => { names[u.key] = ev.target.value; read(); } })))) : "",
       h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "ofXlTable" }, h("thead", null, h("tr", null, ["Person", "Months", "Days", "Outgoing calls"].map(c => h("th", { text: c })))), h("tbody", null, rows))),
-      h("p", { class: "hint", text: "Each day comes in per person (not per seat). The sheet only had the total outgoing calls and the follow-ups, so the rest of each day's total comes in as Other outgoing calls. Days already typed in the app stay as they are." }),
+      howFold("ofXlDaysHow", h("p", { class: "hint", text: "Each day comes in per person (not per seat). The sheet only had the total outgoing calls and the follow-ups, so the rest of each day's total comes in as Other outgoing calls. Days already typed in the app stay as they are." }), "How it works"),
       hist.warnings.length || hist.notes.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${hist.warnings.length + hist.notes.length})` }),
         hist.warnings.length ? h("ul", { class: "lb-notes warn" }, hist.warnings.map(w => h("li", { text: w }))) : null,
         hist.notes.length ? h("ul", { class: "lb-notes" }, hist.notes.map(w => h("li", { text: w }))) : null) : "");
@@ -17101,7 +17118,7 @@ function openOfExcel() {
   };
   openDialog(
     h("h3", { id: "dlgTitle", text: "Load office scorecards from Excel" }),
-    h("p", { class: "hint", text: "Choose an Excel copy of 14. OFFICE SCORECARDS (File > Download > Microsoft Excel). The app reads 2025 and 2026, shows what it found, and adds it under each person." }),
+    howFold("ofXlHow", h("p", { class: "hint", text: "Choose an Excel copy of 14. OFFICE SCORECARDS (File > Download > Microsoft Excel). The app reads 2025 and 2026, shows what it found, and adds it under each person." }), "How it works"),
     h("input", { type: "file", id: "ofXlFile", accept: ".xlsx", onchange: async e => {
       err.textContent = ""; res.hidden = true;
       const f = e.target.files[0];
@@ -17538,7 +17555,7 @@ function openAtPeople() {
   const goneBox = gone.length ? h("details", { class: "at-gone" }, h("summary", { text: `Not here any more (${gone.length})` }), h("div", { class: "at-people", id: "atGoneList" }, gone.map(p => row(p, false)))) : null;
   openDialog(
     h("h3", { id: "dlgTitle", text: "Attendance people" }),
-    h("p", { class: "hint", text: "Everyone on the grid, in its order (↑ ↓). From / To: the months each one is here; a To month takes them off the grid after it, their days stay. Someone who left and came back: tap Came back (under Not here any more); their earlier time is kept and they show only in the months they were here." }),
+    howFold("atPeopleHow", h("p", { class: "hint", text: "Everyone on the grid, in its order (↑ ↓). From / To: the months each one is here; a To month takes them off the grid after it, their days stay. Someone who left and came back: tap Came back (under Not here any more); their earlier time is kept and they show only in the months they were here." }), "How it works"),
     list,
     h("button", { class: "btn small", type: "button", id: "atAddPerson", onclick: () => list.append(row({ name: "", from: now, to: "" }, true)) }, "+ Add a person"),
     goneBox, err,
@@ -17756,7 +17773,7 @@ function openAtExcel() {
       res.replaceChildren(
         h("h4", { text: `${keys.length} months, ${lbMonthLong(Number(keys[0].slice(5)))} ${keys[0].slice(0, 4)} – ${lbMonthLong(Number(keys[keys.length - 1].slice(5)))} ${keys[keys.length - 1].slice(0, 4)}` }),
         h("p", { class: "meta", id: "atXlSum", text: `${fmt(n)} days: ${Object.entries(AT_KINDS).filter(([k]) => by[k]).map(([k, t]) => `${t} ${fmt(by[k])}`).join(", ")}. ${names.length} people (${names.filter(([, p]) => p.last >= hist.newest).length} on the newest tab).` }),
-        h("p", { class: "hint", text: "Each day's text is kept as its note, so nothing is lost if a kind is read wrong (tap the day to change it). Days already typed in the app stay as they are." }),
+        howFold("atXlHow", h("p", { class: "hint", text: "Each day's text is kept as its note, so nothing is lost if a kind is read wrong (tap the day to change it). Days already typed in the app stay as they are." }), "How it works"),
         hist.notes.length || hist.warnings.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${hist.notes.length + hist.warnings.length})` }),
           h("ul", { class: "lb-notes" }, hist.warnings.concat(hist.notes).map(w => h("li", { text: w })))) : "");
       res.hidden = false; go.disabled = false;
