@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 101;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 102;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4577,7 +4577,7 @@ function estProbe_(req) {
   if (r.error) return { ok: false, error: r.error, status: r.status || 0 };
   const e = (r.data && (r.data.estimate || r.data)) || {};
   const SHOW = /status|stage|state|sent|pipeline|approv|work|schedul|_at$|^id$|_id$|number|total|amount|count|kind|type|archived|copied|deleted|viewed|signed|expir/i;
-  const HIDE = /^(customer|address|addresses|notes|line_items|attachments|description|message_from_pro|first_name|last_name|name|email|company|mobile_number|home_number|work_number|street|street_line_2|city|state|zip|country|lead_source)$/i;
+  const HIDE = /^(customer|address|addresses|notes|line_items|attachments|description|message_from_pro|first_name|last_name|name|email|company|mobile_number|home_number|work_number|street|street_line_2|city|state|zip|country|lead_source|assigned_employees)$/i;
   const walk = function (v, depth, key) {
     if (v === null || v === undefined) return null;
     if (Array.isArray(v)) return depth > 3 ? "[" + v.length + "]" : v.slice(0, 6).map(function (x) { return walk(x, depth + 1, key); });
@@ -4591,8 +4591,41 @@ function estProbe_(req) {
     }
     return SHOW.test(String(key || "")) || typeof v === "boolean" ? (typeof v === "string" ? v.slice(0, 80) : v) : "…";
   };
+  // the same estimate as the list sends it (by its customer, or by its time), in case the list carries more
+  const keys = o => Object.keys(o || {});
+  const diff = (a, b) => keys(a).filter(function (k) { return !(k in (b || {})); });
+  const pick = (o, ks) => { const r = {}; ks.forEach(function (k) { r[k] = walk(o[k], 1, k); }); return r; };
+  let li = null, liBy = "";
+  const tries = [];
+  if (e.customer && e.customer.id) tries.push(["customer", { customer_id: e.customer.id, page_size: 100 }]);
+  if (e.schedule && e.schedule.scheduled_start) {
+    const t = Date.parse(e.schedule.scheduled_start);
+    if (t) tries.push(["time", { scheduled_start_min: new Date(t - 60000).toISOString(), scheduled_start_max: new Date(t + 60000).toISOString(), page_size: 100 }]);
+  }
+  tries.push(["newest", { sort_by: "created_at", sort_direction: "desc", page_size: 100 }]);
+  for (let i = 0; i < tries.length && !li; i++) {
+    const l = hcpGet_("/estimates", tries[i][1]);
+    const arr = (l.data && (l.data.estimates || l.data.data)) || [];
+    li = arr.filter(function (x) { return x && x.id === id; })[0] || null;
+    if (li) liBy = tries[i][0];
+  }
+  const liOpt = li && li.options && li.options[0], eOpt = e.options && e.options[0];
+  // asking for more of it ("expand"), and the company's pipeline stages (their names are the company's own settings)
+  const ex = hcpGet_("/estimates/" + encodeURIComponent(id), { "expand[]": "pipeline_status" });
+  const exE = ex && ex.data && (ex.data.estimate || ex.data);
+  const SAFE = /^(customer|address|addresses|first_name|last_name|email|mobile_number|home_number|work_number|street|street_line_2|city|zip|notes|description)$/i;
+  const plain = function (v, depth) {
+    if (v === null || v === undefined || depth > 4) return v === undefined ? null : v;
+    if (Array.isArray(v)) return v.slice(0, 40).map(function (x) { return plain(x, depth + 1); });
+    if (typeof v === "object") { const o = {}; Object.keys(v).slice(0, 40).forEach(function (k) { o[k] = SAFE.test(k) ? "…" : plain(v[k], depth + 1); }); return o; }
+    return typeof v === "string" ? v.slice(0, 80) : v;
+  };
+  const pipe = function (q) { const g = hcpGet_("/pipeline/statuses", q); return g.error ? { error: g.error, status: g.status || 0 } : plain(g.data, 0); };
   return { ok: true, n: n, id: id, stored: { status: String(rows[id][9] || ""), hcpSt: String(rows[id][27] || ""), work: String(rows[id][15] || ""), readAt: String(rows[id][19] || "") },
-    estimate: walk(e, 0, "") };
+    estimate: walk(e, 0, ""),
+    list: li ? { foundBy: liBy, onlyInList: pick(li, diff(li, e)), onlyInOne: diff(e, li), optionOnlyInList: pick(liOpt, diff(liOpt, eOpt)) } : { found: false },
+    expand: ex.error ? { error: ex.error, status: ex.status || 0 } : { newFields: pick(exE, diff(exE, e)), optionNewFields: pick(exE && exE.options && exE.options[0], diff(exE && exE.options && exE.options[0], eOpt)) },
+    pipeline: { all: pipe({}), estimates: pipe({ resource_type: "estimate" }) } };
 }
 /** Before it's sent, in Housecall Pro's own stages: Unscheduled, Scheduled, In progress (On my way), Completed (finished). */
 const EST_PRESEND = /^(unscheduled|needs scheduling|scheduled|in progress|on my way|completed?|complete (un)?rated|finished)$/i;
