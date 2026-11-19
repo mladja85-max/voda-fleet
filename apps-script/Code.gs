@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 103;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 104;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -247,6 +247,7 @@ function reqProp_(k) {
 }
 
 function doPost(e) {
+  EST_SENT_ = null;
   let req;
   try {
     req = JSON.parse(e && e.postData ? e.postData.contents : "{}");
@@ -4409,9 +4410,9 @@ const EST_SHEET = "Estimates";
 const EST_COLS = ["Estimate id", "Estimate #", "Day (scheduled, else created)", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
   "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for", "Address", "State", "Phone"];
-// a quick read also reads again the open estimates of the last 120 days: the newest 20 each time, and 40 more in turn
+// a quick read also reads again the open estimates of the last 180 days: the newest 20 each time, and 40 more in turn
 // (where the last read stopped), so every open one is read again within a few reads however many there are
-const EST_RECHECK_DAYS = 120, EST_RECHECK_NEW = 20, EST_RECHECK_TURN = 40, EST_RECHECK_AT = "EST_RECHECK_AT";
+const EST_RECHECK_DAYS = 180, EST_RECHECK_NEW = 20, EST_RECHECK_TURN = 40, EST_RECHECK_AT = "EST_RECHECK_AT";
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
 const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "5";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once; 5: the day it was scheduled for, read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
@@ -4554,6 +4555,7 @@ function estOut_(r, lead) {
   let opts = [];
   try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
   const tagKind = r[26] ? estKind_(String(r[26]).split(", ")) : "";
+  const sb = estSentBy_(r);
   const dept = String(r[6]) === "o" && tagKind ? "r" : String(r[6] || "o"), kind = dept === "r" ? (r[26] ? tagKind : String(r[7] || "")) : "";
   return { id: String(r[0]), n: String(r[1] || ""), day: String(r[2] || ""), client: String(r[4] || ""), addr: String(r[5] || ""), dept: dept,
     kind: kind, type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
@@ -4561,7 +4563,44 @@ function estOut_(r, lead) {
     inc: lead ? lead.name : "", incRole: lead ? lead.role : "", tags: String(r[26] || ""), hcpSt: String(r[27] || ""),
     // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email), or
     // it's in a stage of your own in the Pipeline (Rebuild estimates, On hold…), which it moves to once it's sent
-    sent: String(r[9]) !== "open" || estSentSt_(r[27]) };
+    sent: String(r[9]) !== "open" || estSentSt_(r[27]) || !!sb, sentBy: sb };
+}
+
+/* ---- Estimates: once sent, always sent. Housecall Pro's API gives an estimate's options one status, the last thing
+   that happened to them: "sent" when it's sent, but "complete rated" once the client rates the visit afterwards, so a
+   sent estimate went back to Not sent. The first time the app reads one as sent (still open), it's written on the
+   "Estimate sent" tab, and it stays sent whatever Housecall Pro says later. One sent before this (and since rated):
+   sending it again from Housecall Pro makes it sent here. ---- */
+const EST_SENT_TAB = "Estimate sent", EST_SENT_COLS = ["At", "Estimate id", "Number", "Status then"];
+let EST_SENT_ = null;
+/** { id: when the app first read it as sent }, read once a request. */
+function estSentMap_() {
+  if (EST_SENT_) return EST_SENT_;
+  const out = {};
+  pcRows_(EST_SENT_TAB, EST_SENT_COLS.length).forEach(function (r) {
+    const id = String(r[1] || "");
+    if (id && !out[id]) out[id] = r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "");
+  });
+  return (EST_SENT_ = out);
+}
+/** Read as sent before: { how: "seen", at } (the first time), or null. */
+function estSentBy_(r) {
+  const at = estSentMap_()[String(r[0])];
+  return at ? { how: "seen", at: at } : null;
+}
+/** Every open estimate read as sent now that isn't on the tab yet goes on it (rows: the Estimates tab, by id). */
+function estSentKeep_(rows, at) {
+  const M = estSentMap_(), add = [];
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id];
+    if (!M[id] && String(r[9] || "open") === "open" && estSentSt_(r[27])) add.push([at, id, String(r[1] || ""), String(r[27] || "").slice(0, 80)]);
+  });
+  if (!add.length) return 0;
+  const s = pcSheet_(EST_SENT_TAB, EST_SENT_COLS), first = Math.max(2, s.getLastRow() + 1);
+  if (s.getMaxRows() < first + add.length - 1) s.insertRowsAfter(s.getMaxRows(), first + add.length + 100 - s.getMaxRows());
+  s.getRange(first, 1, add.length, EST_SENT_COLS.length).setNumberFormat("@").setValues(add);
+  EST_SENT_ = null;
+  return add.length;
 }
 
 /** Admins (Settings › Housecall Pro, "For Claude"): what Housecall Pro sends for one estimate, by its number, to find
@@ -4793,6 +4832,7 @@ function estSync_(req, user) {
       }
     }
     s.getRange(1, 1, 1, W).setValues([EST_COLS]).setFontWeight("bold");
+    estSentKeep_(rows, at);   // once read as sent, it stays sent (a client's rating afterwards changes Housecall Pro's status)
     if (!next) { if (backfill) { P.setProperty(EST_DONE, "yes"); P.setProperty(EST_SCHEMA, EST_V); } P.setProperty(EST_AT, String(now)); }
     return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, rechecked: rechecked, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
   });

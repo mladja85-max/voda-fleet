@@ -2664,6 +2664,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-amt { display: grid; text-align: right; font-variant-numeric: tabular-nums; } .est-amt small { color: var(--muted); font-size: .72rem; line-height: 1.25; }
 .est-st { display: grid; } .est-st b { font-size: .84rem; } .est-st small { color: var(--muted); font-size: .74rem; white-space: nowrap; }
 .est-st.ok b { color: var(--ok); } .est-st.no b { color: var(--due); } .est-st.cx b { color: var(--muted); text-decoration: line-through; }
+.est-st .est-sent { color: var(--ok); font-style: normal; }
 .est-st.op b { color: var(--soon); } .est-st.op.slow small { color: var(--soon); font-weight: 600; } .est-st.op.late small { color: var(--due); font-weight: 700; }
 .est-in { min-width: 0; display: grid; } .est-in .muted { color: var(--muted); font-style: italic; }
 .est-in b, .est-in small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .est-in small { color: var(--muted); font-size: .74rem; }
@@ -15505,7 +15506,7 @@ const estSentSt = st => estStList(st).some(x => /sen[dt]|submit|fail/i.test(x) |
 /** A stage of your own in the Pipeline ("Rebuild estimates"), or "". */
 const estStage = e => { const x = estStList(e.hcpSt).find(v => !/sen[dt]|submit|fail/i.test(v) && !EST_PRESEND.test(v)); return x ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : ""; };
 /** Open and not sent to the client yet (an older Google script: its own word). */
-const estNotSent = e => e.st === "open" && (typeof e.hcpSt === "string" ? !estSentSt(e.hcpSt) : e.sent === false);
+const estNotSent = e => e.st === "open" && !e.sentBy && (typeof e.hcpSt === "string" ? !estSentSt(e.hcpSt) : e.sent === false);
 let estData = store.get(K_EST);                         // this year's: { year, estimates, years, all, readAt, done, connected }
 let estOther = {};                                      // other years' (looked at in this window)
 const estLoading = {};
@@ -15853,9 +15854,12 @@ function estRowEl(e, today) {
     if (e.st === "declined") return h("span", { class: "est-st no" }, h("b", { text: "Declined" }), h("small", { text: [e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", dec ? estDayShort(dec, today) : ""].filter(Boolean).join(" · ") }));
     if (e.st === "canceled") return h("span", { class: "est-st cx" }, h("b", { text: "Canceled" }));
     const age = estAge(e.day, today);
-    const ns = estNotSent(e), days = age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}`;
-    return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title: e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "" }, h("b", { text: "Open" }),
-      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days));
+    const ns = estNotSent(e), days = age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}`, sb = e.st === "open" ? e.sentBy : null;
+    const when = sb && sb.at ? lbDayText(lbDayKey(new Date(sb.at))) : "";
+    const title = sb ? `Read as sent ${when}` + (e.hcpSt ? ` · In Housecall Pro now: ${e.hcpSt}` : "") : e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "";
+    return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title }, h("b", { text: "Open" }),
+      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : sb ? h("i", { class: "est-sent", text: "sent · " })
+        : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days));
   };
   const row = e => {
     const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);
