@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 97;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 98;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -369,6 +369,18 @@ function doPost(e) {
       case "pcMarks":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(pcMarks_(req));
+      case "kpiRead":
+        if (!canSee_(user, KPI)) return json_({ ok: false, error: "not_allowed" });
+        return json_(kpiRead_(req, user));
+      case "kpiPut":
+        if (!canSee_(user, KPI)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return kpiPut_(req, user); }));
+      case "kpiPeople":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return kpiSetPeople_(req); }));
+      case "kpiImport":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return kpiImport_(req); }));
       case "attendance":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(atRead_(user, req.year));
@@ -3086,7 +3098,7 @@ function canSee_(user, section) { return !!user && (user.role === "admin" || par
 function cleanAccess_(raw) {
   if (!Array.isArray(raw)) return null;
   const lists = supLists_(supSheets_().l).map(function (l) { return l.id; });
-  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === OF_EDIT || x === "attendance" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || EST_ACCESS.indexOf(x) !== -1 || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
+  return raw.map(String).filter(function (x, i, a) { return (x === "trucks" || x === "office" || x === OF_EDIT || x === "attendance" || x === "revenue" || x === "repairs" || x === "marketing" || x === "contractors" || x === KPI || EST_ACCESS.indexOf(x) !== -1 || LB_ACCESS.indexOf(x) !== -1 || lists.indexOf(x) !== -1) && a.indexOf(x) === i; });
 }
 
 /* ---------------- leaderboard ---------------- */
@@ -5166,6 +5178,140 @@ function pcMarks_(req) {
     out.push(x);
   });
   return { ok: true, marks: out.slice(-500), now: tmNow_().getTime() };
+}
+
+/* ---------------- KPI (Office › KPI) ----------------
+   Each person's day as the KPI Excel kept it: six numbers (Estimates sent, Repair estimates sent, Invoices sent,
+   Estimates to jobs, Collected balances, Xactimates made), each a list of lines (what it was: the client, the address,
+   the amount) with a count. One row per line on the "KPI log" tab (in this Google Sheet only). The people (Script
+   Property KPI_PEOPLE): each one's name, the login that types for him, and whether he's left. Someone with the KPI tick
+   sees and types only his own; Admins see and type everyone's. */
+const KPI = "kpi", KPI_SHEET = "KPI log", KPI_COLS = ["id", "person", "day", "kpi", "text", "count", "by", "at"];
+const KPI_KEYS = ["est", "rep", "inv", "e2j", "coll", "xact"];
+const KPI_TEXT = 300, KPI_MAX_N = 999, KPI_LINES_DAYS = 62;
+function kpiPeople_() {
+  let p = [];
+  try { p = JSON.parse(PropertiesService.getScriptProperties().getProperty("KPI_PEOPLE") || "[]") || []; } catch (e) { p = []; }
+  return Array.isArray(p) ? p.filter(function (x) { return x && x.name; }).map(function (x) { return { name: String(x.name), user: String(x.user || ""), off: !!x.off }; }) : [];
+}
+/** The names this login types for: his own (Admins: everyone's). */
+function kpiMine_(user, people) {
+  if (user.role === "admin") return people.map(function (x) { return x.name; });
+  return people.filter(function (x) { return x.user && x.user === user.id; }).map(function (x) { return x.name; });
+}
+function kpiLine_(r, tz) { return { id: String(r[0] || ""), p: String(r[1] || ""), d: pcDay_(r[2], tz), k: String(r[3] || ""), t: String(r[4] || ""), n: Number(r[5]) || 0 }; }
+function kpiIsDay_(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")); }
+/** { from, to }: each person's numbers by day (the six counts); { lf, lt } (62 days at most): the lines too. */
+function kpiRead_(req, user) {
+  const tz = Session.getScriptTimeZone(), people = kpiPeople_(), mine = kpiMine_(user, people), admin = user.role === "admin";
+  const from = kpiIsDay_(req.from) ? String(req.from) : "", to = kpiIsDay_(req.to) ? String(req.to) : "";
+  if (!from || !to || to < from) return { ok: false, error: "bad_request" };
+  const lf = kpiIsDay_(req.lf) ? String(req.lf) : "", lt = kpiIsDay_(req.lt) ? String(req.lt) : "";
+  const withLines = !!(lf && lt && lt >= lf && lt <= tmAddDays_(lf, KPI_LINES_DAYS));
+  const tot = {}, lines = [];
+  pcRows_(KPI_SHEET, KPI_COLS.length).forEach(function (r) {
+    const x = kpiLine_(r, tz), k = KPI_KEYS.indexOf(x.k);
+    if (!x.id || !x.d || k === -1 || mine.indexOf(x.p) === -1) return;
+    if (x.d >= from && x.d <= to) { const P = tot[x.p] || (tot[x.p] = {}), D = P[x.d] || (P[x.d] = [0, 0, 0, 0, 0, 0]); D[k] += x.n; }
+    if (withLines && x.d >= lf && x.d <= lt) lines.push(x);
+  });
+  return { ok: true, admin: admin, today: Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd"),
+    people: people.filter(function (x) { return mine.indexOf(x.name) !== -1; }).map(function (x) { return admin ? x : { name: x.name, off: x.off }; }),
+    tot: tot, lines: withLines ? lines : null };
+}
+/** A line: { person, day, kpi, text, n } adds one; { id, text, n } changes one; { id, remove: true } takes it off. */
+function kpiPut_(req, user) {
+  const tz = Session.getScriptTimeZone(), today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd"), mine = kpiMine_(user, kpiPeople_());
+  const text = String(req.text === undefined || req.text === null ? "" : req.text).replace(/\s+/g, " ").trim().slice(0, KPI_TEXT);
+  const n = req.n === undefined || req.n === null || req.n === "" ? 1 : Number(req.n);
+  if (!req.remove && (!isFinite(n) || n < 0 || n > KPI_MAX_N || Math.floor(n) !== n)) return { ok: false, error: "bad_count" };
+  if (!req.remove && !text && !n) return { ok: false, error: "empty" };
+  const s = pcSheet_(KPI_SHEET, KPI_COLS), at = tmNow_().toISOString();
+  if (req.id) {
+    const rows = pcRows_(KPI_SHEET, KPI_COLS.length), id = String(req.id);
+    let i = -1;
+    for (let j = 0; j < rows.length; j++) if (String(rows[j][0]) === id) { i = j; break; }
+    if (i === -1) return { ok: false, error: "gone" };
+    const x = kpiLine_(rows[i], tz);
+    if (mine.indexOf(x.p) === -1) return { ok: false, error: "not_allowed" };
+    if (req.remove) { s.deleteRow(i + 2); return { ok: true, removed: id }; }
+    s.getRange(i + 2, 5, 1, 4).setNumberFormat("@").setValues([[text, String(n), req.by || "", at]]);
+    return { ok: true, line: { id: id, p: x.p, d: x.d, k: x.k, t: text, n: n } };
+  }
+  const p = String(req.person || ""), d = String(req.day || ""), k = String(req.kpi || "");
+  if (mine.indexOf(p) === -1) return { ok: false, error: "not_allowed" };
+  if (!kpiIsDay_(d) || d > today) return { ok: false, error: "bad_day" };
+  if (KPI_KEYS.indexOf(k) === -1) return { ok: false, error: "bad_request" };
+  const id = "k" + Utilities.getUuid().replace(/-/g, "").slice(0, 14);
+  const row = [id, p, d, k, text, String(n), req.by || "", at];
+  const first = Math.max(2, s.getLastRow() + 1);
+  if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
+  s.getRange(first, 1, 1, KPI_COLS.length).setNumberFormat("@").setValues([row]);
+  return { ok: true, line: { id: id, p: p, d: d, k: k, t: text, n: n } };
+}
+/** Admins: who's on the KPI (name, the login that types for him, left), in order. A name already used stays the same
+ *  (his lines go by it). */
+function kpiSetPeople_(req) {
+  if (!Array.isArray(req.people) || req.people.length > 40) return { ok: false, error: "bad_request" };
+  const ids = {}, seen = {};
+  readUsers_(usersSheet_()).forEach(function (x) { ids[x.u.id] = true; });
+  const out = [];
+  for (let i = 0; i < req.people.length; i++) {
+    const x = req.people[i] || {}, name = String(x.name || "").replace(/\s+/g, " ").trim().slice(0, 40), user = String(x.user || "");
+    if (!name) continue;
+    if (seen[name.toLowerCase()]) return { ok: false, error: "twice", name: name };
+    if (user && !ids[user]) return { ok: false, error: "no_user", name: name };
+    seen[name.toLowerCase()] = true;
+    out.push({ name: name, user: user, off: !!x.off });
+  }
+  PropertiesService.getScriptProperties().setProperty("KPI_PEOPLE", JSON.stringify(out));
+  return { ok: true, people: out };
+}
+/** Admins, from the KPI Excel: { months: [{ p, m: "yyyy-mm", lines: [{ d, k, t, n }] }] } (a few at a time). Each
+ *  person's month is replaced by the Excel's lines; a name not on the KPI yet is added (with the login of that first
+ *  name, if exactly one has it; in the order of { order }), and someone whose last month is long gone is marked left. */
+function kpiImport_(req) {
+  if (!Array.isArray(req.months) || !req.months.length || req.months.length > 40) return { ok: false, error: "bad_request" };
+  const tz = Session.getScriptTimeZone(), at = tmNow_().toISOString(), drop = {}, add = [];
+  let n = 0;
+  for (let i = 0; i < req.months.length; i++) {
+    const M = req.months[i] || {}, p = String(M.p || "").replace(/\s+/g, " ").trim().slice(0, 40), m = String(M.m || "");
+    if (!p || !/^\d{4}-\d{2}$/.test(m) || !Array.isArray(M.lines)) return { ok: false, error: "bad_request" };
+    drop[p + "|" + m] = true;
+    M.lines.forEach(function (x) {
+      const d = String((x && x.d) || ""), k = String((x && x.k) || ""), c = Number(x && x.n);
+      if (!kpiIsDay_(d) || d.slice(0, 7) !== m || KPI_KEYS.indexOf(k) === -1) return;
+      const cnt = isFinite(c) && c >= 0 && c <= KPI_MAX_N ? Math.round(c) : 1;
+      const t = String((x && x.t) || "").replace(/\s+/g, " ").trim().slice(0, KPI_TEXT);
+      if (!t && !cnt) return;
+      add.push(["k" + Utilities.getUuid().replace(/-/g, "").slice(0, 14), p, d, k, t, String(cnt), "Excel", at]);
+      n++;
+    });
+  }
+  if (n > 3000) return { ok: false, error: "too_many" };
+  const s = pcSheet_(KPI_SHEET, KPI_COLS), old = pcRows_(KPI_SHEET, KPI_COLS.length);
+  const keep = old.filter(function (r) { const d = pcDay_(r[2], tz); return r[0] && !(d && drop[String(r[1]) + "|" + d.slice(0, 7)]); })
+    .map(function (r) { return r.map(function (v, k) { return k === 2 ? pcDay_(v, tz) : String(v === null || v === undefined ? "" : v); }); });
+  const all = keep.concat(add);
+  if (old.length) s.getRange(2, 1, old.length, KPI_COLS.length).clearContent();
+  if (all.length) {
+    if (s.getMaxRows() < all.length + 1) s.insertRowsAfter(s.getMaxRows(), all.length + 201 - s.getMaxRows());
+    s.getRange(2, 1, all.length, KPI_COLS.length).setNumberFormat("@").setValues(all);
+  }
+  // the people: anyone new is added (linked to the one login with his first name), and kept in the order they came
+  const people = kpiPeople_(), users = readUsers_(usersSheet_()).map(function (x) { return x.u; }).filter(function (u) { return u.status !== "invited"; });
+  const first = function (v) { return String(v || "").trim().split(/\s+/)[0].toLowerCase(); };
+  const names = (Array.isArray(req.order) ? req.order : []).concat(req.months.map(function (M) { return M.p; }));   // as the Excel has them
+  names.forEach(function (nm) {
+    const p = String(nm || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!p || people.some(function (x) { return x.name.toLowerCase() === p.toLowerCase(); })) return;
+    const same = users.filter(function (u) { return first(u.name) === first(p); });
+    const used = people.map(function (x) { return x.user; });
+    people.push({ name: p, user: same.length === 1 && used.indexOf(same[0].id) === -1 ? same[0].id : "", off: !!req.left && req.left.indexOf(p) !== -1 });
+  });
+  if (Array.isArray(req.left)) people.forEach(function (x) { if (req.left.indexOf(x.name) !== -1 && !x.user) x.off = true; });
+  PropertiesService.getScriptProperties().setProperty("KPI_PEOPLE", JSON.stringify(people));
+  return { ok: true, saved: n, people: people };
 }
 
 /* ---- The rebuild calendar: every Repairs estimate approved in Housecall Pro (by the client or the office) goes on the

@@ -358,6 +358,54 @@ button { font: inherit; color: inherit; }
 .dot.due { background: var(--due); } .dot.soon { background: var(--soon); } .dot.ok { background: var(--ok); }
 details.paperwork summary, details.how summary { cursor: pointer; font-weight: 700; color: var(--accent); }
 .how ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: .88rem; }
+/* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
+.kpi-who { margin: 2px 0 0; }
+.kpi-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 10px; display: grid; gap: 1px; min-width: 0; align-content: start; }
+.kpi-tile small { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); line-height: 1.2; }
+.kpi-tile b { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi-tile span { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; min-width: 0; display: grid; gap: 6px; }
+.kpi-card h4 { margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+.kpi-card .kpi-sum { font-family: var(--font-display); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.kpi-lines { list-style: none; margin: 0; padding: 0; display: grid; }
+.kpi-line { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding: 5px 0; min-width: 0; }
+.kpi-line .kpi-t { all: unset; flex: 1; min-width: 0; cursor: pointer; font-size: .86rem; line-height: 1.3; overflow-wrap: anywhere; }
+.kpi-line .kpi-t:hover, .kpi-line .kpi-t:focus-visible { color: var(--accent); text-decoration: underline; }
+.kpi-line .kpi-c { font-size: .78rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kpi-line.saving { opacity: .6; }
+.kpi-line.edit { flex-wrap: wrap; }
+.kpi-line.edit .kpi-in { flex: 1 1 100%; }
+.kpi-add { display: flex; gap: 6px; min-width: 0; }
+.kpi-in, .kpi-n { font: inherit; font-size: .9rem; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--bg); color: var(--ink); min-width: 0; box-sizing: border-box; }
+.kpi-add .kpi-in { flex: 1; }
+.kpi-n { width: 4em; flex: none; text-align: right; }
+.kpi-table-box { padding: 8px 10px; }
+.kpi-table th, .kpi-table td { text-align: right; white-space: nowrap; }
+.kpi-table th:first-child { text-align: left; }
+.kpi-table tr.kpi-none th, .kpi-table tr.kpi-none td { color: var(--muted); }
+.kpi-table tfoot th, .kpi-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
+.kpi-people { display: grid; gap: 8px; margin: 8px 0; }
+.kpi-person { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto auto; gap: 6px; align-items: center; }
+.kpi-person b.kpi-pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-person input.kpi-pname, .kpi-person select { font: inherit; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.kpi-xl th, .kpi-xl td { text-align: right; white-space: nowrap; }
+.kpi-xl tbody th, .kpi-xl td:first-child { text-align: left; }
+.kpi-xl .kpi-diff { color: var(--due); font-weight: 800; }
+.kpi-xl tr.kpi-have td, .kpi-xl tr.kpi-have th { background: var(--soon-bg); }
+.kpi-xl td.kpi-xl-note { text-align: left; font-size: .74rem; color: var(--muted); }
+@media (max-width: 760px) {
+  .kpi-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .kpi-tile { padding: 7px 8px; }
+  .kpi-tile b { font-size: 1.35rem; }
+  .kpi-cards { grid-template-columns: 1fr; }
+  .kpi-table { font-size: .8rem; } .kpi-table th, .kpi-table td { padding: 5px 4px; }
+}
+@media (max-width: 600px) {
+  .kpi-person { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .kpi-person select { grid-column: 1 / -1; grid-row: 2; }
+}
 /* a long explanation, folded: one small grey line, a tap opens it */
 details.how-fold { margin: 2px 0; min-width: 0; }
 details.how-fold > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font-size: .8rem; font-weight: 600; }
@@ -5389,7 +5437,7 @@ const isBusy = e => !!(e && e.error === "server" && /lock timeout|holding the lo
    What one window saves, the others show by themselves, without Update. Typed Leaderboard numbers arrive as the sheet
    saved them; any other change just tells the other windows to load again, quietly. Nothing is sent to another
    login: a window signed in as someone else ignores it. */
-const API_READS = new Set(["list", "leaderboard", "office", "attendance", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync", "repairs", "repSync", "marketing"]);
+const API_READS = new Set(["list", "leaderboard", "office", "attendance", "payRead", "users", "me", "history", "jobLog", "services", "login", "signup", "hcpTest", "revenue", "revSync", "repairs", "repSync", "marketing", "kpiRead"]);
 let peers = null;
 try { peers = typeof BroadcastChannel === "function" ? new BroadcastChannel("voda-prime") : null; } catch (e) { peers = null; }
 function tellPeers(msg) { try { if (peers && session) peers.postMessage(Object.assign({ user: session.id }, msg)); } catch (e) { /* this window still has it */ } }
@@ -5488,6 +5536,7 @@ async function refresh(quiet) {
   if (view.tab === "leaderboard" && loaded && !dlg.open && !lbShowState && !lbTyping()) lbLoad(!quiet);
   // (Office by itself only while nobody is working in this window: its boxes and menus aren't redrawn under a hand)
   if (view.tab === "office" && loaded && !dlg.open && !ofTypingNow() && !ofLoading && (!quiet || performance.now() - lbActiveAt > 15000)) ofLoad();
+  if (view.tab === "office" && ofView.tab === "kpi" && loaded && !dlg.open && !ofTypingNow() && !kpiLoading && !(kpiData && (kpiData.lines || []).some(x => x.saving))) kpiLoad();
   if ((view.tab === "contractors" || (view.tab === "repairs" && canSee("contractors"))) && loaded && !dlg.open && !cpLoading) cpLoad();
   if (view.tab === "attendance" && loaded && !dlg.open && !atLoading) atLoad();
   if (view.tab === "estimates" && loaded && !dlg.open) estAuto();
@@ -7538,7 +7587,7 @@ function openEdit(id) {
 const askTrucks = () => allowedTabs().includes("trucks");
 const askLb = () => lbSeesBoard() && (!apiLevel || apiLevel >= LB_API);
 const askSup = () => allowedTabs().includes("supplies");
-const askOf = () => allowedTabs().includes("office") && (!apiLevel || apiLevel >= OF_API);
+const askOf = () => ofCan() && (!apiLevel || apiLevel >= OF_API);
 // The order matters for typed questions: the first whose words match answers (so "add-on" isn't taken as "on order").
 const ASK_QS = [
   { id: "calls", topic: "Office", q: "Who's behind on the calls goal this week?", chip: "Who's behind on calls this week?", re: /\bcall/, ok: askOf, of: true, answer: () => askCalls() },
@@ -8400,7 +8449,7 @@ const userAccess = () => (session && Array.isArray(session.access) ? session.acc
 const canSee = sec => isAdmin() || userAccess().includes(sec);
 const visLists = s => ((s && s.lists) || []).filter(l => canSee(l.id));
 // what someone may see that isn't a checklist (the rest are checklists)
-const NOT_LISTS = ["trucks", "office", "office-edit", "attendance", "revenue", "repairs", "marketing", "contractors", "estimates", "estimates-all", "payroll", "pricecheck"];
+const NOT_LISTS = ["trucks", "office", "office-edit", "attendance", "revenue", "repairs", "marketing", "contractors", "estimates", "estimates-all", "payroll", "pricecheck", "kpi"];
 function allowedTabs() {
   const out = [];
   if (canSee("trucks")) out.push("trucks");
@@ -8408,7 +8457,7 @@ function allowedTabs() {
   if (canSeeLb()) out.push("leaderboard");
   if (canSee("revenue")) out.push("revenue");   // Operations
   if (canSee("estimates") || canSee("estimates-all")) out.push("estimates");
-  if (ofCan()) out.push("office");
+  if (ofCan() || kpiCan()) out.push("office");   // KPI alone: Office with only its KPI tab
   if (canSee("attendance") && (!apiLevel || apiLevel >= AT_API)) out.push("attendance");
   if (canSee("marketing")) out.push("marketing");
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
@@ -9136,7 +9185,8 @@ function accessChips(selected, onchange, idPrefix) {
     apiLevel >= EST_API ? [["estimates", "Estimates (his own)"], ["estimates-all", "Estimates (all)"]] : [],
     apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : [],
     apiLevel >= MKT_API ? [["marketing", "Marketing"]] : [],
-    apiLevel >= CP_API ? [["contractors", "Contractor Payroll"]] : []);
+    apiLevel >= CP_API ? [["contractors", "Contractor Payroll"]] : [],
+    apiLevel >= KPI_API ? [["kpi", "KPI"]] : []);
   return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
     h("span", { class: "acc-lbl", text: "Sees:" }),
     items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
@@ -16012,7 +16062,7 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates" };
+const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates", kpi: "KPI" };
 const OF_EST_API = 95;                                   // the Google script version with Office › Estimates (Cleaning's)
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const ofCfg = () => ofCleanConfig(ofData && ofData.config);
@@ -16103,6 +16153,11 @@ function renderOffice() {
   const box = $("ofView");
   if (!box || view.tab !== "office" || !session) return;
   if (lbHoldForDate(box, renderOffice)) return;   // a date being typed: draw once it's done
+  if (!ofCan()) {   // KPI only: just its page
+    ofView.tab = "kpi";
+    box.replaceChildren(h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "KPI" })), ...kpiEl());
+    return;
+  }
   if (ofOld || (apiLevel && apiLevel < OF_API && !ofData)) {
     box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "The Office scorecards need the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
@@ -16114,22 +16169,485 @@ function renderOffice() {
     return;
   }
   const cfg = ofCfg(), admin = isAdmin();
+  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || !apiLevel || apiLevel >= OF_EST_API) && (k !== "kpi" || kpiCan()));
+  if (!shown.some(([k]) => k === ofView.tab)) ofView.tab = "today";
+  const kpi = ofView.tab === "kpi";   // People and Load from Excel: the KPI's on its tab
   const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" }),
     admin ? h("div", { class: "lb-acts" },
-      h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => openOfPeople() }, "People"),
-      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => openOfExcel() }, "Load from Excel")) : null);
-  if (!OF_TABS[ofView.tab]) ofView.tab = "today";
-  const tabs = lbSeg(Object.entries(OF_TABS).filter(([k]) => k !== "est" || !apiLevel || apiLevel >= OF_EST_API), ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
+      h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
+      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : openOfExcel() }, "Load from Excel")) : null);
+  const tabs = lbSeg(shown, ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
   tabs.classList.add("of-tabs");
-  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est") {
+  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi) {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
       ofErr ? h("p", { class: "dlg-err", text: ofErr }) : "");
     return;
   }
-  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : ofTodayEl();
+  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : ofTodayEl();
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
   if (ofView.tab === "today") ofShowSave();
+}
+/* ---- KPI: each person's day as the KPI Excel kept it: six numbers, each a list of lines (the
+   client, the address, the amount) with a count. Day / Week / Month / Year / Dates; someone with the KPI tick sees and
+   types only his own; Admins see everyone side by side and type on anyone's. The lines stay in the Google Sheet (the
+   KPI log tab), never on the phone. ---- */
+const KPI_API = 98;                                      // the Google script version with Office › KPI
+const KPI_LIST = [["est", "Estimates sent", "Est"], ["rep", "Repair estimates sent", "Rep"], ["inv", "Invoices sent", "Inv"],
+  ["e2j", "Estimates to jobs", "E→J"], ["coll", "Collected balances", "Coll"], ["xact", "Xactimates made", "Xact"]];
+const kpiCan = () => canSee("kpi") && (!apiLevel || apiLevel >= KPI_API);
+const kpiView = Object.assign({ per: "day", off: 0, day: "", from: "", to: "", who: "" }, store.get("voda.kpiView") || {});
+const kpiSaveView = () => store.set("voda.kpiView", { per: kpiView.per, who: kpiView.who });
+let kpiData = null, kpiKey = "", kpiLoading = false, kpiErr = "", kpiEdit = "", kpiSeq = 0;
+const kpiAddText = {};   // what's typed in each Add box (kept while the page redraws)
+/** The period on screen: { per, from, to, label }. Day: the day picked (today first). */
+function kpiRange() {
+  const today = lbToday(), per = EST_PER[kpiView.per] ? kpiView.per : "day";
+  if (per === "day") { const d = lbOkDay(kpiView.day, today) ? kpiView.day : today; return { per, from: d, to: d, label: lbDayText(d) + (d === today ? " (today)" : "") }; }
+  if (per === "dates") {
+    let from = lbOkDay(kpiView.from, today) ? kpiView.from : `${today.slice(0, 7)}-01`, to = lbOkDay(kpiView.to, today) ? kpiView.to : today;
+    if (to < from) [from, to] = [to, from];
+    return { per, from, to, label: revSpanText(from, to) };
+  }
+  return Object.assign({ per }, ofRange(per, Math.min(0, Number(kpiView.off) || 0)));
+}
+/** What the period needs read: every day's numbers from January 1 (for the month and the year so far) to its end,
+ *  and on Day the lines of the whole month (another day of it opens at once). */
+function kpiAsk(r) {
+  const today = lbToday(), to = r.to > today ? today : r.to, jan = `${to.slice(0, 4)}-01-01`;
+  const ask = { from: r.from < jan ? r.from : jan, to };
+  if (r.per === "day") { const m = r.from.slice(0, 7), end = `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`; ask.lf = `${m}-01`; ask.lt = end > today ? today : end; }
+  return ask;
+}
+const kpiKeyOf = a => [a.from, a.to, a.lf || "", a.lt || ""].join("|");
+async function kpiLoad() {
+  if (kpiLoading || !session || !kpiCan()) return;
+  const ask = kpiAsk(kpiRange()), key = kpiKeyOf(ask);
+  kpiLoading = true;
+  try { const o = await api("kpiRead", ask); kpiData = o; kpiKey = key; kpiErr = ""; }
+  catch (e) { kpiErr = e && e.error === "not_allowed" ? "KPI isn't switched on for you. An admin ticks KPI for you in Settings › Users and invites." : errText(e, "The KPI"); }
+  kpiLoading = false;
+  if (view.tab === "office" && ofView.tab === "kpi" && !ofTypingNow()) renderOffice();
+}
+const kpiZero = () => [0, 0, 0, 0, 0, 0];
+/** A person's six totals from..to. */
+function kpiSum(p, from, to) {
+  const out = kpiZero(), T = (kpiData && kpiData.tot && kpiData.tot[p]) || {};
+  for (const [d, v] of Object.entries(T)) if (d >= from && d <= to) v.forEach((n, i) => { out[i] += n; });
+  return out;
+}
+const kpiHas = (p, from, to) => kpiSum(p, from, to).some(Boolean);
+const kpiNum = n => n ? fmt(n) : "–";
+
+function kpiEl() {
+  if (apiLevel && apiLevel < KPI_API) return [h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+    h("p", { class: "meta", text: "Office › KPI needs the newest Google script: Deploy › Manage deployments › pencil › New version › Deploy." }))];
+  const today = lbToday(), r = kpiRange(), per = r.per, len = revLen(r.from, r.to);
+  const redraw = () => { kpiEdit = ""; kpiSaveView(); renderOffice(); };
+  const step = n => {
+    if (per === "day") kpiView.day = lbAddDays(r.from, n);
+    else if (per === "dates") { kpiView.from = lbAddDays(r.from, n * len); kpiView.to = lbAddDays(r.to, n * len); }
+    else kpiView.off = Math.min(0, (Number(kpiView.off) || 0) + n);
+    redraw();
+  };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }),
+    lbDateInput({ id, value, min: LB_FIRST_DAY, max: today, "aria-label": label }, onpick, LB_FIRST_DAY, today));
+  const prev = h("button", { class: "btn small", type: "button", id: "kpiPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹");
+  const next = h("button", { class: "btn small", type: "button", id: "kpiNext", "aria-label": "Later", disabled: r.to >= today, onclick: () => step(1) }, "›");
+  const bar = h("div", { class: "lb-bar rev-bar-top kpi-bar" },
+    lbSeg(Object.entries(EST_PER), per, k => {
+      if (k === "dates" && per !== "dates") { kpiView.from = r.from; kpiView.to = r.to > today ? today : r.to; }   // Dates starts from the period on screen
+      if (k === "day" && per !== "day") kpiView.day = r.to >= today && r.from <= today ? today : r.to > today ? today : r.to;
+      kpiView.per = k; kpiView.off = 0; redraw();
+    }, "Period"),
+    per === "day"
+      ? h("div", { class: "lb-daybar", id: "kpiDay" }, prev, dateBox("kpiOn", r.from, "Day", v => { kpiView.day = v; redraw(); }), next,
+        r.from !== today ? h("button", { class: "btn ghost small", type: "button", id: "kpiToday", onclick: () => { kpiView.day = today; redraw(); } }, "Today") : null)
+      : per === "dates"
+        ? h("div", { class: "lb-daybar lb-payrange", id: "kpiDates" }, prev,
+          dateBox("kpiFrom", r.from, "From", v => { kpiView.from = v; if (v > r.to) kpiView.to = lbAddDays(v, len - 1) > today ? today : lbAddDays(v, len - 1); redraw(); }),
+          dateBox("kpiTo", r.to, "To", v => { kpiView.to = v; if (v < r.from) kpiView.from = v; redraw(); }), next)
+        : h("div", { class: "of-step" }, prev, h("strong", { id: "kpiLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }), next));
+  const ask = kpiAsk(r);
+  if (!kpiData || kpiKey !== kpiKeyOf(ask)) {
+    if (!kpiLoading && !kpiErr) setTimeout(kpiLoad, 0);
+    return [bar, kpiErr ? h("p", { class: "dlg-err" }, kpiErr, " ", h("button", { class: "btn small", type: "button", id: "kpiRetry", onclick: () => { kpiErr = ""; renderOffice(); } }, "Try again"))
+      : h("p", { class: "loading", text: "Loading the KPI…" })];
+  }
+  const admin = !!kpiData.admin, to = ask.to;
+  const people = (kpiData.people || []).filter(p => !p.off || kpiHas(p.name, r.from, to));
+  if (!people.length) return [bar, h("div", { class: "panel lb-empty", id: "kpiNobody" }, h("h2", { text: admin ? "Nobody on the KPI yet" : "You're not on the KPI yet" }),
+    h("p", { class: "meta", text: admin ? "Tap Load from Excel to bring in the KPI Excel (each person and his months), or People to add each person and the login that types for him." : "An admin adds you under Office › KPI › People." }))];
+  const who = admin ? (people.some(p => p.name === kpiView.who) ? kpiView.who : "") : people.some(p => p.name === kpiView.who) ? kpiView.who : people[0].name;
+  const pick = admin || people.length > 1 ? lbSeg((admin ? [["", "Everyone"]] : []).concat(people.map(p => [p.name, p.name])), who,
+    k => { kpiView.who = k; redraw(); }, "Person") : null;
+  if (pick) pick.classList.add("kpi-who");
+  const body = !who ? kpiAllEl(people, r, to) : per === "day" ? kpiDayEl(who, r.from) : per === "year" ? kpiYearEl(who, r, to) : kpiDaysEl(who, r, to);
+  return [bar, pick, ...body].filter(Boolean);
+}
+/** The six numbers as tiles: the period's, and on a day the month and the year so far under each. */
+function kpiTiles(p, from, to, day) {
+  const t = kpiSum(p, from, to), mo = day ? kpiSum(p, `${day.slice(0, 7)}-01`, day) : null, yr = day ? kpiSum(p, `${day.slice(0, 4)}-01-01`, day) : null;
+  return h("div", { class: "kpi-tiles", id: "kpiTiles" }, KPI_LIST.map(([k, name], i) => h("div", { class: "kpi-tile", "data-k": k },
+    h("small", { text: name }), h("b", { text: fmt(t[i]) }),
+    day ? h("span", { text: `${MONTHS[Number(day.slice(5, 7)) - 1]} ${fmt(mo[i])} · ${day.slice(0, 4)} ${fmt(yr[i])}` }) : null)));
+}
+/** One person's day: the tiles, then each KPI's lines (tap one to change it) and a box to add one. */
+function kpiDayEl(p, day) {
+  const lines = (kpiData.lines || []).filter(x => x.p === p && x.d === day);
+  const cards = KPI_LIST.map(([k, name], i) => {
+    const mine = lines.filter(x => x.k === k), sum = mine.reduce((n, x) => n + x.n, 0);
+    const key = `${p}|${day}|${k}`;
+    const text = h("input", { type: "text", class: "kpi-in", "data-k": k, maxlength: "300", autocomplete: "off", placeholder: "Client – address – $", "aria-label": `${name}: what it was`,
+      value: kpiAddText[key] || "", oninput: e => { kpiAddText[key] = e.target.value; },
+      onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); add(); } } });
+    const cnt = h("input", { type: "number", class: "kpi-n", "data-k": k, min: "0", max: "999", step: "1", inputmode: "numeric", value: "1", "aria-label": `${name}: how many` });
+    const add = () => {
+      const t = text.value.trim(), n = cnt.value === "" ? 1 : Number(cnt.value);
+      if (!t && !n) { text.focus(); return; }
+      if (!Number.isInteger(n) || n < 0 || n > 999) { toast("How many: a whole number, 0 to 999."); return; }
+      delete kpiAddText[key];
+      kpiPut({ person: p, day, kpi: k, text: t, n }, true);
+    };
+    return h("section", { class: "kpi-card", "data-k": k },
+      h("h4", null, h("span", { text: name }), h("b", { class: "kpi-sum", text: fmt(sum) })),
+      mine.length ? h("ul", { class: "kpi-lines" }, mine.map(x => kpiLineEl(x, i))) : null,
+      h("div", { class: "kpi-add" }, text, cnt, h("button", { class: "btn small primary", type: "button", "data-k": k, onclick: add }, "Add")));
+  });
+  return [kpiTiles(p, day, day, day), h("div", { class: "kpi-cards", id: "kpiCards" }, cards)];
+}
+function kpiLineEl(x) {
+  if (kpiEdit === x.id) {
+    const t = h("input", { type: "text", class: "kpi-in", maxlength: "300", value: x.t, "aria-label": "What it was" });
+    const n = h("input", { type: "number", class: "kpi-n", min: "0", max: "999", step: "1", inputmode: "numeric", value: String(x.n), "aria-label": "How many" });
+    const save = () => {
+      const c = n.value === "" ? 1 : Number(n.value);
+      if (!Number.isInteger(c) || c < 0 || c > 999) { toast("How many: a whole number, 0 to 999."); return; }
+      if (!t.value.trim() && !c) return;
+      kpiEdit = ""; kpiPut({ id: x.id, text: t.value.trim(), n: c });
+    };
+    t.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") { kpiEdit = ""; renderOffice(); } });
+    setTimeout(() => { if (t.isConnected) t.focus(); }, 0);
+    return h("li", { class: "kpi-line edit", "data-id": x.id }, t, n,
+      h("button", { class: "btn small primary", type: "button", onclick: save }, "Save"),
+      h("button", { class: "btn small ghost", type: "button", onclick: () => { kpiEdit = ""; renderOffice(); } }, "Cancel"),
+      h("button", { class: "btn small ghost danger", type: "button", "data-act": "remove", onclick: () => { kpiEdit = ""; kpiPut({ id: x.id, remove: true }); } }, "Remove"));
+  }
+  return h("li", { class: "kpi-line" + (x.saving ? " saving" : ""), "data-id": x.id },
+    h("button", { class: "kpi-t", type: "button", disabled: !!x.saving, title: "Change or remove it", onclick: () => { kpiEdit = x.id; renderOffice(); } }, x.t || "(no note)"),
+    h("b", { class: "kpi-c", text: x.saving ? "saving…" : `× ${x.n}` }));
+}
+/** Add, change or take off a line: on screen at once, then saved; if it can't be saved it comes back off (or as it
+ *  was) and says why. */
+async function kpiPut(data, isNew) {
+  const L = kpiData.lines || (kpiData.lines = []), K = KPI_LIST.map(x => x[0]);
+  const bump = (x, sign) => { const P = kpiData.tot[x.p] || (kpiData.tot[x.p] = {}), D = P[x.d] || (P[x.d] = kpiZero()); D[K.indexOf(x.k)] += sign * x.n; };
+  let undo;
+  if (isNew) {
+    const tmp = { id: `tmp${++kpiSeq}`, p: data.person, d: data.day, k: data.kpi, t: data.text.replace(/\s+/g, " "), n: data.n, saving: true };
+    L.push(tmp); bump(tmp, 1);
+    undo = () => { L.splice(L.indexOf(tmp), 1); bump(tmp, -1); };
+    renderOffice();
+    const box = document.querySelector(`#kpiCards .kpi-in[data-k="${data.kpi}"]`); if (box && !isTouch()) box.focus();
+    try { const o = await api("kpiPut", data); Object.assign(tmp, o.line, { saving: false }); }
+    catch (e) { undo(); kpiAddText[`${data.person}|${data.day}|${data.kpi}`] = data.text; toast(kpiPutErr(e)); }
+  } else {
+    const x = L.find(y => y.id === data.id);
+    if (!x) return;
+    const was = Object.assign({}, x);
+    bump(x, -1);
+    if (data.remove) L.splice(L.indexOf(x), 1);
+    else { Object.assign(x, { t: data.text, n: data.n, saving: true }); bump(x, 1); }
+    renderOffice();
+    try { await api("kpiPut", data); x.saving = false; }
+    catch (e) { if (!data.remove) { bump(x, -1); L.splice(L.indexOf(x), 1); } L.push(Object.assign(x, was)); bump(x, 1); toast(kpiPutErr(e)); }
+  }
+  if (view.tab === "office" && ofView.tab === "kpi") renderOffice();
+}
+const kpiPutErr = e => e && e.error === "offline" ? "No connection: not saved. Try again when you're back online." : e && e.error === "bad_day" ? "Not a day ahead." : e && e.error === "gone" ? "Someone took that line off already." : e && e.error === "not_allowed" ? "You can type only your own KPI." : errText(e, "It");
+/** One person, a week, a month or the days picked: the tiles, then a row a day (tap one to open it). */
+function kpiDaysEl(p, r, to) {
+  const days = [];
+  for (let d = to; d >= r.from; d = lbAddDays(d, -1)) if (lbDate(d).getDay() !== 0 || kpiHas(p, d, d)) days.push(d);
+  return [kpiTiles(p, r.from, to), h("div", { class: "panel kpi-table-box" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-table", id: "kpiDays" },
+    h("thead", null, h("tr", null, h("th", { text: "Day" }), KPI_LIST.map(([k, name, short]) => h("th", { title: name, text: short })))),
+    h("tbody", null, days.map(d => { const t = kpiSum(p, d, d); return h("tr", { "data-day": d, class: t.some(Boolean) ? "" : "kpi-none" },
+      h("th", null, h("button", { class: "linkish", type: "button", onclick: () => { kpiView.per = "day"; kpiView.day = d; kpiEdit = ""; kpiSaveView(); renderOffice(); } }, lbDayText(d))),
+      t.map(n => h("td", { text: kpiNum(n) }))); })),
+    h("tfoot", null, h("tr", null, h("th", { text: "Total" }), kpiSum(p, r.from, to).map(n => h("td", { text: fmt(n) }))))))),
+    h("p", { class: "meta", text: "Tap a day to see or add its lines." })];
+}
+/** One person, a year: the tiles, then a row a month (tap one to open it). */
+function kpiYearEl(p, r, to) {
+  const y = Number(r.from.slice(0, 4)), months = [];
+  for (let m = Number(to.slice(5, 7)); m >= 1; m--) months.push(m);
+  const today = lbToday();
+  return [kpiTiles(p, r.from, to), h("div", { class: "panel kpi-table-box" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-table", id: "kpiMonths" },
+    h("thead", null, h("tr", null, h("th", { text: "Month" }), KPI_LIST.map(([k, name, short]) => h("th", { title: name, text: short })))),
+    h("tbody", null, months.map(m => { const k = lbMonthKey(y, m), t = kpiSum(p, `${k}-01`, `${k}-31`); return h("tr", { "data-month": k },
+      h("th", null, h("button", { class: "linkish", type: "button", onclick: () => {
+        const now = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7)), then = y * 12 + m;
+        kpiView.per = "month"; kpiView.off = then - now; kpiSaveView(); renderOffice(); } }, lbMonthLong(m))),
+      t.map(n => h("td", { text: kpiNum(n) }))); })),
+    h("tfoot", null, h("tr", null, h("th", { text: "Total" }), kpiSum(p, r.from, to).map(n => h("td", { text: fmt(n) }))))))),
+    h("p", { class: "meta", text: "Tap a month to see its days." })];
+}
+/** Admins, everyone: a row for each KPI, a column for each person (tap a name to see only his). */
+function kpiAllEl(people, r, to) {
+  const sums = people.map(p => kpiSum(p.name, r.from, to)), total = kpiZero();
+  sums.forEach(s => s.forEach((n, i) => { total[i] += n; }));
+  return [h("div", { class: "panel kpi-table-box" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-table kpi-all", id: "kpiAll" },
+    h("thead", null, h("tr", null, h("th", { text: "" }), people.map(p => h("th", { "data-p": p.name },
+      h("button", { class: "linkish", type: "button", onclick: () => { kpiView.who = p.name; kpiSaveView(); renderOffice(); } }, p.name))),
+      people.length > 1 ? h("th", { text: "Total" }) : null)),
+    h("tbody", null, KPI_LIST.map(([k, name], i) => h("tr", { "data-k": k }, h("th", { text: name }),
+      sums.map(s => h("td", { text: kpiNum(s[i]) })), people.length > 1 ? h("td", null, h("b", { text: fmt(total[i]) })) : null)))))),
+    h("p", { class: "meta", text: "Tap a name to see that person's days and lines, and to type on them." })];
+}
+
+/** Admins: who's on the KPI, the login that types for each, and who's left (his numbers stay; he's off the list). */
+async function openKpiPeople() {
+  let users = [];
+  try { users = (await stFetch("users", () => api("users"))).users || []; } catch (e) { toast(errText(e, "The logins")); return; }
+  const list = ((kpiData && kpiData.admin && kpiData.people) || []).map(p => Object.assign({}, p));
+  const err = h("p", { class: "dlg-err", role: "alert" }), box = h("div", { class: "kpi-people", id: "kpiPeople" });
+  const named = users.filter(u => u.status !== "invited").sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const draw = () => box.replaceChildren(...list.map((p, i) => h("div", { class: "kpi-person", "data-i": i },
+    p.old ? h("b", { class: "kpi-pname", text: p.name }) : h("input", { type: "text", class: "kpi-pname", maxlength: "40", value: p.name, placeholder: "Name (as on the Excel)", "aria-label": "Name", oninput: e => { p.name = e.target.value; } }),
+    h("select", { class: "kpi-puser", "aria-label": "The login that types for this person", onchange: e => { p.user = e.target.value; } },
+      h("option", { value: "", text: "No login" }), named.map(u => h("option", { value: u.id, text: u.name + (u.username ? ` (@${u.username})` : ""), selected: u.id === p.user }))),
+    h("label", { class: "check" }, h("input", { type: "checkbox", class: "kpi-poff", checked: !!p.off, onchange: e => { p.off = e.target.checked; } }), h("span", { text: "Left" })),
+    p.old ? null : h("button", { class: "btn small", type: "button", "aria-label": "Remove", onclick: () => { list.splice(i, 1); draw(); } }, "✕"))),
+    ...(list.length ? [] : [h("p", { class: "meta", text: "Nobody yet." })]));
+  list.forEach(p => { p.old = true; });
+  draw();
+  openDialog(h("div", { class: "rp-dlg" },
+    h("h3", { id: "dlgTitle", text: "KPI people" }),
+    howFold("kpiPeopleHow", h("p", { class: "hint", text: "Each person on the KPI, and the login that types for him: that login sees and types only his own (give it the KPI tick in Settings › Users and invites). Admins see and type everyone's. Left: off the list, his numbers stay. A name already on the KPI stays as it is (his lines go by it)." }), "How it works"),
+    box,
+    h("button", { class: "btn small", type: "button", id: "kpiAddPerson", onclick: () => { list.push({ name: "", user: "", off: false }); draw(); const ins = box.querySelectorAll("input.kpi-pname"); if (ins.length) ins[ins.length - 1].focus(); } }, "+ Add a person"),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: closeDialog }, "Cancel"),
+      h("button", { class: "btn primary", type: "button", id: "kpiPeopleSave", onclick: async ev => {
+        const out = list.map(p => ({ name: String(p.name || "").trim(), user: p.user || "", off: !!p.off })).filter(p => p.name);
+        const names = out.map(p => p.name.toLowerCase());
+        if (names.some((n, i) => names.indexOf(n) !== i)) { err.textContent = "A name is there twice."; return; }
+        const used = out.map(p => p.user).filter(Boolean);
+        if (used.some((u, i) => used.indexOf(u) !== i)) { err.textContent = "A login types for one person only."; return; }
+        ev.currentTarget.disabled = true; err.textContent = "";
+        try { await api("kpiPeople", { people: out }); dlgDirty = false; closeDialog(); toast("KPI people saved"); kpiKey = ""; kpiLoad(); }
+        catch (e) { err.textContent = errText(e, "Nothing"); ev.currentTarget.disabled = false; }
+      } }, "Save")))));
+}
+
+/* ---- Load from Excel: the KPI workbook, one tab a person a month ("Name November 2026", "Name - January 2026", older
+   ones without the year: the year of the tab before it). Each day's block starts with a row of the KPI headings
+   (ESTIMATES SENT …, DATE …); under each heading a line's text, the count in the column next to it; the day's total row
+   is left out. Tabs from before the day numbers: each line's day from its DATE. The month's totals are checked against
+   the tab's MONTHLY row. ---- */
+const KPI_HEADS = { "ESTIMATES SENT": "est", "REPAIR ESTIMATES SENT": "rep", "INVOICES SENT": "inv", "ESTIMATES TO JOBS": "e2j", "COLLECTED BALANCES": "coll", "XACTIMATES MADE": "xact" };
+const KPI_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const kpiHead = v => typeof v === "string" ? v.replace(/\s+/g, " ").trim().toUpperCase() : "";
+/** An Excel day number (or a typed day) as yyyy-mm-dd, if it's a sensible day. */
+function kpiXlDay(v) {
+  if (typeof v === "number" && v > 40000 && v < 60000) return new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5).toISOString().slice(0, 10);
+  if (typeof v === "string") { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v.trim()) || null; if (m) return `${m[1]}-${m[2]}-${m[3]}`; }
+  return "";
+}
+/** "Name November 2026", " Name September", "NAME - January 2026" → { p: "Name", mo: 11, y: 2026 | 0 }. */
+function kpiTabName(name) {
+  const m = /^\s*([A-Za-z][A-Za-z.' ]*?)\s*-?\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{4})?\s*$/i.exec(name || "");
+  if (!m) return null;
+  const p = m[1].trim().split(/\s+/).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  return { p, mo: KPI_MONTHS.indexOf(m[2].toLowerCase()) + 1, y: m[3] ? Number(m[3]) : 0 };
+}
+/** The tabs read → { months: [{ p, m, lines, tot, excel, tabs }], skipped: [names], note: [text] }. */
+function kpiParseTabs(tabs) {
+  const out = {}, skipped = [], note = [];
+  let lastY = 0, lastMo = 0;
+  for (const tab of tabs) {
+    const nm = kpiTabName(tab.name);
+    if (!nm) { skipped.push(tab.name); continue; }
+    let y = nm.y;
+    if (!y) { if (!lastY) { skipped.push(tab.name); continue; } y = nm.mo <= lastMo ? lastY : lastY - 1; }   // no year: the tabs run newest first
+    lastY = y; lastMo = nm.mo;
+    const key = lbMonthKey(y, nm.mo), days = lbDaysIn(key), rows = tab.rows || [];
+    // the day blocks: a row with the headings (a group with DATE; the summary's headings have none)
+    const groups = rows.map(row => {
+      const gs = [];
+      let g = null;
+      (row || []).forEach((v, c) => {
+        const t = kpiHead(v);
+        if (t === "ESTIMATES SENT" && (!g || g.cols.est !== undefined)) { g = { cols: {}, date: -1, start: c }; gs.push(g); }
+        if (!g) return;
+        if (KPI_HEADS[t] && g.cols[KPI_HEADS[t]] === undefined) g.cols[KPI_HEADS[t]] = c;
+        else if (t === "DATE" && g.date === -1) g.date = c;
+      });
+      return gs.filter(x => x.date !== -1 && x.cols.est !== undefined);
+    });
+    const heads = [];
+    groups.forEach((gs, r) => gs.forEach(g => heads.push({ r, g })));
+    const numbered = heads.some(({ r, g }) => typeof (rows[r] || [])[g.start - 1] === "number");   // the day blocks have their day numbers
+    const lines = [], tot = kpiZero(), K = KPI_LIST.map(x => x[0]);
+    let lost = 0, extra = 0, late = 0, copies = 0;
+    const noTotal = [];
+    heads.forEach(({ r, g }, i) => {
+      const end = (heads.find((x, j) => j > i && x.r > r && x.g.start === g.start) || { r: rows.length }).r;
+      const num = (rows[r] || [])[g.start - 1];
+      const dn = typeof num === "number" && num >= 1 && num <= 31 && Math.floor(num) === num ? num : 0;
+      let day = dn ? `${key}-${String(Math.min(dn, days)).padStart(2, "0")}` : "";   // day 31 of a 30-day month: its last day
+      const block = [], sums = {};
+      let totalRow = false;
+      for (let rr = r + 1; rr < end; rr++) {
+        const row = rows[rr] || [], d = kpiXlDay(row[g.date]);
+        if (!day && d) day = d;   // a tab from before the day numbers: the day its lines were typed
+        const cells = Object.entries(g.cols).map(([k, c]) => {
+          const t = row[c], n = row[c + 1];
+          return { k, t: typeof t === "string" ? t.replace(/\s+/g, " ").trim() : typeof t === "number" ? String(t) : "",
+            n: typeof n === "number" && Number.isFinite(n) ? n : typeof n === "string" && /^\s*\d+\s*$/.test(n) ? Number(n) : null };
+        });
+        // the day's total row: every count is the sum of the lines above it (a line typed on it anyway counts 1: the
+        // Excel's total left it out)
+        if (cells.every(x => x.n !== null && x.n === (sums[x.k] || 0))) {
+          totalRow = true;
+          const over = cells.filter(x => x.t);
+          if (over.length) { over.forEach(x => block.push({ k: x.k, t: x.t, n: 1 })); extra += over.length; }
+          continue;
+        }
+        const items = cells.filter(x => x.t || x.n !== null);
+        items.forEach(x => { sums[x.k] = (sums[x.k] || 0) + (x.n || 0); });
+        block.push(...items.map(x => ({ k: x.k, t: x.t, n: x.n === null ? 0 : Math.max(0, Math.round(x.n)) })));
+      }
+      if (!block.length) return;
+      if (!day) { lost += block.length; return; }
+      if (!dn && numbered && day.slice(0, 7) !== key) { copies += block.length; return; }   // another month's day, copied in
+      if (dn > days) late += block.length;
+      if (!totalRow && dn) noTotal.push(dn);
+      block.forEach(x => { lines.push(Object.assign({ d: day }, x)); tot[K.indexOf(x.k)] += x.n; });
+    });
+    if (lost) note.push(`${tab.name.trim()}: ${lost} line${lost === 1 ? "" : "s"} with no day left out.`);
+    if (copies) note.push(`${tab.name.trim()}: ${copies} line${copies === 1 ? "" : "s"} in a block with no day number, dated in another month (copied from that month's tab), left out.`);
+    if (late) note.push(`${tab.name.trim()}: ${late} line${late === 1 ? "" : "s"} typed under day ${days + 1}${days < 30 ? " or later" : ""}, put on ${MONTHS[nm.mo - 1]} ${days}.`);
+    if (noTotal.length) note.push(`${tab.name.trim()}: day ${noTotal.join(", ")} ha${noTotal.length === 1 ? "s" : "ve"} no total row in the Excel, so its MONTHLY leaves ${noTotal.length === 1 ? "that day" : "those days"} out.`);
+    if (extra) note.push(`${tab.name.trim()}: ${extra} line${extra === 1 ? "" : "s"} typed on a day's total row, counted 1 each (the Excel's total left ${extra === 1 ? "it" : "them"} out).`);
+    // the tab's own MONTHLY totals, to check against (before mid-2025 they were the week boxes, typed by hand)
+    let excel = null, weekly = false;
+    for (let r = 0; r < rows.length && !weekly; r++) (rows[r] || []).forEach((v, c) => {
+      if (weekly || !/^WEEK \d$/.test(kpiHead(v))) return;
+      const vals = rows[r + 2] || [];
+      for (let cc = c; cc < c + 8; cc++) if (typeof vals[cc] === "number" && vals[cc]) { weekly = true; return; }
+    });
+    for (let r = 0; r < rows.length && !excel; r++) (rows[r] || []).forEach((v, c) => {
+      if (excel || kpiHead(v) !== "MONTHLY") return;
+      for (let rr = r + 1; rr < Math.min(rows.length, r + 4); rr++) {
+        const row = rows[rr] || [];
+        if (kpiHead(row[c]) !== "ESTIMATES SENT") continue;
+        const vals = rows[rr + 1] || [], e = kpiZero();
+        let any = false;
+        for (let cc = c; cc < c + 8; cc++) { const k = KPI_HEADS[kpiHead(row[cc])]; if (k && typeof vals[cc] === "number") { e[K.indexOf(k)] = vals[cc]; any = true; } }
+        if (any) excel = e;
+        return;
+      }
+    });
+    // lines whose day is in another month (the oldest tabs) go to that month
+    for (const x of lines) {
+      const mk = x.d.slice(0, 7), id = `${nm.p}|${mk}`;
+      const M = out[id] || (out[id] = { p: nm.p, m: mk, lines: [], tot: kpiZero(), excel: null, tabs: [] });
+      M.lines.push(x); M.tot[K.indexOf(x.k)] += x.n;
+    }
+    const own = out[`${nm.p}|${key}`] || (out[`${nm.p}|${key}`] = { p: nm.p, m: key, lines: [], tot: kpiZero(), excel: null, tabs: [] });
+    own.tabs.push(tab.name.trim());
+    if (excel) { own.excel = excel; own.weekly = weekly; }
+  }
+  const order = [...new Set(tabs.map(t => (kpiTabName(t.name) || {}).p).filter(Boolean))];   // the people in the order the Excel has them
+  const months = Object.values(out).filter(x => x.lines.length || (x.excel && x.excel.some(Boolean)))
+    .sort((a, b) => b.m.localeCompare(a.m) || order.indexOf(a.p) - order.indexOf(b.p));
+  return { months, skipped, note, order };
+}
+function openKpiExcel() {
+  const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", "aria-live": "polite" }), res = h("div", { id: "kpiXlResult", hidden: true });
+  let found = null, have = {};
+  const tick = {};
+  const draw = () => {
+    const M = found.months, people = [...new Set(M.map(x => x.p))];
+    const newest = M.reduce((a, x) => x.m > a ? x.m : a, "");
+    const rows = M.map(x => {
+      const id = `${x.p}|${x.m}`, n = x.lines.length, app = have[id];
+      const off = x.excel && x.excel.some((v, i) => v !== x.tot[i]);
+      return h("tr", { "data-id": id, class: app ? "kpi-have" : "" },
+        h("td", null, h("input", { type: "checkbox", checked: !!tick[id], "aria-label": `Load ${x.p}, ${x.m}`, onchange: e => { tick[id] = e.target.checked; foot(); } })),
+        h("th", { text: x.p }), h("td", { text: `${MONTHS[Number(x.m.slice(5, 7)) - 1]} ${x.m.slice(0, 4)}` }), h("td", { class: "num", text: fmt(n) }),
+        ...x.tot.map((v, i) => h("td", { class: "num" + (off && x.excel[i] !== v ? " kpi-diff" : ""), title: off && x.excel[i] !== v ? `The tab's MONTHLY row says ${x.excel[i]}` : null, text: fmt(v) })),
+        h("td", { class: "kpi-xl-note", text: app ? "The app has numbers: loading replaces them" : off ? (x.weekly ? "MONTHLY was the week boxes, typed by hand (in red: what it said)" : "Not MONTHLY's number (in red): see Details") : x.excel ? "✓ matches MONTHLY" : "" }));
+    });
+    res.hidden = false;
+    res.replaceChildren(
+      h("h4", { text: `${M.length} months: ${found.order.filter(p => people.includes(p)).join(", ")}` }),
+      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-xl", id: "kpiXlTable" },
+        h("thead", null, h("tr", null, h("th", { text: "" }), h("th", { text: "Person" }), h("th", { text: "Month" }), h("th", { text: "Lines" }), KPI_LIST.map(([k, name, s]) => h("th", { title: name, text: s })), h("th", { text: "" }))),
+        h("tbody", null, rows))),
+      found.skipped.length || found.note.length ? h("details", { class: "lb-hist-more" }, h("summary", { text: `Details (${found.skipped.length + found.note.length})` }),
+        found.skipped.length ? h("p", { class: "meta", text: `Tabs that aren't a person's month, left out: ${found.skipped.join(", ")}.` }) : null,
+        found.note.map(t => h("p", { class: "meta", text: t }))) : null,
+      howFold("kpiXlHow", h("p", { class: "hint", text: `Each ticked month replaces that person's month in the app with the Excel's lines. Months the app already has numbers for are unticked: tick one to replace it. Someone whose last month is 3 or more months before ${MONTHS[Number(newest.slice(5, 7)) - 1]} ${newest.slice(0, 4)} is marked Left (his numbers stay).` }), "How it works"));
+    foot();
+  };
+  const go = h("button", { class: "btn primary", type: "button", id: "kpiXlGo", disabled: true }, "Load");
+  const foot = () => { const n = Object.values(tick).filter(Boolean).length; go.disabled = !n; go.textContent = n ? `Load ${n} month${n === 1 ? "" : "s"}` : "Load"; };
+  go.onclick = async () => {
+    const pick = found.months.filter(x => tick[`${x.p}|${x.m}`]);
+    if (!pick.length) return;
+    const last = {};
+    found.months.forEach(x => { if (!last[x.p] || x.m > last[x.p]) last[x.p] = x.m; });
+    const newest = Object.values(last).sort().pop() || "";
+    const left = Object.keys(last).filter(p => lbAddMonths(last[p], 3) <= newest);
+    go.disabled = true; err.textContent = "";
+    // a few months at a time (1,500 lines at most)
+    const batches = [];
+    let b = [], n = 0;
+    for (const x of pick) {
+      if (b.length && (n + x.lines.length > 1500 || b.length >= 30)) { batches.push(b); b = []; n = 0; }
+      b.push({ p: x.p, m: x.m, lines: x.lines.map(l => ({ d: l.d, k: l.k, t: l.t, n: l.n })) }); n += x.lines.length;
+    }
+    if (b.length) batches.push(b);
+    let done = 0;
+    try {
+      for (const months of batches) {
+        status.textContent = `Saving… ${done} of ${pick.length} months`;
+        await api("kpiImport", { months, left, order: found.order }, 120000);
+        done += months.length;
+      }
+      status.textContent = "";
+      dlgDirty = false; closeDialog(); toast(`${done} month${done === 1 ? "" : "s"} loaded`);
+      kpiKey = ""; kpiLoad();
+    } catch (e) { status.textContent = ""; err.textContent = `${done ? `${done} of ${pick.length} months were saved. ` : ""}${errText(e, "The rest")}`; go.disabled = false; }
+  };
+  openDialog(h("div", { class: "rp-dlg kpi-xl-dlg" },
+    h("h3", { id: "dlgTitle", text: "Load the KPI from Excel" }),
+    howFold("kpiXlPick", h("p", { class: "hint", text: "Choose the KPI Excel (File > Download > Microsoft Excel). Every tab named for a person and a month is read (like “Name November 2026”): each day's lines and counts under Estimates sent, Repair estimates sent, Invoices sent, Estimates to jobs, Collected balances and Xactimates made. Nothing is saved until you tap Load." }), "How it works"),
+    h("input", { type: "file", id: "kpiXlFile", accept: ".xlsx", onchange: async e => {
+      err.textContent = ""; res.hidden = true;
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        status.textContent = "Reading…";
+        const tabs = await lbReadXlsx(await f.arrayBuffer(), n => !!kpiTabName(n));
+        found = kpiParseTabs(tabs);
+        if (!found.months.length) { status.textContent = ""; err.textContent = "No tabs named for a person and a month (like “Name November 2026”) in that file."; return; }
+        // what the app has already, to leave those months unticked
+        const first = found.months.reduce((a, x) => x.m < a ? x.m : a, "9999"), lastM = found.months.reduce((a, x) => x.m > a ? x.m : a, "");
+        status.textContent = "Checking what the app has…";
+        const o = await api("kpiRead", { from: `${first}-01`, to: `${lastM}-${String(lbDaysIn(lastM)).padStart(2, "0")}` });
+        have = {};
+        for (const [p, D] of Object.entries(o.tot || {})) for (const [d, v] of Object.entries(D)) if (v.some(Boolean)) have[`${p}|${d.slice(0, 7)}`] = true;
+        found.months.forEach(x => { tick[`${x.p}|${x.m}`] = !have[`${x.p}|${x.m}`] && x.lines.length > 0; });
+        status.textContent = "";
+        draw();
+      } catch (x) { status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : errText(x, "That file"); }
+    } }),
+    status, res, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog }, "Cancel"), go))));
 }
 /* ---- Past clients to call: the clients whose last finished job in Housecall Pro was 6, 12, 18, 24 or 36 months before
    the day picked (a Sunday or a closed day moves to the next working day), less anyone booked since, tagged do not call,
