@@ -16336,8 +16336,8 @@ function pcEl() {
     left.length ? h("p", { class: "pc-left" }, h("button", { class: "linkish", type: "button", id: "pcLeft", "aria-expanded": String(pcLeftOpen), onclick: () => { pcLeftOpen = !pcLeftOpen; renderOffice(); } },
       `Left off: ${left.join(" · ")}. ${pcLeftOpen ? "Hide who" : "See who and why"}`)) : null,
     left.length && pcLeftOpen ? h("div", { class: "pc-leftlist", id: "pcLeftList" }, (x.leftOff || []).map(y => h("div", { class: "pc-lo", "data-id": y.id },
-      h("span", { class: "pc-name" }, hcpLink("cust", y.id, y.name || "(no name)")), y.contact ? h("span", { class: "meta pc-contact", text: ` ${y.contact}` }) : null,
-      h("div", { class: "meta", text: [`Last service ${pcDate(y.last)}`, y.type].filter(Boolean).join(" · ") }), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
+      h("span", { class: "pc-name" }, pcNameLink(y)), y.contact ? h("span", { class: "meta pc-contact", text: ` ${y.contact}` }) : null,
+      h("div", { class: "meta" }, pcDots([`Last service ${pcDate(y.last)}`, pcJobNo(y), y.type])), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
   const shut = done && pcFold(list, `${pcRangeKey()}|${g}`, x.due.length + x.missed.length + (x.callbacks || []).length);
   if (shut) { out.push(list); return pcAdminEnd(out, admin); }
   // call-backs first: clients who asked to be called on this day (or one gone by), with what they said
@@ -16415,8 +16415,8 @@ function pcPeriodEl(rg, today) {
     left.length ? h("p", { class: "pc-left" }, year ? `Left off: ${left.join(" · ")}.` : h("button", { class: "linkish", type: "button", id: "pcLeft", "aria-expanded": String(pcLeftOpen), onclick: () => { pcLeftOpen = !pcLeftOpen; renderOffice(); } },
       `Left off: ${left.join(" · ")}. ${pcLeftOpen ? "Hide who" : "See who and why"}`)) : null,
     !year && left.length && pcLeftOpen ? h("div", { class: "pc-leftlist", id: "pcLeftList" }, (x.leftOff || []).map(y => h("div", { class: "pc-lo", "data-id": y.id },
-      h("span", { class: "pc-name" }, hcpLink("cust", y.id, y.name || "(no name)")), y.contact ? h("span", { class: "meta pc-contact", text: ` ${y.contact}` }) : null,
-      h("div", { class: "meta", text: [lbDayText(y.due), `last service ${pcDate(y.last)}`, y.type].filter(Boolean).join(" · ") }), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
+      h("span", { class: "pc-name" }, pcNameLink(y)), y.contact ? h("span", { class: "meta pc-contact", text: ` ${y.contact}` }) : null,
+      h("div", { class: "meta" }, pcDots([lbDayText(y.due), `last service ${pcDate(y.last)}`, pcJobNo(y), y.type])), h("div", { class: "pc-why", text: pcWhyText(y) })))) : null);
   if (year) {
     // month by month: tap one to open it
     const C = n => (n ? fmt(n) : "–"), months = [];
@@ -16456,6 +16456,12 @@ function pcSumText(x) {
 }
 /** A call-back still to make: the row's mark is still the call-back that brought it back (not marked again yet). */
 const pcCbPending = r => !!(r.cbAt && r.m && r.m.r === "cb" && r.m.at === r.cbAt);
+/** A past client's name opens his last job in Housecall Pro: the phone app opens job (and estimate) links, while a
+ *  customer link opens the website and asks to sign in. With an older Google script (no job sent): the customer. */
+const pcNameLink = y => y.lastJob ? hcpLink("job", y.lastJob, y.name || "(no name)") : hcpLink("cust", y.id, y.name || "(no name)");
+/** "Last service May 18, 2026 · #1234 · Cleaning Residential": the job # opens it in Housecall Pro. */
+const pcDots = parts => parts.filter(Boolean).flatMap((p, i) => i ? [" · ", p] : [p]);
+const pcJobNo = y => y.lastJob && y.lastInv ? hcpLink("job", y.lastJob, `#${y.lastInv}`) : "";
 function pcRowEl(r, g, missed, cbRow) {
   const pend = cbRow && pcCbPending(r);
   const m = pend ? null : r.m, key = `${r.id}|${g}`, sure = pcSure === key;
@@ -16479,12 +16485,12 @@ function pcRowEl(r, g, missed, cbRow) {
     : m && m.r === "cb" && m.note ? `“${m.note}”` : "";
   return h("div", { class: "pc-row" + (m ? " marked" : ""), "data-id": r.id },
     h("div", { class: "pc-main" },
-      h("div", { class: "pc-top" }, h("span", { class: "pc-name" }, hcpLink("cust", r.id, r.name || "(no name)")), r.com ? h("span", { class: "pc-com", text: "Commercial" }) : null,
+      h("div", { class: "pc-top" }, h("span", { class: "pc-name" }, pcNameLink(r)), r.com ? h("span", { class: "pc-com", text: "Commercial" }) : null,
         r.contact ? h("span", { class: "meta pc-contact", text: r.contact }) : null,
         tel ? h("a", { class: "pc-tel", href: `tel:+1${tel.slice(-10)}` }, r.phone) : h("span", { class: "meta", text: "no phone" }),
         tel2 ? h("a", { class: "pc-tel pc-tel2", href: `tel:+1${tel2.slice(-10)}` }, r.phone2) : null),
       r.addr ? h("div", { class: "meta", text: r.addr }) : null,
-      h("div", { class: "meta pc-last", text: [`Last service ${pcDate(r.last)}`, what, jobs, missed ? `came up ${lbDayText(r.due)}` : ""].filter(Boolean).join(" · ") }),
+      h("div", { class: "meta pc-last" }, pcDots([`Last service ${pcDate(r.last)}`, pcJobNo(r), what, jobs, missed ? `came up ${lbDayText(r.due)}` : ""])),
       said ? h("div", { class: "pc-said" + (pend ? " due" : ""), text: said }) : null),
     acts, !m && pcCbOpen === key ? pcCbPicker(r, g) : null);
 }
