@@ -368,13 +368,14 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 @media (max-width: 760px) { .of-est-acts { justify-items: stretch; } .of-est-acts .pc-acts, .of-est-acts .pc-done { justify-content: flex-start; } }
 /* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
 .kpi-who { margin: 2px 0 0; }
+#kpiDay input[type="date"] { box-sizing: border-box; height: 2.3rem; }   /* as tall as ‹ › beside it */
 .kpi-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
-.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 10px; display: grid; gap: 1px; min-width: 0; align-content: start; }
+.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 10px; display: grid; grid-template-rows: 1fr auto auto; gap: 1px; min-width: 0; }   /* a name on two lines: the numbers still level */
 .kpi-tile small { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); line-height: 1.2; }
 .kpi-tile b { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .kpi-tile span { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kpi-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
-.kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; min-width: 0; display: grid; gap: 6px; }
+.kpi-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }   /* side by side: the same height, the Add boxes on one line */
+.kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .kpi-card h4 { margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
 .kpi-card .kpi-sum { font-family: var(--font-display); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 .kpi-lines { list-style: none; margin: 0; padding: 0; display: grid; }
@@ -385,12 +386,13 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 .kpi-line.saving { opacity: .6; }
 .kpi-line.edit { flex-wrap: wrap; }
 .kpi-line.edit .kpi-in { flex: 1 1 100%; }
-.kpi-add { display: flex; gap: 6px; min-width: 0; }
+.kpi-add { display: flex; gap: 6px; min-width: 0; margin-top: auto; }
 .kpi-in, .kpi-n { font: inherit; font-size: .9rem; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--bg); color: var(--ink); min-width: 0; box-sizing: border-box; }
 .kpi-add .kpi-in { flex: 1; }
 .kpi-n { width: 4em; flex: none; text-align: right; }
 .kpi-table-box { padding: 8px 10px; }
 .kpi-table th, .kpi-table td { text-align: right; white-space: nowrap; }
+.kpi-table thead th.kpi-th { white-space: normal; line-height: 1.25; vertical-align: bottom; min-width: 5.5em; }
 .kpi-table th:first-child { text-align: left; }
 .kpi-table tr.kpi-none th, .kpi-table tr.kpi-none td { color: var(--muted); }
 .kpi-table tfoot th, .kpi-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
@@ -16206,6 +16208,8 @@ const KPI_API = 98;                                      // the Google script ve
 const KPI_LIST = [["est", "Estimates sent", "Est"], ["rep", "Repair estimates sent", "Rep"], ["inv", "Invoices sent", "Inv"],
   ["e2j", "Estimates to jobs", "E→J"], ["coll", "Collected balances", "Coll"], ["xact", "Xactimates made", "Xact"]];
 const kpiCan = () => canSee("kpi") && (!apiLevel || apiLevel >= KPI_API);
+/** A KPI's column heading: its whole name on a PC, the short one on a phone (where six names won't fit). */
+const kpiTh = ([k, name, short]) => h("th", { class: "kpi-th", title: name }, h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }));
 const kpiView = Object.assign({ per: "day", off: 0, day: "", from: "", to: "", who: "" }, store.get("voda.kpiView") || {});
 const kpiSaveView = () => store.set("voda.kpiView", { per: kpiView.per, who: kpiView.who });
 let kpiData = null, kpiKey = "", kpiLoading = false, kpiErr = "", kpiEdit = "", kpiSeq = 0;
@@ -16271,7 +16275,8 @@ function kpiEl() {
       kpiView.per = k; kpiView.off = 0; redraw();
     }, "Period"),
     per === "day"
-      ? h("div", { class: "lb-daybar", id: "kpiDay" }, prev, dateBox("kpiOn", r.from, "Day", v => { kpiView.day = v; redraw(); }), next,
+      ? h("div", { class: "lb-daybar", id: "kpiDay" }, prev,   // the day box on the same line as ‹ › (no label over it)
+        lbDateInput({ id: "kpiOn", value: r.from, min: LB_FIRST_DAY, max: today, "aria-label": "Day" }, v => { kpiView.day = v; redraw(); }, LB_FIRST_DAY, today), next,
         r.from !== today ? h("button", { class: "btn ghost small", type: "button", id: "kpiToday", onclick: () => { kpiView.day = today; redraw(); } }, "Today") : null)
       : per === "dates"
         ? h("div", { class: "lb-daybar lb-payrange", id: "kpiDates" }, prev,
@@ -16380,7 +16385,7 @@ function kpiDaysEl(p, r, to) {
   const days = [];
   for (let d = to; d >= r.from; d = lbAddDays(d, -1)) if (lbDate(d).getDay() !== 0 || kpiHas(p, d, d)) days.push(d);
   return [kpiTiles(p, r.from, to), h("div", { class: "panel kpi-table-box" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-table", id: "kpiDays" },
-    h("thead", null, h("tr", null, h("th", { text: "Day" }), KPI_LIST.map(([k, name, short]) => h("th", { title: name, text: short })))),
+    h("thead", null, h("tr", null, h("th", { text: "Day" }), KPI_LIST.map(kpiTh))),
     h("tbody", null, days.map(d => { const t = kpiSum(p, d, d); return h("tr", { "data-day": d, class: t.some(Boolean) ? "" : "kpi-none" },
       h("th", null, h("button", { class: "linkish", type: "button", onclick: () => { kpiView.per = "day"; kpiView.day = d; kpiEdit = ""; kpiSaveView(); renderOffice(); } }, lbDayText(d))),
       t.map(n => h("td", { text: kpiNum(n) }))); })),
@@ -16393,7 +16398,7 @@ function kpiYearEl(p, r, to) {
   for (let m = Number(to.slice(5, 7)); m >= 1; m--) months.push(m);
   const today = lbToday();
   return [kpiTiles(p, r.from, to), h("div", { class: "panel kpi-table-box" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-table", id: "kpiMonths" },
-    h("thead", null, h("tr", null, h("th", { text: "Month" }), KPI_LIST.map(([k, name, short]) => h("th", { title: name, text: short })))),
+    h("thead", null, h("tr", null, h("th", { text: "Month" }), KPI_LIST.map(kpiTh))),
     h("tbody", null, months.map(m => { const k = lbMonthKey(y, m), t = kpiSum(p, `${k}-01`, `${k}-31`); return h("tr", { "data-month": k },
       h("th", null, h("button", { class: "linkish", type: "button", onclick: () => {
         const now = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7)), then = y * 12 + m;
