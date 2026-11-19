@@ -7944,8 +7944,8 @@ function hcpProbeEl() {
   const go = async b => {
     const v = n.value.replace(/^#/, "").trim();
     if (!v) { n.focus(); return; }
-    b.disabled = true; res.textContent = "Reading Housecall Pro…";
-    try { const o = await api("estProbe", { n: v }); delete o.ok; delete o.api; res.textContent = JSON.stringify(o, null, 1); }
+    b.disabled = true; res.textContent = "Reading Housecall Pro (up to a minute)…";
+    try { const o = await api("estProbe", { n: v }, 120000); delete o.ok; delete o.api; res.textContent = JSON.stringify(o, null, 1); }
     catch (e) { res.textContent = e && e.error === "not_found" ? `No estimate #${v} in the app yet.` : errText(e, "Nothing"); }
     b.disabled = false;
   };
