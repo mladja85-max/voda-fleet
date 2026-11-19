@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 99;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 100;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4407,7 +4407,9 @@ const EST_SHEET = "Estimates";
 const EST_COLS = ["Estimate id", "Estimate #", "Day (scheduled, else created)", "Created at", "Client", "Address", "Department", "Kind (read)", "Job type", "Status", "Approved by",
   "Decided at", "Estimate $", "Approved $", "Options", "Work status", "Housecall Pro employees", "Lead source", "Updated at", "Read at", "In charge (id)",
   "In charge", "Kind (typed)", "Typed by", "Typed at", "Text", "Tags", "Status in Housecall Pro", "Scheduled for", "Address", "State", "Phone"];
-const EST_RECHECK_DAYS = 60, EST_RECHECK_MAX = 50;   // a quick read also reads again the open estimates of the last 60 days (the newest 50)
+// a quick read also reads again the open estimates of the last 120 days: the newest 20 each time, and 40 more in turn
+// (where the last read stopped), so every open one is read again within a few reads however many there are
+const EST_RECHECK_DAYS = 120, EST_RECHECK_NEW = 20, EST_RECHECK_TURN = 40, EST_RECHECK_AT = "EST_RECHECK_AT";
 const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's assigned to; sees them all
 const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "5";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once; 5: the day it was scheduled for, read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
@@ -4657,16 +4659,23 @@ function estSync_(req, user) {
     if (!next) break;
   }
   // approving or sending an option in Housecall Pro doesn't always move the estimate's "changed" time, so a quick read
-  // can miss it: on its last step, the estimates still open (the newest EST_RECHECK_MAX of the last EST_RECHECK_DAYS
-  // days) are read again one by one, and the ones that changed are kept with the rest
+  // can miss it: on its last step, the estimates still open of the last EST_RECHECK_DAYS days are read again one by one
+  // (the newest every time, the rest in turn), and the ones that changed are kept with the rest
   let rechecked = 0;
   if (!backfill && !next) {
     const seen = {};
     got.forEach(function (e) { if (e && e.id) seen[String(e.id)] = true; });
     const cut = dayOf(now - EST_RECHECK_DAYS * 864e5), had = estRows_(estSheet_(false));
-    const open = Object.keys(had).map(function (id) { return had[id]; })
+    const all = Object.keys(had).map(function (id) { return had[id]; })
       .filter(function (r) { return String(r[9] || "open") === "open" && String(r[2]) >= cut && !seen[String(r[0])]; })
-      .sort(function (a, b) { return String(a[2]) < String(b[2]) ? 1 : String(a[2]) > String(b[2]) ? -1 : 0; }).slice(0, EST_RECHECK_MAX);
+      .sort(function (a, b) { return String(a[2]) < String(b[2]) ? 1 : String(a[2]) > String(b[2]) ? -1 : String(a[0]) < String(b[0]) ? 1 : -1; });
+    const rest = all.slice(EST_RECHECK_NEW);
+    let from = Number(P.getProperty(EST_RECHECK_AT)) || 0;
+    if (from >= rest.length) from = 0;
+    const turn = rest.slice(from, from + EST_RECHECK_TURN);
+    if (turn.length < EST_RECHECK_TURN && from > 0) turn.push.apply(turn, rest.slice(0, Math.min(from, EST_RECHECK_TURN - turn.length)));   // round to the start
+    if (rest.length) P.setProperty(EST_RECHECK_AT, String((from + EST_RECHECK_TURN) % rest.length));
+    const open = all.slice(0, EST_RECHECK_NEW).concat(turn);
     hcpGetAll_(open.map(function (r) { return { path: "/estimates/" + encodeURIComponent(String(r[0])), query: {} }; })).forEach(function (a, i) {
       const e = a && !a.error && a.data ? (a.data.estimate || a.data) : null;
       if (!e || !e.id) return;
