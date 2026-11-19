@@ -370,12 +370,12 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 .kpi-who { margin: 2px 0 0; }
 #kpiDay input[type="date"] { box-sizing: border-box; height: 2.3rem; }   /* as tall as ‹ › beside it */
 .kpi-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
-.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 10px; display: grid; gap: 1px; min-width: 0; align-content: start; }
+.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 10px; display: grid; grid-template-rows: 1fr auto auto; gap: 1px; min-width: 0; }   /* a name on two lines: the numbers still level */
 .kpi-tile small { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); line-height: 1.2; }
 .kpi-tile b { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .kpi-tile span { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kpi-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
-.kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; min-width: 0; display: grid; gap: 6px; }
+.kpi-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }   /* side by side: the same height, the Add boxes on one line */
+.kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .kpi-card h4 { margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
 .kpi-card .kpi-sum { font-family: var(--font-display); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 .kpi-lines { list-style: none; margin: 0; padding: 0; display: grid; }
@@ -386,7 +386,7 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 .kpi-line.saving { opacity: .6; }
 .kpi-line.edit { flex-wrap: wrap; }
 .kpi-line.edit .kpi-in { flex: 1 1 100%; }
-.kpi-add { display: flex; gap: 6px; min-width: 0; }
+.kpi-add { display: flex; gap: 6px; min-width: 0; margin-top: auto; }
 .kpi-in, .kpi-n { font: inherit; font-size: .9rem; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--bg); color: var(--ink); min-width: 0; box-sizing: border-box; }
 .kpi-add .kpi-in { flex: 1; }
 .kpi-n { width: 4em; flex: none; text-align: right; }
