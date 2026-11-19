@@ -368,6 +368,7 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 @media (max-width: 760px) { .of-est-acts { justify-items: stretch; } .of-est-acts .pc-acts, .of-est-acts .pc-done { justify-content: flex-start; } }
 /* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
 .kpi-who { margin: 2px 0 0; }
+#kpiDay input[type="date"] { box-sizing: border-box; height: 2.3rem; }   /* as tall as ‹ › beside it */
 .kpi-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
 .kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 10px; display: grid; gap: 1px; min-width: 0; align-content: start; }
 .kpi-tile small { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); line-height: 1.2; }
@@ -16271,7 +16272,8 @@ function kpiEl() {
       kpiView.per = k; kpiView.off = 0; redraw();
     }, "Period"),
     per === "day"
-      ? h("div", { class: "lb-daybar", id: "kpiDay" }, prev, dateBox("kpiOn", r.from, "Day", v => { kpiView.day = v; redraw(); }), next,
+      ? h("div", { class: "lb-daybar", id: "kpiDay" }, prev,   // the day box on the same line as ‹ › (no label over it)
+        lbDateInput({ id: "kpiOn", value: r.from, min: LB_FIRST_DAY, max: today, "aria-label": "Day" }, v => { kpiView.day = v; redraw(); }, LB_FIRST_DAY, today), next,
         r.from !== today ? h("button", { class: "btn ghost small", type: "button", id: "kpiToday", onclick: () => { kpiView.day = today; redraw(); } }, "Today") : null)
       : per === "dates"
         ? h("div", { class: "lb-daybar lb-payrange", id: "kpiDates" }, prev,
