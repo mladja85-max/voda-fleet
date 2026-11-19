@@ -436,6 +436,11 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 /* a long explanation, folded: one small grey line, a tap opens it */
 details.how-fold { margin: 2px 0; min-width: 0; }
 .hcp-probe-box { margin-top: 10px; }
+.hcp-hook-sec { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.hcp-hook-sec h4 { margin: 0 0 4px; }
+#hcpHookUrl { flex: 1 1 220px; min-width: 0; font-size: .78rem; }
+.hcp-hook-log { margin: 4px 0 8px; padding-left: 18px; font-size: .78rem; color: var(--muted); }
+.hcp-hook-log b.ok { color: var(--ok); } .hcp-hook-log b.muted { color: var(--muted); font-weight: 600; }
 .hcp-probe { font-size: .72rem; line-height: 1.35; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 8px 0 0; }
 .hcp-probe:empty { display: none; }
 details.how-fold > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font-size: .8rem; font-weight: 600; }
@@ -2664,6 +2669,8 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-amt { display: grid; text-align: right; font-variant-numeric: tabular-nums; } .est-amt small { color: var(--muted); font-size: .72rem; line-height: 1.25; }
 .est-st { display: grid; } .est-st b { font-size: .84rem; } .est-st small { color: var(--muted); font-size: .74rem; white-space: nowrap; }
 .est-st.ok b { color: var(--ok); } .est-st.no b { color: var(--due); } .est-st.cx b { color: var(--muted); text-decoration: line-through; }
+.est-st .est-mkl { white-space: nowrap; } .est-mk { font-size: .74rem; }
+.est-st .est-sent { color: var(--ok); font-style: normal; }
 .est-st.op b { color: var(--soon); } .est-st.op.slow small { color: var(--soon); font-weight: 600; } .est-st.op.late small { color: var(--due); font-weight: 700; }
 .est-in { min-width: 0; display: grid; } .est-in .muted { color: var(--muted); font-style: italic; }
 .est-in b, .est-in small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .est-in small { color: var(--muted); font-size: .74rem; }
@@ -7936,6 +7943,35 @@ const HCP_ERRORS = {
   too_long: "Pick 31 days or fewer." };
 let hcpLast = null;   // the last check (its days, what came back, when), kept while the app is open
 const EST_PROBE_API = 101;                             // the Google script version that looks up one estimate's fields
+/** Estimate sent alerts: the link to paste in Housecall Pro (its Webhooks app, "Estimate sent"), so an estimate leaves
+ *  Not sent the moment it's sent; the last alerts that came in; a new link if this one got out. */
+function hcpHookEl() {
+  const box = h("div", { class: "hcp-hook", id: "hcpHook" }, h("p", { class: "meta", text: "Loading…" }));
+  let sure = false;
+  const draw = r => {
+    const url = API_URL + (API_URL.includes("?") ? "&" : "?") + "hook=" + encodeURIComponent(r.key);
+    const field = h("input", { type: "text", id: "hcpHookUrl", readonly: true, value: url, "aria-label": "Alert link", onfocus: ev => ev.target.select() });
+    const log = Array.isArray(r.log) ? r.log : [];
+    box.replaceChildren(
+      h("div", { class: "hcp-days" }, field,
+        h("button", { class: "btn small", type: "button", id: "hcpHookCopy", onclick: async () => {
+          try { await navigator.clipboard.writeText(url); toast("Link copied"); } catch (e) { field.focus(); field.select(); toast("Select the link and copy it"); }
+        } }, "Copy")),
+      h("p", { class: "meta", id: "hcpHookLog" }, log.length ? `Last alerts (${fmt(r.sent || 0)} estimate${r.sent === 1 ? "" : "s"} sent so far):` : "No alerts from Housecall Pro yet."),
+      log.length ? h("ul", { class: "hcp-hook-log", id: "hcpHookList" }, log.slice(0, 8).map(x => h("li", null,
+        `${lbDayText(lbDayKey(new Date(x.at)))} ${fmtTime(new Date(x.at))} · ${x.ev}${x.n ? ` · #${x.n}` : ""} · `, h("b", { class: x.used ? "ok" : "muted", text: x.used ? "counted as sent" : "not used" })))) : null,
+      h("button", { class: "btn small ghost", type: "button", id: "hcpHookNew", onclick: async ev => {
+        if (!sure) { sure = true; ev.currentTarget.textContent = "Sure? The old link stops working"; return; }
+        ev.currentTarget.disabled = true;
+        try { draw(await api("hcpHook", { renew: true })); toast("New link: paste it in Housecall Pro"); } catch (e) { toast(errText(e, "A new link")); }
+      } }, "Make a new link"));
+  };
+  api("hcpHook", {}).then(draw, e => box.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "The alert link") })));
+  return h("section", { class: "hcp-hook-sec" },
+    h("h4", { text: "Estimate sent alerts" }),
+    h("p", { class: "hint", text: "Housecall Pro tells the app the moment an estimate is sent, so it leaves Not sent by itself. Once, in Housecall Pro: open the App Store, find Webhooks (under Operations), click Learn more and turn it on, paste this link, then tick Estimate sent. Keep the link private: whoever has it can mark estimates as sent." }),
+    box);
+}
 /** For Claude: what Housecall Pro sends for one estimate (field names; values only for statuses, times, numbers, ids;
  *  never the client), to find where it keeps something the app needs. */
 function hcpProbeEl() {
@@ -8004,6 +8040,7 @@ function openHcpTest() {
     h("div", { class: "hcp-days" }, h("label", null, h("span", { text: "From" }), from), h("label", null, h("span", { text: "To" }), to),
       h("button", { class: "btn primary", type: "button", id: "hcpGo", text: "Check", onclick: go })),
     out,
+    apiLevel >= EST_SENT_API ? hcpHookEl() : null,
     apiLevel >= EST_PROBE_API ? hcpProbeEl() : null);
   // opens at once: the last check, or nothing read yet (reading a week takes Housecall Pro a few seconds)
   if (hcpLast) show(hcpLast.r, hcpLast.at);
@@ -15505,7 +15542,21 @@ const estSentSt = st => estStList(st).some(x => /sen[dt]|submit|fail/i.test(x) |
 /** A stage of your own in the Pipeline ("Rebuild estimates"), or "". */
 const estStage = e => { const x = estStList(e.hcpSt).find(v => !/sen[dt]|submit|fail/i.test(v) && !EST_PRESEND.test(v)); return x ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : ""; };
 /** Open and not sent to the client yet (an older Google script: its own word). */
-const estNotSent = e => e.st === "open" && (typeof e.hcpSt === "string" ? !estSentSt(e.hcpSt) : e.sent === false);
+const estNotSent = e => e.st === "open" && !e.sentBy && (typeof e.hcpSt === "string" ? !estSentSt(e.hcpSt) : e.sent === false);
+const EST_SENT_API = 104;                                // the Google script version with Mark as sent and Housecall Pro's "sent" alert
+/** Mark as sent / Undo: the office and admins. */
+const estCanMark = () => apiLevel >= EST_SENT_API && (isAdmin() || ofCan());
+/** "This one was sent" (on) or undo it: on screen at once, then saved; a mark that didn't save goes back. */
+async function estMarkSent(e, on) {
+  const before = e.sentBy || null;
+  e.sentBy = on ? { how: "marked", at: new Date().toISOString(), who: session ? session.name : "", saving: true } : null;
+  const redraw = () => { if (view.tab === "estimates") renderEstimates(); else if (view.tab === "office") renderOffice(); };
+  redraw();
+  try { const out = await api("estMarkSent", { id: e.id, on }); e.sentBy = out.sentBy || null; }
+  catch (err) { e.sentBy = before; toast(errText(err, "The mark")); }
+  if (estData && estData.estimates && estData.estimates.includes(e)) store.set(K_EST, estData);
+  redraw();
+}
 let estData = store.get(K_EST);                         // this year's: { year, estimates, years, all, readAt, done, connected }
 let estOther = {};                                      // other years' (looked at in this window)
 const estLoading = {};
@@ -15853,9 +15904,17 @@ function estRowEl(e, today) {
     if (e.st === "declined") return h("span", { class: "est-st no" }, h("b", { text: "Declined" }), h("small", { text: [e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", dec ? estDayShort(dec, today) : ""].filter(Boolean).join(" · ") }));
     if (e.st === "canceled") return h("span", { class: "est-st cx" }, h("b", { text: "Canceled" }));
     const age = estAge(e.day, today);
-    const ns = estNotSent(e), days = age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}`;
-    return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title: e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "" }, h("b", { text: "Open" }),
-      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days));
+    const ns = estNotSent(e), days = age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}`, sb = e.st === "open" ? e.sentBy : null;
+    const when = sb && sb.at ? lbDayText(lbDayKey(new Date(sb.at))) : "";
+    const title = sb ? (sb.how === "hcp" ? `Housecall Pro: sent ${when}` : `Marked as sent by ${sb.who || "someone"}${when ? `, ${when}` : ""}`) + (e.hcpSt ? ` · In Housecall Pro: ${e.hcpSt}` : "")
+      : e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "";
+    // the office and admins: Mark sent on one not sent; Undo on one they marked (not on one Housecall Pro says was sent)
+    const mk = !estCanMark() || (sb && sb.saving) ? null : ns ? h("button", { class: "linkish est-mk", type: "button", "data-act": "sent", title: "It was sent to the client: count it as sent", onclick: () => estMarkSent(e, true) }, "Mark sent")
+      : sb && sb.how === "marked" ? h("button", { class: "linkish est-mk", type: "button", "data-act": "undo", title: "Not sent after all", onclick: () => estMarkSent(e, false) }, "Undo") : null;
+    return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title }, h("b", { text: "Open" }),
+      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : sb ? h("i", { class: "est-sent", text: sb.saving ? "saving… · " : sb.how === "marked" ? "marked sent · " : "sent · " })
+        : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days),
+      mk ? h("small", { class: "est-mkl" }, mk) : null);
   };
   const row = e => {
     const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);

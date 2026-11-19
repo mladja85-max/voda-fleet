@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 103;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 104;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -234,7 +234,8 @@ function newCode_() {
 
 /* ---------------- web app ---------------- */
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.hook) { REQ_PROPS_ = null; return json_({ ok: !!reqProp_(HCP_HOOK_KEY) && String(e.parameter.hook) === reqProp_(HCP_HOOK_KEY) }); }
   return json_({ ok: true, app: "VODA Fleet backend", status: "running" });
 }
 
@@ -247,6 +248,9 @@ function reqProp_(k) {
 }
 
 function doPost(e) {
+  EST_SENT_ = null;
+  // Housecall Pro's alerts (its Webhooks app) come to this same link with ?hook=<the secret>
+  if (e && e.parameter && e.parameter.hook) { REQ_PROPS_ = null; return reqProp_("MOVED") ? json_({ ok: false, error: "moved" }) : hcpHook_(e); }
   let req;
   try {
     req = JSON.parse(e && e.postData ? e.postData.contents : "{}");
@@ -389,6 +393,11 @@ function doPost(e) {
         return json_(withTabLock_(function () { return atPut_(req); }));
       case "estProbe":
         return json_(estProbe_(req));
+      case "hcpHook":
+        return json_(withLock_(function () { return hcpHookInfo_(req); }));
+      case "estMarkSent":
+        if (!canOffice_(user) && user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return estMarkSent_(req, user); }));
       case "hcpTest":
         return json_(hcpTest_(req));
       case "revenue":
@@ -637,7 +646,7 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech", "csr"];   // csr: a Non-admin in the office (sees what's ticked, like a Non-admin)
-const ADMIN_ACTIONS = ["hcpTest", "estProbe", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
+const ADMIN_ACTIONS = ["hcpTest", "estProbe", "hcpHook", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
   "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
@@ -4554,6 +4563,7 @@ function estOut_(r, lead) {
   let opts = [];
   try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
   const tagKind = r[26] ? estKind_(String(r[26]).split(", ")) : "";
+  const sb = estSentBy_(r, opts);
   const dept = String(r[6]) === "o" && tagKind ? "r" : String(r[6] || "o"), kind = dept === "r" ? (r[26] ? tagKind : String(r[7] || "")) : "";
   return { id: String(r[0]), n: String(r[1] || ""), day: String(r[2] || ""), client: String(r[4] || ""), addr: String(r[5] || ""), dept: dept,
     kind: kind, type: String(r[8] || ""), st: String(r[9] || "open"), by: String(r[10] || ""), dec: String(r[11] || ""),
@@ -4561,7 +4571,87 @@ function estOut_(r, lead) {
     inc: lead ? lead.name : "", incRole: lead ? lead.role : "", tags: String(r[26] || ""), hcpSt: String(r[27] || ""),
     // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email), or
     // it's in a stage of your own in the Pipeline (Rebuild estimates, On hold…), which it moves to once it's sent
-    sent: String(r[9]) !== "open" || estSentSt_(r[27]) };
+    sent: String(r[9]) !== "open" || estSentSt_(r[27]) || !!sb, sentBy: sb };
+}
+
+/* ---- Estimates: "sent", from Housecall Pro's alert or marked by hand. Once an estimate's visit is done, Housecall Pro's
+   API says only "complete rated" for it, sent or not, and doesn't say its pipeline stage. So: Housecall Pro tells the
+   app the moment one is sent (its Webhooks app, "Estimate sent", to this script's link with ?hook=<secret>), and the
+   office or an admin can mark one as sent (and undo it). One row each on the "Estimate sent" tab; for a mark, the last
+   one counts. ---- */
+const EST_SENT_TAB = "Estimate sent", EST_SENT_COLS = ["At", "Estimate id", "Number", "How", "Who"];
+const HCP_HOOK_KEY = "HCP_HOOK_KEY", HCP_HOOK_LOG = "HCP_HOOK_LOG", HCP_HOOK_LOG_N = 15;
+let EST_SENT_ = null;
+/** { id: { hcp: at, mark: { at, who } } }: an estimate's (or one of its options') "sent", read once a request. */
+function estSentMap_() {
+  if (EST_SENT_) return EST_SENT_;
+  const out = {};
+  pcRows_(EST_SENT_TAB, EST_SENT_COLS.length).forEach(function (r) {
+    const id = String(r[1] || ""), how = String(r[3] || ""), at = r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "");
+    if (!id) return;
+    const o = out[id] || (out[id] = {});
+    if (how === "hcp") { if (!o.hcp) o.hcp = at; }
+    else if (how === "marked") o.mark = { at: at, who: String(r[4] || "") };
+    else if (how === "undo") o.mark = null;
+  });
+  return (EST_SENT_ = out);
+}
+/** An estimate's "sent" outside Housecall Pro's status: { how: "hcp", at } or { how: "marked", at, who }, or null. */
+function estSentBy_(r, opts) {
+  const M = estSentMap_(), id0 = String(r[0]);
+  const ids = [id0].concat((opts || []).map(function (o) { return Array.isArray(o) ? String(o[4] || "") : ""; }).filter(Boolean));
+  let hcp = "";
+  ids.forEach(function (id) { const o = M[id]; if (o && o.hcp && !hcp) hcp = o.hcp; });
+  const mark = M[id0] && M[id0].mark;
+  return hcp ? { how: "hcp", at: hcp } : mark ? { how: "marked", at: mark.at, who: mark.who } : null;
+}
+function estSentAdd_(row) {
+  const s = pcSheet_(EST_SENT_TAB, EST_SENT_COLS), first = Math.max(2, s.getLastRow() + 1);
+  if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
+  s.getRange(first, 1, 1, EST_SENT_COLS.length).setNumberFormat("@").setValues([row]);
+  EST_SENT_ = null;
+}
+/** The office or an admin: "this one was sent" (on) or undo it (on: false). */
+function estMarkSent_(req, user) {
+  const id = String(req.id || "");
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) return { ok: false, error: "bad_request" };
+  const r = estRows_(estSheet_(false))[id];
+  if (!r) return { ok: false, error: "not_found" };
+  estSentAdd_([tmNow_().toISOString(), id, String(r[1] || ""), req.on === false ? "undo" : "marked", user.name]);
+  let opts = [];
+  try { opts = JSON.parse(String(r[14] || "[]")); } catch (e) { opts = []; }
+  return { ok: true, sentBy: estSentBy_(r, opts) };
+}
+/** Housecall Pro's alert: an estimate sent ("estimate.sent") is kept; every alert goes on a short list (its event, its
+ *  fields' names, the estimate's number: never the client) so Settings can show they're coming in. */
+function hcpHook_(e) {
+  const key = reqProp_(HCP_HOOK_KEY);
+  if (!key || String(e.parameter.hook) !== key) return json_({ ok: false, error: "not_allowed" });
+  let body = {};
+  try { body = JSON.parse(e.postData ? e.postData.contents : "{}") || {}; } catch (x) { body = {}; }
+  const ev = String(body.event || body.event_type || body.type || "").slice(0, 60);
+  const est = body.estimate || (body.data && (body.data.estimate || body.data)) || {};
+  const id = String((est && est.id) || body.estimate_id || "").slice(0, 80), num = String((est && est.estimate_number) || "").slice(0, 20);
+  const sent = /estimate/i.test(ev) && /sent/i.test(ev) && /^[A-Za-z0-9_-]{1,80}$/.test(id);
+  withLock_(function () {
+    if (sent) estSentAdd_([tmNow_().toISOString(), id, num, "hcp", ev]);
+    const P = PropertiesService.getScriptProperties();
+    let log = [];
+    try { log = JSON.parse(P.getProperty(HCP_HOOK_LOG) || "[]") || []; } catch (x) { log = []; }
+    log.unshift({ at: tmNow_().toISOString(), ev: ev || "(no event name)", keys: Object.keys(body).slice(0, 12), n: num, used: sent });
+    P.setProperty(HCP_HOOK_LOG, JSON.stringify(log.slice(0, HCP_HOOK_LOG_N)));
+  });
+  return json_({ ok: true });
+}
+/** Admins: the secret for Housecall Pro's alert link (made the first time, or new when asked) and the last alerts. */
+function hcpHookInfo_(req) {
+  const P = PropertiesService.getScriptProperties();
+  let key = P.getProperty(HCP_HOOK_KEY);
+  if (!key || req.renew === true) { key = Utilities.getUuid().replace(/-/g, ""); P.setProperty(HCP_HOOK_KEY, key); }
+  let log = [];
+  try { log = JSON.parse(P.getProperty(HCP_HOOK_LOG) || "[]") || []; } catch (x) { log = []; }
+  const M = estSentMap_();
+  return { ok: true, key: key, log: log, sent: Object.keys(M).filter(function (k) { return M[k].hcp; }).length };
 }
 
 /** Admins (Settings › Housecall Pro, "For Claude"): what Housecall Pro sends for one estimate, by its number, to find
