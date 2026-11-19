@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 98;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 99;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -425,9 +425,18 @@ function doPost(e) {
         if (!canEst_(user) && !canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         // Office (Office › Estimates): what changed, never every estimate again
         return json_(estSync_(canEst_(user) ? req : Object.assign({}, req, { full: false }), user));
-      case "ofEstimates":
-        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(estReadDept_(req.year, "c"));
+      case "ofEstimates": {
+        if (!canOffice_(user) || !ofEstOk_(user)) return json_({ ok: false, error: "not_allowed" });
+        const out = estReadDept_(req.year, "c");
+        if (out.ok) ofEstMarksOn_(out.estimates);
+        return json_(out);
+      }
+      case "ofEstMark":
+        if (!canOffice_(user) || !ofEstOk_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return ofEstMark_(req, user); }));
+      case "ofEstWho":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return ofEstWhoPut_(req); }));
       case "goals":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(goalsRead_(req.year));
@@ -5180,6 +5189,64 @@ function pcMarks_(req) {
   return { ok: true, marks: out.slice(-500), now: tmNow_().getTime() };
 }
 
+/* ---- Office › Estimates: who follows them up (Admins pick; nobody picked: everyone with Office) and the call marks on
+   each one, as on Past clients: Not now, Voicemail, Booked, Call back (a day and what the client said), Don't call again.
+   One row a mark on the "Estimate calls" tab; the last one of each estimate counts. ---- */
+const OF_EST_CALLS = "Estimate calls", OF_EST_CALL_COLS = ["At", "Day", "Estimate id", "Result", "Who", "Call back on", "Note"];
+function ofEstWho_() {
+  let v = [];
+  try { v = JSON.parse(PropertiesService.getScriptProperties().getProperty("OF_EST_WHO") || "[]") || []; } catch (e) { v = []; }
+  return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+}
+function ofEstOk_(user) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  const who = ofEstWho_();
+  return !who.length || who.indexOf(user.id) !== -1;
+}
+function ofEstWhoPut_(req) {
+  if (!Array.isArray(req.users) || req.users.length > 40) return { ok: false, error: "bad_request" };
+  const ids = {};
+  readUsers_(usersSheet_()).forEach(function (x) { ids[x.u.id] = true; });
+  const out = req.users.map(String).filter(function (id, i, a) { return ids[id] && a.indexOf(id) === i; });
+  PropertiesService.getScriptProperties().setProperty("OF_EST_WHO", JSON.stringify(out));
+  return { ok: true, users: out };
+}
+/** Each estimate's last mark: { r, who, at, cb, note, day }. */
+function ofEstMarks_() {
+  const tz = Session.getScriptTimeZone(), out = {};
+  pcRows_(OF_EST_CALLS, OF_EST_CALL_COLS.length).forEach(function (r) {
+    const id = String(r[2] || "");
+    if (!id) return;
+    const m = { r: String(r[3] || ""), who: String(r[4] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || ""), day: pcDay_(r[1], tz) };
+    if (m.r === "cb") { m.cb = pcDay_(r[5], tz); m.note = String(r[6] || ""); }
+    out[id] = m;   // in the order made: the last one counts
+  });
+  return out;
+}
+function ofEstMarksOn_(list) {
+  const M = ofEstMarks_();
+  (list || []).forEach(function (e) { const m = M[e.id]; if (m && m.r) e.m = m; });
+}
+function ofEstMark_(req, user) {
+  const id = String(req.id || ""), r = String(req.r || "");
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || !Object.prototype.hasOwnProperty.call(PC_RESULTS, r)) return { ok: false, error: "bad_request" };
+  const tz = Session.getScriptTimeZone(), when = tmNow_(), at = when.toISOString(), today = Utilities.formatDate(when, tz, "yyyy-MM-dd");
+  if (user.role !== "admin") {
+    // once the day it was marked is over, a mark stays as it is (a call-back can still be marked when it's due)
+    const last = ofEstMarks_()[id];
+    if (last && last.r && last.r !== "cb" && last.day && last.day < today) return { ok: false, error: "locked", m: last };
+  }
+  const cb = r === "cb" ? String(req.cb || "") : "", note = r === "cb" ? String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140) : "";
+  if (r === "cb" && (!/^\d{4}-\d{2}-\d{2}$/.test(cb) || cb <= today || cb > tmAddDays_(today, 366))) return { ok: false, error: "bad_value", field: "cb" };
+  const s = pcSheet_(OF_EST_CALLS, OF_EST_CALL_COLS), first = Math.max(2, s.getLastRow() + 1);
+  if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
+  s.getRange(first, 1, 1, OF_EST_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, id, r === "clear" ? "" : r, user.name, cb, note]]);
+  const m = { r: r === "clear" ? "" : r, who: user.name, at: at, day: today };
+  if (cb) { m.cb = cb; m.note = note; }
+  return { ok: true, m: m };
+}
+
 /* ---------------- KPI (Office › KPI) ----------------
    Each person's day as the KPI Excel kept it: six numbers (Estimates sent, Repair estimates sent, Invoices sent,
    Estimates to jobs, Collected balances, Xactimates made), each a list of lines (what it was: the client, the address,
@@ -6697,7 +6764,8 @@ function ofMonth_(d, key) {
 }
 function ofRead_(user, year) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
-  const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_() };
+  const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_(),
+    estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined };
   lbRows_(ofSheet_(false)).forEach(function (r) {
     if (r.key === "config") out.config = lbParse_(r.json);
     else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);

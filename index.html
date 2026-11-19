@@ -358,6 +358,14 @@ button { font: inherit; color: inherit; }
 .dot.due { background: var(--due); } .dot.soon { background: var(--soon); } .dot.ok { background: var(--ok); }
 details.paperwork summary, details.how summary { cursor: pointer; font-weight: 700; color: var(--accent); }
 .how ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: .88rem; }
+/* Office › Estimates: the call marks under an estimate (the Past clients buttons) */
+.est-row.of-est-has { border-bottom: 0; padding-bottom: 2px; }
+.of-est-acts { border-bottom: 1px solid var(--line); padding: 0 4px 8px; display: grid; gap: 6px; justify-items: end; }
+.of-est-acts .pc-acts, .of-est-acts .pc-done { justify-content: flex-end; }
+.of-est-acts .pc-cbpick { justify-self: stretch; }
+.of-est-said { font-size: .8rem; font-style: italic; color: var(--muted); }
+.pc-chip.due { background: var(--due-bg); color: var(--due); border-color: var(--due); }
+@media (max-width: 760px) { .of-est-acts { justify-items: stretch; } .of-est-acts .pc-acts, .of-est-acts .pc-done { justify-content: flex-start; } }
 /* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
 .kpi-who { margin: 2px 0 0; }
 .kpi-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
@@ -16064,6 +16072,7 @@ const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: 
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
 const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates", kpi: "KPI" };
 const OF_EST_API = 95;                                   // the Google script version with Office › Estimates (Cleaning's)
+const OF_EST_FU_API = 99;                                // ... and who follows them up, with the call marks
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const ofCfg = () => ofCleanConfig(ofData && ofData.config);
 /** The office person linked to this login. */
@@ -16081,7 +16090,8 @@ async function ofLoad(year) {
     if (y === ofThisYear()) {
       const months = out.months || {};
       for (const [k, p] of Object.entries(ofPending)) months[k] = lbMerge(months[k] || {}, lbClone(p));   // keep what's still being saved
-      ofData = { config: out.config || { people: [] }, months, year: y, admin: !!out.admin, me: out.me || "", at: new Date().toISOString() };
+      ofData = { config: out.config || { people: [] }, months, year: y, admin: !!out.admin, me: out.me || "", at: new Date().toISOString(),
+        estOk: out.estOk !== false, estWho: Array.isArray(out.estWho) ? out.estWho : [] };   // who follows up Office › Estimates
       store.set(K_OF, ofData);
     } else ofYears[y] = { months: out.months || {} };
     ofErr = ""; ofOld = false;
@@ -16169,7 +16179,7 @@ function renderOffice() {
     return;
   }
   const cfg = ofCfg(), admin = isAdmin();
-  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || !apiLevel || apiLevel >= OF_EST_API) && (k !== "kpi" || kpiCan()));
+  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()));
   if (!shown.some(([k]) => k === ofView.tab)) ofView.tab = "today";
   const kpi = ofView.tab === "kpi";   // People and Load from Excel: the KPI's on its tab
   const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" }),
@@ -17379,7 +17389,8 @@ function ofEstEl() {
         h("strong", { id: "ofEstLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
         h("button", { class: "btn small", type: "button", id: "ofEstNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
     h("div", { class: "rev-tools rev-tools-fit" }, h("button", { class: "btn small", type: "button", id: "ofEstRead", disabled: ofEstSync.busy || !doc.connected,
-      title: "Read what changed in Housecall Pro", onclick: () => ofEstRun() }, ofEstSync.busy ? "Reading…" : "Read again")));
+      title: "Read what changed in Housecall Pro", onclick: () => ofEstRun() }, ofEstSync.busy ? "Reading…" : "Read again"),
+      isAdmin() && apiLevel >= OF_EST_FU_API ? h("button", { class: "btn small", type: "button", id: "ofEstWhoBtn", title: "Pick who follows up the estimates", onclick: openOfEstWho }, "Who follows up") : null));
   const status = h("p", { class: "lb-sub rev-status" + (ofEstSync.busy ? " busy" : ""), id: "ofEstStatus", role: "status" },
     !doc.connected ? "Housecall Pro isn't connected right now." : ofEstSync.busy ? "Reading estimates from Housecall Pro…"
       : doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)} · Cleaning estimates only` : "Not read from Housecall Pro yet.");
@@ -17412,9 +17423,117 @@ function ofEstEl() {
     filters,
     shown.length ? h("div", { class: "est-rows", id: "ofEstRows" },
       h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
-      shown.slice(0, ofEstShown).map(e => estRowEl(e, today)))
+      shown.slice(0, ofEstShown).map(e => ofEstRowEl(e, today)))
       : h("p", { class: "lb-sub", id: "ofEstNone", text: list.length ? "No estimates match." : `No Cleaning estimates in ${r.label}.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "ofEstMore", onclick: () => { ofEstShown += 100; renderOffice(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null));
+}
+
+/* ---- Office › Estimates follow-up: the call marks on each estimate, as on Past clients (Not now, Voicemail, Booked,
+   Call back…, Don't call again). The open ones get the buttons; a decided one keeps its mark. Who follows them up:
+   Admins pick (nobody picked: everyone with Office). ---- */
+let ofEstSure = "", ofEstSureTimer = 0, ofEstCbOpen = "";
+const ofEstCbState = {};
+function ofEstRowEl(e, today) {
+  const row = estRowEl(e, today);
+  if (apiLevel && apiLevel < OF_EST_FU_API) return row;
+  const m = e.m && e.m.r ? e.m : null, open = e.st === "open";
+  if (!m && !open) return row;
+  row.classList.add("of-est-has");
+  const sure = ofEstSure === e.id;
+  const due = m && m.r === "cb" && m.cb && m.cb <= today;
+  const acts = m
+    ? h("div", { class: "pc-done" }, h("span", { class: `pc-chip pc-${m.r}` + (due ? " due" : ""), title: m.note || null,
+        text: m.r === "cb" && m.cb ? `${due ? "Call back due" : "Call back"} ${lbDayText(m.cb)}` : PC_MARK_TEXT[m.r] || m.r }),
+      m.r === "cb" && m.note ? h("span", { class: "of-est-said", text: `“${m.note}”` }) : null,
+      h("span", { class: "meta", text: [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · ") }),
+      m.saving ? null : open && (pcMarkOpen(m) || m.r === "cb") ? h("button", { class: "btn ghost small", type: "button", "data-act": "clear", onclick: () => ofEstMark(e, "clear") }, m.r === "cb" ? "Called back" : "Change")
+        : open ? h("span", { class: "meta pc-lock", title: "Marked on an earlier day: it stays as it is (an admin can change it)", text: "Locked" }) : null)
+    : h("div", { class: "pc-acts" }, PC_MARKS.map(([k, t]) => k === "dnc"
+      ? h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": k, onclick: () => (sure ? ofEstMark(e, k) : ofEstAskSure(e.id)) }, sure ? "Sure? Tap again" : t)
+      : k === "cb" ? h("button", { class: "btn small" + (ofEstCbOpen === e.id ? " primary" : ""), type: "button", "data-r": k, "aria-expanded": String(ofEstCbOpen === e.id),
+        onclick: () => { ofEstCbOpen = ofEstCbOpen === e.id ? "" : e.id; renderOffice(); } }, t)
+      : h("button", { class: "btn small", type: "button", "data-r": k, onclick: () => ofEstMark(e, k) }, t)));
+  return h("div", { class: "of-est-item", "data-id": e.id }, row, h("div", { class: "of-est-acts" }, acts, !m && ofEstCbOpen === e.id ? ofEstCbPicker(e) : null));
+}
+function ofEstAskSure(id) {
+  ofEstSure = id; clearTimeout(ofEstSureTimer);
+  ofEstSureTimer = setTimeout(() => { ofEstSure = ""; if (view.tab === "office" && ofView.tab === "est") renderOffice(); }, 5000);
+  renderOffice();
+}
+/** A call marked (or taken back: "clear" — a call-back done: back to the buttons), on screen at once; put back as it
+ *  was when it couldn't be saved. */
+async function ofEstMark(e, res, cb) {
+  ofEstSure = ""; clearTimeout(ofEstSureTimer); ofEstCbOpen = "";
+  const was = e.m;
+  e.m = res === "clear" ? null : Object.assign({ r: res, who: session ? session.name || "" : "", at: new Date().toISOString(), saving: true }, cb || {});
+  renderOffice();
+  try { const out = await api("ofEstMark", Object.assign({ id: e.id, r: res }, cb || {})); e.m = out.m && out.m.r ? out.m : null; }
+  catch (x) {
+    e.m = x && x.error === "locked" && x.m ? x.m : was;
+    toast(x && x.error === "locked" ? "That one was marked on an earlier day: it stays as it is. An admin can change it."
+      : x && x.error === "not_allowed" ? "The estimates are picked for someone else now: it wasn't marked."
+      : x && x.error === "offline" ? "No connection: it wasn't marked. Try again when you're back online." : "It wasn't marked. " + errText(x, "The mark"));
+  }
+  if (view.tab === "office" && ofView.tab === "est") renderOffice();
+}
+function ofEstCbPicker(e) {
+  const today = lbToday(), max = lbAddDays(today, 366), key = e.id;
+  const inMonths = n => { const k = lbAddMonths(today.slice(0, 7), n), d = Math.min(Number(today.slice(8)), lbDaysIn(k)); return `${k}-${String(d).padStart(2, "0")}`; };
+  const st = ofEstCbState[key] || (ofEstCbState[key] = { cb: lbAddDays(today, 7), note: "" });
+  const err = h("p", { class: "dlg-err pc-cberr", role: "alert" });
+  const quick = [["Tomorrow", lbAddDays(today, 1)], ["3 days", lbAddDays(today, 3)], ["1 week", lbAddDays(today, 7)], ["2 weeks", lbAddDays(today, 14)], ["1 month", inMonths(1)]];
+  const custom = !quick.some(([, d]) => d === st.cb);
+  const short = d => { const x = lbDate(d); return `${LB_WD[x.getDay()]}, ${MONTHS[x.getMonth()]} ${x.getDate()}`; };
+  const set = d => { st.cb = d; err.textContent = ""; renderOffice(); };
+  const count = h("span", { class: "pc-cbcount", text: `${st.note.length}/140` });
+  const save = () => {
+    if (!lbIsDay(st.cb) || st.cb <= today || st.cb > max) { err.textContent = "Pick a day after today, a year at most."; return; }
+    ofEstMark(e, "cb", { cb: st.cb, note: st.note.trim() }); delete ofEstCbState[key];
+  };
+  return h("div", { class: "pc-cbpick", id: "ofEstCbPick", role: "group", "aria-label": `Call back ${e.client || ""}` },
+    h("div", { class: "pc-cbhead" }, h("span", { class: "pc-cbicon", "aria-hidden": "true", text: "↻" }),
+      h("div", null, h("b", { text: "Call back" }), h("small", { text: [e.client, `#${e.n}`].filter(Boolean).join(" · ") }))),
+    h("span", { class: "pc-cblab", text: "When" }),
+    h("div", { class: "pc-cbq", role: "radiogroup", "aria-label": "When to call back" },
+      quick.map(([t, d]) => h("button", { class: "pc-cbchip" + (st.cb === d ? " on" : ""), type: "button", role: "radio", "aria-checked": String(st.cb === d), "data-cb": t, onclick: () => set(d) },
+        h("b", { text: t }), h("small", { text: short(d) }))),
+      h("label", { class: "pc-cbchip pc-cbday" + (custom ? " on" : "") }, h("b", { text: "Pick a day" }),
+        h("input", { type: "date", id: "ofEstCbDay", value: st.cb, min: lbAddDays(today, 1), max, "aria-label": "Call back on", onchange: ev => set(ev.target.value) }))),
+    h("label", { class: "pc-cblab", for: "ofEstCbNote" }, "What did the client say? ", h("span", { class: "pc-cbopt", text: "optional" })),
+    h("div", { class: "pc-cbnote" },
+      h("textarea", { id: "ofEstCbNote", rows: "2", maxlength: "140", placeholder: "Thinking it over, call after 5 PM…", "aria-label": "What the client said",
+        oninput: ev => { st.note = ev.target.value; count.textContent = `${st.note.length}/140`; },
+        onkeydown: ev => { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); save(); } } }, st.note), count),
+    err,
+    h("div", { class: "pc-cbfoot" },
+      h("p", { class: "pc-cbwhen", id: "ofEstCbWhen", text: lbIsDay(st.cb) ? `Call back ${short(st.cb)}, ${st.cb.slice(0, 4)}` : "Pick a day" }),
+      h("div", { class: "pc-cbgo" }, h("button", { class: "btn ghost small", type: "button", onclick: () => { ofEstCbOpen = ""; renderOffice(); } }, "Cancel"),
+        h("button", { class: "btn small primary", type: "button", id: "ofEstCbSave", onclick: save }, "Save call back"))));
+}
+/** Admins: who follows up the estimates (nobody picked: everyone with Office sees them). */
+async function openOfEstWho() {
+  let users;
+  try { users = (await stFetch("users", () => api("users"))).users || []; } catch (x) { toast(errText(x, "The logins")); return; }
+  const office = users.filter(u => u.role !== "admin" && u.status === "active" && (u.role === "csr" || (u.access || []).some(a => a === "office" || a === "office-edit")))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const now = ((ofData && ofData.estWho) || []).filter(id => office.some(u => u.id === id));
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const hint = h("p", { class: "meta", id: "ofEstWhoNow" });
+  const show = () => { hint.textContent = now.length ? `Only ${office.filter(u => now.includes(u.id)).map(u => u.name).join(", ")} (and admins) see Office › Estimates.` : "Nobody picked: everyone with Office sees Office › Estimates."; };
+  show();
+  openDialog(h("h3", { id: "dlgTitle", text: "Who follows up the estimates" }),
+    howFold("ofEstWhoHow", h("p", { class: "hint", text: "Tap the people who follow up the Cleaning estimates. Only they (and admins) see Office › Estimates and mark the calls; the others don't see the tab. Nobody picked: everyone with Office sees it." }), "How it works"),
+    office.length ? h("div", { class: "chips", id: "ofEstWhoList" }, office.map(u => h("button", { class: "chip-btn", type: "button", "data-id": u.id, "aria-pressed": String(now.includes(u.id)),
+      onclick: ev => { const on = ev.currentTarget.getAttribute("aria-pressed") !== "true"; ev.currentTarget.setAttribute("aria-pressed", String(on));
+        const i = now.indexOf(u.id); if (on && i === -1) now.push(u.id); if (!on && i !== -1) now.splice(i, 1); show(); } }, u.name)))
+      : h("p", { class: "meta", text: "Nobody with Office yet (Settings › Users and invites)." }),
+    hint, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog }, "Cancel"),
+      h("button", { class: "btn primary", type: "button", id: "ofEstWhoSave", onclick: async ev => {
+        ev.currentTarget.disabled = true; err.textContent = "";
+        try { const o = await api("ofEstWho", { users: now }); if (ofData) ofData.estWho = o.users; dlgDirty = false; closeDialog(); toast(now.length ? "Saved: only they follow up the estimates" : "Saved: everyone with Office sees the estimates"); renderOffice(); }
+        catch (x) { err.textContent = errText(x, "Nothing"); ev.currentTarget.disabled = false; }
+      } }, "Save"))));
 }
 
 /* ---- admins: the people, their numbers and their logins ---- */
