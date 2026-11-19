@@ -358,14 +358,31 @@ button { font: inherit; color: inherit; }
 .dot.due { background: var(--due); } .dot.soon { background: var(--soon); } .dot.ok { background: var(--ok); }
 details.paperwork summary, details.how summary { cursor: pointer; font-weight: 700; color: var(--accent); }
 .how ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: .88rem; }
-/* Office › Estimates: the call marks under an estimate (the Past clients buttons) */
-.est-row.of-est-has { border-bottom: 0; padding-bottom: 2px; }
-.of-est-acts { border-bottom: 1px solid var(--line); padding: 0 4px 8px; display: grid; gap: 6px; justify-items: end; }
-.of-est-acts .pc-acts, .of-est-acts .pc-done { justify-content: flex-end; }
-.of-est-acts .pc-cbpick { justify-self: stretch; }
-.of-est-said { font-size: .8rem; font-style: italic; color: var(--muted); }
+/* Office › Estimates: a Follow-up column (all Cleaning: no Group column); its five icon buttons, or the mark */
+.est-row.of-est-row { grid-template-columns: 76px 58px minmax(0, 1fr) 110px 128px minmax(0, 150px) 170px; gap: 10px; }
+.est-row.of-est-row .est-grp { display: none; }
+.of-est-fu { display: grid; justify-items: end; gap: 2px; min-width: 0; text-align: right; }
+.of-est-btns { display: flex; gap: 4px; }
+.of-est-b { all: unset; box-sizing: border-box; height: 30px; min-width: 30px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; }
+.of-est-b:hover, .of-est-b:focus-visible { color: var(--accent); border-color: var(--accent); }
+.of-est-b:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.of-est-b.on { color: var(--accent-ink, #fff); background: var(--accent); border-color: var(--accent); }
+.of-est-b.sure { color: #fff; background: var(--due); border-color: var(--due); } .of-est-b.sure b { font-size: .78rem; }
+.of-est-ic { display: inline-flex; width: 17px; height: 17px; } .of-est-ic svg { width: 100%; height: 100%; }
+.of-est-fu .pc-chip { font-size: .78rem; padding: 2px 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.of-est-who, .of-est-said { font-size: .72rem; color: var(--muted); max-width: 100%; line-height: 1.35; }
+.of-est-said { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.of-est-btns.sure .of-est-b:not(.sure) { display: none; }   /* Don't call again, sure?: just that, in red, where the five were */
+.of-est-said { font-style: italic; }
+.of-est-who .linkish, .of-est-who .pc-lock { font-size: .72rem; }
+.of-est-item .pc-cbpick { margin: 6px 0 10px; }
 .pc-chip.due { background: var(--due-bg); color: var(--due); border-color: var(--due); }
-@media (max-width: 760px) { .of-est-acts { justify-items: stretch; } .of-est-acts .pc-acts, .of-est-acts .pc-done { justify-content: flex-start; } }
+@media (max-width: 1100px) { .est-row.of-est-row { grid-template-columns: 70px 52px minmax(0, 1fr) 96px 122px minmax(0, 130px) 170px; gap: 8px; } }
+@media (max-width: 860px) {
+  .est-row.of-est-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "cl amt" "meta st" "fu in"; }
+  .of-est-fu { grid-area: fu; justify-items: start; text-align: left; align-self: end; }
+}
 /* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
 .kpi-who { margin: 2px 0 0; }
 #kpiDay input[type="date"] { box-sizing: border-box; height: 2.3rem; }   /* as tall as ‹ › beside it */
@@ -17427,7 +17444,8 @@ function ofEstEl() {
     h("h3", null, `Cleaning estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
     filters,
     shown.length ? h("div", { class: "est-rows", id: "ofEstRows" },
-      h("div", { class: "est-row est-hdr", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Group", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),
+      h("div", { class: "est-row est-hdr of-est-row", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Amount", "Status", "In charge"].map(t => h("span", { text: t })),   // all Cleaning: no Group
+        !apiLevel || apiLevel >= OF_EST_FU_API ? h("span", { class: "of-est-fu", text: "Follow-up" }) : null),
       shown.slice(0, ofEstShown).map(e => ofEstRowEl(e, today)))
       : h("p", { class: "lb-sub", id: "ofEstNone", text: list.length ? "No estimates match." : `No Cleaning estimates in ${r.label}.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "ofEstMore", onclick: () => { ofEstShown += 100; renderOffice(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null));
@@ -17438,27 +17456,44 @@ function ofEstEl() {
    Admins pick (nobody picked: everyone with Office). ---- */
 let ofEstSure = "", ofEstSureTimer = 0, ofEstCbOpen = "";
 const ofEstCbState = {};
+/** The follow-up's icons (simple line drawings, drawn here). */
+const OF_EST_IC = {
+  na: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  vm: '<circle cx="6.5" cy="12" r="4"/><circle cx="17.5" cy="12" r="4"/><path d="M6.5 16h11"/>',
+  booked: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 15.5 2 2 4-4"/>',
+  cb: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/><path d="M14 2a9 9 0 0 1 8 8M14 6a5 5 0 0 1 4 4"/>',
+  dnc: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>' };
+const ofEstIc = k => { const s = h("span", { class: "of-est-ic", "aria-hidden": "true" }); s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${OF_EST_IC[k]}</svg>`; return s; };
+/** An estimate's row with its Follow-up column: an open one's five buttons (icons; their names on hover and read aloud),
+ *  or its mark (who, when, Change); a decided one keeps its mark. Call back… opens its picker under the row. */
 function ofEstRowEl(e, today) {
   const row = estRowEl(e, today);
+  row.classList.add("of-est-row");
   if (apiLevel && apiLevel < OF_EST_FU_API) return row;
   const m = e.m && e.m.r ? e.m : null, open = e.st === "open";
-  if (!m && !open) return row;
-  row.classList.add("of-est-has");
   const sure = ofEstSure === e.id;
   const due = m && m.r === "cb" && m.cb && m.cb <= today;
-  const acts = m
-    ? h("div", { class: "pc-done" }, h("span", { class: `pc-chip pc-${m.r}` + (due ? " due" : ""), title: m.note || null,
+  const fu = h("span", { class: "of-est-fu" });
+  if (m) {
+    const change = m.saving ? null : open && (pcMarkOpen(m) || m.r === "cb")
+      ? h("button", { class: "linkish", type: "button", "data-act": "clear", onclick: () => ofEstMark(e, "clear") }, m.r === "cb" ? "Called back" : "Change")
+      : open ? h("span", { class: "pc-lock", title: "Marked on an earlier day: it stays as it is (an admin can change it)", text: "Locked" }) : null;
+    fu.append(...[h("span", { class: `pc-chip pc-${m.r}` + (due ? " due" : ""), title: m.note || null,
         text: m.r === "cb" && m.cb ? `${due ? "Call back due" : "Call back"} ${lbDayText(m.cb)}` : PC_MARK_TEXT[m.r] || m.r }),
-      m.r === "cb" && m.note ? h("span", { class: "of-est-said", text: `“${m.note}”` }) : null,
-      h("span", { class: "meta", text: [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · ") }),
-      m.saving ? null : open && (pcMarkOpen(m) || m.r === "cb") ? h("button", { class: "btn ghost small", type: "button", "data-act": "clear", onclick: () => ofEstMark(e, "clear") }, m.r === "cb" ? "Called back" : "Change")
-        : open ? h("span", { class: "meta pc-lock", title: "Marked on an earlier day: it stays as it is (an admin can change it)", text: "Locked" }) : null)
-    : h("div", { class: "pc-acts" }, PC_MARKS.map(([k, t]) => k === "dnc"
-      ? h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": k, onclick: () => (sure ? ofEstMark(e, k) : ofEstAskSure(e.id)) }, sure ? "Sure? Tap again" : t)
-      : k === "cb" ? h("button", { class: "btn small" + (ofEstCbOpen === e.id ? " primary" : ""), type: "button", "data-r": k, "aria-expanded": String(ofEstCbOpen === e.id),
-        onclick: () => { ofEstCbOpen = ofEstCbOpen === e.id ? "" : e.id; renderOffice(); } }, t)
-      : h("button", { class: "btn small", type: "button", "data-r": k, onclick: () => ofEstMark(e, k) }, t)));
-  return h("div", { class: "of-est-item", "data-id": e.id }, row, h("div", { class: "of-est-acts" }, acts, !m && ofEstCbOpen === e.id ? ofEstCbPicker(e) : null));
+      m.r === "cb" && m.note ? h("small", { class: "of-est-said", title: m.note, text: `“${m.note}”` }) : null,
+      h("small", { class: "of-est-who" }, [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · "), change ? " · " : null, change)].filter(Boolean));
+  } else if (open) {
+    fu.append(h("span", { class: "of-est-btns" + (sure ? " sure" : ""), role: "group", "aria-label": "Mark the call" }, PC_MARKS.map(([k, t]) => {
+      const name = k === "cb" ? "Call back" : t;
+      if (k === "dnc") return h("button", { class: "of-est-b" + (sure ? " sure" : ""), type: "button", "data-r": k, title: sure ? "Tap again: don't call again" : name, "aria-label": sure ? "Sure? Tap again: don't call again" : name,
+        onclick: () => (sure ? ofEstMark(e, k) : ofEstAskSure(e.id)) }, ofEstIc(k), sure ? h("b", { text: "Sure? Don't call" }) : null);
+      if (k === "cb") return h("button", { class: "of-est-b" + (ofEstCbOpen === e.id ? " on" : ""), type: "button", "data-r": k, title: name, "aria-label": name, "aria-expanded": String(ofEstCbOpen === e.id),
+        onclick: () => { ofEstCbOpen = ofEstCbOpen === e.id ? "" : e.id; renderOffice(); } }, ofEstIc(k));
+      return h("button", { class: "of-est-b", type: "button", "data-r": k, title: name, "aria-label": name, onclick: () => ofEstMark(e, k) }, ofEstIc(k));
+    })));
+  }
+  row.append(fu);
+  return h("div", { class: "of-est-item", "data-id": e.id }, row, !m && open && ofEstCbOpen === e.id ? ofEstCbPicker(e) : null);
 }
 function ofEstAskSure(id) {
   ofEstSure = id; clearTimeout(ofEstSureTimer);
