@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 100;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 101;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -387,6 +387,8 @@ function doPost(e) {
       case "atPut":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return atPut_(req); }));
+      case "estProbe":
+        return json_(estProbe_(req));
       case "hcpTest":
         return json_(hcpTest_(req));
       case "revenue":
@@ -635,7 +637,7 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech", "csr"];   // csr: a Non-admin in the office (sees what's ticked, like a Non-admin)
-const ADMIN_ACTIONS = ["hcpTest", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
+const ADMIN_ACTIONS = ["hcpTest", "estProbe", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
   "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
@@ -4560,6 +4562,37 @@ function estOut_(r, lead) {
     // sent: decided, or Housecall Pro tried to send it (a failed email counts: the office sends from its own email), or
     // it's in a stage of your own in the Pipeline (Rebuild estimates, On hold…), which it moves to once it's sent
     sent: String(r[9]) !== "open" || estSentSt_(r[27]) };
+}
+
+/** Admins (Settings › Housecall Pro, "For Claude"): what Housecall Pro sends for one estimate, by its number, to find
+ *  where it keeps things the app needs (like "sent"). Field names everywhere; values only for status-like fields, times,
+ *  numbers and ids; never the customer, the address, names, notes or descriptions. */
+function estProbe_(req) {
+  const n = String(req.n || "").replace(/^#/, "").trim();
+  if (!/^[A-Za-z0-9-]{1,20}$/.test(n)) return { ok: false, error: "bad_request" };
+  const rows = estRows_(estSheet_(false));
+  const id = Object.keys(rows).filter(function (k) { return String(rows[k][1]) === n || String(rows[k][1]).split("-")[0] === n; })[0];
+  if (!id) return { ok: false, error: "not_found" };
+  const r = hcpGet_("/estimates/" + encodeURIComponent(id));
+  if (r.error) return { ok: false, error: r.error, status: r.status || 0 };
+  const e = (r.data && (r.data.estimate || r.data)) || {};
+  const SHOW = /status|stage|state|sent|pipeline|approv|work|schedul|_at$|^id$|_id$|number|total|amount|count|kind|type|archived|copied|deleted|viewed|signed|expir/i;
+  const HIDE = /^(customer|address|addresses|notes|line_items|attachments|description|message_from_pro|first_name|last_name|name|email|company|mobile_number|home_number|work_number|street|street_line_2|city|state|zip|country|lead_source)$/i;
+  const walk = function (v, depth, key) {
+    if (v === null || v === undefined) return null;
+    if (Array.isArray(v)) return depth > 3 ? "[" + v.length + "]" : v.slice(0, 6).map(function (x) { return walk(x, depth + 1, key); });
+    if (typeof v === "object") {
+      const o = {};
+      Object.keys(v).slice(0, 60).forEach(function (k) {
+        if (HIDE.test(k)) { o[k] = Array.isArray(v[k]) ? "[" + v[k].length + "]" : v[k] && typeof v[k] === "object" ? "{…}" : v[k] === null ? null : "…"; return; }
+        o[k] = depth > 3 ? "…" : walk(v[k], depth + 1, k);
+      });
+      return o;
+    }
+    return SHOW.test(String(key || "")) || typeof v === "boolean" ? (typeof v === "string" ? v.slice(0, 80) : v) : "…";
+  };
+  return { ok: true, n: n, id: id, stored: { status: String(rows[id][9] || ""), hcpSt: String(rows[id][27] || ""), work: String(rows[id][15] || ""), readAt: String(rows[id][19] || "") },
+    estimate: walk(e, 0, "") };
 }
 /** Before it's sent, in Housecall Pro's own stages: Unscheduled, Scheduled, In progress (On my way), Completed (finished). */
 const EST_PRESEND = /^(unscheduled|needs scheduling|scheduled|in progress|on my way|completed?|complete (un)?rated|finished)$/i;

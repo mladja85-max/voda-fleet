@@ -435,6 +435,9 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 }
 /* a long explanation, folded: one small grey line, a tap opens it */
 details.how-fold { margin: 2px 0; min-width: 0; }
+.hcp-probe-box { margin-top: 10px; }
+.hcp-probe { font-size: .72rem; line-height: 1.35; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 8px 0 0; }
+.hcp-probe:empty { display: none; }
 details.how-fold > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font-size: .8rem; font-weight: 600; }
 details.how-fold > summary::-webkit-details-marker { display: none; }
 details.how-fold > summary::before { content: "i"; display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1.5px solid currentColor; border-radius: 50%;
@@ -2075,7 +2078,7 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
 .hcp-out:empty { display: none; }
 .hcp-ok { margin: 0; font-weight: 700; color: var(--ok); }
 .hcp-ok span { color: var(--ink); font-weight: 600; }
-.hcp-tech summary { cursor: pointer; color: var(--muted); font-size: .8rem; }
+.hcp-tech summary, .hcp-probe-box summary { cursor: pointer; color: var(--muted); font-size: .8rem; }
 #hcpTypes td { text-align: right; font-variant-numeric: tabular-nums; }
 #hcpTypes tbody th, #hcpTypes tfoot th { white-space: normal; text-transform: none; letter-spacing: 0; font-size: .86rem; color: var(--ink); }
 @media (max-width: 430px) { #hcpTypes { font-size: .8rem; } #hcpTypes th, #hcpTypes td { padding: 5px 4px; } #hcpTypes tbody th, #hcpTypes tfoot th { font-size: .8rem; } }
@@ -7932,6 +7935,27 @@ const HCP_ERRORS = {
   hcp_bad_answer: "Housecall Pro sent something unexpected. Try again in a minute.",
   too_long: "Pick 31 days or fewer." };
 let hcpLast = null;   // the last check (its days, what came back, when), kept while the app is open
+const EST_PROBE_API = 101;                             // the Google script version that looks up one estimate's fields
+/** For Claude: what Housecall Pro sends for one estimate (field names; values only for statuses, times, numbers, ids;
+ *  never the client), to find where it keeps something the app needs. */
+function hcpProbeEl() {
+  const n = h("input", { type: "text", id: "hcpProbeN", inputmode: "numeric", maxlength: "20", placeholder: "Estimate #, like 9988", "aria-label": "Estimate number" });
+  const res = h("pre", { class: "hcp-probe", id: "hcpProbeOut" });
+  const go = async b => {
+    const v = n.value.replace(/^#/, "").trim();
+    if (!v) { n.focus(); return; }
+    b.disabled = true; res.textContent = "Reading Housecall Pro…";
+    try { const o = await api("estProbe", { n: v }); delete o.ok; delete o.api; res.textContent = JSON.stringify(o, null, 1); }
+    catch (e) { res.textContent = e && e.error === "not_found" ? `No estimate #${v} in the app yet.` : errText(e, "Nothing"); }
+    b.disabled = false;
+  };
+  return h("details", { class: "hcp-probe-box", id: "hcpProbe" }, h("summary", { text: "For Claude: what Housecall Pro sends for one estimate" }),
+    h("div", { class: "hcp-days" }, n, h("button", { class: "btn small", type: "button", id: "hcpProbeGo", onclick: ev => go(ev.currentTarget) }, "Look up"),
+      h("button", { class: "btn small", type: "button", id: "hcpProbeCopy", onclick: async () => {
+        if (!res.textContent) return;
+        try { await navigator.clipboard.writeText(res.textContent); toast("Copied"); } catch (e) { toast("Couldn't copy — select the text instead"); }
+      } }, "Copy")), res);
+}
 function openHcpTest() {
   const today = lbToday(), start = lbWeekStart(today);   // last week, Sunday to Saturday
   const from = h("input", { id: "hcpFrom", type: "date", value: hcpLast ? hcpLast.f : lbAddDays(start, -7), "aria-label": "From" });
@@ -7979,7 +8003,8 @@ function openHcpTest() {
     h("p", { class: "hint", text: "Reads Housecall Pro with the read-only key saved in the Google script. Only totals come back to the app: no customer names, addresses or phone numbers." }),
     h("div", { class: "hcp-days" }, h("label", null, h("span", { text: "From" }), from), h("label", null, h("span", { text: "To" }), to),
       h("button", { class: "btn primary", type: "button", id: "hcpGo", text: "Check", onclick: go })),
-    out);
+    out,
+    apiLevel >= EST_PROBE_API ? hcpProbeEl() : null);
   // opens at once: the last check, or nothing read yet (reading a week takes Housecall Pro a few seconds)
   if (hcpLast) show(hcpLast.r, hcpLast.at);
   else out.replaceChildren(h("p", { class: "meta", id: "hcpIdle", text: "Tap Check to read those days from Housecall Pro (it takes a few seconds)." }));
