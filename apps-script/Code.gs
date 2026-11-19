@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 96;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 97;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4915,12 +4915,12 @@ function pcKnown_(tz) {
   jr.forEach(function (r) {
     const c = String(r[1] || ""), st = String(r[3] || ""), d = pcDay_(r[4], tz), made = pcDay_(r[5], tz), type = String(r[6] || "");
     if (!c) return;
-    const s = by[c] || (by[c] = { last: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0, tags: [] });
+    const s = by[c] || (by[c] = { last: "", lastJob: "", lastInv: "", type: "", addr: "", jobs: 0, first: "", com: "", open: [], all: 0, tags: [] });
     s.all++;
     if (String(r[9] || "")) s.tags.push([d || made, String(r[9]), String(r[2] || "")]);
     if (PC_COM.test(type) && !s.com) s.com = type;
     if (st === "done" && d) {
-      if (d > s.last || (d === s.last && !s.addr)) { s.last = d; s.type = type; s.addr = String(r[7] || ""); }
+      if (d > s.last || (d === s.last && !s.addr)) { s.last = d; s.lastJob = String(r[0] || ""); s.lastInv = String(r[2] || ""); s.type = type; s.addr = String(r[7] || ""); }
       if (!s.first || d < s.first) s.first = d;
       if (hcpFirstVisit_({ invoice_number: String(r[2] || "") })) s.jobs++;
     } else if (st === "open") s.open.push([d, made]);
@@ -5052,13 +5052,13 @@ function pcRead_(req, user) {
     const cu = cust[c] || [], nm = pcName_(cu);
     const left = pcLeft_(c, s, cu, K.never);
     if (left) {   // due that day, left off: counted, and listed with why
-      if (!missed) { groups[g].left[left.why]++; groups[g].leftOff.push(Object.assign({ id: c, name: nm.name, contact: nm.contact, last: s.last, type: s.type }, left)); }
+      if (!missed) { groups[g].left[left.why]++; groups[g].leftOff.push(Object.assign({ id: c, name: nm.name, contact: nm.contact, last: s.last, lastJob: s.lastJob, lastInv: s.lastInv, type: s.type }, left)); }
       return;
     }
     const m = marks[c + "|" + g + "|" + s.last] || null;
     if (missed && m && m.r) return;   // called on a day after it came up
     const list = groups[g][missed ? "missed" : "due"];
-    list.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
+    list.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, lastJob: s.lastJob, lastInv: s.lastInv, type: s.type,
       dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: due, m: m && m.r ? m : null, com: pcCom_(s, cu) });
   });
   // call-backs whose day has come (a Sunday or closed day: the next working day), not called back yet: in their own group,
@@ -5072,7 +5072,7 @@ function pcRead_(req, user) {
     const cu = cust[c] || [];
     if (pcLeft_(c, s, cu, K.never)) return;
     const nm = pcName_(cu);
-    groups[g].callbacks.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
+    groups[g].callbacks.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, lastJob: s.lastJob, lastInv: s.lastInv, type: s.type,
       dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: pcWorkDay_(m.cb), m: m, com: pcCom_(s, cu) });
   });
   const byName = function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : a.id < b.id ? -1 : 1; };
@@ -5110,7 +5110,7 @@ function pcPeriod_(K, per, from, to, today, start) {
       const G = groups[g];
       if (left) {
         G.left[left.why]++;
-        if (!year && G.leftOff.length < 300) G.leftOff.push(Object.assign({ id: c, name: nm.name, contact: nm.contact, last: s.last, type: s.type, due: d }, left));
+        if (!year && G.leftOff.length < 300) G.leftOff.push(Object.assign({ id: c, name: nm.name, contact: nm.contact, last: s.last, lastJob: s.lastJob, lastInv: s.lastInv, type: s.type, due: d }, left));
         return;
       }
       const m = K.marks[c + "|" + g + "|" + s.last] || null, r = m && m.r ? m.r : "";
@@ -5118,7 +5118,7 @@ function pcPeriod_(K, per, from, to, today, start) {
       add(G.tot);
       if (year) { const k = d.slice(0, 7); add(G.months[k] || (G.months[k] = res())); return; }
       if (G.due.length >= PC_PERIOD_MAX) { G.more++; return; }
-      G.due.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, type: s.type,
+      G.due.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, lastJob: s.lastJob, lastInv: s.lastInv, type: s.type,
         dept: revDept_(s.type), jobs: s.jobs, first: s.first, due: d, m: m && m.r ? m : null, com: pcCom_(s, cu) });
     });
   });
