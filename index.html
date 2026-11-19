@@ -392,6 +392,7 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 .kpi-n { width: 4em; flex: none; text-align: right; }
 .kpi-table-box { padding: 8px 10px; }
 .kpi-table th, .kpi-table td { text-align: right; white-space: nowrap; }
+.kpi-table thead th.kpi-th { white-space: normal; line-height: 1.25; vertical-align: bottom; min-width: 5.5em; }
 .kpi-table th:first-child { text-align: left; }
 .kpi-table tr.kpi-none th, .kpi-table tr.kpi-none td { color: var(--muted); }
 .kpi-table tfoot th, .kpi-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
@@ -16207,6 +16208,8 @@ const KPI_API = 98;                                      // the Google script ve
 const KPI_LIST = [["est", "Estimates sent", "Est"], ["rep", "Repair estimates sent", "Rep"], ["inv", "Invoices sent", "Inv"],
   ["e2j", "Estimates to jobs", "E→J"], ["coll", "Collected balances", "Coll"], ["xact", "Xactimates made", "Xact"]];
 const kpiCan = () => canSee("kpi") && (!apiLevel || apiLevel >= KPI_API);
+/** A KPI's column heading: its whole name on a PC, the short one on a phone (where six names won't fit). */
+const kpiTh = ([k, name, short]) => h("th", { class: "kpi-th", title: name }, h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }));
 const kpiView = Object.assign({ per: "day", off: 0, day: "", from: "", to: "", who: "" }, store.get("voda.kpiView") || {});
 const kpiSaveView = () => store.set("voda.kpiView", { per: kpiView.per, who: kpiView.who });
 let kpiData = null, kpiKey = "", kpiLoading = false, kpiErr = "", kpiEdit = "", kpiSeq = 0;
@@ -16382,7 +16385,7 @@ function kpiDaysEl(p, r, to) {
   const days = [];
   for (let d = to; d >= r.from; d = lbAddDays(d, -1)) if (lbDate(d).getDay() !== 0 || kpiHas(p, d, d)) days.push(d);
   return [kpiTiles(p, r.from, to), h("div", { class: "panel kpi-table-box" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-table", id: "kpiDays" },
-    h("thead", null, h("tr", null, h("th", { text: "Day" }), KPI_LIST.map(([k, name, short]) => h("th", { title: name, text: short })))),
+    h("thead", null, h("tr", null, h("th", { text: "Day" }), KPI_LIST.map(kpiTh))),
     h("tbody", null, days.map(d => { const t = kpiSum(p, d, d); return h("tr", { "data-day": d, class: t.some(Boolean) ? "" : "kpi-none" },
       h("th", null, h("button", { class: "linkish", type: "button", onclick: () => { kpiView.per = "day"; kpiView.day = d; kpiEdit = ""; kpiSaveView(); renderOffice(); } }, lbDayText(d))),
       t.map(n => h("td", { text: kpiNum(n) }))); })),
@@ -16395,7 +16398,7 @@ function kpiYearEl(p, r, to) {
   for (let m = Number(to.slice(5, 7)); m >= 1; m--) months.push(m);
   const today = lbToday();
   return [kpiTiles(p, r.from, to), h("div", { class: "panel kpi-table-box" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table kpi-table", id: "kpiMonths" },
-    h("thead", null, h("tr", null, h("th", { text: "Month" }), KPI_LIST.map(([k, name, short]) => h("th", { title: name, text: short })))),
+    h("thead", null, h("tr", null, h("th", { text: "Month" }), KPI_LIST.map(kpiTh))),
     h("tbody", null, months.map(m => { const k = lbMonthKey(y, m), t = kpiSum(p, `${k}-01`, `${k}-31`); return h("tr", { "data-month": k },
       h("th", null, h("button", { class: "linkish", type: "button", onclick: () => {
         const now = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7)), then = y * 12 + m;
