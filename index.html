@@ -999,6 +999,17 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .cpm-group .cpm-name { font-family: var(--font-display); text-transform: uppercase; letter-spacing: .03em; font-size: 1.02rem; }
 .cpm-col .cpm-name { padding-left: 12px; }
 .cpm-total { background: var(--surface-2); font-weight: 800; border-top: 2px solid var(--line); }
+.cpm-open { cursor: pointer; }
+.cpm-open:hover { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.cpm-group.cpm-open:hover { background: color-mix(in srgb, var(--accent-soft) 90%, var(--surface)); }
+.cpm-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cpm-open .cpm-name { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
+dialog#dlg:has(.cpm-jobs) { width: min(1100px, calc(100% - 24px)); }   /* a line's jobs: every column without sliding sideways */
+.cpm-jobs { display: grid; gap: 8px; }
+.cpm-jobs > p { margin: 0; }
+.cpm-jobs-table td { white-space: nowrap; }
+.cpm-jobs-table .cpm-j-amt { text-align: right; font-variant-numeric: tabular-nums; }
+.cpm-jobs-table .cpm-j-client, .cpm-jobs-table .cpm-j-type { white-space: normal; min-width: 9em; }
 .cpm-vs.up b { color: var(--ok); }
 .cpm-vs.down b { color: var(--due); }
 .cpm-days { margin-top: 6px; }
@@ -12284,6 +12295,7 @@ async function revLoad(y) {
 function revRedraw() {
   if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing();
   else if (view.tab === "office" && ofView.tab === "cpm" && !ofTypingNow()) renderOffice();
+  if (cpmJobsRedraw && dlg.open) cpmJobsRedraw();
   if (estRepRedraw && dlg.open) estRepRedraw();
   if (revUnpaidRedraw && dlg.open) revUnpaidRedraw();
 }
@@ -12331,7 +12343,8 @@ async function revEnsure(ranges, force, src) {
   const now = Date.now(), months = {};
   // a day read before the script kept sources and unpaid visits is read again when they're needed (src, or a range's third item)
   const lacks = v => !v[11] || (apiLevel >= UNPAID_API && !Array.isArray(v[12])) || (apiLevel >= JOBS_API && !Array.isArray(v[13]))
-    || (src === "cpm" && apiLevel >= CPM_API && (!v[14] || typeof v[14] !== "object"));   // Clients Per Month: read before the script kept each day's clients
+    || (src === "cpm" && apiLevel >= CPM_API && (!v[14] || typeof v[14] !== "object"))   // Clients Per Month: read before the script kept each day's clients
+    || (src === "cpm" && apiLevel >= CPM_JOBS_API && Array.isArray(v[13]) && v[13].some(j => Array.isArray(j) && j.length < 10));   // ... or each job's
   for (let [from, to, full] of ranges) {
     if (to > today) to = today;
     for (let d = from; d <= to; d = lbAddDays(d, 1)) {
@@ -16723,6 +16736,7 @@ function renderOffice() {
    Marketing). Months before Housecall Pro: the Excel, loaded by an admin. Clients: jobs (a job's later visits, "1234-2",
    add money but aren't another client). ---- */
 const CPM_API = 109;                                     // the Google script version with Clients Per Month
+const CPM_JOBS_API = 110;                                // ... and each day's jobs with their Clients key (the lists behind each line)
 const K_CPM_VIEW = "voda.cpmView1";
 const cpmView = Object.assign({ per: "month", off: 0 }, store.get(K_CPM_VIEW) || {});
 let cpmData = null, cpmLoading = false, cpmErr = "", cpmOld = false;
@@ -16741,7 +16755,11 @@ function cpmColOf(key, dep, map) {
   if (a < 0 || b < 0) return MKT_OTHER;
   const seg = key.slice(a + 1, b), lead = key.slice(b + 1);
   let kind = key.slice(0, a), row = "";
-  if (!kind) { row = (map && map[lead]) || mktGuess(lead); if (row === MKT_REPEAT) kind = "repeat"; else if (row === MKT_REFERRAL) kind = "referral"; }
+  if (!kind) {
+    row = (map && map[lead]) || mktGuess(lead);
+    if (/\s+clients?$/i.test(row) && row !== MKT_REPEAT) row = mktGuess(row.replace(/\s+clients?$/i, ""));   // "Google Client" → Google, "Repeat Client" → Repeat (as the Excel's "THUMBTACK Client")
+    if (row === MKT_REPEAT) kind = "repeat"; else if (row === MKT_REFERRAL) kind = "referral";
+  }
   if (dep === "p") return kind === "repeat" ? "Repairs Repeat" : kind === "referral" ? "Repairs Referral" : `Repairs ${row}`;
   const D = dep === "c" ? "Cleaning" : dep === "r" ? "Restoration" : "";
   if (kind === "repeat") return ["Repeat", seg === "com" ? "Commercial" : "Residential", D].filter(Boolean).join(" ");
@@ -16829,12 +16847,13 @@ function cpmMonth(m, from, to) {
 }
 /** from..to added up: each column [cents, clients], each day's, where it's from, days still to read. */
 function cpmPeriod(from, to) {
-  const s = { cols: {}, days: {}, from: new Set(), missing: 0 };
+  const s = { cols: {}, days: {}, from: new Set(), missing: 0, src: {} };
   for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = cpmNextMonth(m)) {
     const a = m === from.slice(0, 7) ? from : `${m}-01`, b = m === to.slice(0, 7) ? to : `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`;
     const x = cpmMonth(m, a, b);
     if (!x) return null;
     if (x.from) s.from.add(x.from);
+    s.src[m] = x.from;
     s.missing += x.missing;
     for (const [d, cols] of Object.entries(x.days)) {
       s.days[d] = cols;
@@ -16890,9 +16909,13 @@ function cpmEl() {
   const pct = (a, b) => (b ? `${Math.round(a / b * 100)}%` : "–");
   const each = v => (v[1] ? lbMoney(v[0] / v[1] / 100) : "–");
   const was = ptot[0] || ptot[1];   // last year has anything to compare with
-  const row = (cls, name, v, p, pos, attrs) => {
+  // each line opens its jobs (tap, or Enter): the group's, the source's, or all of them
+  const open = (sel, label) => () => cpmJobsDlg(sel, label, r.from, to, r.label);
+  const row = (cls, name, v, p, pos, attrs, sel) => {
     const d = v[0] - p[0], dn = v[1] - p[1], cmp = was && (v[0] || v[1] || p[0] || p[1]);
-    return h("div", Object.assign({ class: `cpm-row ${cls}`, role: "row" }, attrs || {}),
+    const go = sel ? open(sel, name) : null;
+    return h("div", Object.assign({ class: `cpm-row ${cls}` + (go ? " cpm-open" : ""), role: "row" }, go ? { tabindex: "0", title: "Its jobs", onclick: go,
+      onkeydown: ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } } } : {}, attrs || {}),
       h("span", { class: "cpm-name", role: "cell", text: name }),
       h("span", { class: "cpm-money", role: "cell" }, h("b", { text: lbMoney(v[0] / 100) }), h("small", { text: pct(v[0], tot[0]) })),
       h("span", { class: "cpm-n", role: "cell" }, h("b", { text: fmt(v[1]) }), h("small", { text: pct(v[1], tot[1]) })),
@@ -16913,10 +16936,10 @@ function cpmEl() {
   const body = [head];
   for (const [g, label] of groups) {
     const list = ids.filter(id => cpmGroup(id) === g);
-    body.push(row("cpm-group", label, gv(cur, g), gv(prev, g), gRank.indexOf(g) + 1, { "data-g": g }));
-    for (const id of list) body.push(row("cpm-col", cpmName(id), val(cur, id), val(prev, id), byMoney.indexOf(id) + 1, { "data-col": id }));
+    body.push(row("cpm-group", label, gv(cur, g), gv(prev, g), gRank.indexOf(g) + 1, { "data-g": g }, { g }));
+    for (const id of list) body.push(row("cpm-col", cpmName(id), val(cur, id), val(prev, id), byMoney.indexOf(id) + 1, { "data-col": id }, { id, g }));
   }
-  body.push(row("cpm-total", "Total", tot, ptot, 0, { "data-g": "total" }));
+  body.push(row("cpm-total", "Total", tot, ptot, 0, { "data-g": "total" }, { all: true }));
   out.push(h("div", { class: "cpm-table", id: "cpmTable", role: "table" }, body));
   // each day: its total and each group's (Week, Month, Year)
   if (per !== "day") {
@@ -16931,6 +16954,66 @@ function cpmEl() {
   }
   out.push(howFold("cpmHow", h("p", { class: "hint", text: "Revenue: each job's amount on the day it's on the schedule (canceled jobs left out). Clients: jobs (a job's later visits, 1234-2, add money but aren't another client). Repeat clients and Referrals come from the Job type (… - REPEAT, … - REFERRAL; Residential or Commercial from it too); every other job from its Lead source, matched to a source as on Marketing (Lead sources). Repairs: every repair job, by Repeat, Referral or its source (Google, Google Guaranteed, …). Position: by revenue (1 is the most). vs last year: the same days a year before. Months Housecall Pro doesn't have come from the Excel (an admin loads it with Load from Excel)." }), "How it's counted"));
   return out;
+}
+/** A line's jobs (sel: { id } a source, { g } a group, { all }), from..to: every job Housecall Pro has on those days that
+ *  goes on that line (each day's Jobs, matched the same way as the totals): its day, number (opens it in Housecall Pro),
+ *  client, Job type, Lead source, the line it's on, amount, and whether it's counted as a client (a first visit). Their
+ *  sum is the line's. Months from the Excel have no jobs: their totals are named instead. */
+let cpmJobsRedraw = null;                                // the open list, drawn again as days come in from Housecall Pro
+function cpmJobsDlg(sel, label, from, to, period) {
+  const box = h("div", { class: "cpm-jobs" });
+  let asked = false;
+  const g = sel.all ? "" : sel.g, grp = (CPM_GROUPS.find(x => x[0] === g) || [])[1] || "";
+  const draw = () => {
+    const per = cpmPeriod(from, to);
+    if (!per) { box.replaceChildren(h("p", { class: "loading", text: "Loading…" })); return; }
+    const map = cpmData && cpmData.map, list = [], xl = [], old = [];
+    let oldScript = false;
+    const hit = col => sel.all || (sel.id ? col === sel.id : cpmGroup(col) === g);
+    for (const [m, src] of Object.entries(per.src)) if (src === "xl") xl.push(m);
+    for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+      if (per.src[d.slice(0, 7)] === "xl") continue;
+      const doc = revDoc(Number(d.slice(0, 4))), v = doc && doc.days[d];
+      if (!v || !Array.isArray(v[13])) continue;
+      for (const j of v[13]) {
+        if (!Array.isArray(j)) continue;
+        if (j.length < 10) { if (apiLevel && apiLevel < CPM_JOBS_API) oldScript = true; else old.push(d); break; }   // read before the script kept each job's key: read again
+        const col = cpmColOf(String(j[9] || ""), j[3], map);
+        if (!hit(col)) continue;
+        const ck = String(j[9] || ""), lead = ck.split("|").slice(2).join("|");
+        list.push({ d, id: j[0], inv: j[1], client: j[2], cents: Number(j[4]) || 0, first: !!j[8], type: String(j[10] || ""), lead, col });
+      }
+    }
+    list.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : String(b.inv).localeCompare(String(a.inv), undefined, { numeric: true })));
+    const sum = list.reduce((t, x) => [t[0] + x.cents, t[1] + (x.first ? 1 : 0)], [0, 0]);
+    const xlSum = cpmSum(xl.flatMap(m => Object.entries(per.days).filter(([d]) => d.startsWith(m)).flatMap(([, cols]) => Object.entries(cols).filter(([id]) => hit(id)).map(([, v]) => v))));
+    const showLine = !sel.id;   // a group or all: which line each job is on
+    box.replaceChildren(...[
+      h("p", { class: "meta", id: "cpmJobsSum" }, h("b", { text: `${fmt(list.length)} job${list.length === 1 ? "" : "s"} · ${lbMoney(sum[0] / 100)} · ${fmt(sum[1])} client${sum[1] === 1 ? "" : "s"}` }),
+        list.length ? " (a job's later visits add money, not another client)" : ""),
+      oldScript ? h("p", { class: "dlg-err", text: "The lists need the Google script's new version (Deploy › Manage deployments › New version)." }) : null,
+      old.length ? h("p", { class: "meta rev-status busy", id: "cpmJobsReading", text: "Reading some days again from Housecall Pro, for their jobs…" }) : null,
+      xl.length ? h("p", { class: "meta", id: "cpmJobsXl", text: `From the Excel, no jobs to list: ${xl.map(m => `${lbMonthLong(Number(m.slice(5))).slice(0, 3)} ${m.slice(0, 4)}`).join(", ")} (${lbMoney(xlSum[0] / 100)} · ${fmt(xlSum[1])} clients).` }) : null,
+      list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cpm-jobs-table", id: "cpmJobsTable" },
+        h("thead", null, h("tr", null, ["Day", "#", "Client", "Job type", "Lead source", showLine ? "Line" : null, "Amount", "Client?"].filter(Boolean).map(t => h("th", { text: t })))),
+        h("tbody", null, list.map(x => h("tr", { "data-inv": x.inv },
+          h("td", { class: "cpm-j-day", text: lbDayText(x.d) }),
+          h("td", { class: "cpm-j-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : hcpLink("job", x.id, "Open")),
+          h("td", { class: "cpm-j-client", text: x.client || "(no name)" }),
+          h("td", { class: "cpm-j-type", text: x.type || "(no job type)" }),
+          h("td", { class: "cpm-j-lead", text: x.lead || "(none)" }),
+          showLine ? h("td", { class: "cpm-j-line", text: `${(CPM_GROUPS.find(z => z[0] === cpmGroup(x.col)) || [])[1] || ""} · ${cpmName(x.col)}` }) : null,
+          h("td", { class: "cpm-j-amt", text: lbMoney(x.cents / 100) }),
+          h("td", { class: "cpm-j-first", text: x.first ? "Yes" : "Later visit" })))))) : xl.length ? null : h("p", { class: "meta", text: "No jobs on this line then." })].filter(Boolean));
+    if (old.length && !asked) { asked = true; revEnsure([[old[0], old[old.length - 1]]], false, "cpm"); }
+  };
+  cpmJobsRedraw = () => { if (box.isConnected) draw(); };
+  openDialog(
+    h("h3", { id: "dlgTitle", text: sel.all ? `Every job · ${period}` : sel.id ? `${grp ? `${grp} · ` : ""}${label} · ${period}` : `${label} · ${period}` }),
+    h("p", { class: "hint", text: "Each job Housecall Pro has on these days for this line, the newest first. Tap a number to open the job in Housecall Pro. Clients: first visits (1234-2 and later add money only)." }),
+    box,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+  draw();
 }
 /** Admin: Load from Excel on Clients Per Month: the Excel's month tabs, each day by column, saved (a month loaded again
  *  is replaced). Housecall Pro's numbers are still used for any month it has. */
