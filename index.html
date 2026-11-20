@@ -780,6 +780,44 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .pc-chip.pc-vm { background: var(--soon-bg); color: var(--soon); border-color: transparent; }
 .pc-chip.pc-booked { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
 .pc-chip.pc-dnc { background: var(--due-bg); color: var(--due); border-color: transparent; }
+.pc-chip.pc-sw { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+/* Estimates › Today's calls: beside the list on a wide screen (the page gets wider for it), above it otherwise */
+.est-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
+.est-calls { order: -1; gap: 6px; }
+.ec-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ec-head h3 { margin: 0; } .ec-head h3 small { font-weight: 600; color: var(--muted); font-size: .8rem; }
+.ec-count { margin-left: auto; font-size: .82rem; font-weight: 700; color: var(--muted); }
+.ec-bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; } .ec-bar i { display: block; height: 100%; background: var(--ok); }
+.ec-sec { margin: 8px 0 0; font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.ec-row { border-top: 1px solid var(--line); padding: 8px 0; display: grid; gap: 8px; }
+.ec-sec + .ec-row { border-top: 0; }
+.ec-row.next { background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 8px; padding: 8px; margin: 0 -8px; border-top-color: transparent; }
+.ec-top { display: flex; align-items: center; gap: 10px; }
+.ec-who { flex: 1; min-width: 0; display: grid; } .ec-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-who small { color: var(--muted); font-size: .76rem; } .ec-who .ec-why { color: var(--soon); font-weight: 700; } .ec-who .ec-said { font-style: italic; }
+.ec-next { justify-self: start; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); }
+.ec-row.done .ec-who b { color: var(--muted); }
+.ec-done { display: grid; justify-items: end; gap: 2px; } .ec-done .pc-chip { font-size: .76rem; padding: 2px 8px; } .ec-done small, .ec-done .ec-change { font-size: .74rem; font-weight: 600; }
+.ec-call { white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; } .ec-call.on { border-color: var(--accent); color: var(--accent); }
+.ec-call .of-est-ic svg { width: 15px; height: 15px; }
+.ec-marks { display: flex; flex-wrap: wrap; gap: 6px; }
+.ec-m { padding: 5px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; color: var(--ink); }
+.ec-m.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.ec-m.dnc { color: var(--due); } .ec-m.dnc.sure { background: var(--due-bg); border-color: var(--due); }
+.ec-form { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.ec-lbl { font-size: .74rem; font-weight: 700; color: var(--muted); }
+.ec-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ec-chip { padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; color: var(--ink); }
+.ec-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.ec-chips input[type="date"] { width: auto; min-width: 0; font-size: .8rem; }
+.ec-btns { display: flex; gap: 8px; }
+.ec-foot { margin: 6px 0 0; font-size: .76rem; color: var(--muted); }
+.ec-days { display: flex; gap: 6px; align-items: center; margin-top: 6px; } .ec-days input { flex: 1; min-width: 0; }
+@media (min-width: 1760px) {
+  body[data-tab="estimates"] { --page-w: 1760px; }
+  body[data-tab="estimates"] #estView:has(> .est-calls) { max-width: none; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; column-gap: 24px; }
+  .est-calls { order: 0; position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
+}
 .pc-row.marked .pc-name, .pc-row.marked .pc-name a { color: var(--muted); }
 .pc-contact { font-size: .9rem; }
 .pc-com { font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); align-self: center; }
@@ -15553,7 +15591,8 @@ async function estLoad(y) {
   estLoading[y] = true;
   try {
     const out = await api("estimates", { year: y }, 90000);
-    const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, me: out.me || "", reports: out.reports || {}, readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false };
+    const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, me: out.me || "", reports: out.reports || {}, readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false,
+      sentFrom: out.sentFrom || "", callDays: Array.isArray(out.callDays) ? out.callDays : null };
     if (y === revThisYear()) { estData = doc; store.set(K_EST, doc); } else estOther[y] = doc;
     estErr = ""; estOld = false;
   } catch (e) {
@@ -15737,9 +15776,11 @@ function renderEstimates() {
   // nothing created in these days: says so (and where Housecall Pro's estimates start) instead of tiles full of zeros
   if (!listAll.length && doc.done && !estSync.busy) {
     const first = (doc.years || []).length ? Math.min(...doc.years) : 0;
-    box.replaceChildren(...head, h("div", { class: "panel est-empty", id: "estEmpty" },
+    const calls = estCallsEl(today, all, all ? estView.who || "" : "");
+    const main = [...head, h("div", { class: "panel est-empty", id: "estEmpty" },
       h("p", null, h("b", { text: `No estimates in ${r.label}.` }),
-        first && Number(r.to.slice(0, 4)) < first ? ` Housecall Pro's estimates start in ${first}.` : r.from > today ? "" : " Every estimate in Housecall Pro is read; none were scheduled (or made) in these days.")));
+        first && Number(r.to.slice(0, 4)) < first ? ` Housecall Pro's estimates start in ${first}.` : r.from > today ? "" : " Every estimate in Housecall Pro is read; none were scheduled (or made) in these days."))];
+    box.replaceChildren(...(calls ? [h("div", { class: "est-main" }, ...main), calls] : main));
     return;
   }
   // the tiles: every estimate, then each group (approval rate by estimates and by dollars); a tile picks the list's group
@@ -15837,7 +15878,146 @@ function renderEstimates() {
       : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates in these days."
         : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
-  box.replaceChildren(...[...head, tiles, people, how, listBox].filter(Boolean));
+  const calls = estCallsEl(today, all, who);
+  const main = [...head, tiles, people, how, listBox].filter(Boolean);
+  box.replaceChildren(...(calls ? [h("div", { class: "est-main" }, ...main), calls] : main));
+}
+
+/* ---- Estimates › Today's calls: whoever's in charge of an estimate calls the client after it's sent, on the call days
+   (1, 2, 3, 7 and 14 days after it's sent; an admin can change them) and on the day a call back was asked for, until
+   someone speaks with them (and sets no day to call again), it's booked, or Don't call again. A call day missed stays
+   on the list EST_CALL_GRACE more days. The order to call in: call backs due, then the newest sent to the oldest; the
+   first not called yet is "Call next". Cleaning estimates are the office's (Office › Estimates); Freddy's visits aren't
+   estimates. Beside the list on a wide screen, above it otherwise. ---- */
+const EST_CALLS_API = 105;                                // the Google script version with calls on estimates
+const EST_CALL_GRACE = 2;
+const EST_CALL_DAYS_DEF = [1, 2, 3, 7, 14];
+const EST_CALL_TEXT = { nr: "No answer", vm: "Voicemail", sw: "Spoke with", cb: "Call back", booked: "Booked", dnc: "Don't call again" };
+const EST_CALL_WHO = [["client", "Client"], ["pm", "Property manager"], ["adjuster", "Adjuster"], ["other", "Someone else"]];
+const EST_CALL_SOON = [[1, "Tomorrow"], [3, "In 3 days"], [7, "In a week"], [14, "In 2 weeks"], [30, "In a month"]];
+const K_EST_CALLS_FOLD = "voda.estCallsFold";
+let estCallOpen = "", estCallSure = "", estCallForm = null, estCallDaysEdit = false;   // the row with its buttons open; Don't call's second tap; Spoke with / Call back's box
+const estDayGap = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+/** An estimate's calls as they stand (a clear takes back the one before it). */
+const estCallMarks = e => { const ms = []; (e.calls || []).forEach(m => { if (m.r) ms.push(m); else ms.pop(); }); return ms; };
+/** The day it was sent: the first day the app read it as sent, or (sent before the app kept that) its own day. */
+const estSentDay = (e, from) => { const s = e.sentBy && e.sentBy.at ? lbDayKey(new Date(e.sentBy.at)) : ""; return s && from && s > from ? s : e.day; };
+/** Is it a call for today? { e, due: { kind: "cb" | "day", day, n }, sent, age, done (today's call), last, tries }, or null. */
+function estCallDue(e, today, days, from) {
+  if (e.st !== "open" || estNotSent(e) || ["c", "v"].includes(estGroup(e))) return null;
+  const ms = estCallMarks(e), before = ms.filter(m => m.d < today), todays = ms.filter(m => m.d === today), last = before[before.length - 1] || null;
+  const sent = estSentDay(e, from);
+  let due = null;
+  if (last && (last.r === "dnc" || last.r === "booked")) due = null;
+  else if (last && last.cb) due = last.cb <= today ? { kind: "cb", day: last.cb } : null;
+  else if (last && last.r === "sw") due = null;
+  else if (sent) {
+    let k = -1;
+    days.forEach((n, i) => { if (lbAddDays(sent, n) <= today) k = i; });
+    const t = k >= 0 ? lbAddDays(sent, days[k]) : "";
+    if (t && estDayGap(t, today) <= EST_CALL_GRACE && !before.some(m => m.d >= t)) due = { kind: "day", day: t, n: days[k] };
+  }
+  if (!due) return null;
+  return { e, due, sent, age: estDayGap(sent, today), done: todays[todays.length - 1] || null, last, tries: before.filter(m => m.r === "nr" || m.r === "vm").length };
+}
+/** A call: on screen at once, then saved (one that didn't save goes back). x: { cb, note, sw }. */
+async function estCallSave(e, r, x = {}) {
+  const was = (e.calls || []).slice();
+  e.calls = was.concat(Object.assign({ d: lbToday(), r: r === "clear" ? "" : r, w: session ? session.name : "", at: new Date().toISOString(), saving: true },
+    x.cb ? { cb: x.cb } : {}, x.note ? { n: x.note } : {}, x.sw ? { s: x.sw } : {}));
+  estCallOpen = ""; estCallSure = ""; estCallForm = null;
+  renderEstimates();
+  try { const out = await api("estCall", Object.assign({ id: e.id, r }, x)); e.calls = out.calls || []; }
+  catch (err) { e.calls = was; toast(errText(err, "The call")); }
+  if (estData) store.set(K_EST, estData);
+  renderEstimates();
+}
+const estCallText = m => m.r === "sw" ? `Spoke with ${((EST_CALL_WHO.find(w => w[0] === m.s) || [, ""])[1] || "them").toLowerCase().replace(/^client$/, "the client").replace(/^adjuster$/, "the adjuster").replace(/^property manager$/, "the property manager")}`
+  : m.r === "cb" && m.cb ? `Call back ${lbDayText(m.cb)}` : EST_CALL_TEXT[m.r] || m.r;
+/** Spoke with… / Call back…: who (Spoke with), a day to call again (Call back: needed), a note. */
+function estCallFormEl(e) {
+  const f = estCallForm, today = lbToday(), isSw = f.r === "sw";
+  const day = h("input", { type: "date", id: "ecDay", min: lbAddDays(today, 1), max: lbAddDays(today, 366), value: f.cb || "", "aria-label": isSw ? "Call again on" : "Call back on",
+    onchange: ev => { f.cb = ev.target.value; f.err = ""; renderEstimates(); } });
+  const note = h("input", { type: "text", id: "ecNote", maxlength: "140", value: f.note || "", placeholder: isSw ? "What they said" : "What to call about", "aria-label": "Note", "data-nodirty": "",
+    oninput: ev => { f.note = ev.target.value; } });
+  const save = () => {
+    if (isSw && !f.sw) { f.err = "Pick who you spoke with."; renderEstimates(); return; }
+    if (!isSw && !f.cb) { f.err = "Pick the day to call back."; renderEstimates(); return; }
+    estCallSave(e, f.r, Object.assign({ note: String(f.note || "").trim() }, f.cb ? { cb: f.cb } : {}, isSw ? { sw: f.sw } : {}));
+  };
+  return h("div", { class: "ec-form", id: "ecForm" },
+    isSw ? h("div", { class: "ec-chips", role: "radiogroup", "aria-label": "Spoke with" }, EST_CALL_WHO.map(([k, t]) => h("button", { class: "ec-chip" + (f.sw === k ? " on" : ""), type: "button", role: "radio",
+      "aria-checked": String(f.sw === k), "data-sw": k, onclick: () => { f.sw = k; f.err = ""; renderEstimates(); } }, t))) : null,
+    h("span", { class: "ec-lbl", text: isSw ? "Call again (if they asked)" : "Call back" }),
+    h("div", { class: "ec-chips" }, EST_CALL_SOON.map(([n, t]) => h("button", { class: "ec-chip" + (f.cb === lbAddDays(today, n) ? " on" : ""), type: "button", "data-n": n,
+      onclick: () => { const d = lbAddDays(today, n); f.cb = f.cb === d && isSw ? "" : d; f.err = ""; renderEstimates(); } }, t)), day),
+    note,
+    f.err ? h("p", { class: "dlg-err", id: "ecErr", text: f.err }) : null,
+    h("div", { class: "ec-btns" }, h("button", { class: "btn small primary", type: "button", id: "ecSave", onclick: save }, "Save"),
+      h("button", { class: "btn small ghost", type: "button", onclick: () => { estCallForm = null; renderEstimates(); } }, "Cancel")));
+}
+/** One call's row: the client (Call next on the first not called yet), #, amount, who's on it (everyone's), why today;
+ *  today's call (and Change), or Call with its buttons. */
+function estCallRowEl(c, next, showWho) {
+  const e = c.e, open = estCallOpen === e.id && !c.done, m = c.done;
+  const why = c.due.kind === "cb" ? (c.due.day < lbToday() ? `call back from ${lbDayText(c.due.day)}` : "call back today") : c.due.day < lbToday() ? `missed ${lbDayText(c.due.day)}` : "";
+  const lastNote = c.due.kind === "cb" && c.last && c.last.n ? `“${c.last.n}”` : "";
+  const right = m ? h("span", { class: "ec-done" }, h("span", { class: `pc-chip pc-${m.r}`, text: estCallText(m), title: m.n || null }),
+      m.saving ? h("small", { text: "saving…" }) : h("button", { class: "linkish ec-change", type: "button", title: "Take back today's call", onclick: () => estCallSave(e, "clear") }, "Change"))
+    : h("button", { class: "btn small ec-call" + (open ? " on" : ""), type: "button", "aria-expanded": String(open), onclick: () => { estCallOpen = open ? "" : e.id; estCallSure = ""; estCallForm = null; renderEstimates(); } },
+      ofEstIc("cb"), "Call");
+  const btns = open ? h("div", { class: "ec-marks", role: "group", "aria-label": "How did the call go" },
+    [["nr", "No answer"], ["vm", "Voicemail"], ["sw", "Spoke with…"], ["cb", "Call back…"], ["booked", "Booked"]].map(([k, t]) => h("button", { class: "ec-m" + (estCallForm && estCallForm.r === k ? " on" : ""), type: "button", "data-r": k,
+      onclick: () => { if (k === "sw" || k === "cb") { estCallForm = estCallForm && estCallForm.r === k ? null : { id: e.id, r: k, sw: "", cb: "", note: "" }; renderEstimates(); } else estCallSave(e, k); } }, t)),
+    h("button", { class: "ec-m dnc" + (estCallSure === e.id ? " sure" : ""), type: "button", "data-r": "dnc", onclick: () => { if (estCallSure === e.id) estCallSave(e, "dnc"); else { estCallSure = e.id; renderEstimates(); } } },
+      estCallSure === e.id ? "Sure? Don't call again" : "Don't call again")) : null;
+  return h("div", { class: "ec-row" + (m ? " done" : "") + (next ? " next" : ""), "data-id": e.id, "data-sent": c.sent, "data-kind": c.due.kind },
+    h("div", { class: "ec-top" },
+      h("div", { class: "ec-who" },
+        next ? h("span", { class: "ec-next", text: "Call next" }) : null,
+        h("b", { text: e.client || "No name" }),
+        h("small", null, hcpLink("est", estOptId(e), `#${e.n}`), ` · ${lbMoney(estValue(e) / 100)}`, showWho ? ` · ${e.inc || "Nobody assigned"}` : "",
+          c.tries ? ` · try ${c.tries + 1}` : "", why ? h("span", { class: "ec-why", text: ` · ${why}` }) : null, lastNote ? h("span", { class: "ec-said", text: ` · ${lastNote}` }) : null)),
+      right),
+    btns, open && estCallForm && estCallForm.id === e.id ? estCallFormEl(e) : null);
+}
+/** The panel (null with an older Google script, or for someone who can't see estimates). who: the person picked
+ *  (someone who sees them all), or "" for everyone's. */
+function estCallsEl(today, all, who) {
+  if (!estData || (apiLevel && apiLevel < EST_CALLS_API) || !Array.isArray(estData.callDays)) return null;
+  const days = estData.callDays.length ? estData.callDays : EST_CALL_DAYS_DEF, from = estData.sentFrom || "";
+  const pool = estData.estimates.concat((estOther[estData.year - 1] || {}).estimates || []);
+  const mine = pool.filter(e => !all || !who || estOwners(e).includes(who));
+  const due = mine.map(e => estCallDue(e, today, days, from)).filter(Boolean)
+    // call backs due first, then the newest sent to the oldest
+    .sort((a, b) => (a.due.kind === "cb") !== (b.due.kind === "cb") ? (a.due.kind === "cb" ? -1 : 1) : a.sent < b.sent ? 1 : a.sent > b.sent ? -1 : Number(b.e.n) - Number(a.e.n) || 0);
+  const done = due.filter(c => c.done).length, nextId = (due.find(c => !c.done) || {}).e;
+  const fold = store.get(K_EST_CALLS_FOLD) === true;
+  const sec = c => c.due.kind === "cb" ? "Call backs due" : c.age <= 1 ? "Sent yesterday" : c.age === 7 ? "Sent a week ago" : c.age === 14 ? "Sent 2 weeks ago" : `Sent ${c.age} days ago`;
+  const body = [];
+  let at = "";
+  due.forEach(c => { const t = sec(c); if (t !== at) { at = t; body.push(h("p", { class: "ec-sec", text: t })); } body.push(estCallRowEl(c, nextId === c.e, all && !who)); });
+  const soon = mine.map(e => { const l = estCallMarks(e).slice(-1)[0]; return e.st === "open" && l && l.cb && l.cb > today && l.cb <= lbAddDays(today, 7) ? l.cb : ""; }).filter(Boolean).sort();
+  const daysEl = isAdmin() ? (estCallDaysEdit
+    ? h("div", { class: "ec-days" }, h("input", { type: "text", id: "ecDaysIn", value: days.join(", "), inputmode: "numeric", "aria-label": "Call days", "data-nodirty": "" }),
+      h("button", { class: "btn small", type: "button", id: "ecDaysSave", onclick: async () => {
+        const v = String($("ecDaysIn").value || "").split(/[\s,]+/).filter(Boolean).map(Number);
+        if (!v.length || v.some(n => !Number.isInteger(n) || n < 1 || n > 90)) { toast("Days after it's sent, like 1, 2, 3, 7, 14"); return; }
+        try { const out = await api("estCallDays", { days: v }); estData.callDays = out.days; store.set(K_EST, estData); estCallDaysEdit = false; renderEstimates(); } catch (err) { toast(errText(err, "The call days")); }
+      } }, "Save"), h("button", { class: "btn small ghost", type: "button", onclick: () => { estCallDaysEdit = false; renderEstimates(); } }, "Cancel"))
+    : h("p", { class: "ec-foot" }, `Called ${days.join(", ")} days after it's sent · `, h("button", { class: "linkish", type: "button", id: "ecDaysBtn", onclick: () => { estCallDaysEdit = true; renderEstimates(); } }, "Change"))) : null;
+  return h("section", { class: "panel est-calls" + (fold ? " folded" : ""), id: "estCalls", "aria-label": "Today's calls" },
+    h("div", { class: "ec-head" },
+      h("h3", null, "Today's calls", all ? h("small", { text: who ? ` · ${who}` : " · everyone's" }) : null),
+      h("span", { class: "ec-count", id: "ecCount", text: due.length ? (done === due.length ? "All done ✓" : `${done} of ${due.length} done`) : "None today" }),
+      h("button", { class: "btn small ghost ec-fold", type: "button", "aria-expanded": String(!fold), onclick: () => { store.set(K_EST_CALLS_FOLD, !fold); renderEstimates(); } }, fold ? "Show" : "Hide")),
+    fold ? null : [
+      due.length ? h("div", { class: "ec-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(due.length), "aria-valuenow": String(done) }, h("i", { style: `width:${Math.round(done / due.length * 100)}%` })) : null,
+      due.length ? h("div", { class: "ec-list", id: "ecList" }, body)
+        : h("p", { class: "lb-sub", id: "ecNone", text: `No calls due today.${soon.length ? ` Next call back: ${lbDayText(soon[0])}${soon.length > 1 ? ` (${soon.length} this week)` : ""}.` : ""}` }),
+      daysEl,
+      howFold("estCallsHow", h("p", { class: "lb-sub" }, `Each estimate's people in Housecall Pro call the client ${days.join(", ")} days after it's sent (one sent before ${from ? lbDayText(from) : "the app kept it"} counts from its scheduled day), until they speak with someone and set no day to call again, it's booked, or Don't call again. A call day that's missed stays on the list ${EST_CALL_GRACE} more days. A call back comes back on its day. The order: call backs first, then the newest sent to the oldest. Cleaning estimates are the office's (Office › Estimates).`))]);
 }
 
 /** An estimate's row (Estimates and Office › Estimates): day, #, client and address, group, amount, status (approved
@@ -16727,7 +16907,7 @@ const pcWhoEl = g => (pcData && pcData.assign ? h("small", { class: "pc-who", te
 const pcNoneEl = () => h("div", { class: "panel", id: "pcNone" }, h("h2", { text: "No past-client groups for you" }),
   h("p", { class: "meta", text: "Each group is picked for someone else. Ask Mike to pick one for you." }));
 const PC_MARKS = [["na", "Not now"], ["vm", "Voicemail"], ["booked", "Booked"], ["cb", "Call back…"], ["dnc", "Don't call again"]];
-const PC_MARK_TEXT = Object.assign(Object.fromEntries(PC_MARKS), { cb: "Call back" });
+const PC_MARK_TEXT = Object.assign(Object.fromEntries(PC_MARKS), { cb: "Call back", nr: "No answer", sw: "Spoke with" });
 const PC_CB_API = 88;                                    // the Google script version with call-backs
 const PC_DEPT = { r: "Restoration", c: "Cleaning", p: "Repairs" };
 const K_PC_VIEW = "voda.pcView1";
