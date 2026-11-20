@@ -978,6 +978,40 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-val { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 9px; }
 .of-in:has(.of-ratio) .of-val { padding-right: 6.6em; }
 .of-row-stats { grid-column: 3; margin: 0; justify-self: end; text-align: right; font-size: .82rem; }
+/* booked jobs (Scorecard, Admins only): the three boxes beside Scheduled / completed open the jobs */
+button.lb-box.of-bk { font: inherit; color: inherit; text-align: left; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+.of-bk .of-in { container-type: inline-size; }
+@container (max-width: 13em) {   /* a narrow box (a phone, big letters): what's beside the number goes under it */
+  .of-bk .of-in .of-ratio { position: static; transform: none; display: block; margin: 3px 0 0 2px; white-space: normal; }
+  .of-bk .of-in:has(.of-ratio) .of-val { padding-right: 9px; }
+}
+button.lb-box.of-bk:disabled { cursor: default; opacity: 1; }
+button.lb-box.of-bk:not(:disabled):hover .of-val, button.lb-box.of-bk[aria-expanded="true"] .of-val { border-color: var(--accent); }
+button.lb-box.of-bk:focus-visible { outline: none; }
+button.lb-box.of-bk:focus-visible .of-val { outline: 2px solid var(--accent); outline-offset: 1px; }
+.of-val.up { color: var(--ok); }
+.of-val.down { color: var(--due); }
+.of-bk-open { margin-top: 8px; display: grid; gap: 6px; }
+.of-bk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.of-bk-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto 5.5em; gap: 2px 12px; align-items: baseline; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: .86rem; }
+.of-bk-row:not(:has(.of-bk-day)) { grid-template-columns: auto minmax(0, 1fr) auto 5.5em; }
+.of-bk-row .of-bk-st { grid-column: 1 / -1; color: var(--muted); font-size: .76rem; }
+.of-bk-day { color: var(--muted); white-space: nowrap; }
+.of-bk-client { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.of-bk-amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.of-bk-diff { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.of-bk-diff.up { color: var(--ok); }
+.of-bk-diff.down { color: var(--due); }
+.of-bk-row[data-st="x"] .of-bk-amt { text-decoration: line-through; color: var(--muted); }
+.of-bk-note { margin: 0; font-size: .8rem; color: var(--muted); }
+.of-bk-foot { display: grid; gap: 8px; margin-top: 10px; }
+@media (max-width: 560px) {
+  .of-bk-row, .of-bk-row:not(:has(.of-bk-day)) { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+  .of-bk-client { flex-basis: 100%; order: 3; }
+  .of-bk-amt { order: 4; }
+  .of-bk-diff { order: 5; margin-left: auto; }
+  .of-bk-row .of-bk-st { flex-basis: 100%; order: 6; }
+}
 @media (max-width: 560px) { .of-row-stats { grid-column: 1 / -1; justify-self: start; text-align: left; } }
 .of-nums .lb-m b i { margin-left: 6px; font-style: normal; color: var(--muted); font-weight: 600; }
 .of-people { display: grid; gap: 12px; }
@@ -5639,6 +5673,7 @@ async function refresh(quiet) {
   if (view.tab === "leaderboard" && loaded && !dlg.open && !lbShowState && !lbTyping()) lbLoad(!quiet);
   // (Office by itself only while nobody is working in this window: its boxes and menus aren't redrawn under a hand)
   if (view.tab === "office" && loaded && !dlg.open && !ofTypingNow() && !ofLoading && (!quiet || performance.now() - lbActiveAt > 15000)) ofLoad();
+  if (!quiet && view.tab === "office" && ofView.tab === "score") ofBk.after = Date.now();   // the booked jobs: read again
   if (view.tab === "office" && ofView.tab === "kpi" && loaded && !dlg.open && !ofTypingNow() && !kpiLoading && !(kpiData && (kpiData.lines || []).some(x => x.saving))) kpiLoad();
   if ((view.tab === "contractors" || (view.tab === "repairs" && canSee("contractors"))) && loaded && !dlg.open && !cpLoading) cpLoad();
   if (view.tab === "attendance" && loaded && !dlg.open && !atLoading) atLoad();
@@ -17679,6 +17714,90 @@ function ofRange(per, off) {
   }
   return { from: `${y + off}-01-01`, to: `${y + off}-12-31`, label: String(y + off) };
 }
+/* ---- booked jobs (Admins only on the Scorecard): each office person's jobs on the schedule for those days, whenever she
+   booked them, from Housecall Pro (the hourly check): how many, their amounts when booked (booked revenue) and, once
+   serviced, the change ---- */
+const OF_BK_API = 107;                                   // the Google script version that keeps the booked jobs
+const OF_BK_HOW = { tag: "Tag in Housecall Pro", pc: "Past clients call", est: "Estimate call" };
+const ofBk = { docs: {}, loading: {}, err: "", old: false, after: 0, open: "" };
+/** Those days' booked jobs (kept 5 minutes; Update reads them again); null the first time, while they load. */
+function ofBkFor(from, to) {
+  const k = `${from}|${to}`, d = ofBk.docs[k];
+  if (!(d && d.t >= ofBk.after && Date.now() - d.t < 5 * 60e3) && !ofBk.loading[k]) ofBkLoad(from, to);
+  return d || null;
+}
+async function ofBkLoad(from, to) {
+  const k = `${from}|${to}`;
+  ofBk.loading[k] = true;
+  try {
+    const out = await api("ofBooked", { from, to });
+    ofBk.docs[k] = Object.assign(out, { t: Date.now() }); ofBk.err = ""; ofBk.old = false;
+  } catch (e) {
+    ofBk.old = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < OF_BK_API);
+    ofBk.err = ofBk.old ? "" : errText(e, "The booked jobs");
+    ofBk.docs[k] = Object.assign(ofBk.docs[k] || { jobs: [] }, { t: Date.now(), failed: true });
+  }
+  ofBk.loading[k] = false;
+  if (view.tab === "office" && ofView.tab === "score" && !ofTypingNow()) renderOffice();
+}
+const ofBkMoney = c => lbMoney(c / 100);
+const ofBkDiff = c => (c > 0 ? "+" : c < 0 ? "−" : "") + lbMoney(Math.abs(c) / 100);
+/** A person's booked jobs added up (canceled ones aren't on the schedule: only noted): how many, booked $, and the change
+ *  on the ones serviced (those booked with a price). */
+function ofBkSum(jobs) {
+  const live = jobs.filter(j => j.st !== "x"), priced = live.filter(j => j.bc > 0), done = priced.filter(j => j.st === "d" && j.fc != null);
+  return { n: live.length, can: jobs.length - live.length, cents: live.reduce((t, j) => t + (j.bc || 0), 0), unpriced: live.filter(j => !(j.bc > 0)).length,
+    priced: priced.length, done: done.length, diff: done.reduce((t, j) => t + j.fc - j.bc, 0), base: done.reduce((t, j) => t + j.bc, 0) };
+}
+/** One booked job in a list: its number, the day it's on the schedule for, the client, booked $ → what it came to, the
+ *  change, the day it was booked, its status and who it's credited to (how). */
+function ofBkRowEl(j, showDay, showWho) {
+  const diff = j.st === "d" && j.bc > 0 && j.fc != null ? j.fc - j.bc : null;
+  const st = j.st === "x" ? "Canceled" : j.st === "d" ? "Serviced" : "Not serviced yet";
+  const how = j.how ? `${OF_BK_HOW[j.how] || j.how}${showWho ? `: ${j.name}` : ""}` : "Not credited to anyone";
+  return h("li", { class: "of-bk-row", "data-inv": j.inv, "data-st": j.st },
+    h("b", { class: "of-bk-inv", text: `#${j.inv}` }),
+    showDay ? h("span", { class: "of-bk-day", text: lbDayText(j.day) }) : null,
+    h("span", { class: "of-bk-client", text: j.client || "" }),
+    h("span", { class: "of-bk-amt", text: j.bc == null ? "Booked $ not known" : `${ofBkMoney(j.bc)}${j.fc != null ? ` → ${ofBkMoney(j.fc)}` : ""}` }),
+    h("span", { class: "of-bk-diff" + (diff > 0 ? " up" : diff < 0 ? " down" : ""), text: diff == null ? "" : ofBkDiff(diff) }),
+    h("small", { class: "of-bk-st", text: `Booked ${j.bday ? lbDayText(j.bday) : "?"}${j.seen ? ` (amount as of ${lbDayText(j.seen)})` : ""} · ${st}${j.n > 1 ? ` · ${j.n} visits` : ""} · ${how}` }));
+}
+/** The three boxes beside Scheduled / completed (tap: the jobs), and the list when open. */
+function ofBkBoxes(p, bk, per) {
+  const jobs = bk && !bk.failed ? bk.jobs.filter(j => j.by === p.name) : [], t = ofBkSum(jobs), open = ofBk.open === p.name && !!bk && !bk.failed;
+  const toggle = () => { ofBk.open = open ? "" : p.name; renderOffice(); };
+  const box = (k, label, val, small, cls, kid) => h("button", { type: "button", class: "lb-box ro of-bk" + (kid ? " kid" : ""), "data-k": k, "aria-expanded": String(open),
+    disabled: !bk || !!bk.failed, title: "The jobs", onclick: toggle },
+    h("span", { text: label }),
+    h("div", { class: "of-in" }, h("div", { class: "of-val" + (cls ? ` ${cls}` : ""), text: val }), small ? h("small", { class: "of-ratio", text: small }) : null));
+  const wait = !bk ? "…" : bk.failed ? "–" : null;
+  const pct = t.base ? ` · ${t.diff > 0 ? "+" : t.diff < 0 ? "−" : ""}${Math.abs(Math.round(t.diff / t.base * 100))}%` : "";
+  const boxes = [
+    box("bkn", "Booked jobs", wait || fmt(t.n), wait ? "" : t.can ? `+${t.can} canceled` : "", "", true),
+    box("bkc", "Booked revenue", wait || ofBkMoney(t.cents), wait ? "" : t.unpriced ? `${t.unpriced} not priced` : "", "", false),
+    box("bkd", "Increase / decrease", wait || (t.done ? ofBkDiff(t.diff) : "–"), wait ? "" : `${t.done} of ${t.priced} done${pct}`, wait || !t.done ? "" : t.diff > 0 ? "up" : t.diff < 0 ? "down" : "", true)];
+  const list = open ? h("div", { class: "of-bk-open", id: `ofBk-${p.name.replace(/[^A-Za-z0-9]/g, "")}` },
+    jobs.length ? h("ul", { class: "of-bk-list" }, jobs.map(j => ofBkRowEl(j, per !== "day", false))) : h("p", { class: "meta", text: "No jobs booked then." }),
+    h("p", { class: "of-bk-note", text: `Her jobs on the schedule for ${per === "day" ? "this day" : "these days"}, whenever she booked them. Booked revenue: each job's amount when she booked it. Increase / decrease: once every visit is done, what it came to (less a card fee line) against that${t.done ? `: ${ofBkDiff(t.diff)} on ${t.done} job${t.done === 1 ? "" : "s"} booked at ${ofBkMoney(t.base)}` : ""}.` })) : null;
+  return { boxes, list };
+}
+/** Below everyone: the jobs booked then that aren't on anyone's scorecard (no tag, no mark; or a name not in People),
+ *  and how it's counted. */
+function ofBkFootEl(bk, per, cfg) {
+  if (ofBk.old) return h("p", { class: "meta", id: "ofBkOld", text: "Booked jobs: the Google script needs its new version (Deploy › Manage deployments › New version)." });
+  if (ofBk.err) return h("p", { class: "dlg-err", id: "ofBkErr", text: ofBk.err });
+  if (!bk || bk.failed) return null;
+  const none = bk.jobs.filter(j => !j.by);
+  const names = cfg.people.map(x => x.name).slice(0, 3);
+  const out = [];
+  if (bk.err && bk.connected) out.push(h("p", { class: "dlg-err", text: `The hourly check of Housecall Pro didn't run: ${HCP_ERRORS[bk.err] || bk.err}` }));
+  if (none.length) out.push(howFold("ofBkNone", h("div", {},
+    h("p", { class: "hint", text: `Add a tag "Booked: ${names[0] || "name"}" to the job in Housecall Pro (or mark the call Booked in the app): within the hour it counts for her.` }),
+    h("ul", { class: "of-bk-list" }, none.map(j => ofBkRowEl(j, per !== "day", true)))), `Booked, not on anyone's scorecard (${none.length})`));
+  out.push(howFold("ofBkHow", h("p", { class: "hint", text: `Booked jobs: the jobs on the schedule for these days in Housecall Pro (the day of their first visit; a job's visits count once), whenever they were booked. A canceled job isn't counted (it shows as canceled). Who booked it: the tag "Booked: <name>" on the job, else a call she marked Booked in the app (Past clients, Office › Estimates) for that client within 3 days of booking it. Booked revenue: each job's amount when it was booked (one priced later, before the visit: that price; one booked before ${bk.since ? lbDayText(bk.since) : "the app kept them"}: its amount that day). Increase / decrease: once every visit is done, what the job came to (less a card fee line) against that; jobs booked at $0 aren't in it. Read from Housecall Pro every hour.` }), "How booked jobs are counted"));
+  return h("div", { class: "of-bk-foot", id: "ofBkFoot" }, out);
+}
 function ofScoreEl() {
   const cfg = ofCfg(), per = OF_PER[ofView.per] ? ofView.per : "week";
   const off = Math.min(0, Number(ofView.off) || 0);
@@ -17698,7 +17817,7 @@ function ofScoreEl() {
   rows.sort((a, b) => b.s.pct - a.s.pct || b.s.out - a.s.out || a.p.name.localeCompare(b.p.name));
   const places = lbRanks(rows.map(x => Math.round(x.s.pct * 1000)), false, true);
   if (!rows.length) { out.push(h("p", { class: "meta", text: "No one in the office then." })); return out; }
-  const editor = ofEditor();
+  const editor = ofEditor(), bk = editor ? ofBkFor(r.from, to) : null;
   out.push(h("ol", { class: "lb-list", id: "ofList" }, rows.map(({ p, s }, i) => {
     const workDays = s.days.filter(d => d.work);
     // laid out like Office Calls: the three totals, then Outbound calls, Inbound calls and Admins only (admins see it)
@@ -17710,8 +17829,8 @@ function ofScoreEl() {
         h("div", { class: "of-in" }, h("div", { class: "of-val", text: fmt(s.sums[f.id]) }),
           ratio != null ? h("small", { class: "of-ratio", text: `${ofPct(ratio)} ${/^sched/i.test(f.label) ? "scheduled" : "booked"}` }) : null));
     };
-    const sec = (title, list, id) => (list.length ? h("div", { class: "of-ssec", "data-sec": id }, h("h5", { text: title }),
-      h("div", { class: "of-line", style: `--n:${Math.min(6, Math.max(4, list.length))}` }, list.map(num))) : null);
+    const sec = (title, list, id, more) => (list.length || more ? h("div", { class: "of-ssec", "data-sec": id }, h("h5", { text: title }),
+      h("div", { class: "of-line", style: `--n:${Math.min(6, Math.max(4, list.length + (more ? more.boxes.length : 0)))}` }, list.map(num), more ? more.boxes : null), more ? more.list : null) : null);
     return h("li", { class: `lb-row of-row p${s.worked ? places[i] : 9}`, "data-person": p.name },
       h("div", { class: "of-row-in" },
         h("span", { class: "lb-place", text: s.worked ? String(places[i]) : "–" }),
@@ -17724,8 +17843,9 @@ function ofScoreEl() {
         h("div", { class: "of-secs" },
           sec("Outbound calls", lone ? rr.out.filter(f => f.kind !== "out") : rr.out, "out"),
           sec("Inbound calls", rr.in, "in"),
-          editor ? sec("Admins only (checked in the CRM)", rr.admin, "admin") : null)));
+          editor ? sec("Admins only (checked in the CRM)", rr.admin, "admin", ofBkBoxes(p, bk, per)) : null)));
   })));
+  if (editor) out.push(ofBkFootEl(bk, per, cfg));
   out.push(howFold("ofGoalHow", h("p", { class: "hint", text: `The goal is ${cfg.goal} outgoing calls a day, Monday to Friday (closed on New Year's Day, July 4, Thanksgiving and Christmas), counted on the days each person has numbers. Every kind of outgoing call adds up.` }), "How it's counted"));
   return out;
 }
