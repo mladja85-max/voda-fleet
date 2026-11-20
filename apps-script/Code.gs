@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 108;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 109;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -401,6 +401,12 @@ function doPost(e) {
       case "revSync":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
+      case "cpmRead":
+        if (!canCpm_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(cpmRead_());
+      case "cpmImport":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return cpmImport_(req, user); }));
       case "unsentRead":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(unsentRead_(req));
@@ -3918,7 +3924,7 @@ function connectHousecallPro() {
 // first visit; canceled jobs are left out. The app reads the tab, and asks for days to be read again from Housecall Pro
 // when they're missing or may have changed (an invoice changed after the day).
 const REV_SHEET = "Revenue";
-const REV_COLS = ["Day", "Restoration $", "Restoration jobs", "Cleaning $", "Cleaning jobs", "Repairs $", "Repairs jobs", "Other $", "Other jobs", "Visits", "Read from Housecall Pro", "Other job types", "Sources", "Unpaid", "Jobs"];
+const REV_COLS = ["Day", "Restoration $", "Restoration jobs", "Cleaning $", "Cleaning jobs", "Repairs $", "Repairs jobs", "Other $", "Other jobs", "Visits", "Read from Housecall Pro", "Other job types", "Sources", "Unpaid", "Jobs", "Clients"];
 // Sources (for Marketing): each kind of job and lead source that day, "repeat|Google": [Restoration ¢, jobs, Cleaning ¢,
 // jobs, Repairs ¢, jobs, Other ¢, jobs]. The kind is REPEAT or REFERRAL from the Job type, else "" and the Lead source
 // decides. Empty on days read before Marketing (they're read again when Marketing needs them).
@@ -3956,7 +3962,7 @@ function revRows_(s) {
     const day = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM-dd") : String(r[0] || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
     const at = r[10] instanceof Date ? r[10].toISOString() : String(r[10] || "");
-    out[day] = [day].concat(r.slice(1, 10).map(function (v) { return Number(v) || 0; }), [at, String(r[11] || ""), String(r[12] || ""), String(r[13] || ""), String(r[14] || "")]);
+    out[day] = [day].concat(r.slice(1, 10).map(function (v) { return Number(v) || 0; }), [at, String(r[11] || ""), String(r[12] || ""), String(r[13] || ""), String(r[14] || ""), String(r[15] || "")]);
   });
   return out;
 }
@@ -3964,9 +3970,9 @@ function revRows_(s) {
  *  unpaid (each null when read before it was kept)]. */
 function revOut_(row) {
   const parse = function (t) { if (!t) return null; try { return JSON.parse(t); } catch (e) { return null; } };
-  const src = parse(row[12]), unpaid = parse(row[13]), jobs = parse(row[14]);
+  const src = parse(row[12]), unpaid = parse(row[13]), jobs = parse(row[14]), cl = parse(row[15]);
   return row.slice(1, 10).concat([Date.parse(row[10]) || 0, row[11], src && typeof src === "object" && !Array.isArray(src) ? src : null, Array.isArray(unpaid) ? unpaid : null,
-    Array.isArray(jobs) ? jobs : null]);
+    Array.isArray(jobs) ? jobs : null, cl && typeof cl === "object" && !Array.isArray(cl) ? cl : null]);
 }
 // Invoices not sent (Operations): finished jobs whose invoice still owes and was never sent to the client, as Housecall
 // Pro's Invoices › Unsent has them. Read when the app asks (kept 5 minutes, so phones opening Operations together read
@@ -4144,7 +4150,7 @@ function revSync_(req) {
   if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
   if (got.more) return { ok: false, error: "too_many" };
   const tz = Session.getScriptTimeZone(), at = new Date().toISOString(), acc = {};
-  list.forEach(function (d) { acc[d] = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], visits: 0, other: {}, src: {}, unpaid: [], jobs: [] }; });
+  list.forEach(function (d) { acc[d] = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], visits: 0, other: {}, src: {}, unpaid: [], jobs: [], cl: {} }; });
   got.jobs.forEach(function (job) {
     if (!job || /cancel/i.test(String(job.work_status || ""))) return;
     const start = new Date((job.schedule && job.schedule.scheduled_start) || "");
@@ -4159,6 +4165,11 @@ function revSync_(req) {
     const v = a.src[key] || (a.src[key] = [0, 0, 0, 0, 0, 0, 0, 0]);
     v[i] += Math.round(cents);
     if (first) v[i + 1]++;
+    // Clients Per Month: the same, with Residential or Commercial (from the Job type: "Cleaning Commercial - REPEAT")
+    const ck = mktKind_(type) + "|" + (/commercial/i.test(type) ? "com" : "res") + "|" + hcpLead_(job);
+    const cv = a.cl[ck] || (a.cl[ck] = [0, 0, 0, 0, 0, 0, 0, 0]);
+    cv[i] += Math.round(cents);
+    if (first) cv[i + 1]++;
     // still owed: done or under way (a visit still to come isn't owed yet)
     const owes = Math.round(Number(job.outstanding_balance) || 0);
     a.jobs.push([String(job.id || ""), String(job.invoice_number || ""), hcpClient_(job), k, Math.round(cents), owes,
@@ -4173,7 +4184,7 @@ function revSync_(req) {
     list.forEach(function (d) {
       const a = acc[d], row = [d];
       REV_DEPTS.forEach(function (k) { row.push(Math.round(a[k][0]) / 100, a[k][1]); });
-      row.push(a.visits, at, Object.keys(a.other).sort().join("; "), JSON.stringify(a.src), JSON.stringify(a.unpaid), JSON.stringify(a.jobs));
+      row.push(a.visits, at, Object.keys(a.other).sort().join("; "), JSON.stringify(a.src), JSON.stringify(a.unpaid), JSON.stringify(a.jobs), JSON.stringify(a.cl));
       rows[d] = row;
     });
     const all = Object.keys(rows).sort().map(function (d) { return rows[d]; });
@@ -4182,6 +4193,64 @@ function revSync_(req) {
     s.getRange(2, 1, all.length, REV_COLS.length).setValues(all);
     return { ok: true, days: pick(rows) };
   });
+}
+
+/* ---- Clients Per Month (Office, admins and Revenue): each day's money and clients by where they came from, as the
+   "4. Clients Per Month" Excel had it. From Housecall Pro: the Clients column of the Revenue tab (each day's jobs by
+   Repeat / Referral from the Job type, Residential or Commercial, and the Lead source). Months before Housecall Pro:
+   from the Excel, loaded by an admin (Office › Load from Excel on Clients Per Month), one row a month here: each day's
+   [$, clients] by column. ---- */
+const CPM_SHEET = "Clients per month", CPM_COLS = ["Month", "Days", "From", "Loaded at", "Loaded by"];
+const CPM_MAX = 400;   // months
+function canCpm_(user) { return !!user && (user.role === "admin" || canSee_(user, "revenue")); }
+/** The Excel's months ({ "2019-04": { "1": { "Google": [cents, clients] } } }) and how Lead sources are matched (Marketing). */
+function cpmRead_() {
+  const s = SpreadsheetApp.getActive().getSheetByName(CPM_SHEET), tz = Session.getScriptTimeZone(), months = {};
+  (s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, CPM_COLS.length).getValues() : []).forEach(function (r) {
+    const m = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM") : String(r[0] || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(m)) return;
+    try { const d = JSON.parse(String(r[1] || "{}")); if (d && typeof d === "object") months[m] = d; } catch (e) { /* a broken row: left out */ }
+  });
+  const map = {};
+  mktRows_(mktSheet_(MKT_MAP, MKT_MAP_COLS, false), MKT_MAP_COLS.length).forEach(function (r) { const row = mktName_(r[1]); if (row) map[mktName_(r[0])] = row; });
+  return { ok: true, months: months, map: map };
+}
+/** Admin: the Excel's months ({ months: { "2019-04": days } }): each replaces that month; the others stay. */
+function cpmImport_(req, user) {
+  const got = req.months && typeof req.months === "object" && !Array.isArray(req.months) ? req.months : null;
+  if (!got || Object.keys(got).length > CPM_MAX) return { ok: false, error: "bad_request" };
+  const clean = {};
+  Object.keys(got).forEach(function (m) {
+    if (!/^\d{4}-\d{2}$/.test(m) || !got[m] || typeof got[m] !== "object") return;
+    const days = {};
+    Object.keys(got[m]).forEach(function (d) {
+      const n = Number(d), x = got[m][d];
+      if (!(n >= 1 && n <= 31) || !x || typeof x !== "object") return;
+      const cols = {};
+      Object.keys(x).slice(0, 60).forEach(function (k) {
+        const name = String(k).replace(/\s+/g, " ").trim().slice(0, 60), v = x[k];
+        if (!name || !Array.isArray(v)) return;
+        const c = Math.round(Number(v[0]) || 0), j = Math.round(Number(v[1]) || 0);
+        if ((c || j) && Math.abs(c) < 1e10 && j >= 0 && j < 1e5) cols[name] = [c, j];
+      });
+      if (Object.keys(cols).length) days[String(n)] = cols;
+    });
+    clean[m] = days;
+  });
+  const s = pcSheet_(CPM_SHEET, CPM_COLS), tz = Session.getScriptTimeZone(), at = new Date().toISOString(), rows = {};
+  (s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, CPM_COLS.length).getValues() : []).forEach(function (r) {
+    const m = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM") : String(r[0] || "").trim();
+    if (/^\d{4}-\d{2}$/.test(m)) rows[m] = [m, String(r[1] || ""), String(r[2] || ""), r[3] instanceof Date ? r[3].toISOString() : String(r[3] || ""), String(r[4] || "")];
+  });
+  Object.keys(clean).forEach(function (m) { rows[m] = [m, JSON.stringify(clean[m]), "Excel", at, String(user.name || "").slice(0, 60)]; });
+  const all = Object.keys(rows).sort().map(function (m) { return rows[m]; });
+  if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, CPM_COLS.length).clearContent();
+  if (all.length) {
+    if (s.getMaxRows() < all.length + 1) s.insertRowsAfter(s.getMaxRows(), all.length + 1 - s.getMaxRows());
+    s.getRange(2, 1, all.length, 1).setNumberFormat("@");
+    s.getRange(2, 1, all.length, CPM_COLS.length).setValues(all);
+  }
+  return Object.assign(cpmRead_(), { saved: Object.keys(clean).length });
 }
 
 /* ---------------- Marketing: where clients come from, what they bring in, and what the ads cost ---------------- */
