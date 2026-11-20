@@ -1752,6 +1752,7 @@ dialog#dlg[open] .rv-unpaid .rv-unpaid-body > .lb-scroll { flex: 1; min-height: 
 .mkt-row.tot { border-bottom: 0; border-top: 2px solid var(--line); }
 .mkt-row.tot .mkt-label, .mkt-row.tot .c-rev b { font-weight: 800; }
 .mkt-row.mo { cursor: pointer; } .mkt-row.mo:hover, .mkt-row.mo:focus-visible { background: var(--accent-soft); outline: none; }
+.mkt-move-months { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .mkt-move-sum ul { margin: 4px 0 0 18px; padding: 0; }
 .mkt-row.mkt-open { cursor: pointer; } .mkt-row.mkt-open:hover { background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
 .mkt-row.mkt-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .mkt-open .mkt-label { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
@@ -15667,6 +15668,7 @@ function renderMarketing() {
   // underneath: the rest of what can be done, and how it's worked out
   const foot = h("div", { class: "mkt-foot" },
     h("button", { class: "btn small", type: "button", id: "mktLeadsBtn", onclick: () => mktLeadsDlg() }, "Lead sources"),
+    isAdmin() ? h("button", { class: "btn small", type: "button", id: "mktMoveBtn", onclick: () => mktMoveDlg() }, "Move ad spend") : null,
     isAdmin() ? h("button", { class: "btn small", type: "button", id: "mktImportBtn", onclick: () => mktImportDlg() }, (mktData.hist || []).length ? "Import spreadsheets again" : "Import spreadsheets") : null,
     h("button", { class: "btn small", type: "button", id: "mktReadBtn", disabled: revSync.busy, title: "Read these days from Housecall Pro again",
       onclick: () => { revSync.err = ""; revEnsure(ranges().slice(0, 1), true, true); } }, "Read again"),
@@ -15835,6 +15837,77 @@ function mktLeadsDlg() {
       onclick: () => { for (const [lead, sel] of Object.entries(sels)) sel.value = mktGuess(lead); dlgDirty = true; } }, "Use the suggested matches") : null,
     list, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), save))));
+}
+
+/** Admin: ad spend moved from one line to another (it was typed under the wrong one): every month in a range, added to
+ *  what the other line has, shown before it's moved. */
+const MKT_MOVE_API = 115;                                // the Google script version that moves ad spend
+function mktMoveDlg() {
+  const sp = (mktData && mktData.spend) || {}, byName = {};
+  for (const [m, x] of Object.entries(sp)) for (const [n, v] of Object.entries(x)) { const t = byName[n] || (byName[n] = { months: [], cents: 0 }); t.months.push(m); t.cents += Math.round(Number(v) * 100); }
+  const names = Object.keys(byName).sort((a, b) => byName[b].cents - byName[a].cents);
+  const err = h("p", { class: "dlg-err", role: "alert" }), sum = h("div", { class: "mkt-move-sum", id: "mktMoveSum" });
+  if (!names.length) {
+    openDialog(h("h3", { id: "dlgTitle", text: "Move ad spend" }), h("p", { class: "meta", text: "No ad spend typed yet." }),
+      h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+    return;
+  }
+  const lines = [...new Set([...MKT_ROWS.filter(n => n !== MKT_OTHER), ...Object.values((mktData && mktData.map) || {}), ...((mktData && mktData.hist) || []).map(x => x[1]), ...names])].sort((a, b) => a.localeCompare(b));
+  const fromSel = h("select", { id: "mktMoveFrom" }, names.map(n => h("option", { value: n, text: `${n} (${lbMoney(byName[n].cents / 100)})` })));
+  const toSel = h("select", { id: "mktMoveTo" });
+  const aSel = h("select", { id: "mktMoveA" }), bSel = h("select", { id: "mktMoveB" });
+  const mText = m => `${lbMonthLong(Number(m.slice(5))).slice(0, 3)} ${m.slice(0, 4)}`;
+  const go = h("button", { class: "btn primary", type: "button", id: "mktMoveGo", text: "Move" });
+  let armed = false;
+  const fillTo = () => {
+    const was = toSel.value, f = fromSel.value;
+    toSel.replaceChildren(...lines.filter(n => n !== f).map(n => h("option", { value: n, text: n })));
+    toSel.value = lines.includes(was) && was !== f ? was : (/^google$/i.test(f) && lines.includes("Google Guaranteed") ? "Google Guaranteed" : toSel.options[0].value);
+  };
+  const fillMonths = () => {
+    const ms = byName[fromSel.value].months.slice().sort();
+    aSel.replaceChildren(...ms.map(m => h("option", { value: m, text: mText(m) })));
+    bSel.replaceChildren(...ms.slice().reverse().map(m => h("option", { value: m, text: mText(m) })));
+    aSel.value = ms[0]; bSel.value = ms[ms.length - 1];
+  };
+  const show = () => {
+    armed = false; err.textContent = "";
+    const f = fromSel.value, t = toSel.value, a = aSel.value <= bSel.value ? aSel.value : bSel.value, b = aSel.value <= bSel.value ? bSel.value : aSel.value;
+    const ms = byName[f].months.filter(m => m >= a && m <= b).sort(), years = {};
+    let cents = 0, both = 0;
+    for (const m of ms) { const c = Math.round(Number(sp[m][f]) * 100); cents += c; const y = years[m.slice(0, 4)] || (years[m.slice(0, 4)] = [0, 0]); y[0]++; y[1] += c; if (sp[m][t] != null) both++; }
+    sum.replaceChildren(...[
+      h("p", null, h("b", { text: `${lbMoney(cents / 100)} in ${ms.length} month${ms.length === 1 ? "" : "s"}` }), ` moves from ${f} to ${t}.`),
+      h("ul", { class: "meta" }, Object.keys(years).sort().reverse().map(y => h("li", { text: `${y}: ${years[y][0]} month${years[y][0] === 1 ? "" : "s"} · ${lbMoney(years[y][1] / 100)}` }))),
+      both ? h("p", { class: "meta", text: `${t} already has spend in ${both} of those months: it's added to it.` }) : null].filter(Boolean));
+    go.disabled = !ms.length; go.textContent = ms.length ? `Move ${lbMoney(cents / 100)}` : "Move";
+  };
+  fromSel.onchange = () => { fillTo(); fillMonths(); show(); };
+  toSel.onchange = show; aSel.onchange = show; bSel.onchange = show;
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Move ad spend" }),
+    h("p", { class: "hint", text: "Spend typed under the wrong line: move it, month by month, to the line it paid for. Its Return and Cost per job then show on that line. Spend imported from the spreadsheets goes back where they have it if you import them again." }),
+    h("label", { class: "field" }, h("span", { text: "Move the spend of" }), fromSel),
+    h("label", { class: "field" }, h("span", { text: "To" }), toSel),
+    h("div", { class: "mkt-move-months" }, h("label", { class: "field" }, h("span", { text: "From" }), aSel), h("label", { class: "field" }, h("span", { text: "Through" }), bSel)),
+    sum, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), go)));
+  go.onclick = async () => {
+    if (!armed) { armed = true; go.textContent = "Tap again to move"; return; }
+    const a = aSel.value <= bSel.value ? aSel.value : bSel.value, b = aSel.value <= bSel.value ? bSel.value : aSel.value;
+    go.disabled = true; go.textContent = "Moving…";
+    try {
+      const out = await api("mktMove", { from: fromSel.value, to: toSel.value, a, b });
+      mktSet(out); closeDialog();
+      toast(`${lbMoney(((out.moved && out.moved.cents) || 0) / 100)} moved to ${toSel.value}`);
+      renderMarketing();
+    } catch (e) {
+      err.textContent = e && e.error === "bad_request" && (Number(e.api) || 0) < MKT_MOVE_API ? "The Google script needs its new version first (Deploy › Manage deployments › New version)." : e && e.error === "nothing" ? "Nothing to move in those months." : errText(e, "Nothing");
+      armed = false; go.disabled = false; show();
+    }
+  };
+  fromSel.value = names.find(n => /^google$/i.test(n)) || names[0];
+  fillTo(); fillMonths(); show();
 }
 
 /** Admin: read Clients Per Month and Summary Advertising (the Excel copies) and save their months. */
