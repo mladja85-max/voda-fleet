@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 104;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 105;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -437,6 +437,12 @@ function doPost(e) {
       case "ofEstMark":
         if (!canOffice_(user) || !ofEstOk_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return ofEstMark_(req, user); }));
+      case "estCall":
+        if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return estCall_(req, user); }));
+      case "estCallDays":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(estCallDaysPut_(req));
       case "ofEstWho":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return ofEstWhoPut_(req); }));
@@ -4577,12 +4583,18 @@ let EST_SENT_ = null;
 function estSentMap_() {
   if (EST_SENT_) return EST_SENT_;
   const out = {};
+  let first = "";
   pcRows_(EST_SENT_TAB, EST_SENT_COLS.length).forEach(function (r) {
-    const id = String(r[1] || "");
-    if (id && !out[id]) out[id] = r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "");
+    const id = String(r[1] || ""), at = r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "");
+    if (id && !out[id]) out[id] = at;
+    if (at && (!first || at < first)) first = at;
   });
+  EST_SENT_FROM_ = first ? Utilities.formatDate(new Date(first), Session.getScriptTimeZone(), "yyyy-MM-dd") : "";
   return (EST_SENT_ = out);
 }
+let EST_SENT_FROM_ = "";
+/** The day the app started keeping "sent" (the estimates read as sent that day were sent before it, on their own day). */
+function estSentFrom_() { estSentMap_(); return EST_SENT_FROM_; }
 /** Read as sent before: { how: "seen", at } (the first time), or null. */
 function estSentBy_(r) {
   const at = estSentMap_()[String(r[0])];
@@ -4698,8 +4710,75 @@ function estRead_(year, user) {
     list.push(estOut_(r, lead));
   });
   const P = PropertiesService.getScriptProperties();
+  estCallsOn_(list);
   return { ok: true, year: Number(y), estimates: list, years: Object.keys(years).map(Number).sort(), all: all, me: String(user.name || ""), reports: all ? estReports_() : {}, readAt: Number(P.getProperty(EST_AT)) || 0,
-    done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V, connected: !!hcpKey_() };
+    done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V, connected: !!hcpKey_(), sentFrom: estSentFrom_(), callDays: estCallDays_() };
+}
+
+/* ---- Estimates › Today's calls: whoever's in charge of an estimate calls the client after it's sent, on the call days
+   (1, 2, 3, 7 and 14 days after, an admin can change them), and on the day a call back was asked for. Each call is a row
+   on the "Estimate calls" tab (the same one Office › Estimates marks), in order: No answer, Voicemail, Spoke with (the
+   client, the property manager, the adjuster or someone else; a note; a day to call again), Call back (a day, a note),
+   Booked, Don't call again; a "clear" takes back that day's last one. ---- */
+const EST_CALL_RESULTS = { nr: "No answer", vm: "Voicemail", sw: "Spoke with", cb: "Call back", booked: "Booked", dnc: "Don't call again", clear: "" };
+const EST_CALL_WHO = { client: "Client", pm: "Property manager", adjuster: "Adjuster", other: "Someone else" };
+const EST_CALL_DAYS = "EST_CALL_DAYS", EST_CALL_DAYS_DEF = [1, 2, 3, 7, 14];
+function estCallDays_() {
+  let v = null;
+  try { v = JSON.parse(PropertiesService.getScriptProperties().getProperty(EST_CALL_DAYS) || "null"); } catch (e) { v = null; }
+  return Array.isArray(v) && v.length ? v : EST_CALL_DAYS_DEF.slice();
+}
+function estCallDaysPut_(req) {
+  const d = Array.isArray(req.days) ? req.days.map(Number) : [];
+  if (!d.length || d.length > 8 || d.some(function (n) { return !Number.isInteger(n) || n < 1 || n > 90; })) return { ok: false, error: "bad_value" };
+  const out = d.filter(function (n, i) { return d.indexOf(n) === i; }).sort(function (a, b) { return a - b; });
+  PropertiesService.getScriptProperties().setProperty(EST_CALL_DAYS, JSON.stringify(out));
+  return { ok: true, days: out };
+}
+/** Every estimate's calls, in order: { id: [{ d: day, r, w: who called, cb, n: note, s: spoke with, at }] }. */
+function estCallsAll_() {
+  const tz = Session.getScriptTimeZone(), out = {};
+  pcRows_(OF_EST_CALLS, OF_EST_CALL_COLS.length).forEach(function (r) {
+    const id = String(r[2] || "");
+    if (!id) return;
+    const m = { d: pcDay_(r[1], tz), r: String(r[3] || ""), w: String(r[4] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "") };
+    if (r[5]) m.cb = pcDay_(r[5], tz);
+    if (r[6]) m.n = String(r[6]);
+    if (r[7]) m.s = String(r[7]);
+    (out[id] || (out[id] = [])).push(m);
+  });
+  return out;
+}
+/** The open estimates get their calls (the last 20). */
+function estCallsOn_(list) {
+  const C = estCallsAll_();
+  (list || []).forEach(function (e) { if (e.st === "open" && C[e.id]) e.calls = C[e.id].slice(-20); });
+}
+/** A call on an estimate: whoever's in charge of it (on it in Housecall Pro), or someone who sees them all. */
+function estCall_(req, user) {
+  const id = String(req.id || ""), r = String(req.r || "");
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || !Object.prototype.hasOwnProperty.call(EST_CALL_RESULTS, r)) return { ok: false, error: "bad_request" };
+  const row = estRows_(estSheet_(false))[id];
+  if (!row) return { ok: false, error: "not_found" };
+  if (!estAll_(user) && !String(row[16] || "").split(", ").some(function (n) { return estIsMe_(user, n); })) return { ok: false, error: "not_allowed" };
+  const tz = Session.getScriptTimeZone(), when = tmNow_(), at = when.toISOString(), today = Utilities.formatDate(when, tz, "yyyy-MM-dd");
+  if (r === "clear") {
+    // takes back the last call, if it was made today (an admin: any day)
+    const left = [];
+    (estCallsAll_()[id] || []).forEach(function (m) { if (m.r) left.push(m); else left.pop(); });
+    const last = left[left.length - 1];
+    if (!last) return { ok: false, error: "gone" };
+    if (last.d !== today && user.role !== "admin") return { ok: false, error: "locked" };
+  }
+  const cb = r === "cb" || r === "sw" ? String(req.cb || "") : "";
+  if ((r === "cb" || cb) && (!/^\d{4}-\d{2}-\d{2}$/.test(cb) || cb <= today || cb > tmAddDays_(today, 366))) return { ok: false, error: "bad_value", field: "cb" };
+  const sw = r === "sw" ? String(req.sw || "") : "";
+  if (r === "sw" && !Object.prototype.hasOwnProperty.call(EST_CALL_WHO, sw)) return { ok: false, error: "bad_value", field: "sw" };
+  const note = r === "cb" || r === "sw" ? String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140) : "";
+  const s = pcSheet_(OF_EST_CALLS, OF_EST_CALL_COLS), first = Math.max(2, s.getLastRow() + 1);
+  if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
+  s.getRange(first, 1, 1, OF_EST_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, id, r === "clear" ? "" : r, user.name, cb, note, sw]]);
+  return { ok: true, calls: (estCallsAll_()[id] || []).slice(-20) };
 }
 /** Office › Estimates: a year's estimates of one department (Cleaning), every one of them, as on Estimates (who's in
  *  charge from Employees), and which years have any of it. */
@@ -5315,7 +5394,7 @@ function pcMarks_(req) {
 /* ---- Office › Estimates: who follows them up (Admins pick; nobody picked: everyone with Office) and the call marks on
    each one, as on Past clients: Not now, Voicemail, Booked, Call back (a day and what the client said), Don't call again.
    One row a mark on the "Estimate calls" tab; the last one of each estimate counts. ---- */
-const OF_EST_CALLS = "Estimate calls", OF_EST_CALL_COLS = ["At", "Day", "Estimate id", "Result", "Who", "Call back on", "Note"];
+const OF_EST_CALLS = "Estimate calls", OF_EST_CALL_COLS = ["At", "Day", "Estimate id", "Result", "Who", "Call back on", "Note", "Spoke with"];
 function ofEstWho_() {
   let v = [];
   try { v = JSON.parse(PropertiesService.getScriptProperties().getProperty("OF_EST_WHO") || "[]") || []; } catch (e) { v = []; }
@@ -5364,7 +5443,7 @@ function ofEstMark_(req, user) {
   if (r === "cb" && (!/^\d{4}-\d{2}-\d{2}$/.test(cb) || cb <= today || cb > tmAddDays_(today, 366))) return { ok: false, error: "bad_value", field: "cb" };
   const s = pcSheet_(OF_EST_CALLS, OF_EST_CALL_COLS), first = Math.max(2, s.getLastRow() + 1);
   if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
-  s.getRange(first, 1, 1, OF_EST_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, id, r === "clear" ? "" : r, user.name, cb, note]]);
+  s.getRange(first, 1, 1, OF_EST_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, id, r === "clear" ? "" : r, user.name, cb, note, ""]]);
   const m = { r: r === "clear" ? "" : r, who: user.name, at: at, day: today };
   if (cb) { m.cb = cb; m.note = note; }
   return { ok: true, m: m };
