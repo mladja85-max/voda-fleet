@@ -1752,6 +1752,9 @@ dialog#dlg[open] .rv-unpaid .rv-unpaid-body > .lb-scroll { flex: 1; min-height: 
 .mkt-row.tot { border-bottom: 0; border-top: 2px solid var(--line); }
 .mkt-row.tot .mkt-label, .mkt-row.tot .c-rev b { font-weight: 800; }
 .mkt-row.mo { cursor: pointer; } .mkt-row.mo:hover, .mkt-row.mo:focus-visible { background: var(--accent-soft); outline: none; }
+.mkt-row.mkt-open { cursor: pointer; } .mkt-row.mkt-open:hover { background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
+.mkt-row.mkt-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mkt-open .mkt-label { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
 .mkt-row.future { color: var(--muted); opacity: .55; }
 .mkt-spend { all: unset; cursor: pointer; border-radius: 7px; padding: 2px 7px; margin: -2px -7px; font-weight: 600; }
 .mkt-spend.add { color: var(--accent); font-size: .86rem; }
@@ -12324,6 +12327,7 @@ function revRedraw() {
   if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing();
   else if (view.tab === "office" && (ofView.tab === "cpm" || ofView.tab === "rp") && !ofTypingNow()) renderOffice();
   if (cpmJobsRedraw && dlg.open) cpmJobsRedraw();
+  if (mktJobsRedraw && dlg.open) mktJobsRedraw();
   if (estRepRedraw && dlg.open) estRepRedraw();
   if (revUnpaidRedraw && dlg.open) revUnpaidRedraw();
 }
@@ -15575,7 +15579,10 @@ function renderMarketing() {
     const spendBtn = () => (o.edit ? h("button", { class: "mkt-spend" + (a.spend ? "" : " add"), type: "button", "data-src": o.edit, title: `Type ${o.edit}'s ad spend`, onclick: e => { e.stopPropagation(); mktSpendDlg(months[0], o.edit); } },
       a.spend ? (o.short ? `spent ${mktShortMoney(a.spend)}` : mktShortMoney(a.spend)) : "add spend") : null);
     const meta = [share, `${fmt(a.jobs)} job${a.jobs === 1 ? "" : "s"}`, a.jobs ? `${perJob(a.cents, a.jobs)} a job` : ""].filter(Boolean).join(" · ");
-    return h("div", Object.assign({ class: "mkt-row " + cls, role: "row" }, o.src ? { "data-src": o.src } : {}, o.attrs || {}),
+    // a source, a group or the total: tap for its jobs
+    const opens = o.jobs ? { tabindex: "0", title: "Its jobs", onclick: () => mktJobsDlg(o.jobs, name, months, upTo, label + (soFar ? " (so far)" : ""), dep),
+      onkeydown: e => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.currentTarget.click(); } } } : {};
+    return h("div", Object.assign({ class: "mkt-row " + cls + (o.jobs ? " mkt-open" : ""), role: "row" }, o.src ? { "data-src": o.src } : {}, opens, o.attrs || {}),
       h("div", { class: "c-name", role: "rowheader" },
         h("div", { class: "mkt-nm" }, o.rank ? h("span", { class: "mkt-rk", text: String(o.rank) }) : null, h("span", { class: "mkt-label", text: name }), o.note ? h("small", { text: o.note }) : null),
         o.bar !== undefined ? h("span", { class: "mkt-bar " + (o.tone || ""), "aria-hidden": "true" }, h("i", { style: `width:${Math.max(a.cents > 0 ? 1.5 : 0, Math.min(100, o.bar))}%` })) : null,
@@ -15596,22 +15603,22 @@ function renderMarketing() {
     h("div", { class: "c-name", text: first }), h("div", { class: "c-rev", text: "Revenue" }), c ? h("div", { class: "c-vs", text: `vs ${cmpName}` }) : null,
     h("div", { class: "c-jobs", text: "Jobs" }), h("div", { class: "c-pj", text: "Per job" }),
     withSpend ? [h("div", { class: "c-sp", text: "Spent" }), h("div", { class: "c-ret", text: "Return" }), h("div", { class: "c-cpj", text: "Cost / job" })] : []);
-  const leaf = (n, cls, tone) => row(cls, n, line(s, n), c ? line(c, n) : null, { src: n, rank: rankOf(n), bar: pct(line(s, n).cents, T.cents), tone, edit: canSpend ? n : "" });
+  const leaf = (n, cls, tone) => row(cls, n, line(s, n), c ? line(c, n) : null, { src: n, rank: rankOf(n), bar: pct(line(s, n).cents, T.cents), tone, edit: canSpend ? n : "", jobs: { names: [n] } });
   const listRows = [headRow("Source"),
-    row("sec new", "New clients", N, NC, { src: "New clients", bar: pct(N.cents, T.cents), tone: "new" })];
+    row("sec new", "New clients", N, NC, { src: "New clients", bar: pct(N.cents, T.cents), tone: "new", jobs: { names: newAll } })];
   const others = newRows.filter(n => !(gBlock && mktIsGoogle(n)));
   const blocks = (gBlock ? [{ g: true, cents: sumOf(s, gAll).cents }] : []).concat(others.map(n => ({ n, cents: line(s, n).cents })))
     .sort((a, b) => b.cents - a.cents);
   for (const bk of blocks) {
     if (bk.g) {
       const G = sumOf(s, gAll), GC = c ? sumOf(c, gAll) : null;
-      listRows.push(row("grp", "All Google", G, GC, { src: "All Google", bar: pct(G.cents, T.cents), tone: "new" }));
+      listRows.push(row("grp", "All Google", G, GC, { src: "All Google", bar: pct(G.cents, T.cents), tone: "new", jobs: { names: gAll } }));
       gRows.forEach(n => listRows.push(leaf(n, "sub sub2", "new")));
     } else listRows.push(leaf(bk.n, "sub", "new"));
   }
   if (has(MKT_REPEAT)) listRows.push(leaf(MKT_REPEAT, "sec repeat", "repeat"));
   if (has(MKT_REFERRAL)) listRows.push(leaf(MKT_REFERRAL, "sec referral", "referral"));
-  listRows.push(row("tot", "Total", T, TC, { src: "Total", share: false }));
+  listRows.push(row("tot", "Total", T, TC, { src: "Total", share: false, jobs: { all: true } }));
   const list = h("div", { class: "mkt-list" + (withSpend ? "" : " nospend") + (c ? " cmp" : ""), id: "mktList", role: "table", style: `--mkt-cols:${cols}` }, listRows);
   // the totals
   const kpi = (k, name, big, sub, was) => h("div", { class: "mkt-kpi", "data-k": k }, h("small", { text: name }), h("b", null, big), sub ? h("span", { text: sub }) : null,
@@ -15661,9 +15668,75 @@ function renderMarketing() {
     h("button", { class: "btn small", type: "button", id: "mktReadBtn", disabled: revSync.busy, title: "Read these days from Housecall Pro again",
       onclick: () => { revSync.err = ""; revEnsure(ranges().slice(0, 1), true, true); } }, "Read again"),
     h("details", { class: "mkt-how" }, h("summary", { text: "How it's worked out" }),
-      h("p", { text: "From Housecall Pro: Repeat clients and Referrals by the Job type (… - REPEAT, … - REFERRAL); every other job by its Lead source (Lead sources matches them to rows). Revenue is what was charged, on each visit's scheduled day; a job counts once. Return: revenue ÷ ad spend (1 to 10 means every $1 brought $10). Ad spend is typed here, a month at a time. Months before Housecall Pro come from Clients Per Month and Summary Advertising." })));
+      h("p", { text: "From Housecall Pro: Repeat clients and Referrals by the Job type (… - REPEAT, … - REFERRAL); every other job by its Lead source (Lead sources matches them to rows). Revenue is what was charged, on each visit's scheduled day; a job counts once. Tap a line for its jobs (numbers open them in Housecall Pro). Return: revenue ÷ ad spend (1 to 10 means every $1 brought $10). Ad spend is typed here, a month at a time. Months before Housecall Pro come from Clients Per Month and Summary Advertising." })));
   box.replaceChildren(h("div", { class: "rev-main mkt-main" }, ...[top, ctl, status, err, kpis, panel, byMonth, foot].filter(Boolean)));
   if (!revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges(), false, true), 0);
+}
+
+/** A Marketing line's jobs (a source, a group like New clients or All Google, or every job): each job Housecall Pro has
+ *  on the days of the period for it, in the department picked; numbers open the job in Housecall Pro. Months from the
+ *  spreadsheets have no jobs to list: they're named with their totals. sel: { names: [rows] } or { all: true }. */
+let mktJobsRedraw = null;                                // the open list, drawn again as days come in from Housecall Pro
+function mktJobsDlg(sel, label, months, upTo, period, dep) {
+  const box = h("div", { class: "cpm-jobs" });
+  let asked = false;
+  const hit = n => sel.all || sel.names.includes(n);
+  const draw = () => {
+    const map = mktData && mktData.map, list = [], xl = [], old = [], today = lbToday();
+    let oldScript = false, xlSum = [0, 0];
+    for (const m of months) {
+      const last = m === months[months.length - 1] && upTo ? upTo : `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`;
+      const x = mktMonth(m, last);
+      if (!x) { box.replaceChildren(h("p", { class: "loading", text: "Loading…" })); return; }
+      if (x.from === "hist") {
+        xl.push(m);
+        for (const [n, r] of Object.entries(x.rows)) if (hit(n)) { const v = mktVal(r, dep); xlSum = [xlSum[0] + v[0], xlSum[1] + v[1]]; }
+        continue;
+      }
+      const doc = revDoc(Number(m.slice(0, 4)));
+      for (let d = `${m}-01`; d <= last && d <= today; d = lbAddDays(d, 1)) {
+        const v = doc && doc.days[d];
+        if (!v || !Array.isArray(v[13])) { if (v) old.push(d); continue; }
+        for (const j of v[13]) {
+          if (!Array.isArray(j)) continue;
+          if (j.length < 10) { if (apiLevel && apiLevel < CPM_JOBS_API) oldScript = true; else old.push(d); break; }   // read before the script kept each job's source: read again
+          if (dep !== "all" && j[3] !== dep) continue;
+          const parts = String(j[9] || "").split("|"), lead = parts.slice(2).join("|"), src = mktRowOf(`${parts[0] || ""}|${lead}`, map);
+          if (!hit(src)) continue;
+          list.push({ d, id: j[0], inv: j[1], client: j[2], cents: Number(j[4]) || 0, first: !!j[8], type: String(j[10] || ""), lead, src });
+        }
+      }
+    }
+    list.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : String(b.inv).localeCompare(String(a.inv), undefined, { numeric: true })));
+    const sum = list.reduce((t, x) => [t[0] + x.cents, t[1] + (x.first ? 1 : 0)], [0, 0]), later = list.length - sum[1];
+    const showSrc = sel.all || sel.names.length > 1;   // a group or every job: which source each one is
+    box.replaceChildren(...[
+      h("p", { class: "meta", id: "mktJobsSum" }, h("b", { text: `${fmt(sum[1])} job${sum[1] === 1 ? "" : "s"} · ${lbMoney(sum[0] / 100)}` }),
+        later ? ` (and ${fmt(later)} later visit${later === 1 ? "" : "s"}: 1234-2 and on add money, not another job)` : ""),
+      oldScript ? h("p", { class: "dlg-err", text: "The lists need the Google script's new version (Deploy › Manage deployments › New version)." }) : null,
+      old.length ? h("p", { class: "meta rev-status busy", id: "mktJobsReading", text: "Reading some days again from Housecall Pro, for their jobs…" }) : null,
+      xl.length ? h("p", { class: "meta", id: "mktJobsXl", text: `From your spreadsheets, no jobs to list: ${xl.map(m => `${lbMonthLong(Number(m.slice(5))).slice(0, 3)} ${m.slice(0, 4)}`).join(", ")} (${lbMoney(xlSum[0] / 100)} · ${fmt(xlSum[1])} jobs).` }) : null,
+      list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cpm-jobs-table", id: "mktJobsTable" },
+        h("thead", null, h("tr", null, ["Day", "#", "Client", "Job type", "Lead source", showSrc ? "Source" : null, "Amount", "Job?"].filter(Boolean).map(t => h("th", { text: t })))),
+        h("tbody", null, list.map(x => h("tr", { "data-inv": x.inv },
+          h("td", { class: "cpm-j-day", text: lbDayText(x.d) }),
+          h("td", { class: "cpm-j-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : hcpLink("job", x.id, "Open")),
+          h("td", { class: "cpm-j-client", text: x.client || "(no name)" }),
+          h("td", { class: "cpm-j-type", text: x.type || "(no job type)" }),
+          h("td", { class: "cpm-j-lead", text: x.lead || "(none)" }),
+          showSrc ? h("td", { class: "cpm-j-line", text: x.src }) : null,
+          h("td", { class: "cpm-j-amt", text: lbMoney(x.cents / 100) }),
+          h("td", { class: "cpm-j-first", text: x.first ? "Yes" : "Later visit" })))))) : xl.length ? null : h("p", { class: "meta", text: "No jobs on this line then." })].filter(Boolean));
+    if (old.length && !asked) { asked = true; revEnsure([[old[0], old[old.length - 1]]], false, "cpm"); }
+  };
+  mktJobsRedraw = () => { if (box.isConnected) draw(); };
+  const depName = (MKT_DEPS.find(([k]) => k === dep) || [])[1] || "";
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `${label}${dep !== "all" ? ` · ${depName}` : ""} · ${period}` }),
+    h("p", { class: "hint", text: "Each job Housecall Pro has on these days for this line, the newest first. Tap a number to open the job in Housecall Pro. Jobs: first visits (1234-2 and later add money only)." }),
+    box,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+  draw();
 }
 
 /** A month's ad spend, a source a line (the one tapped first). Empty takes it off. */
