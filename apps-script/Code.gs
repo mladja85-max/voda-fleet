@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 106;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 107;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -418,6 +418,9 @@ function doPost(e) {
         return json_(withLock_(function () { return priceCheck_(req, user); }));
       case "setPriceCheck":
         return json_(withLock_(function () { return setPriceCheck_(req); }));
+      case "ofBooked":
+        if (!ofEditor_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(ofBooked_(req));
       case "estimates":
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(estRead_(req.year, user));
@@ -5829,7 +5832,11 @@ function priceScan_() {
     for (let i = 0; i < list.length; i++) { if ((Date.parse(list[i].updated_at) || 0) < since) { older = true; break; } got.push(list[i]); }
     if (older || !list.length || page >= (Number(r.data && r.data.total_pages) || 1)) break;
   }
-  return withLock_(function () { return priceCompare_(got, now); });
+  const out = withLock_(function () { return priceCompare_(got, now); });
+  // the jobs put on the schedule (Office Scorecard's booked jobs): never in the way of the price changes
+  try { out.booked = bkStep_(got, now); P.setProperty(BK_ERR, ""); }
+  catch (e) { out.booked = null; P.setProperty(BK_ERR, String((e && e.message) || e).slice(0, 200)); }
+  return out;
 }
 /** Each job changed: its amount against the last one seen; a difference is a warning (one open warning a job: a later
  *  change updates it). Then what was seen is kept, and the day of a changed job is read again on Revenue. */
@@ -5914,13 +5921,17 @@ function priceOut_(r) {
 }
 /** An admin: the open warnings and the last 50 checked, when the last check ran and whether it runs by itself. Check now
  *  (scan), or no check for 2 hours: one now. The hourly check is set up the first time. */
+/** The hourly check's time trigger, set up the first time: is it there? */
+function priceTrigger_() {
+  try {
+    if (ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "priceScan"; })) return true;
+    ScriptApp.newTrigger("priceScan").timeBased().everyHours(1).create();
+    return true;
+  } catch (e) { return false; }
+}
 function priceList_(user, scan) {
   const P = PropertiesService.getScriptProperties();
-  let trigger = false;
-  try {
-    trigger = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "priceScan"; });
-    if (!trigger) { ScriptApp.newTrigger("priceScan").timeBased().everyHours(1).create(); trigger = true; }
-  } catch (e) { trigger = false; }
+  const trigger = priceTrigger_();
   let err = String(P.getProperty(PRICE_ERR) || "");
   if (hcpKey_() && (scan || Date.now() - (Number(P.getProperty(PRICE_AT)) || 0) > 2 * 3600e3)) { const out = priceScan(); err = out.ok ? "" : String(out.error || "error"); }
   const s = SpreadsheetApp.getActive().getSheetByName(PRICE_SHEET), rows = s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, PRICE_COLS.length).getValues().filter(function (r) { return r[0]; }) : [];
@@ -5984,6 +5995,201 @@ function priceWatchSetup() {
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "priceScan") ScriptApp.deleteTrigger(tr); });
   ScriptApp.newTrigger("priceScan").timeBased().everyHours(1).create();
   Logger.log(JSON.stringify(priceScan()));
+}
+
+/* ---- Booked jobs (Office › Office Scorecard, Admins only): every job put on the schedule in Housecall Pro, as the hourly
+   check of Price changes sees it (the jobs changed most recently): the day it was put on the schedule, its amount then
+   (the booked revenue), who booked it and, once it's serviced, its amount then (the increase or decrease). Who booked
+   it: a tag on the job in Housecall Pro ("Booked: <name>"), else a Booked mark in the app for the same client
+   (Past clients: the client, within BK_MARK_DAYS of the job; Office › Estimates and Today's calls: the job made from
+   that estimate, else a job for the same client's name within BK_MARK_DAYS). Housecall Pro's API doesn't say who made a
+   job (its Activity feed isn't in the API). Kept from the first check after this was added (BK_FROM): jobs made before
+   then aren't counted. One row a visit on the Bookings tab; a job's visits ("1234-2") are one booking. ---- */
+const BK_SHEET = "Bookings";
+const BK_COLS = ["Job id", "Job #", "Created at", "First seen", "Booked day", "Booked at", "Booked $", "Tagged by", "Customer id", "Client",
+  "From estimate", "Now $", "Job status", "Done at", "Last seen", "Card fee $", "Fee read at $", "Tags"];
+const BK_FROM = "BK_FROM", BK_ERR = "BK_ERR";
+const BK_FEE_MAX = 25;   // serviced jobs' card fees read a check (their line items); the rest at the next one
+const BK_MARK_DAYS = 3;  // a Booked mark counts for a job put on the schedule up to 3 days before or after it
+/** The name on a "Booked: <name>" tag (also "Booked by <name>", "Booked - <name>"), or "". */
+function bkTagWho_(tags) {
+  const list = (Array.isArray(tags) ? tags : []).map(function (t) { return String((t && typeof t === "object" ? t.name : t) || "").trim(); });
+  for (let i = 0; i < list.length; i++) {
+    const m = /^booked\s*(?:by\b\s*[:\-–]?|[:\-–])\s*(.+)$/i.exec(list[i]);
+    if (m && m[1].trim()) return m[1].replace(/\s+/g, " ").trim().slice(0, 40);
+  }
+  return "";
+}
+const bkNum_ = function (v) { return v === "" || v === null || v === undefined || !isFinite(Number(v)) ? null : Math.round(Number(v) * 100); };
+const bkIso_ = function (v) { return v instanceof Date ? (isNaN(v.getTime()) ? "" : v.toISOString()) : String(v || ""); };
+function bkRows_() {
+  const s = SpreadsheetApp.getActive().getSheetByName(BK_SHEET);
+  return s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, BK_COLS.length).getValues().filter(function (r) { return r[0]; }) : [];
+}
+/** After each check: the jobs it read (made since BK_FROM) kept on the Bookings tab. A serviced job's card fee (a
+ *  "Credit Card Service Charge" line) is read once for each amount it's serviced at, before the tab is locked. */
+function bkStep_(jobs, now) {
+  const P = PropertiesService.getScriptProperties();
+  let from = String(P.getProperty(BK_FROM) || "");
+  if (!from) { from = new Date(now).toISOString(); P.setProperty(BK_FROM, from); }
+  const fromMs = Date.parse(from) || now;
+  const mine = (jobs || []).filter(function (j) { return j && j.id && (Date.parse(j.created_at || "") || 0) >= fromMs; });
+  if (!mine.length) return { kept: 0, booked: 0, fees: 0 };
+  const had = {};
+  bkRows_().forEach(function (r) { had[String(r[0])] = r; });
+  const fee = {};
+  let reads = 0;
+  mine.forEach(function (j) {
+    if (!/complete/i.test(String(j.work_status || ""))) return;
+    const cents = Math.round(Number(j.total_amount) || 0), r = had[String(j.id)];
+    if (r && bkNum_(r[16]) === cents) return;   // read at this amount already
+    if (!cents) { fee[j.id] = 0; return; }
+    if (reads >= BK_FEE_MAX) return;
+    reads++;
+    const f = repJobFee_(j.id);
+    if (f !== null) fee[j.id] = f;
+  });
+  return withLock_(function () { return bkKeep_(mine, now, fee); });
+}
+function bkKeep_(jobs, now, fee) {
+  const tz = Session.getScriptTimeZone(), at = new Date(now).toISOString();
+  const s = priceSheet_(BK_SHEET, BK_COLS);
+  const rows = s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, BK_COLS.length).getValues() : [];
+  const at_ = {};
+  rows.forEach(function (r, i) { if (r[0]) at_[String(r[0])] = i; });
+  const dayOf = function (v) { const d = new Date(v || ""); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, "yyyy-MM-dd"); };
+  let added = 0, booked = 0;
+  jobs.forEach(function (job) {
+    const id = String(job.id), cents = Math.round(Number(job.total_amount) || 0), st = String(job.work_status || "");
+    const wt = job.work_timestamps || {}, sch = job.schedule || {};
+    const started = !!(wt.on_my_way_at || wt.started_at || wt.completed_at) || /progress|complete/i.test(st);
+    let i = at_[id];
+    const first = i === undefined;
+    if (first) {
+      const r0 = [];
+      for (let c = 0; c < BK_COLS.length; c++) r0.push("");
+      r0[0] = id; r0[2] = String(job.created_at || ""); r0[3] = at;
+      i = rows.length; at_[id] = i; rows.push(r0); added++;
+    }
+    const r = rows[i];
+    if (!pcDay_(r[4], tz) && (sch.scheduled_start || started) && !/cancel/i.test(st)) {
+      // put on the schedule: when it was made (seen the first time), else the change that scheduled it. Its amount then
+      // is the booked revenue; one first seen after the visit started: not known
+      const when = (first ? String(job.created_at || "") : String(job.updated_at || "")) || at;
+      r[4] = dayOf(when) || dayOf(at); r[5] = when; r[6] = started ? "" : cents / 100; booked++;
+    } else if (pcDay_(r[4], tz) && !started && bkNum_(r[6]) === 0 && cents > 0) r[6] = cents / 100;   // priced after it was made, before the visit
+    const ests = [job.original_estimate_id].concat(Array.isArray(job.original_estimate_uuids) ? job.original_estimate_uuids : [])
+      .map(function (x) { return String(x || "").trim(); }).filter(function (x, k, a) { return x && a.indexOf(x) === k; });
+    const tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return String((t && typeof t === "object" ? t.name : t) || "").trim(); }).filter(Boolean);
+    r[1] = String(job.invoice_number || ""); r[7] = bkTagWho_(job.tags); r[8] = String((job.customer && job.customer.id) || job.customer_id || "");
+    r[9] = hcpClient_(job); r[10] = ests.join(",").slice(0, 400); r[11] = cents / 100; r[12] = st; r[13] = String(wt.completed_at || ""); r[14] = at;
+    if (Object.prototype.hasOwnProperty.call(fee, id)) { r[15] = fee[id] / 100; r[16] = cents / 100; }
+    r[17] = tags.join(", ").slice(0, 300);
+  });
+  if (rows.length) {
+    s.getRange(2, 1, rows.length, BK_COLS.length).setValues(rows);
+    s.getRange(2, 1, rows.length, 2).setNumberFormat("@");
+  }
+  return { kept: jobs.length, added: added, booked: booked, fees: Object.keys(fee).length };
+}
+/** A job's visits as one booking: the day its first visit ("1234" or "1234-1") was put on the schedule, the visits put
+ *  on the schedule that day (their amounts then: booked $; null when one isn't known), and, once every visit not
+ *  canceled is serviced, what they came to (the visits added later too, less card fees). */
+function bkGroups_(rows, tz) {
+  const by = {};
+  rows.forEach(function (r) {
+    const inv = String(r[1] || "").trim(), base = inv.replace(/-\d+$/, "");
+    if (!base) return;
+    const st = String(r[12] || "");
+    (by[base] || (by[base] = [])).push({ inv: inv, first: hcpFirstVisit_({ invoice_number: inv }), day: pcDay_(r[4], tz), at: bkIso_(r[5]), bc: bkNum_(r[6]),
+      tag: String(r[7] || ""), cust: String(r[8] || ""), client: String(r[9] || ""), ests: String(r[10] || "").split(",").filter(Boolean),
+      now: bkNum_(r[11]) || 0, can: /cancel/i.test(st), done: /complete/i.test(st), fee: bkNum_(r[15]) || 0 });
+  });
+  const out = [];
+  Object.keys(by).forEach(function (base) {
+    const vs = by[base], first = vs.filter(function (v) { return v.first && v.day; })[0];
+    if (!first) return;   // its first visit was made before the app kept them (or isn't on the schedule yet)
+    const booking = vs.filter(function (v) { return v.day === first.day; }), live = vs.filter(function (v) { return !v.can; });
+    let bc = 0;
+    booking.forEach(function (v) { bc = bc === null || v.bc === null ? null : bc + v.bc; });
+    const st = !live.length ? "x" : live.every(function (v) { return v.done; }) ? "d" : "o";
+    const tagged = [first].concat(booking).filter(function (v) { return v.tag; })[0];
+    const ests = [];
+    vs.forEach(function (v) { v.ests.forEach(function (e) { if (ests.indexOf(e) === -1) ests.push(e); }); });
+    out.push({ inv: first.inv, day: first.day, at: first.at, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
+      tag: tagged ? tagged.tag : "", cust: first.cust, client: first.client, ests: ests });
+  });
+  return out;
+}
+/** Who booked each one: its tag, else a Booked mark in the app (the last mark on an estimate or a past client). */
+function bkCredit_(groups, tz) {
+  const norm = function (v) { return String(v || "").toLowerCase().replace(/\s+/g, " ").trim(); };
+  const gap = function (a, b) { return Math.abs(Date.parse(a + "T12:00:00Z") - Date.parse(b + "T12:00:00Z")) / 864e5; };
+  groups.forEach(function (g) { if (g.tag) { g.name = g.tag; g.how = "tag"; } });
+  const pick = function (list, day) {   // the one put on the schedule closest to the mark
+    return list.filter(function (g) { return !g.how && gap(g.day, day) <= BK_MARK_DAYS; }).sort(function (a, b) { return gap(a.day, day) - gap(b.day, day); })[0];
+  };
+  // Office › Estimates and Today's calls: the job made from that estimate (any day), else one for the client's name
+  const est = {};
+  pcRows_(OF_EST_CALLS, OF_EST_CALL_COLS.length).forEach(function (r) { const id = String(r[2] || ""); if (id) est[id] = { r: String(r[3] || ""), who: String(r[4] || ""), day: pcDay_(r[1], tz) }; });
+  const ids = Object.keys(est).filter(function (id) { return est[id].r === "booked" && est[id].who; });
+  if (ids.length) {
+    const er = estRows_(SpreadsheetApp.getActive().getSheetByName(EST_SHEET));
+    ids.forEach(function (id) {
+      const m = est[id], row = er[id], keys = [id].concat(row ? priceJson_(row[14]).map(function (o) { return String((o && o[4]) || ""); }).filter(Boolean) : []);
+      let g = groups.filter(function (x) { return !x.how && x.ests.some(function (e) { return keys.indexOf(e) !== -1; }); })[0];
+      const client = row ? norm(row[4]) : "";
+      if (!g && client && m.day) g = pick(groups.filter(function (x) { return norm(x.client) === client; }), m.day);
+      if (g) { g.name = m.who; g.how = "est"; }
+    });
+  }
+  // Past clients: a job for that client
+  const pc = {};
+  pcRows_(PC_CALLS, PC_CALL_COLS.length).forEach(function (r) { const c = String(r[2] || ""); if (c) pc[c] = { r: String(r[5] || ""), who: String(r[6] || ""), day: pcDay_(r[1], tz) }; });
+  Object.keys(pc).forEach(function (c) {
+    const m = pc[c];
+    if (m.r !== "booked" || !m.who || !m.day) return;
+    const g = pick(groups.filter(function (x) { return x.cust === c; }), m.day);
+    if (g) { g.name = m.who; g.how = "pc"; }
+  });
+  return groups;
+}
+/** Admins and Office (any day): the jobs put on the schedule from..to (yyyy-MM-dd, a year at most), each with who booked
+ *  it (by: the office person on the scorecard; name: as the tag or the mark has it), its booked $ and, once serviced,
+ *  what it came to (cents). Runs the hourly check when it's 2 hours behind (and sets it up the first time). */
+function ofBooked_(req) {
+  const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")); };
+  const from = String(req.from || ""), to = String(req.to || "");
+  if (!isDay(from) || !isDay(to) || from > to || to > tmAddDays_(from, 366)) return { ok: false, error: "bad_request" };
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone();
+  const trigger = priceTrigger_();
+  let err = String(P.getProperty(PRICE_ERR) || "");
+  if (hcpKey_() && Date.now() - (Number(P.getProperty(PRICE_AT)) || 0) > 2 * 3600e3) { const o = priceScan(); err = o.ok ? "" : String(o.error || "error"); }
+  const since = String(P.getProperty(BK_FROM) || "");
+  // credited across every booking (a mark goes to the job closest to it), then the days asked
+  const groups = bkCredit_(bkGroups_(bkRows_(), tz), tz).filter(function (g) { return g.day >= from && g.day <= to; });
+  // the name on a tag or a mark → the office person: a mark's login (the person it's linked to in People), else the name
+  let cfg = { people: [] };
+  lbRows_(ofSheet_(false)).forEach(function (r) { if (r.key === "config") cfg = ofConfig_(lbParse_(r.json)); });
+  const norm = function (v) { return String(v || "").toLowerCase().replace(/\s+/g, " ").trim(); };
+  const users = groups.some(function (g) { return g.how && g.how !== "tag"; }) ? readUsers_(usersSheet_()) : [];
+  const person = function (name, how) {
+    const n = norm(name);
+    if (!n) return "";
+    if (how !== "tag") {
+      const u = users.filter(function (x) { return norm(x.u.name) === n; })[0], p = u ? cfg.people.filter(function (y) { return y.user && y.user === u.u.id; })[0] : null;
+      if (p) return p.name;
+    }
+    const whole = cfg.people.filter(function (y) { return norm(y.name) === n; })[0];
+    if (whole) return whole.name;
+    const f = n.split(" ")[0], firsts = cfg.people.filter(function (y) { return norm(y.name).split(" ")[0] === f; });
+    return firsts.length === 1 ? firsts[0].name : "";
+  };
+  const jobs = groups.map(function (g) {
+    return { inv: g.inv, day: g.day, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n };
+  }).sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : a.inv < b.inv ? 1 : -1; });
+  return { ok: true, from: from, to: to, since: since ? pcDay_(new Date(since), tz) : "", scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err,
+    bkErr: String(P.getProperty(BK_ERR) || ""), trigger: trigger, connected: !!hcpKey_(), jobs: jobs };
 }
 
 /* ---- Company goal (Operations): each year's goal for each department and each month's Super, Minimum and Bonus goals,
