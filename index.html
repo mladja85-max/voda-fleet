@@ -16774,7 +16774,7 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates", kpi: "KPI", cpm: "Clients Per Month", rp: "Referral Partners", trc: "Tech Report Cards" };
+const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", trc: "Tech Report Cards", est: "Estimates", kpi: "KPI", cpm: "Clients Per Month", rp: "Referral Partners" };
 const OF_EST_API = 95;                                   // the Google script version with Office › Estimates (Cleaning's)
 const OF_EST_FU_API = 99;                                // ... and who follows them up, with the call marks
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
@@ -16871,14 +16871,13 @@ function ofTabsEl(cur) {
   const of = ofCan(), estOk = (!apiLevel || apiLevel >= OF_EST_API) && (!ofData || ofData.estOk !== false);
   const list = [];
   for (const [k, t] of Object.entries(OF_TABS)) {
-    if (k === "rp" || k === "trc") continue;   // after Marketing
-    const ok = k === "kpi" ? kpiCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());
+    if (k === "rp") continue;   // after Marketing
+    const ok = k === "kpi" ? kpiCan() : k === "trc" ? trcCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());   // Tech Report Cards: after Past clients
     if (ok) list.push([k, t]);
     if (k === "kpi" && atInOf()) list.push(["at", "Attendance"]);
   }
   if (mkInOf()) list.push(["mkt", "Marketing"]);
   if (of && rpCan()) list.push(["rp", OF_TABS.rp]);
-  if (trcCan()) list.push(["trc", OF_TABS.trc]);
   const seg = lbSeg(list, cur, k => {
     if (k === cur) return;
     if (view.tab === "office") ofFlush();   // a day being typed is saved first
