@@ -2037,6 +2037,9 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
 .lb-boxes.n1 { grid-template-columns: minmax(0, 200px); }
 .lb-box { display: grid; gap: 3px; min-width: 0; }
 .lb-box span { font-size: .74rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Past clients' numbers: counted from the marks, not typed */
+.lb-box.auto input { background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); color: var(--ink); cursor: default; }
+.of-in .of-auto { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: .72rem; white-space: nowrap; color: var(--accent); font-weight: 700; }
 /* office day: her task names are long ("Past clients (6M, 1Y, 18M, 2Y, 3Y)"): two lines, so the boxes still line up */
 .of-day .lb-box { align-content: start; }
 .of-day .lb-box > span { white-space: normal; line-height: 1.25; min-height: 2.5em; display: flex; align-items: flex-end; }
@@ -16699,7 +16702,8 @@ async function ofLoad(year) {
       const months = out.months || {};
       for (const [k, p] of Object.entries(ofPending)) months[k] = lbMerge(months[k] || {}, lbClone(p));   // keep what's still being saved
       ofData = { config: out.config || { people: [] }, months, year: y, admin: !!out.admin, me: out.me || "", at: new Date().toISOString(),
-        estOk: out.estOk !== false, estWho: Array.isArray(out.estWho) ? out.estWho : [] };   // who follows up Office › Estimates
+        estOk: out.estOk !== false, estWho: Array.isArray(out.estWho) ? out.estWho : [],   // who follows up Office › Estimates
+        pcAuto: lbIsDay(out.pcAuto) ? out.pcAuto : "" };   // from this day: Past clients' numbers counted, not typed
       store.set(K_OF, ofData);
     } else ofYears[y] = { months: out.months || {} };
     ofErr = ""; ofOld = false;
@@ -18212,6 +18216,7 @@ async function pcMark(r, g, res, cb) {
   try {
     const out = await api("pcMark", Object.assign({ id: r.id, g, last: r.last, r: res }, cb || {}));
     r.m = out.m && out.m.r ? out.m : null;
+    ofPcPatch(out.of);   // her Past clients numbers on Office Calls, counted again
   } catch (e) {
     r.m = e && e.error === "locked" && e.m ? e.m : was;
     toast(e && e.error === "locked" ? "That call was marked on an earlier day: it stays as it is. Ask Mike to change it."
@@ -18566,6 +18571,28 @@ function ofTotsEl(t) {
 }
 
 /* ---- my day: her calls by kind (adding up toward the goal) and her other numbers ---- */
+/** Past clients' two numbers on a CSR's day ("Past clients (6M, 1Y, 18M, 2Y, 3Y)" and "Booked from past clients"):
+ *  from the day it started (ofData.pcAuto), counted from the clients she marked on Past clients that day, not typed. */
+function ofPcIds(p) {
+  const vis = (p.fields || []).filter(f => !f.hide);
+  const c = vis.find(f => f.kind === "out" && /^past clients/i.test(f.label)), b = vis.find(f => /^booked from past/i.test(f.label));
+  return { c: c ? c.id : "", b: b ? b.id : "" };
+}
+const ofPcAuto = (p, fid, day) => !!(ofData && ofData.pcAuto && day >= ofData.pcAuto && p && p.user && fid && Object.values(ofPcIds(p)).includes(fid));
+/** A call marked on Past clients: the day's numbers it changed, into the office days on screen. */
+function ofPcPatch(of) {
+  if (!of || !of.days || !ofData || !ofData.months) return;
+  for (const [d, people] of Object.entries(of.days)) {
+    const k = d.slice(0, 7);
+    if (!d.startsWith(`${ofData.year}-`)) continue;
+    const doc = ofData.months[k] || (ofData.months[k] = { days: {} }), days = doc.days || (doc.days = {});
+    for (const [name, vals] of Object.entries(people)) {
+      const e = (days[d] || (days[d] = {}))[name] || (days[d][name] = {});
+      for (const [id, v] of Object.entries(vals)) { if (v == null) delete e[id]; else e[id] = v; }
+    }
+  }
+  store.set(K_OF, ofData);
+}
 function ofTodayEl() {
   const cfg = ofCfg(), admin = isAdmin(), editor = ofEditor(), y = ofData.year;
   const today = lbToday();
@@ -18598,13 +18625,15 @@ function ofTodayEl() {
   const goal = cfg.goal, work = ofWorkDay(day);
   const locked = !editor && day !== today;   // another day: only Admins and Office (any day) change it
   const box = (f, i, row) => {
-    const mine = (f.kind !== "admin" || editor) && !locked;
+    const auto = ofPcAuto(p, f.id, day);   // Past clients' numbers: counted from her marks, not typed
+    const mine = (f.kind !== "admin" || editor) && !locked && !auto;
     const kid = f.of && i > 0 && (row[i - 1].id === f.of || row[i - 1].of === f.of);   // beside its calls (phone: same line)
-    return h("label", { class: "lb-box" + (mine ? "" : " ro") + (kid ? " kid" : ""), "data-k": f.id }, h("span", { text: ofFieldName(f) }),
+    return h("label", { class: "lb-box" + (mine ? "" : " ro") + (kid ? " kid" : "") + (auto ? " auto" : ""), "data-k": f.id,
+      title: auto ? "Counted from Past clients: the clients marked there this day (Booked: the ones marked Booked)" : null }, h("span", { text: ofFieldName(f) }),
       h("div", { class: "of-in" },   // the % booked sits inside the box, on the right
-        h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? "" : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
+        h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? (auto ? "0" : "") : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
           onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
-        f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : null));
+        f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : auto ? h("small", { class: "of-auto", text: "from Past clients" }) : null));
   };
   const shown = ofShown(p, e);   // a past-only number shows only on a day that has one
   // the rows: Outbound calls, Inbound calls, then Admins only (not shown to the office people: admins type them)
