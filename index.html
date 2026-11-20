@@ -11416,7 +11416,8 @@ function lbSpanRecs(from, to, withReviews, built) {
   return out;
 }
 /** A Performance table ranked by one of its numbers, best first: 1, 2 and 3 in gold, VODA blue and VODA drop blue (a tie
- *  shares the place). Tap a heading to rank by that number, tap it again for the other way; Team sorts A to Z with no
+ *  shares the place, and the next one takes the next number: 1, 1, 1, 2, as the places everywhere else; it only shows
+ *  the order, the scores are worked out on their own). Tap a heading to rank by that number, tap it again for the other way; Team sorts A to Z with no
  *  places. A team with nothing typed (`has` false) comes last, without a place.
  *  cols: [{ k, label, v: team => number, f: team => text, low: lower is better, def: ranked by it at first }] */
 function lbRankTable(id, cols, list, has, foot) {
@@ -11429,7 +11430,7 @@ function lbRankTable(id, cols, list, has, foot) {
   if (k === "name") rows = list.slice().sort((a, b) => (flip ? -1 : 1) * a.name.localeCompare(b.name)).map(t => ({ t, p: null }));
   else {
     const low = flip ? !col.low : !!col.low;
-    const vals = live.map(col.v), rk = lbRanks(vals, low);
+    const vals = live.map(col.v), rk = lbRanks(vals, low, true);
     // gold and blues only for a real result: $0 sales tied for 3rd get a plain place
     rows = live.map((t, i) => ({ t, p: rk[i], medal: low || vals[i] > 0 })).sort((a, b) => a.p - b.p || a.t.name.localeCompare(b.t.name)).concat(idle.map(t => ({ t, p: null })));
   }
