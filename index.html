@@ -2066,7 +2066,7 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
 .lb-box span { font-size: .74rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Past clients' numbers: counted from the marks, not typed */
 .lb-box.auto input { background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); color: var(--ink); cursor: default; }
-.of-in .of-auto { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: .72rem; white-space: nowrap; color: var(--accent); font-weight: 700; }
+.of-in .of-auto { all: unset; cursor: pointer; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-size: .72rem; white-space: nowrap; color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 /* office day: her task names are long ("Past clients (6M, 1Y, 18M, 2Y, 3Y)"): two lines, so the boxes still line up */
 .of-day .lb-box { align-content: start; }
 .of-day .lb-box > span { white-space: normal; line-height: 1.25; min-height: 2.5em; display: flex; align-items: flex-end; }
@@ -18966,6 +18966,31 @@ function ofPcIds(p) {
   return { c: c ? c.id : "", b: b ? b.id : "" };
 }
 const ofPcAuto = (p, fid, day) => !!(ofData && ofData.pcAuto && day >= ofData.pcAuto && p && p.user && fid && Object.values(ofPcIds(p)).includes(fid));
+/** The clients counted in her Past clients number that day: each one's group, the day they came up on the list (that
+ *  day's, an earlier one, a later one), the mark and when. */
+const OF_PC_LIST_API = 117;
+async function ofPcListDlg(p, day) {
+  const box = h("div", { class: "cpm-jobs", id: "ofPcList" }, h("p", { class: "loading", text: "Loading…" }));
+  openDialog(h("h3", { id: "dlgTitle", text: `Past clients · ${p.name} · ${lbDayText(day)}` }),
+    h("p", { class: "hint", text: "The clients she marked on Office › Past clients this day: what her Past clients number counts (a client marked twice counts once; one taken back doesn't count)." }),
+    box, h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+  let out;
+  try { out = await api("pcDayMarks", { day, uid: p.user }); }
+  catch (e) { box.replaceChildren(h("p", { class: "dlg-err", text: e && e.error === "bad_request" && (Number(e.api) || 0) < OF_PC_LIST_API ? "This list needs the Google script's new version (Deploy › Manage deployments › New version)." : errText(e, "The list") })); return; }
+  const list = out.list || [], on = list.filter(x => x.due === day).length, before = list.filter(x => x.due && x.due < day).length, after = list.filter(x => x.due > day).length;
+  const booked = list.filter(x => x.r === "booked").length;
+  const G = { 6: "6 months", 12: "1 year", 18: "18 months", 24: "2 years", 36: "3 years" };
+  box.replaceChildren(...[
+    h("p", { class: "meta", id: "ofPcListSum" }, h("b", { text: `${fmt(list.length)} client${list.length === 1 ? "" : "s"} marked · ${fmt(booked)} booked` }),
+      list.length ? ` — ${[on ? `${fmt(on)} from that day's list` : "", before ? `${fmt(before)} from earlier days' lists` : "", after ? `${fmt(after)} from later days' lists (called ahead)` : ""].filter(Boolean).join(" · ")}` : ""),
+    list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cpm-jobs-table", id: "ofPcListTable" },
+      h("thead", null, h("tr", null, ["Marked", "Client", "Group", "On the list for", "Mark"].map(t => h("th", { text: t })))),
+      h("tbody", null, list.map(x => h("tr", { "data-id": x.id, "data-due": x.due },
+        h("td", { text: x.at ? fmtTime(new Date(x.at)) : "" }), h("td", { class: "cpm-j-client" }, hcpLink("cust", x.id, x.name)), h("td", { text: G[x.g] || `${x.g} months` }),
+        h("td", { text: x.due ? lbDayText(x.due) + (x.due < day ? " (earlier)" : x.due > day ? " (ahead)" : "") : "" }),
+        h("td", { text: PC_MARK_TEXT[x.r] || x.r }))))))
+      : h("p", { class: "meta", text: "No clients marked that day." })]);
+}
 /** A call marked on Past clients: the day's numbers it changed, into the office days on screen. */
 function ofPcPatch(of) {
   if (!of || !of.days || !ofData || !ofData.months) return;
@@ -19020,7 +19045,8 @@ function ofTodayEl() {
       h("div", { class: "of-in" },   // the % booked sits inside the box, on the right
         h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? (auto ? "0" : "") : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
           onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
-        f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : auto ? h("small", { class: "of-auto", text: "from Past clients" }) : null));
+        f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : auto ? h("button", { class: "of-auto", type: "button", id: "ofPcSee", title: "The clients counted",
+          onclick: ev => { ev.preventDefault(); ev.stopPropagation(); ofPcListDlg(p, day); } }, "from Past clients ›") : null));
   };
   const shown = ofShown(p, e);   // a past-only number shows only on a day that has one
   // the rows: Outbound calls, Inbound calls, then Admins only (not shown to the office people: admins type them)
