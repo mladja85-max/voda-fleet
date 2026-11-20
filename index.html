@@ -406,10 +406,41 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 .of-est-said { font-style: italic; }
 .of-est-who .linkish, .of-est-who .pc-lock { font-size: .72rem; }
 .of-est-item .pc-cbpick { margin: 6px 0 10px; }
+.of-est-dots, .est-ins { display: none; }
 .pc-chip.due { background: var(--due-bg); color: var(--due); border-color: var(--due); }
 @media (max-width: 1100px) { .est-row.of-est-row { grid-template-columns: 70px 52px minmax(0, 1fr) 96px 122px minmax(0, 150px); gap: 8px; } }
 @media (max-width: 860px) {
   .est-row.of-est-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "cl amt" "meta st" ". in"; }
+}
+/* Office › Estimates on a phone: each estimate in three short lines (the client and amount; the address and options;
+   the day, #, who's on it and its status) and one row of buttons (Not now, Voicemail, Booked, ⋯); the status buttons
+   one line that slides sideways; Everyone and the search on one line */
+@media (max-width: 600px) {
+  /* two lines that don't pull on each other: the client and amount, then the day, #, who and status */
+  .est-row.of-est-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 10px 2px 6px; }
+  .est-row.of-est-row::before { content: ""; order: 3; flex: 0 0 100%; height: 0; }
+  .est-row.of-est-row .est-cl { order: 1; flex: 1 1 0; min-width: 0; } .est-row.of-est-row .est-amt { order: 2; flex: none; }
+  .est-row.of-est-row .est-day { order: 4; } .est-row.of-est-row .est-no { order: 5; margin-left: 0; }
+  .est-row.of-est-row .est-day, .est-row.of-est-row .est-no, .est-row.of-est-row .est-in { font-size: .8rem; flex: none; }
+  .est-row.of-est-row .est-in { order: 6; flex: 1 1 0; min-width: 64px; text-align: left; } .est-row.of-est-row .est-in > small { display: none; }
+  .est-row.of-est-row .est-in b { font-weight: 600; } .est-row.of-est-row .est-inf { display: none; } .est-row.of-est-row .est-ins { display: inline; }
+  .est-row.of-est-row .est-st { order: 7; flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; white-space: nowrap; overflow: hidden; text-align: right; }
+  .est-row.of-est-row .est-st b { font-size: .8rem; flex: none; } .est-row.of-est-row .est-st small:not(:empty)::before { content: "·"; margin-right: 4px; color: var(--muted); font-weight: 400; }
+  .est-row.of-est-row .est-st small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .est-row.of-est-row .est-since, .est-row.of-est-row .est-st small:has(> .est-by:only-child) { display: none; }
+  .est-row.of-est-row .est-by { display: none; }
+  .of-est-item > .of-est-fu { padding: 2px 2px 10px; }
+  .pc-acts.of-est-btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 6px; flex: 1 1 100%; }
+  .of-est-btns .btn { justify-content: center; padding-inline: 6px; min-width: 0; }
+  .of-est-btns:not(.more) [data-r="cb"], .of-est-btns:not(.more) [data-r="dnc"] { display: none; }
+  .of-est-btns.more [data-r="cb"] { grid-column: 1 / 3; } .of-est-btns.more [data-r="dnc"] { grid-column: 3 / 5; }
+  .of-est-btns .of-est-dots { display: inline-flex; grid-row: 1; grid-column: 4; width: 44px; padding-inline: 0; font-size: 1.15rem; line-height: 1; }
+  .of-est-btns.more .of-est-dots { background: var(--accent-soft); color: var(--accent); }
+  #ofEstList .est-filters select { flex: 0 1 40%; } #ofEstList .est-filters input[type="search"] { flex: 1 1 0; }
+  #ofEstList .est-stseg { display: flex; flex: 1 1 100%; overflow-x: auto; width: auto; scroll-behavior: auto;
+    -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+  #ofEstList .est-stseg.end { -webkit-mask-image: none; mask-image: none; }
+  #ofEstList .est-stseg .seg-btn { flex: none; min-width: 86px; }
 }
 /* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
 .kpi-who { margin: 2px 0 0; }
@@ -660,15 +691,23 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   .seg.of-tabs { width: max-content; max-width: calc(100vw - 64px); flex-wrap: wrap; box-sizing: border-box; }
   .seg.of-tabs .seg-btn { padding-inline: 11px; }
 }
-/* Office's four tabs on a phone: two by two, every name whole */
+/* Office's tabs on a phone: two by two, every name whole; more than four: one line, the tab you're on with ▾, and
+   tapped, all of them two by two under it (the one you're on stays first, ▴) */
 @media (max-width: 600px) {
   .seg.of-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
   .seg.of-tabs .seg-btn { justify-content: center; text-align: center; white-space: nowrap; padding: 9px 6px; }
+  .seg.of-tabs.of-drop:not(.open) .seg-btn:not([aria-selected="true"]) { display: none; }
+  .seg.of-tabs.of-drop .seg-btn[aria-selected="true"] { grid-column: 1 / -1; order: -1; position: relative; padding: 10px 40px; font-size: 1rem; }
+  .seg.of-tabs.of-drop .seg-btn[aria-selected="true"]::after { content: ""; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; margin-top: -6px;
+    border: solid currentColor; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); transition: transform .15s ease; }
+  .seg.of-tabs.of-drop.open .seg-btn[aria-selected="true"]::after { transform: rotate(-135deg); margin-top: -2px; }
+  .seg.of-tabs.of-drop.open .seg-btn[aria-selected="true"] { margin-bottom: 4px; }
 }
-.seg-btn:hover:not([aria-selected="true"]) { color: var(--ink); }
+.seg-btn:hover:not([aria-selected="true"]):not([aria-pressed="true"]) { color: var(--ink); }
 .seg-btn:active { transform: scale(.97); }
-.seg-btn[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
-.seg-btn[aria-selected="true"] .n { background: rgba(255, 255, 255, .24); color: inherit; }
+/* the option picked: VODA blue (a row of tabs says it with aria-selected, a row of filters with aria-pressed) */
+.seg-btn[aria-selected="true"], .seg-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
+.seg-btn[aria-selected="true"] .n, .seg-btn[aria-pressed="true"] .n { background: rgba(255, 255, 255, .24); color: inherit; }
 .seg-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
 .seg-btn .n { font-size: .74rem; padding: 0 7px; border-radius: 999px; background: var(--line); color: var(--ink); line-height: 1.5; }
 .seg-btn .n.hot { background: var(--soon-bg); color: var(--soon); }
@@ -1061,9 +1100,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .cpm-tots .of-tot { display: grid; grid-row: auto; grid-template-rows: none; align-content: start; gap: 4px; padding: 8px 12px 10px; }
   .cpm-tots .of-tot small { margin-right: 0; }
   .cpm-tots .of-tot b { font-size: 1.4rem; overflow-wrap: anywhere; }
-  .lb-bar > .of-step { flex: 1 1 100%; }
-  .of-step strong { flex: 1; min-width: 0; font-size: 1rem; }
-  .lb-bar > .of-step ~ .btn { margin-left: auto; }
+  .lb-bar > .of-step:has(~ #cpmRead, ~ #rpRead) { flex: 1 1 100%; }
+  .lb-bar > .of-step:has(~ #cpmRead, ~ #rpRead) strong { flex: 1; min-width: 0; font-size: 1rem; }
+  .lb-bar > .of-step ~ :is(#cpmRead, #rpRead) { margin-left: auto; }
 }
 .cpm-from { margin: 2px 0 10px; }
 .cpm-table { display: grid; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
@@ -1360,7 +1399,10 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .cp-table th, .cp-table td, .cp-items th, .cp-items td { white-space: nowrap; }
 .cp-table .l, .cp-items .l { text-align: left; } .cp-table td.st, .cp-table th.st { text-align: right; }
 .cp-items td.l { white-space: normal; } .cp-items td.c, .cp-items th.c { text-align: center; }
-.cp-items tr.off td { opacity: .5; } .cp-items .cp-pay { width: 7.5em; text-align: right; font: inherit; padding: 4px 6px; }
+.cp-items tr.off td { opacity: .5; }
+.cp-items th small { display: block; font-weight: 500; } .cp-items .cp-invamt { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* the window never wider than the screen: a table too wide for it slides inside it, not the whole window */
+.cp-dlg { min-width: 0; max-width: 100%; } .cp-dlg > * { min-width: 0; max-width: 100%; } .cp-dlg .lb-scroll { overflow-x: auto; } .cp-items .cp-pay { width: 7.5em; text-align: right; font: inherit; padding: 4px 6px; }
 .cp-items .cp-pay.bad, .cp-payf input.bad { border-color: var(--due); }
 /* a pay that isn't its invoice */
 .cp-items tbody tr.dif td { background: var(--soon-bg); }
@@ -14882,8 +14924,8 @@ function openCpBatch(id) {
   const draw = () => {
     const on = st.filter(x => x.ok), pay = on.reduce((n, x) => n + cents(x), 0), inv = on.reduce((n, x) => n + x.i.a, 0), dif = pay - inv;
     st.forEach(difOf);
-    foot.replaceChildren(h("tr", { class: dif ? "dif" : "" }, h("td"), h("th", { class: "l", text: `${cpPlural(on.length, "invoice")} OK` }), h("td", { class: "pc" }), h("td", { class: "pc" }),
-      h("td", { text: C(inv) }), h("td", null, h("b", { text: C(pay) }))));
+    foot.replaceChildren(h("tr", { class: dif ? "dif" : "" }, h("td"), h("th", { class: "l" }, `${cpPlural(on.length, "invoice")} OK`, h("small", { class: "ph", text: `Invoiced ${C(inv)}` })), h("td", { class: "pc" }), h("td", { class: "pc" }),
+      h("td", { class: "pc", text: C(inv) }), h("td", null, h("b", { text: C(pay) }))));
     sumBox.classList.toggle("dif", !!(on.length && dif));
     // one line: what's paid, to whom (a pay that isn't the invoices: by how much, under it)
     sumBox.replaceChildren(...[h("b", { id: "cpSumLine", text: on.length ? `Pay ${cpPlural(on.length, "invoice")} – ${C(pay)} to ${b.vendor}` : "Nothing ticked OK" }),
@@ -14894,10 +14936,11 @@ function openCpBatch(id) {
   };
   const rows = st.map(x => x.tr = h("tr", { "data-n": x.i.n },
     h("td", { class: "c" }, h("input", { type: "checkbox", class: "cp-ok", checked: true, "aria-label": `Invoice ${x.i.n} OK`, onchange: e => { x.ok = e.target.checked; e.target.closest("tr").classList.toggle("off", !x.ok); draw(); } })),
-    h("td", { class: "l inv" }, pdfBtn(x.i), addedEl(x.i), h("small", { class: "ph", text: x.i.client })),
+    // a phone: the invoice's amount under its number (one column less: the window fits)
+    h("td", { class: "l inv" }, pdfBtn(x.i), addedEl(x.i), h("small", { class: "ph", text: x.i.client }), h("small", { class: "ph cp-invamt", text: `Invoice ${C(x.i.a)}` })),
     h("td", { class: "l pc" }, x.i.client),
     h("td", { class: "l pc", text: x.i.addr }),
-    h("td", { text: C(x.i.a) }),
+    h("td", { class: "pc", text: C(x.i.a) }),
     h("td", null, h("input", { type: "text", inputmode: "decimal", class: "cp-pay", value: x.pay, "aria-label": `Pay on ${x.i.n}`, oninput: e => { x.pay = e.target.value; e.target.classList.toggle("bad", !(num(x.pay) > 0)); draw(); } }),
       h("small", { class: "cp-dif" }))));
   const paidOn = lbDateInput({ id: "cpPaidOn", value: lbToday() }, () => {});
@@ -14956,7 +14999,7 @@ function openCpBatch(id) {
     h("h3", { id: "dlgTitle", text: `Batch ${b.id} · ${b.vendor}` }), steps,
     howFold("cpBatchHow", h("p", { class: "hint", text: "Check each invoice against its PDF (tap its number to open it) and confirm what's paid on it. Untick one to leave it out: it goes back to not sent. Then record the payment: the jobs are marked paid and the pay stub goes to " + vs + "." }), "How it works"),
     h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-items", id: "cpItems" },
-      h("thead", null, h("tr", null, h("th", { class: "c", text: "OK" }), h("th", { class: "l", text: "Invoice" }), h("th", { class: "l pc", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { text: "Invoice $" }), h("th", { text: "Pay" }))),
+      h("thead", null, h("tr", null, h("th", { class: "c", text: "OK" }), h("th", { class: "l", text: "Invoice" }), h("th", { class: "l pc", text: "Client" }), h("th", { class: "l pc", text: "Address" }), h("th", { class: "pc", text: "Invoice $" }), h("th", { text: "Pay" }))),
       h("tbody", null, rows), foot)),
     h("div", { class: "cp-payf" }, f("cpPaidOn", "Paid on", paidOn), f("cpHow", "How", how), h("div", { class: "field" }, refLbl, ref), f("cpLast4", "From account (last 4)", last4), f("cpAppBy", "Approved by", appBy)),
     h("div", { class: "cp-sendbox" }, to.el), sumBox, err, resendBox,
@@ -16595,11 +16638,14 @@ function estRowEl(e, today) {
       : estVisitDone(e) ? h("span", { class: "est-st ok" }, h("b", { text: "Visit done" }))
       : h("span", { class: "est-st op" }, h("b", { text: "Visit to come" }), e.ws ? h("small", { text: revStatus(e.ws) }) : null);
     const dec = e.dec ? lbDayKey(new Date(e.dec)) : "";
-    if (e.st === "approved") return h("span", { class: "est-st ok" }, h("b", { text: "Approved" }), h("small", { text: [e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", dec ? estDayShort(dec, today) : ""].filter(Boolean).join(" · ") }));
-    if (e.st === "declined") return h("span", { class: "est-st no" }, h("b", { text: "Declined" }), h("small", { text: [e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", dec ? estDayShort(dec, today) : ""].filter(Boolean).join(" · ") }));
+    // who decided, its own bit (a phone's Office estimates: just the day)
+    const byDay = () => { const by = e.by === "office" ? "by the office" : e.by === "client" ? "by the client" : "", d = dec ? estDayShort(dec, today) : "";
+      return h("small", null, by ? h("span", { class: "est-by", text: by + (d ? " · " : "") }) : null, d ? h("span", { text: d }) : null); };
+    if (e.st === "approved") return h("span", { class: "est-st ok" }, h("b", { text: "Approved" }), byDay());
+    if (e.st === "declined") return h("span", { class: "est-st no" }, h("b", { text: "Declined" }), byDay());
     if (e.st === "canceled") return h("span", { class: "est-st cx" }, h("b", { text: "Canceled" }));
     const age = estAge(e.day, today);
-    const ns = estNotSent(e), days = age === 0 ? "since today" : `${age} day${age === 1 ? "" : "s"}`, sb = e.st === "open" ? e.sentBy : null;
+    const ns = estNotSent(e), days = age === 0 ? [h("span", { class: "est-since", text: "since " }), "today"] : `${age} day${age === 1 ? "" : "s"}`, sb = e.st === "open" ? e.sentBy : null;
     const when = sb && sb.at ? lbDayText(lbDayKey(new Date(sb.at))) : "";
     const title = sb ? `Read as sent ${when}` + (e.hcpSt ? ` · In Housecall Pro now: ${e.hcpSt}` : "") : e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "";
     return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title }, h("b", { text: "Open" }),
@@ -16956,6 +17002,7 @@ function ofShowSave() {
 /* ---- the screen ---- */
 /** Office's row of tabs: its own (Office Calls … Clients Per Month, as the login may see them), with Attendance after KPI
  *  and Marketing after Clients Per Month for whoever sees those too (they're their own pages: the row takes you there). */
+let ofTabsOpen = false;   // a phone: the list of tabs opened (the tab you're on, tapped)
 function ofTabsEl(cur) {
   const of = ofCan(), estOk = (!apiLevel || apiLevel >= OF_EST_API) && (!ofData || ofData.estOk !== false);
   const list = [];
@@ -16968,7 +17015,13 @@ function ofTabsEl(cur) {
   if (mkInOf()) list.push(["mkt", "Marketing"]);
   if (of && rpCan()) list.push(["rp", OF_TABS.rp]);
   const seg = lbSeg(list, cur, k => {
-    if (k === cur) return;
+    if (k === cur) {   // a phone with more than four tabs: the tab you're on opens (or closes) the list
+      if (!seg.classList.contains("of-drop")) return;
+      ofTabsOpen = !ofTabsOpen; seg.classList.toggle("open", ofTabsOpen);
+      const on = seg.querySelector('.seg-btn[aria-selected="true"]'); if (on) on.setAttribute("aria-expanded", String(ofTabsOpen));
+      return;
+    }
+    ofTabsOpen = false;
     if (view.tab === "office") ofFlush();   // a day being typed is saved first
     if (k === "at") { setTab("attendance"); return; }
     if (k === "mkt") { setTab("marketing"); return; }
@@ -16976,6 +17029,12 @@ function ofTabsEl(cur) {
     if (view.tab !== "office") setTab("office"); else renderOffice();
   }, "Office");
   seg.classList.add("of-tabs");
+  // a phone with more than four tabs: one line, the tab you're on (▾); tapped, all of them two by two (a PC: one row)
+  if (list.length > 4) {
+    seg.classList.add("of-drop"); if (ofTabsOpen) seg.classList.add("open");
+    const on = seg.querySelector('.seg-btn[aria-selected="true"]');
+    if (on) { on.setAttribute("aria-haspopup", "true"); on.setAttribute("aria-expanded", String(ofTabsOpen)); on.title = "All the tabs"; }
+  }
   return seg;
 }
 /** Attendance's and Marketing's top when they're in Office's row: Office's name and the row (their own buttons stay theirs). */
@@ -19451,6 +19510,13 @@ function ofEstEl() {
     whoSel, search,
     who || q || ofEstView.st !== "all" ? h("button", { class: "btn small ghost", type: "button", id: "ofEstClear", onclick: () => { Object.assign(ofEstView, { st: "all", who: "", q: "" }); redraw(); } }, "Show all") : null);
   const more = shown.length - ofEstShown;
+  requestAnimationFrame(() => {   // a phone: the status buttons slide sideways; the one picked in sight, the fade gone at the end
+    const sg = document.querySelector("#ofEstList .est-stseg"), on = sg && sg.querySelector('[aria-selected="true"]');
+    if (!sg || sg.scrollWidth <= sg.clientWidth + 1) return;
+    const end = () => sg.classList.toggle("end", sg.scrollLeft + sg.clientWidth >= sg.scrollWidth - 2);
+    if (on) { const a = sg.getBoundingClientRect(), b = on.getBoundingClientRect(); sg.scrollLeft += (b.left + b.width / 2) - (a.left + a.width / 2); }
+    end(); sg.onscroll = end;
+  });
   return head.concat(h("div", { class: "panel est-list", id: "ofEstList" },
     h("h3", null, `Cleaning estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
     filters,
@@ -19464,7 +19530,7 @@ function ofEstEl() {
 /* ---- Office › Estimates follow-up: the call marks on each estimate, as on Past clients (Not now, Voicemail, Booked,
    Call back…, Don't call again). The open ones get the buttons; a decided one keeps its mark. Who follows them up:
    Admins pick (nobody picked: everyone with Office). ---- */
-let ofEstSure = "", ofEstSureTimer = 0, ofEstCbOpen = "";
+let ofEstSure = "", ofEstSureTimer = 0, ofEstCbOpen = "", ofEstMore = "";   // ofEstMore: a phone: the estimate whose ⋯ is open
 const ofEstCbState = {};
 /** An estimate's row with its follow-up under it: an open one's five buttons in words, as on Past clients (Not now,
  *  Voicemail, Booked, Call back…, Don't call again: a second tap), or its mark (who, when, Change); a decided one keeps
@@ -19472,6 +19538,9 @@ const ofEstCbState = {};
 function ofEstRowEl(e, today) {
   const row = estRowEl(e, today);
   row.classList.add("of-est-row");
+  // who's on it: a phone shows the first name and the last one's first letter ("Pat Q.")
+  const inB = row.querySelector(".est-in > b"), full = inB ? inB.textContent.trim() : "", parts = full.split(/\s+/);
+  if (parts.length > 1) { inB.replaceChildren(h("span", { class: "est-inf", text: full }), h("span", { class: "est-ins", text: `${parts[0]} ${parts[parts.length - 1][0]}.` })); inB.title = full; }
   if (apiLevel && apiLevel < OF_EST_FU_API) return row;
   const m = e.m && e.m.r ? e.m : null, open = e.st === "open";
   const sure = ofEstSure === e.id;
@@ -19486,12 +19555,16 @@ function ofEstRowEl(e, today) {
       m.r === "cb" && m.note ? h("small", { class: "of-est-said", title: m.note, text: `“${m.note}”` }) : null,
       h("small", { class: "of-est-who" }, [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · "), change ? " · " : null, change)].filter(Boolean));
   } else if (open) {
-    // the same buttons as Past clients: words; Don't call again asks once more
-    fu.append(h("div", { class: "pc-acts of-est-btns", role: "group", "aria-label": "Mark the call" }, PC_MARKS.map(([k, t]) => k === "dnc"
+    // the same buttons as Past clients: words; Don't call again asks once more. A phone: Not now, Voicemail, Booked and
+    // ⋯ (Call back… and Don't call again under it)
+    const more = ofEstMore === e.id || ofEstCbOpen === e.id || sure;
+    fu.append(h("div", { class: "pc-acts of-est-btns" + (more ? " more" : ""), role: "group", "aria-label": "Mark the call" }, PC_MARKS.map(([k, t]) => k === "dnc"
       ? h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": k, onclick: () => (sure ? ofEstMark(e, k) : ofEstAskSure(e.id)) }, sure ? "Sure? Tap again" : t)
       : k === "cb" ? h("button", { class: "btn small" + (ofEstCbOpen === e.id ? " primary" : ""), type: "button", "data-r": k, "aria-expanded": String(ofEstCbOpen === e.id),
           onclick: () => { ofEstCbOpen = ofEstCbOpen === e.id ? "" : e.id; renderOffice(); } }, t)
-      : h("button", { class: "btn small", type: "button", "data-r": k, onclick: () => ofEstMark(e, k) }, t))));
+      : h("button", { class: "btn small", type: "button", "data-r": k, onclick: () => ofEstMark(e, k) }, t)),
+      h("button", { class: "btn small ghost of-est-dots", type: "button", "aria-label": more ? "Fewer" : "More: Call back, Don't call again", "aria-expanded": String(more),
+        onclick: () => { if (more) { ofEstMore = ""; if (ofEstCbOpen === e.id) ofEstCbOpen = ""; if (sure) { ofEstSure = ""; clearTimeout(ofEstSureTimer); } } else ofEstMore = e.id; renderOffice(); } }, "⋯")));
   }
   return h("div", { class: "of-est-item", "data-id": e.id }, row, fu.childNodes.length ? fu : null, !m && open && ofEstCbOpen === e.id ? ofEstCbPicker(e) : null);
 }
@@ -19503,7 +19576,7 @@ function ofEstAskSure(id) {
 /** A call marked (or taken back: "clear" — a call-back done: back to the buttons), on screen at once; put back as it
  *  was when it couldn't be saved. */
 async function ofEstMark(e, res, cb) {
-  ofEstSure = ""; clearTimeout(ofEstSureTimer); ofEstCbOpen = "";
+  ofEstSure = ""; clearTimeout(ofEstSureTimer); ofEstCbOpen = ""; ofEstMore = "";
   const was = e.m;
   e.m = res === "clear" ? null : Object.assign({ r: res, who: session ? session.name || "" : "", at: new Date().toISOString(), saving: true }, cb || {});
   renderOffice();
