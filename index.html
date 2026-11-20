@@ -16995,7 +16995,9 @@ function cpmEl() {
     h("div", { class: "of-step" },
       h("button", { class: "btn small", type: "button", id: "cpmPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
       h("strong", { id: "cpmRangeLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
-      h("button", { class: "btn small", type: "button", id: "cpmNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›"))));
+      h("button", { class: "btn small", type: "button", id: "cpmNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    h("button", { class: "btn small", type: "button", id: "cpmRead", disabled: revSync.busy || r.from > today, title: "Read these days from Housecall Pro again (a Lead source or Job type changed there)",
+      onclick: () => { revSync.err = ""; revEnsure([[r.from, to]], true, "cpm"); renderOffice(); } }, revSync.busy ? "Reading…" : "Read again")));
   if (r.from > today) return out;
   const lf = cpmLastYear(r.from), lt = cpmLastYear(to);
   const cur = cpmPeriod(r.from, to), prev = cpmPeriod(lf, lt);
@@ -17189,10 +17191,10 @@ const rpCan = () => isAdmin() || canSee("revenue");
 const rpClean = n => String(n || "").replace(/^\s*\d+\)\s*/, "").replace(/^\s*(?:referr?al|referred)\b[^,]*?\bby\b\s*[:\-–]?\s*/i, "").replace(/^\s*-\s*/, "").replace(/\s+/g, " ").trim();
 /** ... and to match the Excel's with the tags': no "The", LLC, Inc, punctuation; lower case. */
 const rpKey = n => rpClean(n).toLowerCase().replace(/^the\s+/, "").replace(/\b(l\.?l\.?c\.?|inc\.?|corp\.?|co\.?|ltd\.?|llp|pllc)(?=\W|$)/g, "").replace(/[^a-z0-9&]+/g, " ").trim();
-async function rpLoad() {
+async function rpLoad(force) {
   if (!session || !rpCan() || rpLoading) return;
   rpLoading = true;
-  try { rpSet(await api("rpRead", {}, 170000)); rpErr = ""; rpOld = false; }
+  try { rpSet(await api("rpRead", force ? { force: true } : {}, 170000)); rpErr = ""; rpOld = false; }
   catch (e) { rpOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < RP_API); rpErr = rpOld ? "" : errText(e, "Referral Partners"); }
   rpLoading = false;
   if (view.tab === "office" && ofView.tab === "rp") renderOffice();
@@ -17319,7 +17321,10 @@ function rpEl() {
     h("div", { class: "of-step" },
       h("button", { class: "btn small", type: "button", id: "rpPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
       h("strong", { id: "rpRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
-      h("button", { class: "btn small", type: "button", id: "rpNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›"))));
+      h("button", { class: "btn small", type: "button", id: "rpNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    h("button", { class: "btn small", type: "button", id: "rpRead", disabled: revSync.busy || rpLoading, title: "Read the customers' tags and these days from Housecall Pro again",
+      onclick: () => { const m0 = rpMonthsOf(r.from, to)[0]; revSync.err = ""; rpLoad(true); revEnsure([[`${m0}-01`, to]], true, "rp"); renderOffice(); } },
+      revSync.busy || rpLoading ? "Reading…" : "Read again")));
   if (!rpData.ready) out.push(h("p", { class: "dlg-err", id: "rpNotReady", text: "Who referred each client comes from the customers' tags, read with Past clients: Office › Past clients needs its first read from Housecall Pro." }));
   const months = rpMonthsOf(r.from, to), ytdMonths = rpMonthsOf(`${to.slice(0, 4)}-01-01`, to);
   const cur = rpPeriod(months, to), ytd = per === "month" ? rpPeriod(ytdMonths, to) : cur;
