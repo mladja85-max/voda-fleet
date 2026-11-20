@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 112;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 113;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -5578,8 +5578,93 @@ function pcMark_(req, user) {
   s.getRange(first, 1, 1, PC_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, c, String(g), last, r === "clear" ? "" : r, user.name, cb, note]]);
   const m = { r: r === "clear" ? "" : r, who: user.name, at: at };
   if (cb) { m.cb = cb; m.note = note; m.day = today; }
-  return { ok: true, m: m };
+  // Office Calls: her Past clients numbers for today, counted again
+  let of = null;
+  try { of = ofPcSync_(today); } catch (e) { of = null; }
+  return { ok: true, m: m, of: of };
 }
+/* ---- Past clients → Office Calls: each CSR's "Past clients (6M, 1Y, 18M, 2Y, 3Y)" and "Booked from past clients"
+   aren't typed (from PC_AUTO_FROM on, the day this started; days before keep what was typed): they're the clients she
+   marked on Past clients that day, whichever day's list the client was on (behind, today or ahead), and how many of them
+   she marked Booked. A client marked more than once the same day counts once (the day's last mark, if not taken back);
+   a call-back called back on a later day counts that day too. ---- */
+const PC_AUTO = "PC_AUTO_FROM";
+/** The first day the numbers are counted ("" before; set: start today, once the lists are running). */
+function pcAutoFrom_(set) {
+  const P = PropertiesService.getScriptProperties();
+  let v = P.getProperty(PC_AUTO) || "";
+  if (!v && set && P.getProperty(PC_DONE) === "yes") { v = Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd"); P.setProperty(PC_AUTO, v); }
+  return v;
+}
+/** A person's two Past clients numbers (ids), when she has them. */
+function ofPcIds_(p) {
+  const vis = (p.fields || []).filter(function (f) { return !f.hide; });
+  const c = vis.filter(function (f) { return f.kind === "out" && /^past clients/i.test(f.label); })[0];
+  const b = vis.filter(function (f) { return /^booked from past/i.test(f.label); })[0];
+  return { c: c ? c.id : "", b: b ? b.id : "" };
+}
+/** The calls marked from..to (the day each was marked): { day: { who: { c: clients called, b: booked } } }. */
+function pcCounts_(from, to) {
+  const tz = Session.getScriptTimeZone(), last = {};
+  pcRows_(PC_CALLS, PC_CALL_COLS.length).forEach(function (x) {
+    const d = pcDay_(x[1], tz);
+    if (!d || d < from || d > to) return;
+    last[d + "|" + x[2] + "|" + x[3] + "|" + pcDay_(x[4], tz)] = x;   // in the order made: the day's last mark counts
+  });
+  const out = {};
+  Object.keys(last).forEach(function (k) {
+    const x = last[k], r = String(x[5] || ""), who = String(x[6] || ""), d = k.split("|")[0];
+    if (!r || !who) return;
+    const t = (out[d] || (out[d] = {}))[who] || (out[d][who] = { c: 0, b: 0 });
+    t.c++;
+    if (r === "booked") t.b++;
+  });
+  return out;
+}
+function ofUserNames_() { const out = {}; readUsers_(usersSheet_()).forEach(function (x) { out[x.u.id] = x.u.name; }); return out; }
+/** Puts the counts into a month (from..to, its days only) for everyone linked to a login: what changed, by day and person. */
+function ofPcApply_(doc, key, cfg, counts, names, from, to) {
+  const patch = {}, first = key + "-01", last = tmAddDays_(tmAddDays_(first, 31).slice(0, 8) + "01", -1);
+  if (!doc.days || typeof doc.days !== "object") doc.days = {};
+  for (let d = from > first ? from : first; d <= (to < last ? to : last); d = tmAddDays_(d, 1)) {
+    cfg.people.forEach(function (p) {
+      const who = p.user && names[p.user], ids = ofPcIds_(p);
+      if (!who || (!ids.c && !ids.b)) return;
+      const t = (counts[d] && counts[d][who]) || { c: 0, b: 0 }, want = {};
+      if (ids.c) want[ids.c] = t.c > 0 ? t.c : null;
+      if (ids.b) want[ids.b] = t.c > 0 ? t.b : null;   // with calls: booked (0 too); none: blank
+      const day = doc.days[d] || {}, e = day[p.name] || {};
+      let diff = false;
+      Object.keys(want).forEach(function (id) {
+        const v = want[id];
+        if ((v === null ? undefined : v) === e[id]) return;
+        diff = true;
+        if (v === null) delete e[id]; else e[id] = v;
+      });
+      if (!diff) return;
+      (patch[d] || (patch[d] = {}))[p.name] = want;
+      if (Object.keys(e).some(function (k) { return k !== "at" && k !== "by"; })) { day[p.name] = e; doc.days[d] = day; }
+      else { delete day[p.name]; if (Object.keys(day).length) doc.days[d] = day; else delete doc.days[d]; }
+    });
+  }
+  return patch;
+}
+/** A day's Past clients numbers counted again and saved (after a call is marked): what changed ({ key, days }), or null. */
+function ofPcSync_(day) {
+  const auto = pcAutoFrom_(true);
+  if (!auto || day < auto) return null;
+  const s = ofSheet_(false);
+  if (!s) return null;
+  const byKey = {};
+  lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
+  if (!byKey.config) return null;
+  const cfg = ofConfig_(lbParse_(byKey.config.json)), key = day.slice(0, 7);
+  const doc = ofMonth_(lbParse_(byKey[key] ? byKey[key].json : ""), key);
+  const patch = ofPcApply_(doc, key, cfg, pcCounts_(day, day), ofUserNames_(), day, day);
+  if (Object.keys(patch).length) lbSaveRow_(s, byKey, key, JSON.stringify(ofMonth_(doc, key)), new Date().toISOString(), "Past clients");
+  return { key: key, days: patch };
+}
+
 /** Everyone with Office: the marks made since `since` (ms), to show what the others marked. */
 function pcMarks_(req) {
   const tz = Session.getScriptTimeZone(), since = Number(req.since) || 0;
@@ -7430,8 +7515,10 @@ function ofMonth_(d, key) {
 }
 function ofRead_(user, year) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  let pcAuto = pcAutoFrom_(false);
+  if (!pcAuto) { try { withTabLock_(function () { pcAuto = pcAutoFrom_(true); if (pcAuto) ofPcSync_(pcAuto); }); } catch (e) { pcAuto = pcAutoFrom_(false); } }
   const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_(),
-    estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined };
+    estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined, pcAuto: pcAuto };
   lbRows_(ofSheet_(false)).forEach(function (r) {
     if (r.key === "config") out.config = lbParse_(r.json);
     else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);
@@ -7455,6 +7542,8 @@ function ofPut_(req) {
   const cfg = ofConfig_(byKey.config ? lbParse_(byKey.config.json) : {});
   const now = new Date().toISOString();
   const out = { ok: true, months: {} };
+  const pcAuto = pcAutoFrom_(false), pcToday = Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  let pcCnt = null, pcNames = null;
   writes.forEach(function (w) {
     const key = String((w && w.key) || "");
     const whole = w && w.data && typeof w.data === "object";
@@ -7488,6 +7577,12 @@ function ofPut_(req) {
         change = { days: days };
       }
       doc = ofMonth_(lbMerge_(whole ? {} : lbParse_(byKey[key] ? byKey[key].json : ""), change), key);
+      // Past clients' numbers: counted from the calls marked, not typed (whatever was sent for them)
+      if (pcAuto && key >= pcAuto.slice(0, 7) && pcAuto <= pcToday) {
+        if (!pcCnt) { pcCnt = pcCounts_(pcAuto, pcToday); pcNames = ofUserNames_(); }
+        ofPcApply_(doc, key, cfg, pcCnt, pcNames, pcAuto, pcToday);
+        doc = ofMonth_(doc, key);
+      }
     }
     lbSaveRow_(s, byKey, key, JSON.stringify(doc), now, req.by);
     if (key === "config") out.config = doc; else out.months[key] = doc;
