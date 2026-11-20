@@ -413,6 +413,9 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 }
 /* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
 .kpi-who { margin: 2px 0 0; }
+.kpi-who .seg-btn[data-color] { box-shadow: inset 0 -3px 0 var(--pc); }
+.kpi-who .seg-btn[data-color][aria-selected="true"] { background: var(--pc); color: var(--pc-ink); box-shadow: none; }
+.kpi-pcolor { width: 38px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
 #kpiDay input[type="date"] { box-sizing: border-box; height: 2.3rem; }   /* as tall as ‹ › beside it */
 .kpi-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
 .kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 10px; display: grid; grid-template-rows: 1fr auto auto; gap: 1px; min-width: 0; }   /* a name on two lines: the numbers still level */
@@ -442,7 +445,7 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 .kpi-table tr.kpi-none th, .kpi-table tr.kpi-none td { color: var(--muted); }
 .kpi-table tfoot th, .kpi-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
 .kpi-people { display: grid; gap: 8px; margin: 8px 0; }
-.kpi-person { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto auto; gap: 6px; align-items: center; }
+.kpi-person { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto auto auto; gap: 6px; align-items: center; }
 .kpi-person b.kpi-pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kpi-person input.kpi-pname, .kpi-person select { font: inherit; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
 .kpi-xl th, .kpi-xl td { text-align: right; white-space: nowrap; }
@@ -458,7 +461,7 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
   .kpi-table { font-size: .8rem; } .kpi-table th, .kpi-table td { padding: 5px 4px; }
 }
 @media (max-width: 600px) {
-  .kpi-person { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .kpi-person { grid-template-columns: minmax(0, 1fr) auto auto auto; }
   .kpi-person select { grid-column: 1 / -1; grid-row: 2; }
 }
 /* a long explanation, folded: one small grey line, a tap opens it */
@@ -4664,13 +4667,16 @@ async function lbReadXlsx(buf, want, opts) {
   }
   // cell colors (opts.colors): each cell's text and fill color, and the colors of its runs of text, as "rrggbb"
   let xf = [], colr = () => "";
-  if (opts && opts.colors) {
-    const st = (await read("xl/styles.xml")) || "", th = (await read("xl/theme/theme1.xml")) || "";
+  if (opts && (opts.colors || opts.tabColor)) {
+    const th = (await read("xl/theme/theme1.xml")) || "";
     const scheme = (/<a:clrScheme\b[\s\S]*?<\/a:clrScheme>/.exec(th) || [""])[0];
     const pal = ["dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"]
       .map(n => ((new RegExp(`<a:${n}>[\\s\\S]*?(?:srgbClr val|lastClr)="([0-9A-Fa-f]{6})"`).exec(scheme) || [])[1] || "").toLowerCase());
     const theme = [pal[1], pal[0], pal[3], pal[2], ...pal.slice(4)];
     colr = tag => { const rgb = /\brgb="(?:[0-9A-Fa-f]{2})?([0-9A-Fa-f]{6})"/.exec(tag || ""); if (rgb) return rgb[1].toLowerCase(); const t = /\btheme="(\d+)"/.exec(tag || ""); return t ? theme[Number(t[1])] || "" : ""; };
+  }
+  if (opts && opts.colors) {
+    const st = (await read("xl/styles.xml")) || "";
     const sec = n => (new RegExp(`<${n}\\b[^>]*>([\\s\\S]*?)</${n}>`).exec(st) || [])[1] || "";
     const fonts = [...sec("fonts").matchAll(/<font\b[^>]*?(?:\/>|>([\s\S]*?)<\/font>)/g)].map(m => colr((/<color\b[^>]*>/.exec(m[1] || "") || [""])[0]));
     const fills = [...sec("fills").matchAll(/<fill\b[^>]*?(?:\/>|>([\s\S]*?)<\/fill>)/g)].map(m => /patternType="solid"/.test(m[1] || "") ? colr((/<fgColor\b[^>]*>/.exec(m[1]) || [""])[0]) : "");
@@ -4717,7 +4723,8 @@ async function lbReadXlsx(buf, want, opts) {
       }
     }
     for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = [];
-    tabs.push(opts && opts.colors ? { name, rows, fmt } : { name, rows });
+    const tc = opts && opts.tabColor ? colr((/<tabColor\b[^>]*>/.exec(xml) || [""])[0]) : "";
+    tabs.push(Object.assign(opts && opts.colors ? { name, rows, fmt } : { name, rows }, tc ? { tabColor: tc } : {}));
   }
   return tabs;
 }
@@ -16690,10 +16697,17 @@ function kpiEl() {
   const who = admin ? (people.some(p => p.name === kpiView.who) ? kpiView.who : "") : people.some(p => p.name === kpiView.who) ? kpiView.who : people[0].name;
   const pick = admin || people.length > 1 ? lbSeg((admin ? [["", "Everyone"]] : []).concat(people.map(p => [p.name, p.name])), who,
     k => { kpiView.who = k; redraw(); }, "Person") : null;
-  if (pick) pick.classList.add("kpi-who");
+  if (pick) {
+    pick.classList.add("kpi-who");
+    for (const b of pick.querySelectorAll(".seg-btn[data-k]")) { const c = kpiColor(b.dataset.k); if (c) { b.dataset.color = c; b.style.setProperty("--pc", c); b.style.setProperty("--pc-ink", kpiInk(c)); } }
+  }
   const body = !who ? kpiAllEl(people, r, to) : per === "day" ? kpiDayEl(who, r.from) : per === "year" ? kpiYearEl(who, r, to) : kpiDaysEl(who, r, to);
   return [bar, pick, ...body].filter(Boolean);
 }
+/** A person's color on the KPI (his tabs' color in the Excel, or picked under People), or "". */
+const kpiColor = name => { const p = ((kpiData && kpiData.people) || []).find(x => x.name === name); return p && /^#[0-9a-f]{6}$/i.test(p.color || "") ? p.color : ""; };
+/** Dark or white text on that color, whichever reads better. */
+const kpiInk = c => { const n = parseInt(c.slice(1), 16), l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.62 ? "#1b2430" : "#fff"; };
 /** The six numbers as tiles: the period's, and on a day the month and the year so far under each. */
 function kpiTiles(p, from, to, day) {
   const t = kpiSum(p, from, to), mo = day ? kpiSum(p, `${day.slice(0, 7)}-01`, day) : null, yr = day ? kpiSum(p, `${day.slice(0, 4)}-01-01`, day) : null;
@@ -16825,6 +16839,8 @@ async function openKpiPeople() {
     p.old ? h("b", { class: "kpi-pname", text: p.name }) : h("input", { type: "text", class: "kpi-pname", maxlength: "40", value: p.name, placeholder: "Name (as on the Excel)", "aria-label": "Name", oninput: e => { p.name = e.target.value; } }),
     h("select", { class: "kpi-puser", "aria-label": "The login that types for this person", onchange: e => { p.user = e.target.value; } },
       h("option", { value: "", text: "No login" }), named.map(u => h("option", { value: u.id, text: u.name + (u.username ? ` (@${u.username})` : ""), selected: u.id === p.user }))),
+    h("input", { type: "color", class: "kpi-pcolor", value: /^#[0-9a-f]{6}$/i.test(p.color || "") ? p.color : "#9aa5b1", title: "His color (the Excel's tab color)", "aria-label": "Color",
+      oninput: e => { p.color = e.target.value; } }),
     h("label", { class: "check" }, h("input", { type: "checkbox", class: "kpi-poff", checked: !!p.off, onchange: e => { p.off = e.target.checked; } }), h("span", { text: "Left" })),
     p.old ? null : h("button", { class: "btn small", type: "button", "aria-label": "Remove", onclick: () => { list.splice(i, 1); draw(); } }, "✕"))),
     ...(list.length ? [] : [h("p", { class: "meta", text: "Nobody yet." })]));
@@ -16839,7 +16855,7 @@ async function openKpiPeople() {
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
       h("button", { class: "btn", type: "button", onclick: closeDialog }, "Cancel"),
       h("button", { class: "btn primary", type: "button", id: "kpiPeopleSave", onclick: async ev => {
-        const out = list.map(p => ({ name: String(p.name || "").trim(), user: p.user || "", off: !!p.off })).filter(p => p.name);
+        const out = list.map(p => Object.assign({ name: String(p.name || "").trim(), user: p.user || "", off: !!p.off }, /^#[0-9a-f]{6}$/i.test(p.color || "") ? { color: p.color } : {})).filter(p => p.name);
         const names = out.map(p => p.name.toLowerCase());
         if (names.some((n, i) => names.indexOf(n) !== i)) { err.textContent = "A name is there twice."; return; }
         const used = out.map(p => p.user).filter(Boolean);
@@ -16970,9 +16986,12 @@ function kpiParseTabs(tabs) {
     if (excel) { own.excel = excel; own.weekly = weekly; }
   }
   const order = [...new Set(tabs.map(t => (kpiTabName(t.name) || {}).p).filter(Boolean))];   // the people in the order the Excel has them
+  // each person's color: his tabs' color in the Excel (the newest tab's: the tabs run newest first)
+  const colors = {};
+  tabs.forEach(t => { const nm = kpiTabName(t.name); if (nm && t.tabColor && !colors[nm.p]) colors[nm.p] = "#" + t.tabColor; });
   const months = Object.values(out).filter(x => x.lines.length || (x.excel && x.excel.some(Boolean)))
     .sort((a, b) => b.m.localeCompare(a.m) || order.indexOf(a.p) - order.indexOf(b.p));
-  return { months, skipped, note, order };
+  return { months, skipped, note, order, colors };
 }
 function openKpiExcel() {
   const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", "aria-live": "polite" }), res = h("div", { id: "kpiXlResult", hidden: true });
@@ -17003,9 +17022,17 @@ function openKpiExcel() {
     foot();
   };
   const go = h("button", { class: "btn primary", type: "button", id: "kpiXlGo", disabled: true }, "Load");
-  const foot = () => { const n = Object.values(tick).filter(Boolean).length; go.disabled = !n; go.textContent = n ? `Load ${n} month${n === 1 ? "" : "s"}` : "Load"; };
+  // nothing ticked but the tabs have colors: just the people's colors (no month replaced)
+  const colorsOnly = () => !!found && !Object.values(tick).some(Boolean) && Object.keys(found.colors || {}).length > 0;
+  const foot = () => { const n = Object.values(tick).filter(Boolean).length; go.disabled = !n && !colorsOnly(); go.textContent = n ? `Load ${n} month${n === 1 ? "" : "s"}` : colorsOnly() ? "Load the colors only" : "Load"; };
   go.onclick = async () => {
     const pick = found.months.filter(x => tick[`${x.p}|${x.m}`]);
+    if (!pick.length && colorsOnly()) {
+      go.disabled = true; err.textContent = "";
+      try { await api("kpiImport", { months: [], colors: found.colors }); dlgDirty = false; closeDialog(); toast("Colors loaded"); kpiKey = ""; kpiLoad(); }
+      catch (e) { err.textContent = errText(e, "The colors"); go.disabled = false; }
+      return;
+    }
     if (!pick.length) return;
     const last = {};
     found.months.forEach(x => { if (!last[x.p] || x.m > last[x.p]) last[x.p] = x.m; });
@@ -17024,7 +17051,7 @@ function openKpiExcel() {
     try {
       for (const months of batches) {
         status.textContent = `Saving… ${done} of ${pick.length} months`;
-        await api("kpiImport", { months, left, order: found.order }, 120000);
+        await api("kpiImport", { months, left, order: found.order, colors: found.colors }, 120000);
         done += months.length;
       }
       status.textContent = "";
@@ -17041,7 +17068,7 @@ function openKpiExcel() {
       if (!f) return;
       try {
         status.textContent = "Reading…";
-        const tabs = await lbReadXlsx(await f.arrayBuffer(), n => !!kpiTabName(n));
+        const tabs = await lbReadXlsx(await f.arrayBuffer(), n => !!kpiTabName(n), { tabColor: true });
         found = kpiParseTabs(tabs);
         if (!found.months.length) { status.textContent = ""; err.textContent = "No tabs named for a person and a month (like “Name November 2026”) in that file."; return; }
         // what the app has already, to leave those months unticked
