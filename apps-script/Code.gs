@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 115;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 116;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -467,6 +467,21 @@ function doPost(e) {
       case "ofEstWho":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return ofEstWhoPut_(req); }));
+      case "trcDay":
+        if (!trcOk_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(trcDay_(req));
+      case "trcMark":
+        if (!trcOk_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return trcMark_(req, user); }));
+      case "trcReport":
+        if (!trcOk_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(trcReport_(req));
+      case "trcWho":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return trcWhoPut_(req); }));
+      case "trcImport":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return trcImport_(req); }));
       case "goals":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(goalsRead_(req.year));
@@ -5712,6 +5727,145 @@ function pcMarks_(req) {
   return { ok: true, marks: out.slice(-500), now: tmNow_().getTime() };
 }
 
+/* ---- Office › Tech Report Cards: the CSRs call the client of each cleaning and restoration job (yesterday's, to
+   start) and mark what the tech did, as the client tells it: on the way, called the client, brochure / business card,
+   other services, fiber protector benefits, offered an estimate, asked for a review, photos, invoice complete; or
+   Voicemail (couldn't reach the client). Each tech's report card adds them up (a week, month or year): of his jobs
+   called, how many had each one, and the %. Admins pick the CSRs who do it (nobody picked: admins only). One row a job
+   on the "Tech report cards" tab (a mark can be changed only the day it was made, except by an admin); months before
+   the app: each tech's month from the "6. TECHS Weekly Report Cards" Excel (Load from Excel). ---- */
+const TRC_SHEET = "Tech report cards", TRC_COLS = ["Job id", "Day", "Invoice #", "Client", "Techs", "Dept", "Voicemail", "Items", "By", "At", "Marked on"];
+const TRC_HIST = "Tech report card history", TRC_HIST_COLS = ["Month", "Tech", "Jobs", "On the way", "Called client", "Brochure", "Other services", "Fiber protector", "Offer estimate", "Review", "Photos", "Invoice complete", "Voicemail", "From"];
+const TRC_ITEMS = ["otw", "called", "bro", "other", "fiber", "est", "review", "photos", "inv"];
+const TRC_WHO = "TRC_WHO";
+const TRC_DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+function trcWho_() {
+  let v = [];
+  try { v = JSON.parse(PropertiesService.getScriptProperties().getProperty(TRC_WHO) || "[]") || []; } catch (e) { v = []; }
+  return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+}
+/** Admins, and the CSRs picked. */
+function trcOk_(user) { return !!user && (user.role === "admin" || trcWho_().indexOf(user.id) !== -1); }
+function trcWhoPut_(req) {
+  if (!Array.isArray(req.users) || req.users.length > 40) return { ok: false, error: "bad_request" };
+  const ids = {};
+  readUsers_(usersSheet_()).forEach(function (x) { ids[x.u.id] = true; });
+  const out = req.users.map(String).filter(function (id, i, a) { return ids[id] && a.indexOf(id) === i; });
+  PropertiesService.getScriptProperties().setProperty(TRC_WHO, JSON.stringify(out));
+  return { ok: true, users: out };
+}
+function trcRows_() {
+  const s = SpreadsheetApp.getActive().getSheetByName(TRC_SHEET);
+  return s && s.getLastRow() >= 2 ? s.getRange(2, 1, s.getLastRow() - 1, TRC_COLS.length).getValues() : [];
+}
+function trcMarkOf_(r, tz) {
+  const items = String(r[7] || "").split(",").filter(function (k) { return TRC_ITEMS.indexOf(k) !== -1; });
+  return { vm: Number(r[6]) === 1, items: items, by: String(r[8] || ""), at: r[9] instanceof Date ? r[9].toISOString() : String(r[9] || ""), on: pcDay_(r[10], tz) };
+}
+/** A day's cleaning and restoration jobs (Housecall Pro: not canceled, on that day), each with its techs, client and
+ *  phone, and its mark; jobs marked that day but not on it any more (moved) too. */
+function trcDay_(req) {
+  const tz = Session.getScriptTimeZone(), day = String(req.day || "");
+  if (!TRC_DAY.test(day)) return { ok: false, error: "bad_request" };
+  if (!hcpKey_()) return { ok: false, error: "no_key" };
+  const got = hcpJobsIn_(day, day);
+  if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
+  const marks = {};
+  trcRows_().forEach(function (r) { if (String(r[0])) marks[String(r[0])] = r; });
+  const jobs = [], seen = {};
+  got.jobs.forEach(function (j) {
+    if (!j || /cancel/i.test(String(j.work_status || ""))) return;
+    const start = new Date((j.schedule && j.schedule.scheduled_start) || "");
+    if (isNaN(start.getTime()) || Utilities.formatDate(start, tz, "yyyy-MM-dd") !== day) return;
+    const type = hcpJobType_(j), dept = revDept_(type);
+    if (dept !== "c" && dept !== "r") return;
+    const id = String(j.id || "");
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    const cu = j.customer || {}, techs = (Array.isArray(j.assigned_employees) ? j.assigned_employees : [])
+      .map(function (x) { return [x && x.first_name, x && x.last_name].filter(Boolean).join(" ").replace(/\s+/g, " ").trim(); }).filter(Boolean).slice(0, 6);
+    const a = j.address || {};
+    jobs.push({ id: id, inv: String(j.invoice_number || ""), client: hcpClient_(j), phone: pcPhone_(cu.mobile_number || cu.home_number || cu.work_number || ""),
+      addr: [a.street, a.city].filter(Boolean).join(", ").slice(0, 80), type: type.slice(0, 60), dept: dept, techs: techs,
+      time: (function (t) { const hh = Number(t.slice(0, 2)); return (hh % 12 || 12) + ":" + t.slice(3) + (hh < 12 ? " AM" : " PM"); })(Utilities.formatDate(start, tz, "HH:mm")), st: String(j.work_status || "").slice(0, 30), m: marks[id] ? trcMarkOf_(marks[id], tz) : null });
+  });
+  Object.keys(marks).forEach(function (id) {
+    const r = marks[id];
+    if (seen[id] || pcDay_(r[1], tz) !== day) return;
+    jobs.push({ id: id, inv: String(r[2] || ""), client: String(r[3] || ""), phone: "", addr: "", type: "", dept: String(r[5] || ""), techs: String(r[4] || "").split(", ").filter(Boolean),
+      time: "", st: "moved", gone: true, m: trcMarkOf_(r, tz) });
+  });
+  jobs.forEach(function (j) { const t = /^(\d+):(\d\d) (AM|PM)$/.exec(j.time); j.ts = t ? (Number(t[1]) % 12 + (t[3] === "PM" ? 12 : 0)) * 60 + Number(t[2]) : 9999; });
+  jobs.sort(function (x, y) { return (x.techs[0] || "~") < (y.techs[0] || "~") ? -1 : (x.techs[0] || "~") > (y.techs[0] || "~") ? 1 : x.ts - y.ts; });
+  jobs.forEach(function (j) { delete j.ts; });
+  return { ok: true, day: day, jobs: jobs, today: Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd") };
+}
+/** A CSR's mark on a job ({ id, day, inv, client, techs, dept, vm, items } or { id, clear: true }): reached (the items
+ *  the client said yes to, maybe none) or Voicemail. Changed only the day it was made, except by an admin. */
+function trcMark_(req, user) {
+  const tz = Session.getScriptTimeZone(), id = String(req.id || ""), today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) return { ok: false, error: "bad_request" };
+  const s = pcSheet_(TRC_SHEET, TRC_COLS), rows = trcRows_();
+  const i = rows.findIndex(function (r) { return String(r[0]) === id; });
+  if (i !== -1 && user.role !== "admin" && pcDay_(rows[i][10], tz) < today) return { ok: false, error: "locked", m: trcMarkOf_(rows[i], tz) };
+  if (req.clear === true) {
+    if (i !== -1) s.deleteRow(i + 2);
+    return { ok: true, m: null };
+  }
+  const day = String(req.day || ""), dept = String(req.dept || "");
+  const items = Array.isArray(req.items) ? req.items.map(String).filter(function (k, n, a) { return TRC_ITEMS.indexOf(k) !== -1 && a.indexOf(k) === n; }) : [];
+  const techs = Array.isArray(req.techs) ? req.techs.map(function (t) { return String(t || "").replace(/[,\s]+/g, " ").trim().slice(0, 60); }).filter(Boolean).slice(0, 6) : [];
+  if (!TRC_DAY.test(day) || day > today || (dept && dept !== "c" && dept !== "r")) return { ok: false, error: "bad_request" };
+  const vm = req.vm === true;
+  const row = [id, day, String(req.inv || "").slice(0, 20), String(req.client || "").replace(/\s+/g, " ").trim().slice(0, 80), techs.join(", "), dept, vm ? 1 : 0, vm ? "" : items.join(","),
+    user.name, new Date().toISOString(), today];
+  if (i !== -1) s.getRange(i + 2, 1, 1, TRC_COLS.length).setNumberFormat("@").setValues([row]);
+  else {
+    const first = Math.max(2, s.getLastRow() + 1);
+    if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
+    s.getRange(first, 1, 1, TRC_COLS.length).setNumberFormat("@").setValues([row]);
+  }
+  return { ok: true, m: trcMarkOf_(row, tz) };
+}
+/** The marks from..to (by the job's day, a year at most), short: [day, techs, dept, vm, items, job id, invoice, client], and the Excel's months
+ *  ([month, tech, jobs, each item, voicemail]) for the months the app has no marks in. */
+function trcReport_(req) {
+  const tz = Session.getScriptTimeZone(), from = String(req.from || ""), to = String(req.to || "");
+  if (!TRC_DAY.test(from) || !TRC_DAY.test(to) || from > to || to > tmAddDays_(from, 370)) return { ok: false, error: "bad_request" };
+  const marks = [], live = {};
+  trcRows_().forEach(function (r) {
+    const d = pcDay_(r[1], tz);
+    if (!d) return;
+    live[d.slice(0, 7)] = true;
+    if (d < from || d > to) return;
+    marks.push([d, String(r[4] || ""), String(r[5] || ""), Number(r[6]) === 1 ? 1 : 0, String(r[7] || ""), String(r[0] || ""), String(r[2] || ""), String(r[3] || "")]);
+  });
+  const hist = [];
+  const hs = SpreadsheetApp.getActive().getSheetByName(TRC_HIST);
+  if (hs && hs.getLastRow() >= 2) hs.getRange(2, 1, hs.getLastRow() - 1, TRC_HIST_COLS.length).getValues().forEach(function (r) {
+    const m = rpMonth_(r[0], tz);
+    if (!m || live[m] || m < from.slice(0, 7) || m > to.slice(0, 7)) return;
+    hist.push([m, String(r[1] || "")].concat(r.slice(2, 13).map(function (v) { return Math.max(0, Math.round(Number(v) || 0)); })));
+  });
+  return { ok: true, from: from, to: to, marks: marks, hist: hist, first: Object.keys(live).sort()[0] || "" };
+}
+/** Admin: the Excel's months ({ rows: [[month, tech, jobs, 9 items, voicemail]] }): they replace what was loaded before. */
+function trcImport_(req) {
+  const rows = Array.isArray(req.rows) ? req.rows : null;
+  if (!rows || rows.length > 3000) return { ok: false, error: "bad_request" };
+  const out = [];
+  rows.forEach(function (x) {
+    if (!Array.isArray(x) || !RP_YM.test(String(x[0] || "")) || !rpName_(x[1])) return;
+    const n = x.slice(2, 13).map(function (v) { return Math.max(0, Math.min(100000, Math.round(Number(v) || 0))); });
+    while (n.length < 11) n.push(0);
+    if (!n.some(Boolean)) return;
+    out.push([String(x[0]), rpName_(x[1]).slice(0, 40)].concat(n).concat(["Excel"]));
+  });
+  out.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1; });
+  mktWrite_(mktSheet_(TRC_HIST, TRC_HIST_COLS, true), TRC_HIST_COLS, out);
+  return { ok: true, saved: out.length };
+}
+
 /* ---- Office › Estimates: who follows them up (Admins pick; nobody picked: everyone with Office) and the call marks on
    each one, as on Past clients: Not now, Voicemail, Booked, Call back (a day and what the client said), Don't call again.
    One row a mark on the "Estimate calls" tab; the last one of each estimate counts. ---- */
@@ -7551,7 +7705,8 @@ function ofRead_(user, year) {
   let pcAuto = pcAutoFrom_(false);
   if (!pcAuto) { try { withTabLock_(function () { pcAuto = pcAutoFrom_(true); if (pcAuto) ofPcSync_(pcAuto); }); } catch (e) { pcAuto = pcAutoFrom_(false); } }
   const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_(),
-    estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined, pcAuto: pcAuto };
+    estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined, pcAuto: pcAuto,
+    trcOk: trcOk_(user), trcWho: user.role === "admin" ? trcWho_() : undefined };
   lbRows_(ofSheet_(false)).forEach(function (r) {
     if (r.key === "config") out.config = lbParse_(r.json);
     else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);

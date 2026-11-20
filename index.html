@@ -980,6 +980,26 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-val { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 9px; }
 .of-in:has(.of-ratio) .of-val { padding-right: 6.6em; }
 .of-row-stats { grid-column: 3; margin: 0; justify-self: end; text-align: right; font-size: .82rem; }
+/* Tech Report Cards: a card a job (Reached / Voicemail, then the items); the report: a table, % big, count small */
+.trc-list { display: grid; gap: 8px; }
+.trc-job { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 10px 12px; display: grid; gap: 6px; }
+.trc-job.ok { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.trc-job.vm { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }
+.trc-top { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.trc-client { font-weight: 700; }
+.trc-techs { font-size: .9rem; }
+.trc-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.trc-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.trc-items .chip-btn[aria-pressed="true"]::before, .trc-st[aria-pressed="true"]::before { content: "✓ "; }
+.trc-by { margin-left: auto; }
+.trc-table td, .trc-table th { text-align: center; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+.trc-table thead th { white-space: normal; min-width: 4.6em; font-size: .7rem; line-height: 1.2; vertical-align: bottom; }
+.trc-table th.trc-name { text-align: left; }
+.trc-pct b { display: block; } .trc-pct small { color: var(--muted); font-size: .72rem; }
+.trc-pct.hi b { color: var(--good, #15803d); }
+.trc-table tr.trc-open { cursor: pointer; } .trc-table tr.trc-open:hover { background: var(--accent-soft); }
+.trc-table tr.trc-tot { font-weight: 700; border-top: 2px solid var(--line); }
+.trc-tick { color: var(--accent); font-weight: 800; }
 /* Referral Partners: a line a partner (tap: its jobs); phone: name, then the numbers */
 .rp-row { display: grid; grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, 1fr)); gap: 4px 12px; align-items: baseline; padding: 8px 12px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .rp-row > span { display: flex; flex-direction: column; min-width: 0; }
@@ -16754,7 +16774,7 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates", kpi: "KPI", cpm: "Clients Per Month", rp: "Referral Partners" };
+const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates", kpi: "KPI", cpm: "Clients Per Month", rp: "Referral Partners", trc: "Tech Report Cards" };
 const OF_EST_API = 95;                                   // the Google script version with Office › Estimates (Cleaning's)
 const OF_EST_FU_API = 99;                                // ... and who follows them up, with the call marks
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
@@ -16776,7 +16796,8 @@ async function ofLoad(year) {
       for (const [k, p] of Object.entries(ofPending)) months[k] = lbMerge(months[k] || {}, lbClone(p));   // keep what's still being saved
       ofData = { config: out.config || { people: [] }, months, year: y, admin: !!out.admin, me: out.me || "", at: new Date().toISOString(),
         estOk: out.estOk !== false, estWho: Array.isArray(out.estWho) ? out.estWho : [],   // who follows up Office › Estimates
-        pcAuto: lbIsDay(out.pcAuto) ? out.pcAuto : "" };   // from this day: Past clients' numbers counted, not typed
+        pcAuto: lbIsDay(out.pcAuto) ? out.pcAuto : "",   // from this day: Past clients' numbers counted, not typed
+        trcOk: out.trcOk === true, trcWho: Array.isArray(out.trcWho) ? out.trcWho : [] };   // Tech Report Cards: may she, and (admins) who
       store.set(K_OF, ofData);
     } else ofYears[y] = { months: out.months || {} };
     ofErr = ""; ofOld = false;
@@ -16850,13 +16871,14 @@ function ofTabsEl(cur) {
   const of = ofCan(), estOk = (!apiLevel || apiLevel >= OF_EST_API) && (!ofData || ofData.estOk !== false);
   const list = [];
   for (const [k, t] of Object.entries(OF_TABS)) {
-    if (k === "rp") continue;   // after Marketing
+    if (k === "rp" || k === "trc") continue;   // after Marketing
     const ok = k === "kpi" ? kpiCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());
     if (ok) list.push([k, t]);
     if (k === "kpi" && atInOf()) list.push(["at", "Attendance"]);
   }
   if (mkInOf()) list.push(["mkt", "Marketing"]);
   if (of && rpCan()) list.push(["rp", OF_TABS.rp]);
+  if (trcCan()) list.push(["trc", OF_TABS.trc]);
   const seg = lbSeg(list, cur, k => {
     if (k === cur) return;
     if (view.tab === "office") ofFlush();   // a day being typed is saved first
@@ -16890,22 +16912,23 @@ function renderOffice() {
     return;
   }
   const cfg = ofCfg(), admin = isAdmin();
-  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()));
+  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()) && (k !== "trc" || trcCan()));
   if (!shown.some(([k]) => k === ofView.tab)) ofView.tab = "today";
-  const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm", rp = ofView.tab === "rp";   // People and Load from Excel: the KPI's on its tab; Clients Per Month and Referral Partners: their Excels
+  const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm", rp = ofView.tab === "rp", trc = ofView.tab === "trc";   // People and Load from Excel: the KPI's on its tab; Clients Per Month and Referral Partners: their Excels
   const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" }),
     admin ? h("div", { class: "lb-acts" },
-      cpm ? null : rp ? h("button", { class: "btn", type: "button", id: "rpPartnersBtn", disabled: !rpData, onclick: () => rpPartnersDlg(rpShownMonth()) }, "Partners")
+      cpm ? null : trc ? h("button", { class: "btn", type: "button", id: "trcWhoBtn", onclick: () => openTrcWho() }, "Who calls")
+        : rp ? h("button", { class: "btn", type: "button", id: "rpPartnersBtn", disabled: !rpData, onclick: () => rpPartnersDlg(rpShownMonth()) }, "Partners")
         : h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
-      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : rp ? openRpExcel() : openOfExcel() }, "Load from Excel")) : null);
+      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : rp ? openRpExcel() : trc ? openTrcExcel() : openOfExcel() }, "Load from Excel")) : null);
   const tabs = ofTabsEl(ofView.tab);
-  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi && !cpm && !rp) {
+  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi && !cpm && !rp && !trc) {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
       ofErr ? h("p", { class: "dlg-err", text: ofErr }) : "");
     return;
   }
-  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : cpm ? cpmEl() : rp ? rpEl() : ofTodayEl();
+  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : cpm ? cpmEl() : rp ? rpEl() : trc ? trcEl() : ofTodayEl();
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
   if (ofView.tab === "today") ofShowSave();
 }
@@ -17668,6 +17691,287 @@ function openRpExcel() {
       renderOffice();
     } catch (x) {
       err.textContent = x && x.error === "bad_request" && (Number(x.api) || 0) < RP_API ? "The Google script needs its new version first (Deploy › Manage deployments › New version)." : errText(x, "Nothing");
+      go.disabled = false; go.textContent = "Load"; armed = false;
+    }
+  };
+}
+/* ---- Office › Tech Report Cards (admins and the CSRs picked): Calls: a day's cleaning and restoration jobs from
+   Housecall Pro (yesterday's, to start), each with its techs and the client's phone; the CSR calls the client and taps
+   Reached, then what the tech did as the client tells it, or Voicemail. Report cards: each tech's jobs called in a
+   week, month or year, and how many had each item (and the %), like the Excel; months before the app from the Excel
+   (Load from Excel). A mark can be changed only the day it's made (admins: any day). ---- */
+const TRC_API = 116;                                     // the Google script version with Tech Report Cards
+const TRC_ITEMS = [["otw", "On the way"], ["called", "Called client"], ["bro", "Brochure / card"], ["other", "Other services"], ["fiber", "Fiber protector"],
+  ["est", "Offered estimate"], ["review", "Asked for review"], ["photos", "Photos"], ["inv", "Invoice complete"]];
+const TRC_DEPS = [["all", "All"], ["c", "Cleaning"], ["r", "Restoration"]];
+const K_TRC_VIEW = "voda.trcView1";
+const trcView = Object.assign({ v: "calls", per: "month", off: 0, dep: "all", day: "" }, store.get(K_TRC_VIEW) || {}, { off: 0, day: "" });
+const trcSaveView = () => store.set(K_TRC_VIEW, { v: trcView.v, per: trcView.per, dep: trcView.dep });
+const trcCan = () => !!(ofData && ofData.trcOk) || isAdmin();
+const trcDays = {}, trcRep = {}, trcBusy = {}, trcTimers = {};
+let trcErr = "", trcOld = false;
+/** The last day the office was open before today (yesterday; Monday: Saturday). */
+function trcPrevOpen() { let d = lbAddDays(lbToday(), -1); for (let i = 0; i < 7 && (lbDate(d).getDay() === 0 || lbHoliday(d)); i++) d = lbAddDays(d, -1); return d; }
+const trcKey = n => String(n || "").trim().split(/\s+/)[0].toLowerCase();   // a tech across Housecall Pro ("Fred Lane") and the Excel ("FRED")
+const trcNice = n => String(n || "").trim().replace(/\s+/g, " ").replace(/\b([A-Za-z])([A-Za-z']*)/g, (_, a, b) => a.toUpperCase() + b.toLowerCase());
+async function trcLoadDay(day, force) {
+  if (trcBusy[day]) return;
+  trcBusy[day] = true;
+  try { const out = await api("trcDay", { day }, 120000); trcDays[day] = { jobs: out.jobs || [], at: Date.now(), today: out.today }; trcErr = ""; trcOld = false; }
+  catch (e) { trcOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < TRC_API); trcErr = trcOld ? "" : e && e.error ? (HCP_ERRORS[e.error] || errText(e, "The jobs")) : errText(e, "The jobs"); if (force) toast(trcErr || "The Google script needs its new version"); }
+  trcBusy[day] = false;
+  if (view.tab === "office" && ofView.tab === "trc") renderOffice();
+}
+async function trcLoadRep(y) {
+  const k = `y${y}`;
+  if (trcBusy[k]) return;
+  trcBusy[k] = true;
+  const today = lbToday(), to = `${y}-12-31` > today ? today : `${y}-12-31`;
+  try { const out = await api("trcReport", { from: `${y}-01-01`, to }, 120000); trcRep[y] = Object.assign(out, { at: Date.now() }); trcErr = ""; trcOld = false; }
+  catch (e) { trcOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < TRC_API); trcErr = trcOld ? "" : errText(e, "The report cards"); }
+  trcBusy[k] = false;
+  if (view.tab === "office" && ofView.tab === "trc") renderOffice();
+}
+function trcEl() {
+  const out = [];
+  if (trcOld || (apiLevel && apiLevel < TRC_API)) {
+    out.push(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Tech Report Cards needs the newest Google script: Deploy › Manage deployments › pencil › New version › Deploy." })));
+    return out;
+  }
+  out.push(h("div", { class: "lb-bar" }, lbSeg([["calls", "Calls"], ["cards", "Report cards"]], trcView.v === "cards" ? "cards" : "calls", k => { trcView.v = k; trcSaveView(); renderOffice(); }, "View"),
+    lbSeg(TRC_DEPS, trcView.dep, k => { trcView.dep = k; trcSaveView(); renderOffice(); }, "Department")));
+  return out.concat(trcView.v === "cards" ? trcCardsEl() : trcCallsEl());
+}
+/* -- Calls: one day's jobs -- */
+function trcCallsEl() {
+  const out = [], today = lbToday(), day = lbIsDay(trcView.day) && trcView.day <= today ? trcView.day : trcPrevOpen();
+  const go = d => { trcView.day = d > today ? today : d; renderOffice(); };
+  const D = trcDays[day];
+  if ((!D || Date.now() - D.at > 5 * 60e3) && !trcBusy[day]) setTimeout(() => trcLoadDay(day), 0);
+  out.push(h("div", { class: "of-dayrow" }, h("div", { class: "lb-daybar" },
+    h("button", { class: "btn small", type: "button", id: "trcPrev", "aria-label": "Previous day", onclick: () => go(lbAddDays(day, -1)) }, "‹"),
+    lbDateInput({ id: "trcDay", value: day, max: today, "aria-label": "Day" }, v => go(v), "2020-01-01", today),
+    h("button", { class: "btn small", type: "button", id: "trcNext", "aria-label": "Next day", disabled: day >= today, onclick: () => go(lbAddDays(day, 1)) }, "›"),
+    h("button", { class: "btn small", type: "button", id: "trcRead", disabled: !!trcBusy[day], title: "Read this day's jobs from Housecall Pro again", onclick: () => trcLoadDay(day, true) }, trcBusy[day] ? "Reading…" : "Read again"))));
+  if (!D) { out.push(h("p", { class: "loading", text: trcErr || "Reading the day's jobs from Housecall Pro…" })); return out; }
+  const admin = isAdmin(), dep = trcView.dep;
+  const jobs = D.jobs.filter(j => dep === "all" || j.dept === dep);
+  const reached = jobs.filter(j => j.m && !j.m.vm).length, vm = jobs.filter(j => j.m && j.m.vm).length, left = jobs.length - reached - vm;
+  out.push(h("div", { class: "cpm-tots trc-tots" },
+    h("div", { class: "of-tot" }, h("small", { text: "Jobs" }), h("b", { id: "trcJobs", text: fmt(jobs.length) })),
+    h("div", { class: "of-tot" }, h("small", { text: "Reached" }), h("b", { id: "trcReached", text: fmt(reached) })),
+    h("div", { class: "of-tot" }, h("small", { text: "Voicemail" }), h("b", { id: "trcVm", text: fmt(vm) })),
+    h("div", { class: "of-tot" + (left ? " down" : "") }, h("small", { text: "To call" }), h("b", { id: "trcLeft", text: fmt(left) }))));
+  if (!jobs.length) { out.push(h("p", { class: "meta", id: "trcNone", text: `No ${dep === "c" ? "cleaning " : dep === "r" ? "restoration " : "cleaning or restoration "}jobs in Housecall Pro on ${lbDayText(day)}.` })); return out; }
+  out.push(h("div", { class: "trc-list", id: "trcList" }, jobs.map(j => trcJobEl(j, day, admin, D.today || today))));
+  return out;
+}
+function trcJobEl(j, day, admin, today) {
+  const m = j.m, locked = !!(m && !admin && m.on && m.on < today);
+  const tel = String(j.phone || "").replace(/\D/g, "");
+  const set = (vm, items) => trcSet(j, day, vm, items);
+  const state = !m ? "" : m.vm ? "vm" : "ok";
+  return h("div", { class: "trc-job" + (state ? ` ${state}` : ""), "data-id": j.id },
+    h("div", { class: "trc-top" },
+      h("span", { class: "trc-client" }, j.inv ? hcpLink("job", j.id, j.client || `#${j.inv}`) : (j.client || "(no name)")),
+      j.inv ? h("span", { class: "meta", text: `#${j.inv}` }) : null,
+      tel ? h("a", { class: "pc-tel", href: `tel:+1${tel.slice(-10)}` }, j.phone) : h("span", { class: "meta", text: j.gone ? "" : "no phone" }),
+      h("span", { class: "meta", text: [j.time, j.type].filter(Boolean).join(" · ") })),
+    h("div", { class: "trc-techs" }, h("b", { text: j.techs.length ? j.techs.join(", ") : "(no tech on the job)" }), j.gone ? h("span", { class: "meta", text: " · moved to another day in Housecall Pro" }) : null),
+    h("div", { class: "trc-acts" },
+      h("button", { class: "chip-btn trc-st", type: "button", "data-s": "ok", "aria-pressed": String(state === "ok"), disabled: locked, onclick: () => (state === "ok" ? trcClear(j, day) : set(false, m && !m.vm ? m.items : [])) }, "Reached"),
+      h("button", { class: "chip-btn trc-st", type: "button", "data-s": "vm", "aria-pressed": String(state === "vm"), disabled: locked, onclick: () => (state === "vm" ? trcClear(j, day) : set(true, [])) }, "Voicemail"),
+      m ? h("span", { class: "meta trc-by", text: locked ? `Locked · ${m.by}` : [m.by, m.saving ? "saving…" : ""].filter(Boolean).join(" · ") }) : null),
+    state === "ok" ? h("div", { class: "trc-items" }, TRC_ITEMS.map(([k, t]) => h("button", { class: "chip-btn sm", type: "button", "data-k": k, "aria-pressed": String(m.items.includes(k)), disabled: locked,
+      onclick: () => set(false, m.items.includes(k) ? m.items.filter(x => x !== k) : m.items.concat(k)) }, t))) : null);
+}
+/** A mark: on the screen at once, saved a moment later (taps close together go as one). */
+function trcSet(j, day, vm, items) {
+  j.m = Object.assign({}, j.m || {}, { vm, items: vm ? [] : TRC_ITEMS.map(x => x[0]).filter(k => items.includes(k)), by: session ? session.name || "" : "", on: lbToday(), saving: true });
+  renderOffice();
+  clearTimeout(trcTimers[j.id]);
+  trcTimers[j.id] = setTimeout(async () => {
+    const m = j.m;
+    try {
+      const out = await api("trcMark", { id: j.id, day, inv: j.inv, client: j.client, techs: j.techs, dept: j.dept, vm: m.vm, items: m.items });
+      if (j.m === m) j.m = out.m;
+      delete trcRep[Number(day.slice(0, 4))];
+    } catch (e) {
+      j.m = e && e.error === "locked" && e.m ? e.m : null;
+      toast(e && e.error === "locked" ? "That job was marked on an earlier day: it stays as it is. Ask Mike to change it." : "That wasn't saved. " + errText(e, "The mark"));
+    }
+    if (view.tab === "office" && ofView.tab === "trc") renderOffice();
+  }, 600);
+}
+async function trcClear(j, day) {
+  clearTimeout(trcTimers[j.id]);
+  const was = j.m;
+  j.m = null; renderOffice();
+  try { await api("trcMark", { id: j.id, clear: true }); delete trcRep[Number(day.slice(0, 4))]; }
+  catch (e) { j.m = e && e.m ? e.m : was; toast(e && e.error === "locked" ? "That job was marked on an earlier day: it stays as it is." : "That wasn't saved. " + errText(e, "The mark")); }
+  if (view.tab === "office" && ofView.tab === "trc") renderOffice();
+}
+/* -- Report cards: each tech, a week, month or year -- */
+function trcSum(marks, hist, dep) {
+  const by = {}, T = k => by[k] || (by[k] = { name: "", jobs: 0, vm: 0, ok: 0, items: {}, list: [], xl: [] });
+  for (const [d, techs, dp, vm, items, id, inv, client] of marks) {
+    if (dep !== "all" && dp !== dep) continue;
+    const list = String(items || "").split(",").filter(Boolean);
+    for (const name of String(techs || "").split(", ").filter(Boolean)) {
+      const t = T(trcKey(name));
+      if (name.length > t.name.length) t.name = name;
+      t.jobs++; if (vm) t.vm++; else t.ok++;
+      for (const k of list) t.items[k] = (t.items[k] || 0) + 1;
+      t.list.push({ d, id, inv, client, vm: !!vm, items: list });
+    }
+  }
+  if (dep === "all") for (const [m, name, jobs, ...n] of hist) {
+    const t = T(trcKey(name));
+    if (!t.name) t.name = trcNice(name);
+    t.jobs += jobs; t.vm += n[9] || 0; t.ok += Math.max(0, jobs - (n[9] || 0));
+    TRC_ITEMS.forEach(([k], i) => { if (n[i]) t.items[k] = (t.items[k] || 0) + n[i]; });
+    t.xl.push(m);
+  }
+  return by;
+}
+function trcCardsEl() {
+  const out = [], per = ["week", "month", "year"].includes(trcView.per) ? trcView.per : "month", off = Math.min(0, Number(trcView.off) || 0);
+  const r = ofRange(per, off), today = lbToday(), to = r.to > today ? today : r.to, y = Number(to.slice(0, 4));
+  const step = n => { trcView.off = Math.min(0, off + n); renderOffice(); };
+  out.push(h("div", { class: "lb-bar" },
+    lbSeg([["week", "Week"], ["month", "Month"], ["year", "Year"]], per, k => { trcView.per = k; trcView.off = 0; trcSaveView(); renderOffice(); }, "Period"),
+    h("div", { class: "of-step" },
+      h("button", { class: "btn small", type: "button", id: "trcCPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+      h("strong", { id: "trcRange", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
+      h("button", { class: "btn small", type: "button", id: "trcCNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›"))));
+  const years = [...new Set([Number(r.from.slice(0, 4)), y])];
+  for (const yy of years) if ((!trcRep[yy] || Date.now() - trcRep[yy].at > 5 * 60e3) && !trcBusy[`y${yy}`]) setTimeout(() => trcLoadRep(yy), 0);
+  if (years.some(yy => !trcRep[yy])) { out.push(h("p", { class: "loading", text: trcErr || "Loading the report cards…" })); return out; }
+  const marks = years.flatMap(yy => trcRep[yy].marks).filter(x => x[0] >= r.from && x[0] <= to);
+  const hist = per === "week" ? [] : years.flatMap(yy => trcRep[yy].hist).filter(x => x[0] >= r.from.slice(0, 7) && x[0] <= to.slice(0, 7));
+  const by = trcSum(marks, hist, trcView.dep), keys = Object.keys(by).filter(k => by[k].jobs).sort((a, b) => by[b].jobs - by[a].jobs || by[a].name.localeCompare(by[b].name));
+  const xlMonths = [...new Set(hist.map(x => x[0]))].sort();
+  if (xlMonths.length) out.push(h("p", { class: "meta", id: "trcFromXl", text: `From the Excel: ${xlMonths.map(m => `${lbMonthLong(Number(m.slice(5))).slice(0, 3)} ${m.slice(0, 4)}`).join(", ")}.` }));
+  if (trcView.dep !== "all" && years.some(yy => trcRep[yy].hist.length)) out.push(h("p", { class: "meta", text: "Months from the Excel aren't split by department: they show under All." }));
+  if (!keys.length) { out.push(h("p", { class: "meta", id: "trcEmpty", text: "No jobs called in this period yet." })); return out; }
+  const tot = { name: "All techs", jobs: 0, vm: 0, ok: 0, items: {} };
+  for (const k of keys) { const t = by[k]; tot.jobs += t.jobs; tot.vm += t.vm; tot.ok += t.ok; for (const [i, n] of Object.entries(t.items)) tot.items[i] = (tot.items[i] || 0) + n; }
+  const pctCell = (n, of, plain) => h("td", { class: "trc-pct" + (!plain && of && n / of >= .8 ? " hi" : "") }, h("b", { text: of ? `${Math.round(n / of * 100)}%` : "–" }), h("small", { text: fmt(n) }));
+  const row = (t, k) => h("tr", Object.assign({ "data-tech": t.name }, k ? { class: "trc-open", tabindex: "0", title: "His jobs", onclick: () => trcTechDlg(t, r.label), onkeydown: e => { if (e.key === "Enter") trcTechDlg(t, r.label); } } : { class: "trc-tot" }),
+    h("th", { class: "trc-name", text: t.name }), h("td", { class: "trc-n", text: fmt(t.jobs) }), pctCell(t.ok, t.jobs), pctCell(t.vm, t.jobs, true),
+    TRC_ITEMS.map(([i]) => pctCell(t.items[i] || 0, t.jobs)));
+  out.push(h("div", { class: "lb-scroll" }, h("table", { class: "lb-table trc-table", id: "trcTable" },
+    h("thead", null, h("tr", null, h("th", { text: "Tech" }), h("th", { text: "Jobs" }), h("th", { text: "Reached" }), h("th", { text: "Voicemail" }), TRC_ITEMS.map(([, t]) => h("th", { text: t })))),
+    h("tbody", null, keys.map(k => row(by[k], k)), keys.length > 1 ? row(tot, "") : null))));
+  out.push(howFold("trcHow", h("p", { class: "hint", text: "Jobs: each tech's cleaning and restoration jobs the CSRs called (reached or voicemail); a job with two techs counts for both. Each item: how many of those jobs the client said yes to, and the % of his jobs (as on the Excel). Months before the app come from the Excel (Load from Excel), all departments together." }), "How it's counted"));
+  return out;
+}
+function trcTechDlg(t, period) {
+  const list = t.list.slice().sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `${t.name} · ${period}` }),
+    h("div", { class: "cpm-jobs" }, ...[
+      t.xl.length ? h("p", { class: "meta", text: `From the Excel, no jobs to list: ${t.xl.map(m => `${lbMonthLong(Number(m.slice(5))).slice(0, 3)} ${m.slice(0, 4)}`).join(", ")}.` }) : null,
+      list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cpm-jobs-table", id: "trcTechTable" },
+        h("thead", null, h("tr", null, ["Day", "#", "Client", "Reached", ...TRC_ITEMS.map(x => x[1])].map(x => h("th", { text: x })))),
+        h("tbody", null, list.map(x => h("tr", { "data-inv": x.inv },
+          h("td", { text: lbDayText(x.d) }), h("td", null, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : ""), h("td", { class: "cpm-j-client", text: x.client || "(no name)" }),
+          h("td", { text: x.vm ? "Voicemail" : "Yes" }), TRC_ITEMS.map(([k]) => h("td", { class: "trc-tick", text: x.items.includes(k) ? "✓" : "" }))))))) : null].filter(Boolean)),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+}
+/** Admins: the CSRs who call the clients (they and admins see the tab; nobody picked: admins only). */
+async function openTrcWho() {
+  let users;
+  try { users = (await stFetch("users", () => api("users"))).users || []; } catch (x) { toast(errText(x, "The logins")); return; }
+  const office = users.filter(u => u.role !== "admin" && u.status === "active" && (u.role === "csr" || (u.access || []).some(a => a === "office" || a === "office-edit")))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const now = ((ofData && ofData.trcWho) || []).filter(id => office.some(u => u.id === id));
+  const err = h("p", { class: "dlg-err", role: "alert" }), hint = h("p", { class: "meta", id: "trcWhoNow" });
+  const show = () => { hint.textContent = now.length ? `${office.filter(u => now.includes(u.id)).map(u => u.name).join(", ")} (and admins) see Tech Report Cards.` : "Nobody picked: only admins see Tech Report Cards."; };
+  show();
+  openDialog(h("h3", { id: "dlgTitle", text: "Who calls for the report cards" }),
+    office.length ? h("div", { class: "chips", id: "trcWhoList" }, office.map(u => h("button", { class: "chip-btn", type: "button", "data-id": u.id, "aria-pressed": String(now.includes(u.id)),
+      onclick: ev => { const on = ev.currentTarget.getAttribute("aria-pressed") !== "true"; ev.currentTarget.setAttribute("aria-pressed", String(on));
+        const i = now.indexOf(u.id); if (on && i === -1) now.push(u.id); if (!on && i !== -1) now.splice(i, 1); show(); } }, u.name)))
+      : h("p", { class: "meta", text: "Nobody with Office yet (Settings › Users and invites)." }),
+    hint, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog }, "Cancel"),
+      h("button", { class: "btn primary", type: "button", id: "trcWhoSave", onclick: async ev => {
+        ev.currentTarget.disabled = true; err.textContent = "";
+        try { const o = await api("trcWho", { users: now }); if (ofData) ofData.trcWho = o.users; dlgDirty = false; closeDialog(); toast("Saved"); renderOffice(); }
+        catch (x) { err.textContent = errText(x, "Nothing"); ev.currentTarget.disabled = false; }
+      } }, "Save"))));
+}
+/** The Excel's month tabs ("November 2026"): each tech's block (his name, "F. Jobs" and the items), its weekday rows
+ *  added up → [[month, tech, jobs, 9 items, voicemail]]. */
+const TRC_XL_COL = [[/on the way/i, "otw"], [/called/i, "called"], [/brochure|card/i, "bro"], [/other serv/i, "other"], [/fiber|protector/i, "fiber"], [/estimate/i, "est"],
+  [/review/i, "review"], [/photo/i, "photos"], [/invoice/i, "inv"], [/voice ?mail/i, "vm"]];
+function trcReadXlsx(tabs) {
+  const out = [], WD = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
+  for (const t of tabs) {
+    const nm = /^\s*([A-Za-z]+)\s+(\d{4})\s*$/.exec(t.name || ""), mi = nm ? MKT_MON.indexOf(nm[1].toLowerCase()) : -1;
+    if (mi < 0) continue;
+    const m = `${nm[2]}-${String(mi + 1).padStart(2, "0")}`, rows = t.rows || [], cell = (r, c) => { const v = (rows[r] || [])[c]; return v == null ? "" : v; };
+    let hr = -1;
+    for (let r = 0; r < 6 && hr < 0; r++) if ((rows[r] || []).some(v => /^[A-Za-z]{1,3}\.?\s*jobs$/i.test(String(v == null ? "" : v).trim()))) hr = r;
+    if (hr < 0) continue;
+    for (let c = 1; c < (rows[hr] || []).length; c++) {
+      if (!/^[A-Za-z]{1,3}\.?\s*jobs$/i.test(String(cell(hr, c)).trim())) continue;
+      const cols = {};
+      for (let k = c + 1; k < c + 12; k++) { const head = String(cell(hr, k)).trim(); if (!head || /jobs$/i.test(head)) break; const f = TRC_XL_COL.find(([re]) => re.test(head)); if (f && cols[f[1]] == null) cols[f[1]] = k; }
+      let mr = -1;
+      for (let r = hr + 1; r < rows.length && mr < 0; r++) if (/^monthly$/i.test(String(cell(r, c - 1)).trim())) mr = r;
+      const name = trcNice(String((mr > 0 && cell(mr - 1, c)) || cell(0, c)).trim());
+      if (!name) continue;
+      const n = { jobs: 0 };
+      for (let r = hr + 1; r < (mr > 0 ? mr : rows.length); r++) {
+        if (!WD.test(String(cell(r, c - 1)).trim())) continue;
+        n.jobs += mktNum(cell(r, c));
+        for (const [k, col] of Object.entries(cols)) n[k] = (n[k] || 0) + mktNum(cell(r, col));
+      }
+      const vals = [n.jobs, ...TRC_ITEMS.map(([k]) => n[k] || 0), n.vm || 0].map(v => Math.round(v));
+      if (vals.some(Boolean)) out.push([m, name, ...vals]);
+    }
+  }
+  return out;
+}
+/** Admin: Load from Excel on Tech Report Cards. */
+function openTrcExcel() {
+  let got = null, armed = false;
+  const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", role: "status" }), sum = h("div", { id: "trcXlSum" });
+  const go = h("button", { class: "btn primary", type: "button", id: "trcXlGo", disabled: true, text: "Load" });
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Load Tech Report Cards from Excel" }),
+    howFold("trcXlHow", h("p", { class: "hint", text: "Choose an Excel copy of 6. TECHS Weekly Report Cards (File > Download > Microsoft Excel). The app reads every month tab (like “November 2026”): each tech's days added up for the month. Months the app has its own calls for use those; the Excel fills the months before. Loading again replaces what was loaded." }), "How it works"),
+    h("input", { type: "file", id: "trcXlFile", accept: ".xlsx", onchange: async e => {
+      err.textContent = ""; sum.replaceChildren(); go.disabled = true; armed = false; go.textContent = "Load";
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        status.textContent = "Reading…";
+        got = trcReadXlsx(await lbReadXlsx(await f.arrayBuffer(), n => /^\s*[A-Za-z]+\s+\d{4}\s*$/.test(n)));
+        status.textContent = "";
+        if (!got.length) { err.textContent = "No month tabs (like “November 2026”) with techs' “Jobs” columns in that file."; return; }
+        const years = {};
+        for (const [m, , jobs] of got) { const y = years[m.slice(0, 4)] || (years[m.slice(0, 4)] = { months: new Set(), jobs: 0 }); y.months.add(m); y.jobs += jobs; }
+        sum.replaceChildren(h("table", { class: "lb-table", id: "trcXlTable" }, h("thead", null, h("tr", null, ["Year", "Months", "Jobs"].map(t => h("th", { text: t })))),
+          h("tbody", null, Object.keys(years).sort().reverse().map(y => h("tr", { "data-year": y }, h("th", { text: y }), h("td", { text: String(years[y].months.size) }), h("td", { text: fmt(years[y].jobs) }))))));
+        go.disabled = false; dlgDirty = true;
+      } catch (x) { status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
+    } }),
+    status, sum, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), go)));
+  go.onclick = async () => {
+    if (!got) return;
+    if (!armed) { armed = true; go.textContent = "Tap again to load"; return; }
+    go.disabled = true; go.textContent = "Saving…";
+    try {
+      const out = await api("trcImport", { rows: got }, 170000);
+      for (const k of Object.keys(trcRep)) delete trcRep[k];
+      dlgDirty = false; closeDialog(); toast(`Tech Report Cards loaded (${fmt(out.saved || 0)} tech-months)`); renderOffice();
+    } catch (x) {
+      err.textContent = x && x.error === "bad_request" && (Number(x.api) || 0) < TRC_API ? "The Google script needs its new version first (Deploy › Manage deployments › New version)." : errText(x, "Nothing");
       go.disabled = false; go.textContent = "Load"; armed = false;
     }
   };
