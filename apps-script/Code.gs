@@ -5997,20 +5997,24 @@ function priceWatchSetup() {
   Logger.log(JSON.stringify(priceScan()));
 }
 
-/* ---- Booked jobs (Office › Office Scorecard, Admins only): every job put on the schedule in Housecall Pro, as the hourly
-   check of Price changes sees it (the jobs changed most recently): the day it was put on the schedule, its amount then
-   (the booked revenue), who booked it and, once it's serviced, its amount then (the increase or decrease). Who booked
-   it: a tag on the job in Housecall Pro ("Booked: <name>"), else a Booked mark in the app for the same client
-   (Past clients: the client, within BK_MARK_DAYS of the job; Office › Estimates and Today's calls: the job made from
-   that estimate, else a job for the same client's name within BK_MARK_DAYS). Housecall Pro's API doesn't say who made a
-   job (its Activity feed isn't in the API). Kept from the first check after this was added (BK_FROM): jobs made before
-   then aren't counted. One row a visit on the Bookings tab; a job's visits ("1234-2") are one booking. ---- */
+/* ---- Booked jobs (Office › Office Scorecard, Admins only): each office person's jobs on the schedule for a day (the day
+   of their first visit), whenever she booked them: how many, their amount when booked (the booked revenue) and, once
+   serviced, what they came to (the increase or decrease). The hourly check of Price changes reads the jobs changed most
+   recently; once a day it also reads every job on the schedule from today on (BK_AHEAD_DAYS), so the ones booked before
+   the app kept them, and not changed since, are there too (their amount: the one first seen). Who booked it: a tag on
+   the job in Housecall Pro ("Booked: <name>"), else a Booked mark in the app for the same client (Past clients: the
+   client, within BK_MARK_DAYS of the day it was booked; Office › Estimates and Today's calls: the job made from that
+   estimate, else a job for the same client's name within BK_MARK_DAYS). Housecall Pro's API doesn't say who made a job
+   (its Activity feed isn't in the API). Kept from the first check after this was added (BK_FROM): jobs made since, and
+   jobs on the schedule from that day on. One row a visit on the Bookings tab; a job's visits ("1234-2") are one job. ---- */
 const BK_SHEET = "Bookings";
-const BK_COLS = ["Job id", "Job #", "Created at", "First seen", "Booked day", "Booked at", "Booked $", "Tagged by", "Customer id", "Client",
+const BK_COLS = ["Job id", "Job #", "Created at", "First seen", "Booked day", "Booked at", "Booked $", "Service day", "Tagged by", "Customer id", "Client",
   "From estimate", "Now $", "Job status", "Done at", "Last seen", "Card fee $", "Fee read at $", "Tags"];
-const BK_FROM = "BK_FROM", BK_ERR = "BK_ERR";
-const BK_FEE_MAX = 25;   // serviced jobs' card fees read a check (their line items); the rest at the next one
-const BK_MARK_DAYS = 3;  // a Booked mark counts for a job put on the schedule up to 3 days before or after it
+const BK = { day: 4, at: 5, bc: 6, svc: 7, tag: 8, cust: 9, client: 10, est: 11, now: 12, st: 13, done: 14, seen: 15, fee: 16, feeAt: 17, tags: 18 };
+const BK_FROM = "BK_FROM", BK_ERR = "BK_ERR", BK_AHEAD = "BK_AHEAD_DAY";
+const BK_AHEAD_DAYS = 93;  // once a day: the jobs on the schedule for today and the next 3 months
+const BK_FEE_MAX = 25;     // serviced jobs' card fees read a check (their line items); the rest at the next one
+const BK_MARK_DAYS = 3;    // a Booked mark counts for a job booked up to 3 days before or after it
 /** The name on a "Booked: <name>" tag (also "Booked by <name>", "Booked - <name>"), or "". */
 function bkTagWho_(tags) {
   const list = (Array.isArray(tags) ? tags : []).map(function (t) { return String((t && typeof t === "object" ? t.name : t) || "").trim(); });
@@ -6022,19 +6026,43 @@ function bkTagWho_(tags) {
 }
 const bkNum_ = function (v) { return v === "" || v === null || v === undefined || !isFinite(Number(v)) ? null : Math.round(Number(v) * 100); };
 const bkIso_ = function (v) { return v instanceof Date ? (isNaN(v.getTime()) ? "" : v.toISOString()) : String(v || ""); };
+/** The day a job is on the schedule for (its scheduled start, in the script's time zone), or "". */
+function bkSvcDay_(job, tz) {
+  const d = new Date((job && job.schedule && job.schedule.scheduled_start) || "");
+  return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, "yyyy-MM-dd");
+}
 function bkRows_() {
   const s = SpreadsheetApp.getActive().getSheetByName(BK_SHEET);
   return s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, BK_COLS.length).getValues().filter(function (r) { return r[0]; }) : [];
 }
-/** After each check: the jobs it read (made since BK_FROM) kept on the Bookings tab. A serviced job's card fee (a
- *  "Credit Card Service Charge" line) is read once for each amount it's serviced at, before the tab is locked. */
+/** After each check: the jobs it read, and once a day every job on the schedule from today on, kept on the Bookings tab
+ *  (those made since BK_FROM, and those on the schedule from its day on). A serviced job's card fee (a "Credit Card
+ *  Service Charge" line) is read once for each amount it's serviced at, before the tab is locked. */
 function bkStep_(jobs, now) {
-  const P = PropertiesService.getScriptProperties();
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone();
   let from = String(P.getProperty(BK_FROM) || "");
   if (!from) { from = new Date(now).toISOString(); P.setProperty(BK_FROM, from); }
-  const fromMs = Date.parse(from) || now;
-  const mine = (jobs || []).filter(function (j) { return j && j.id && (Date.parse(j.created_at || "") || 0) >= fromMs; });
-  if (!mine.length) return { kept: 0, booked: 0, fees: 0 };
+  const fromMs = Date.parse(from) || now, fromDay = Utilities.formatDate(new Date(fromMs), tz, "yyyy-MM-dd");
+  const today = Utilities.formatDate(new Date(now), tz, "yyyy-MM-dd");
+  let list = (jobs || []).slice(), ahead = 0;
+  if (String(P.getProperty(BK_AHEAD) || "") !== today) {
+    let ok = true;
+    for (let k = 0; k < BK_AHEAD_DAYS && ok; k += HCP_MAX_DAYS) {
+      const got = hcpJobsIn_(tmAddDays_(today, k), tmAddDays_(today, Math.min(k + HCP_MAX_DAYS, BK_AHEAD_DAYS) - 1));
+      if (got.error) ok = false;
+      else { list = list.concat(got.jobs); ahead += got.jobs.length; }
+    }
+    if (ok) P.setProperty(BK_AHEAD, today);
+  }
+  const once = {};
+  const mine = list.filter(function (j) {
+    if (!j || !j.id || once[j.id]) return false;
+    once[j.id] = true;
+    if ((Date.parse(j.created_at || "") || 0) >= fromMs) return true;
+    const d = bkSvcDay_(j, tz);
+    return !!d && d >= fromDay;
+  });
+  if (!mine.length) return { kept: 0, ahead: ahead };
   const had = {};
   bkRows_().forEach(function (r) { had[String(r[0])] = r; });
   const fee = {};
@@ -6042,14 +6070,16 @@ function bkStep_(jobs, now) {
   mine.forEach(function (j) {
     if (!/complete/i.test(String(j.work_status || ""))) return;
     const cents = Math.round(Number(j.total_amount) || 0), r = had[String(j.id)];
-    if (r && bkNum_(r[16]) === cents) return;   // read at this amount already
+    if (r && bkNum_(r[BK.feeAt]) === cents) return;   // read at this amount already
     if (!cents) { fee[j.id] = 0; return; }
     if (reads >= BK_FEE_MAX) return;
     reads++;
     const f = repJobFee_(j.id);
     if (f !== null) fee[j.id] = f;
   });
-  return withLock_(function () { return bkKeep_(mine, now, fee); });
+  const out = withLock_(function () { return bkKeep_(mine, now, fee); });
+  out.ahead = ahead;
+  return out;
 }
 function bkKeep_(jobs, now, fee) {
   const tz = Session.getScriptTimeZone(), at = new Date(now).toISOString();
@@ -6072,19 +6102,20 @@ function bkKeep_(jobs, now, fee) {
       i = rows.length; at_[id] = i; rows.push(r0); added++;
     }
     const r = rows[i];
-    if (!pcDay_(r[4], tz) && (sch.scheduled_start || started) && !/cancel/i.test(st)) {
+    if (!pcDay_(r[BK.day], tz) && (sch.scheduled_start || started) && !/cancel/i.test(st)) {
       // put on the schedule: when it was made (seen the first time), else the change that scheduled it. Its amount then
       // is the booked revenue; one first seen after the visit started: not known
       const when = (first ? String(job.created_at || "") : String(job.updated_at || "")) || at;
-      r[4] = dayOf(when) || dayOf(at); r[5] = when; r[6] = started ? "" : cents / 100; booked++;
-    } else if (pcDay_(r[4], tz) && !started && bkNum_(r[6]) === 0 && cents > 0) r[6] = cents / 100;   // priced after it was made, before the visit
+      r[BK.day] = dayOf(when) || dayOf(at); r[BK.at] = when; r[BK.bc] = started ? "" : cents / 100; booked++;
+    } else if (pcDay_(r[BK.day], tz) && !started && bkNum_(r[BK.bc]) === 0 && cents > 0) r[BK.bc] = cents / 100;   // priced after it was made, before the visit
     const ests = [job.original_estimate_id].concat(Array.isArray(job.original_estimate_uuids) ? job.original_estimate_uuids : [])
       .map(function (x) { return String(x || "").trim(); }).filter(function (x, k, a) { return x && a.indexOf(x) === k; });
     const tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return String((t && typeof t === "object" ? t.name : t) || "").trim(); }).filter(Boolean);
-    r[1] = String(job.invoice_number || ""); r[7] = bkTagWho_(job.tags); r[8] = String((job.customer && job.customer.id) || job.customer_id || "");
-    r[9] = hcpClient_(job); r[10] = ests.join(",").slice(0, 400); r[11] = cents / 100; r[12] = st; r[13] = String(wt.completed_at || ""); r[14] = at;
-    if (Object.prototype.hasOwnProperty.call(fee, id)) { r[15] = fee[id] / 100; r[16] = cents / 100; }
-    r[17] = tags.join(", ").slice(0, 300);
+    r[1] = String(job.invoice_number || ""); r[BK.svc] = bkSvcDay_(job, tz); r[BK.tag] = bkTagWho_(job.tags);
+    r[BK.cust] = String((job.customer && job.customer.id) || job.customer_id || ""); r[BK.client] = hcpClient_(job); r[BK.est] = ests.join(",").slice(0, 400);
+    r[BK.now] = cents / 100; r[BK.st] = st; r[BK.done] = String(wt.completed_at || ""); r[BK.seen] = at;
+    if (Object.prototype.hasOwnProperty.call(fee, id)) { r[BK.fee] = fee[id] / 100; r[BK.feeAt] = cents / 100; }
+    r[BK.tags] = tags.join(", ").slice(0, 300);
   });
   if (rows.length) {
     s.getRange(2, 1, rows.length, BK_COLS.length).setValues(rows);
@@ -6092,42 +6123,45 @@ function bkKeep_(jobs, now, fee) {
   }
   return { kept: jobs.length, added: added, booked: booked, fees: Object.keys(fee).length };
 }
-/** A job's visits as one booking: the day its first visit ("1234" or "1234-1") was put on the schedule, the visits put
- *  on the schedule that day (their amounts then: booked $; null when one isn't known), and, once every visit not
- *  canceled is serviced, what they came to (the visits added later too, less card fees). */
-function bkGroups_(rows, tz) {
+/** A job's visits as one job: on the schedule for its first visit's day (day), booked the day its first visit was put on
+ *  the schedule (bday); its booked $: the visits put on the schedule that same day (null when one isn't known); once
+ *  every visit not canceled is serviced, what they came to (later visits too, less card fees). Booked before the app
+ *  kept them (pre): its amount is the one first seen (seen: that day). */
+function bkGroups_(rows, tz, fromMs) {
   const by = {};
   rows.forEach(function (r) {
     const inv = String(r[1] || "").trim(), base = inv.replace(/-\d+$/, "");
     if (!base) return;
-    const st = String(r[12] || "");
-    (by[base] || (by[base] = [])).push({ inv: inv, first: hcpFirstVisit_({ invoice_number: inv }), day: pcDay_(r[4], tz), at: bkIso_(r[5]), bc: bkNum_(r[6]),
-      tag: String(r[7] || ""), cust: String(r[8] || ""), client: String(r[9] || ""), ests: String(r[10] || "").split(",").filter(Boolean),
-      now: bkNum_(r[11]) || 0, can: /cancel/i.test(st), done: /complete/i.test(st), fee: bkNum_(r[15]) || 0 });
+    const st = String(r[BK.st] || "");
+    (by[base] || (by[base] = [])).push({ inv: inv, first: hcpFirstVisit_({ invoice_number: inv }), bday: pcDay_(r[BK.day], tz), sday: pcDay_(r[BK.svc], tz), bc: bkNum_(r[BK.bc]),
+      tag: String(r[BK.tag] || ""), cust: String(r[BK.cust] || ""), client: String(r[BK.client] || ""), ests: String(r[BK.est] || "").split(",").filter(Boolean),
+      now: bkNum_(r[BK.now]) || 0, can: /cancel/i.test(st), done: /complete/i.test(st), fee: bkNum_(r[BK.fee]) || 0,
+      pre: (Date.parse(bkIso_(r[2])) || 0) < fromMs, seen: pcDay_(r[3] instanceof Date ? r[3] : new Date(String(r[3] || "")), tz) });
   });
   const out = [];
   Object.keys(by).forEach(function (base) {
-    const vs = by[base], first = vs.filter(function (v) { return v.first && v.day; })[0];
-    if (!first) return;   // its first visit was made before the app kept them (or isn't on the schedule yet)
-    const booking = vs.filter(function (v) { return v.day === first.day; }), live = vs.filter(function (v) { return !v.can; });
+    const vs = by[base], first = vs.filter(function (v) { return v.first && v.bday && v.sday; })[0];
+    if (!first) return;   // its first visit isn't on the schedule (or was made, and done, before the app kept them)
+    const booking = vs.filter(function (v) { return v.bday === first.bday; }), live = vs.filter(function (v) { return !v.can; });
     let bc = 0;
     booking.forEach(function (v) { bc = bc === null || v.bc === null ? null : bc + v.bc; });
     const st = !live.length ? "x" : live.every(function (v) { return v.done; }) ? "d" : "o";
     const tagged = [first].concat(booking).filter(function (v) { return v.tag; })[0];
     const ests = [];
     vs.forEach(function (v) { v.ests.forEach(function (e) { if (ests.indexOf(e) === -1) ests.push(e); }); });
-    out.push({ inv: first.inv, day: first.day, at: first.at, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
-      tag: tagged ? tagged.tag : "", cust: first.cust, client: first.client, ests: ests });
+    out.push({ inv: first.inv, day: first.sday, bday: first.bday, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
+      tag: tagged ? tagged.tag : "", cust: first.cust, client: first.client, ests: ests, pre: first.pre, seen: first.pre ? first.seen : "" });
   });
   return out;
 }
-/** Who booked each one: its tag, else a Booked mark in the app (the last mark on an estimate or a past client). */
+/** Who booked each one: its tag, else a Booked mark in the app (the last mark on an estimate or a past client), near the
+ *  day it was booked. */
 function bkCredit_(groups, tz) {
   const norm = function (v) { return String(v || "").toLowerCase().replace(/\s+/g, " ").trim(); };
   const gap = function (a, b) { return Math.abs(Date.parse(a + "T12:00:00Z") - Date.parse(b + "T12:00:00Z")) / 864e5; };
   groups.forEach(function (g) { if (g.tag) { g.name = g.tag; g.how = "tag"; } });
-  const pick = function (list, day) {   // the one put on the schedule closest to the mark
-    return list.filter(function (g) { return !g.how && gap(g.day, day) <= BK_MARK_DAYS; }).sort(function (a, b) { return gap(a.day, day) - gap(b.day, day); })[0];
+  const pick = function (list, day) {   // the one booked closest to the mark
+    return list.filter(function (g) { return !g.how && gap(g.bday, day) <= BK_MARK_DAYS; }).sort(function (a, b) { return gap(a.bday, day) - gap(b.bday, day); })[0];
   };
   // Office › Estimates and Today's calls: the job made from that estimate (any day), else one for the client's name
   const est = {};
@@ -6154,9 +6188,10 @@ function bkCredit_(groups, tz) {
   });
   return groups;
 }
-/** Admins and Office (any day): the jobs put on the schedule from..to (yyyy-MM-dd, a year at most), each with who booked
- *  it (by: the office person on the scorecard; name: as the tag or the mark has it), its booked $ and, once serviced,
- *  what it came to (cents). Runs the hourly check when it's 2 hours behind (and sets it up the first time). */
+/** Admins and Office (any day): the jobs on the schedule from..to (yyyy-MM-dd, a year at most: their first visit's day),
+ *  each with who booked it (by: the office person on the scorecard; name: as the tag or the mark has it), the day it was
+ *  booked, its booked $ and, once serviced, what it came to (cents). Runs the hourly check when it's 2 hours behind (and
+ *  sets it up the first time). */
 function ofBooked_(req) {
   const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")); };
   const from = String(req.from || ""), to = String(req.to || "");
@@ -6167,7 +6202,7 @@ function ofBooked_(req) {
   if (hcpKey_() && Date.now() - (Number(P.getProperty(PRICE_AT)) || 0) > 2 * 3600e3) { const o = priceScan(); err = o.ok ? "" : String(o.error || "error"); }
   const since = String(P.getProperty(BK_FROM) || "");
   // credited across every booking (a mark goes to the job closest to it), then the days asked
-  const groups = bkCredit_(bkGroups_(bkRows_(), tz), tz).filter(function (g) { return g.day >= from && g.day <= to; });
+  const groups = bkCredit_(bkGroups_(bkRows_(), tz, Date.parse(since) || 0), tz).filter(function (g) { return g.day >= from && g.day <= to; });
   // the name on a tag or a mark → the office person: a mark's login (the person it's linked to in People), else the name
   let cfg = { people: [] };
   lbRows_(ofSheet_(false)).forEach(function (r) { if (r.key === "config") cfg = ofConfig_(lbParse_(r.json)); });
@@ -6186,7 +6221,8 @@ function ofBooked_(req) {
     return firsts.length === 1 ? firsts[0].name : "";
   };
   const jobs = groups.map(function (g) {
-    return { inv: g.inv, day: g.day, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n };
+    return { inv: g.inv, day: g.day, bday: g.bday, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n,
+      seen: g.seen || "" };
   }).sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : a.inv < b.inv ? 1 : -1; });
   return { ok: true, from: from, to: to, since: since ? pcDay_(new Date(since), tz) : "", scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err,
     bkErr: String(P.getProperty(BK_ERR) || ""), trigger: trigger, connected: !!hcpKey_(), jobs: jobs };
