@@ -844,7 +844,9 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .ec-foot { margin: 6px 0 0; font-size: .76rem; color: var(--muted); }
 .ec-days { display: flex; gap: 6px; align-items: center; margin-top: 6px; } .ec-days input { flex: 1; min-width: 0; }
 @media (min-width: 1760px) {
-  body[data-tab="estimates"] { --page-w: 1760px; }
+  /* Estimates with Today's calls beside it: the page grows to the right only, so the top bar and the tabs stay where
+     they are on every other tab */
+  body[data-tab="estimates"] .page:has(#estView > .est-calls) { max-width: none; width: auto; margin-left: max(0px, calc((100% - var(--page-w) - 48px) / 2)); margin-right: 0; }
   body[data-tab="estimates"] #estView:has(> .est-calls) { max-width: none; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; column-gap: 24px; }
   .est-calls { order: 0; position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
 }
@@ -979,6 +981,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-in:has(.of-ratio) .of-val { padding-right: 6.6em; }
 .of-row-stats { grid-column: 3; margin: 0; justify-self: end; text-align: right; font-size: .82rem; }
 /* Clients Per Month: the totals, then one table (sources by group); phone: two lines a source */
+.of-fold { display: grid; gap: 12px; justify-items: start; }
+@media (max-width: 600px) { .of-fold { justify-items: stretch; } }
 .cpm-tots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
 @media (min-width: 900px) { .cpm-tots { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .cpm-tots .of-tot { flex-wrap: wrap; }   /* a big number goes under its name rather than out of the box */
@@ -2649,7 +2653,8 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 @media (max-width: 600px) {
   .views.many .view-btn { flex: 1 1 0; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: .68rem; letter-spacing: .02em; min-width: 0; }
   .views.many .view-btn svg { display: block; width: 18px; height: 18px; }
-  .views.five .view-btn { font-size: .58rem; letter-spacing: -.01em; padding: 6px 0; }
+  .views.five { gap: 0; }
+  .views.five .view-btn { flex: 1 1 auto; font-size: .58rem; letter-spacing: -.01em; padding: 6px 0; }   /* a longer name (Leaderboard) gets the room it needs */
 }
 @media (max-width: 370px) { .views.many .view-btn { font-size: .6rem; letter-spacing: 0; } }
 @media (max-width: 370px) { .views.five .view-btn { font-size: .54rem; } #revTable { font-size: .76rem; } #revTable th, #revTable td { padding: 5px 2px; } #revTable td .rev-was { padding: 2px 3px 3px; font-size: .68rem; } }
@@ -5933,8 +5938,8 @@ function label(t) { return [t.unit, t.driver].filter(Boolean).join(" · ") || "T
 
 /* ---------- view (filters, search, sort) ---------- */
 const K_VIEW = "voda.view";
-const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "", list: "", lbSide: "leaderboard", whSide: "trucks" }, store.get(K_VIEW) || {});
-function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab, list: view.list, lbSide: view.lbSide, whSide: view.whSide }); }
+const view = Object.assign({ filter: "all", q: "", sort: "urgent", tmOnly: false, division: "", tab: "trucks", supTab: "", list: "", lbSide: "leaderboard", whSide: "trucks", ofSide: "office" }, store.get(K_VIEW) || {});
+function saveView() { store.set(K_VIEW, { filter: view.filter, sort: view.sort, tmOnly: view.tmOnly, division: view.division, tab: view.tab, supTab: view.supTab, list: view.list, lbSide: view.lbSide, whSide: view.whSide, ofSide: view.ofSide }); }
 const DIVISIONS = ["Cleaning", "Restoration"];
 const divClass = d => d === "Cleaning" ? "cleaning" : d === "Restoration" ? "restoration" : "none";
 const inScope = t => !view.division || t.division === view.division;
@@ -8718,8 +8723,12 @@ function allowedTabs() {
 const repInLb = () => { const t = allowedTabs(); return t.includes("repairs") && t.includes("leaderboard"); };
 /** ... and Contractor Payroll next to it. */
 const cpInLb = () => { const t = allowedTabs(); return t.includes("contractors") && t.includes("leaderboard"); };
+/** Whoever sees Office and Attendance gets Attendance in Office's row (after KPI) instead of a tab of its own at the top. */
+const atInOf = () => { const t = allowedTabs(); return t.includes("attendance") && t.includes("office"); };
+/** ... and Marketing (after Clients Per Month). */
+const mkInOf = () => { const t = allowedTabs(); return t.includes("marketing") && t.includes("office"); };
 /** The tabs on the bar at the top. */
-const navTabs = () => allowedTabs().filter(t => (t !== "repairs" || !repInLb()) && (t !== "contractors" || !cpInLb()))
+const navTabs = () => allowedTabs().filter(t => (t !== "repairs" || !repInLb()) && (t !== "contractors" || !cpInLb()) && (t !== "attendance" || !atInOf()) && (t !== "marketing" || !mkInOf()))
   .map(t => (t === "trucks" || t === "supplies" ? "warehouse" : t)).filter((t, i, a) => a.indexOf(t) === i);   // Trucks and Checklists: one Warehouse tab
 /** The Leaderboard's or Revenue's name over it: only when there's no bar at the top already saying it. */
 const secTitle = text => (navTabs().length < 2 ? h("h2", { class: "lb-title", text }) : null);
@@ -8839,6 +8848,7 @@ function setTab(tab, sub) {
   view.tab = ["supplies", "leaderboard", "office", "attendance", "revenue", "estimates", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
   if (view.tab === "leaderboard" || view.tab === "repairs" || view.tab === "contractors") view.lbSide = view.tab;
   if (view.tab === "trucks" || view.tab === "supplies") view.whSide = view.tab;
+  if (view.tab === "office" || view.tab === "attendance" || view.tab === "marketing") view.ofSide = view.tab;   // Office's tab opens where you were
   if (sub) view.supTab = sub;
   saveView();
   applyTab();
@@ -8866,7 +8876,7 @@ function applyTab() {
   $("whTabs").hidden = !(trk || sup) || !tabs.includes("trucks") || !tabs.includes("supplies");
   $("viewLeaderboard").hidden = !tabs.includes("leaderboard");
   $("viewOffice").hidden = !tabs.includes("office");
-  $("viewAttendance").hidden = !tabs.includes("attendance");
+  $("viewAttendance").hidden = !nav.includes("attendance");
   $("viewRevenue").hidden = !nav.includes("revenue");
   $("viewEstimates").hidden = !nav.includes("estimates");
   $("viewRepairs").hidden = !nav.includes("repairs");
@@ -8891,7 +8901,7 @@ function applyTab() {
   $("viewTrucks").setAttribute("aria-selected", String(trk));
   $("viewSupplies").setAttribute("aria-selected", String(sup));
   $("viewLeaderboard").setAttribute("aria-pressed", String(lb || (rp && folded) || (cp && cpInLb())));
-  $("viewOffice").setAttribute("aria-pressed", String(of));
+  $("viewOffice").setAttribute("aria-pressed", String(of || (at && atInOf()) || (mk && mkInOf())));
   $("viewAttendance").setAttribute("aria-pressed", String(at));
   $("viewRevenue").setAttribute("aria-pressed", String(rv));
   $("viewEstimates").setAttribute("aria-pressed", String(es));
@@ -8915,7 +8925,7 @@ $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
 // Warehouse: the one of Trucks and Checklists used last (that this person may see)
 $("viewWarehouse").addEventListener("click", () => { const t = allowedTabs(); setTab(t.includes(view.whSide) ? view.whSide : t.includes("trucks") ? "trucks" : "supplies"); });
-$("viewOffice").addEventListener("click", () => setTab("office"));
+$("viewOffice").addEventListener("click", () => setTab(atInOf() && view.ofSide === "attendance" ? "attendance" : mkInOf() && view.ofSide === "marketing" ? "marketing" : "office"));
 $("viewAttendance").addEventListener("click", () => setTab("attendance"));
 $("viewRevenue").addEventListener("click", () => setTab("revenue"));
 $("viewEstimates").addEventListener("click", () => setTab("estimates"));
@@ -15434,12 +15444,12 @@ function renderMarketing() {
   const box = $("mktView");
   if (!box || view.tab !== "marketing" || !session) return;
   if (mktOld || (apiLevel && apiLevel < MKT_API)) {
-    box.replaceChildren(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+    box.replaceChildren(...(mkInOf() ? ofFoldTop("mkt") : []), h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "Marketing needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." })));
     return;
   }
   if (!mktData) {
-    box.replaceChildren(h("p", { class: "loading", text: mktErr || (offline ? "Marketing needs a connection the first time. Try again when you're back online." : "Loading marketing…") }));
+    box.replaceChildren(...(mkInOf() ? ofFoldTop("mkt") : []), h("p", { class: "loading", text: mktErr || (offline ? "Marketing needs a connection the first time. Try again when you're back online." : "Loading marketing…") }));
     if (!mktErr) mktLoad();
     return;
   }
@@ -15469,8 +15479,8 @@ function renderMarketing() {
   const ranges = () => [[`${months[0]}-01`, upTo || lastDay(months[months.length - 1])]]
     .concat(cmp ? [[`${back(months[0])}-01`, cmpUpTo || lastDay(back(months[months.length - 1]))]] : []);
   const step = n => { mktView.off = Math.min(0, off + n); renderMarketing(); };
-  const title = secTitle("Marketing");
-  const top = title ? h("div", { class: "lb-top" }, title) : null;
+  const title = mkInOf() ? null : secTitle("Marketing");   // in Office's row: Office's name and the row on top
+  const top = mkInOf() ? h("div", { class: "of-fold" }, ...ofFoldTop("mkt")) : title ? h("div", { class: "lb-top" }, title) : null;
   // the controls: the period, then the department and what to compare with
   const cmpSel = h("select", { id: "mktCmp", class: "mkt-sel", "aria-label": "Compare with", onchange: e => { mktView.cmp = Number(e.target.value) || 0; mktSaveView(); renderMarketing(); } },
     h("option", { value: "0", text: "No compare" }), Array.from({ length: REV_CMP_YEARS }, (_, i) => h("option", { value: String(i + 1), text: `vs ${y - i - 1}` })));
@@ -16643,13 +16653,37 @@ function ofShowSave() {
 }
 
 /* ---- the screen ---- */
+/** Office's row of tabs: its own (Office Calls … Clients Per Month, as the login may see them), with Attendance after KPI
+ *  and Marketing after Clients Per Month for whoever sees those too (they're their own pages: the row takes you there). */
+function ofTabsEl(cur) {
+  const of = ofCan(), estOk = (!apiLevel || apiLevel >= OF_EST_API) && (!ofData || ofData.estOk !== false);
+  const list = [];
+  for (const [k, t] of Object.entries(OF_TABS)) {
+    const ok = k === "kpi" ? kpiCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());
+    if (ok) list.push([k, t]);
+    if (k === "kpi" && atInOf()) list.push(["at", "Attendance"]);
+  }
+  if (mkInOf()) list.push(["mkt", "Marketing"]);
+  const seg = lbSeg(list, cur, k => {
+    if (k === cur) return;
+    if (view.tab === "office") ofFlush();   // a day being typed is saved first
+    if (k === "at") { setTab("attendance"); return; }
+    if (k === "mkt") { setTab("marketing"); return; }
+    ofView.tab = k; ofSaveView();
+    if (view.tab !== "office") setTab("office"); else renderOffice();
+  }, "Office");
+  seg.classList.add("of-tabs");
+  return seg;
+}
+/** Attendance's and Marketing's top when they're in Office's row: Office's name and the row (their own buttons stay theirs). */
+const ofFoldTop = cur => [h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" })), ofTabsEl(cur)];
 function renderOffice() {
   const box = $("ofView");
   if (!box || view.tab !== "office" || !session) return;
   if (lbHoldForDate(box, renderOffice)) return;   // a date being typed: draw once it's done
-  if (!ofCan()) {   // KPI only: just its page
+  if (!ofCan()) {   // KPI only: just its page (with Attendance and Marketing beside it, when he sees them)
     ofView.tab = "kpi";
-    box.replaceChildren(h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "KPI" })), ...kpiEl());
+    box.replaceChildren(...(atInOf() || mkInOf() ? ofFoldTop("kpi") : [h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "KPI" }))]), ...kpiEl());
     return;
   }
   if (ofOld || (apiLevel && apiLevel < OF_API && !ofData)) {
@@ -16670,8 +16704,7 @@ function renderOffice() {
     admin ? h("div", { class: "lb-acts" },
       cpm ? null : h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
       h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : openOfExcel() }, "Load from Excel")) : null);
-  const tabs = lbSeg(shown, ofView.tab, k => { ofFlush(); ofView.tab = k; ofSaveView(); renderOffice(); }, "Office");
-  tabs.classList.add("of-tabs");
+  const tabs = ofTabsEl(ofView.tab);
   if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi && !cpm) {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
@@ -18891,14 +18924,15 @@ function renderAttendance() {
   if (!box || view.tab !== "attendance" || !session) return;
   if (lbHoldForDate(box, renderAttendance)) return;      // a date being typed: draw once it's done
   const admin = isAdmin(), today = lbToday();
-  const title = secTitle("Attendance");
+  const fold = atInOf(), title = fold ? null : secTitle("Attendance");   // in Office's row: Office's name and the row on top
+  const top = fold ? ofFoldTop("at") : title ? [h("div", { class: "lb-top" }, title)] : [];
   if (atOld || (apiLevel && apiLevel < AT_API)) {
-    box.replaceChildren(...[title, h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+    box.replaceChildren(...[...top, h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
       h("p", { class: "meta", text: "Attendance needs the newest Google script. In the app's Google Sheet: Extensions > Apps Script. Paste the latest Code.gs from GitHub (apps-script/Code.gs) and press Ctrl+S. Then Deploy > Manage deployments > pencil > Version: New version > Deploy. Refresh the app after that." }))].filter(Boolean));
     return;
   }
   if (!atData || atData.year !== atThisYear()) {
-    box.replaceChildren(...[title, atErr ? h("p", { class: "dlg-err" }, atErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { atErr = ""; atLoad(); renderAttendance(); } }, "Try again"))
+    box.replaceChildren(...[...top, atErr ? h("p", { class: "dlg-err" }, atErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { atErr = ""; atLoad(); renderAttendance(); } }, "Try again"))
       : h("p", { class: "loading", text: offline ? "Attendance needs a connection the first time. Try again when you're back online." : "Loading attendance…" })].filter(Boolean));
     if (!atErr) atLoad();
     return;
@@ -18939,7 +18973,7 @@ function renderAttendance() {
   const saveNote = h("p", { class: "lb-save" + (atSaveErr ? " error" : atInflight.length ? " saving" : ""), id: "atSaveNote", role: "status", hidden: !atSaveErr && !atInflight.length },
     atSaveErr ? [h("span", { text: atSaveErr }), " ", atRetry ? h("button", { class: "btn small", type: "button", id: "atRetry", onclick: () => { const j = atRetry; atRetry = null; atSaveErr = ""; atSaveDays(j.key, j.days); } }, "Try again") : null]
       : atInflight.length ? "Saving…" : "");
-  const head = [title ? h("div", { class: "lb-top" }, title) : null, bar, saveNote].filter(Boolean);
+  const head = [...top, bar, saveNote].filter(Boolean);
   const days = atDaysIn(r.from, r.to);
   if (!days) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4) === r.to.slice(0, 4) ? r.from.slice(0, 4) : `${r.from.slice(0, 4)} – ${r.to.slice(0, 4)}`}…` })); return; }
   const people = atPeopleFor(r.from, r.to, days);
