@@ -988,20 +988,25 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .rp-row.cpm-head { border-top: 0; }
 .rp-name { display: block !important; }
 .rp-name b { color: var(--muted); font-weight: 700; margin-right: 2px; }
-.rp-name small { display: block; }
 .rp-sent.due small { color: var(--due); font-weight: 700; }
-.rp-table.act .rp-row { grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, 1fr)) 5.5rem; }
+.rp-cellbtn { all: unset; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-end; text-align: right; cursor: pointer; border-radius: 8px; padding: 3px 8px; margin: -3px -8px; min-width: 0; max-width: calc(100% + 16px); }
+.rp-cellbtn:hover { background: var(--accent-soft); }
+.rp-cellbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rp-row small.rp-set { color: var(--accent); font-weight: 700; }
+.rp-amt { display: flex; align-items: center; gap: 6px; } .rp-amt input { flex: 1; min-width: 0; } .rp-unit { font-weight: 700; color: var(--muted); } .rp-amt.pre .rp-unit { order: -1; }
+.rp-preview { min-height: 1.3em; font-weight: 600; }
+.rp-rules { display: grid; gap: 4px; margin-top: 4px; }
+.rp-rule { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rp-rule small { color: var(--muted); }
 .rp-sentlist { margin-top: 12px; display: grid; gap: 6px; }
 .rp-partners { display: grid; gap: 6px; max-height: 60vh; overflow: auto; }
-.rp-p { display: grid; grid-template-columns: minmax(0, 1fr) auto 6em auto; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
-.rp-p-name { display: grid; } .rp-p-name small { color: var(--muted); font-size: .74rem; }
-.rp-p select, .rp-p input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+.rp-p { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rp-p-name, .rp-p-rule { display: grid; } .rp-p-name small, .rp-p-rule small { color: var(--muted); font-size: .74rem; }
 @media (max-width: 640px) {
-  .rp-row, .rp-table.act .rp-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 10px; }
+  .rp-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px 8px; }
   .rp-row .rp-name { grid-column: 1 / -1; }
-  .rp-row .cpm-each, .rp-row .rp-owed { display: none; }
-  .rp-row > span.rp-act { grid-column: 1 / -1; align-items: flex-start; }
-  .rp-p { grid-template-columns: minmax(0, 1fr) 5em auto; } .rp-p-name { grid-column: 1 / -1; }
+  .rp-row .cpm-each { display: none; }
+  .rp-p { grid-template-columns: minmax(0, 1fr) auto; } .rp-p-name { grid-column: 1 / -1; }
 }
 /* Clients Per Month: the totals, then one table (sources by group); phone: two lines a source */
 .of-fold { display: grid; gap: 12px; justify-items: start; }
@@ -16740,7 +16745,7 @@ function renderOffice() {
   const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm", rp = ofView.tab === "rp";   // People and Load from Excel: the KPI's on its tab; Clients Per Month and Referral Partners: their Excels
   const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" }),
     admin ? h("div", { class: "lb-acts" },
-      cpm ? null : rp ? h("button", { class: "btn", type: "button", id: "rpPartnersBtn", disabled: !rpData, onclick: () => rpPartnersDlg() }, "Partners")
+      cpm ? null : rp ? h("button", { class: "btn", type: "button", id: "rpPartnersBtn", disabled: !rpData, onclick: () => rpPartnersDlg(rpShownMonth()) }, "Partners")
         : h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
       h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : rp ? openRpExcel() : openOfExcel() }, "Load from Excel")) : null);
   const tabs = ofTabsEl(ofView.tab);
@@ -17091,13 +17096,16 @@ function openCpmExcel() {
    been sent (when, how much, a note like the gift card). Who referred a client: the customer's tag in Housecall Pro
    ("Referral Client By Maple Ridge Realty, LLC"), kept with Past clients' customers. The jobs (day, number, money) are each
    day's Jobs, read from Housecall Pro like Operations. Months before Housecall Pro: the Excel, loaded by an admin. ---- */
-const RP_API = 111;                                      // the Google script version with Referral Partners
+const RP_API = 112;                                      // the Google script version with Referral Partners (rewards from a month on, one-time)
 const K_RP_VIEW = "voda.rpView1";
 const rpView = Object.assign({ per: "month", off: 0 }, store.get(K_RP_VIEW) || {});
 rpView.off = 0;
 let rpData = null, rpLoading = false, rpErr = "", rpOld = false, rpHistCache = null;
 const RP_PER = { month: "Month", year: "Year" };
-const RP_KIND = { none: "No reward", pct: "% of the money", job: "$ a job", month: "$ a month (with a job)" };
+const RP_KIND = { pct: "% of the money", job: "$ a job", month: "$ a month (with a job)", once: "One time: $ for one month", none: "No reward" };
+/** cents → "$170", "$16.50" (rewards keep their cents) */
+const rpMoney = c => { const n = Math.round(Number(c) || 0); return (n < 0 ? "-$" : "$") + (Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: n % 100 ? 2 : 0, maximumFractionDigits: 2 }); };
+const rpPrevMonth = m => { const y = Number(m.slice(0, 4)), mo = Number(m.slice(5, 7)); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`; };
 const rpCan = () => isAdmin() || canSee("revenue");
 /** A partner's name without the Excel's numbering or "Referral Client By" ("17) Referral Client By Maple Ridge Realty" →
  *  "Maple Ridge Realty"). */
@@ -17124,7 +17132,19 @@ function rpNames() {
   for (const x of rpData.hist) if (!out[rpKey(x[1])]) out[rpKey(x[1])] = rpClean(x[1]);
   return out;
 }
-const rpRule = k => rpData.rules.find(r => rpKey(r.partner) === k) || null;
+const rpRules = k => rpData.rules.filter(r => rpKey(r.partner) === k);
+/** A partner's rule for month m: its latest (not one-time) from that month or before ("" = from the start). */
+const rpRuleAt = (k, m) => rpRules(k).filter(r => r.kind !== "once" && (r.from || "") <= m).sort((a, b) => ((a.from || "") < (b.from || "") ? 1 : -1))[0] || null;
+/** One-time rewards for month m (cents). */
+const rpOnce = (k, m) => rpRules(k).filter(r => r.kind === "once" && r.from === m).reduce((t, r) => t + Math.round(r.amount * 100), 0);
+const rpRuleText = r => !r || r.kind === "none" ? "No reward" : r.kind === "pct" ? `${r.amount}% of the money` : r.kind === "job" ? `${rpMoney(r.amount * 100)} a job` : r.kind === "month" ? `${rpMoney(r.amount * 100)} a month` : `${rpMoney(r.amount * 100)} one time`;
+const rpRuleShort = r => !r || r.kind === "none" ? "" : r.kind === "pct" ? `${r.amount}%` : `${rpMoney(r.amount * 100)}${r.kind === "job" ? " a job" : r.kind === "month" ? " a month" : ""}`;
+const rpWhen = r => r.kind === "once" ? rpMonthText(r.from) : r.from ? `from ${rpMonthText(r.from)}` : "from the start";
+/** The last month the page shows (up to today). */
+function rpShownMonth() {
+  const per = RP_PER[rpView.per] ? rpView.per : "month", r = ofRange(per, Math.min(0, Number(rpView.off) || 0)), today = lbToday();
+  return (r.to > today ? today : r.to).slice(0, 7);
+}
 /** The Excel's months: { "2022-04": { key: { jobs, cents, reward, note } } }. */
 function rpHist() {
   if (rpHistCache && rpHistCache.of === rpData) return rpHistCache.by;
@@ -17166,30 +17186,41 @@ function rpMonth(m, upTo) {
   else if (has) out.from = "hcp";
   return out;
 }
-/** What a partner's reward comes to for a month (cents): the Excel's for its months; else the partner's rule. */
-function rpOwed(k, x, from) {
-  if (from === "xl") return x.reward || 0;
-  const r = rpRule(k);
-  if (!r || r.kind === "none") return 0;
+/** What a rule comes to for a month's jobs (cents). */
+function rpRuleOwed(r, x) {
+  if (!r || r.kind === "none" || r.kind === "once") return 0;
   if (r.kind === "pct") return Math.round(x.cents * r.amount / 100);
   if (r.kind === "job") return Math.round(x.jobs * r.amount * 100);
   return x.jobs || x.cents ? Math.round(r.amount * 100) : 0;
 }
+/** What a partner's reward comes to for month m (cents): the Excel's for its months, else the rule then; plus one-time ones. */
+function rpOwed(k, x, from, m) {
+  return (from === "xl" ? x.reward || 0 : rpRuleOwed(rpRuleAt(k, m), x)) + rpOnce(k, m);
+}
 /** months (yyyy-MM, the last one up to upTo) added up by partner: jobs, cents, owed, sent, each month's lists. */
 function rpPeriod(months, upTo) {
   const s = { by: {}, from: new Set(), missing: 0 };
+  const T = k => s.by[k] || (s.by[k] = { jobs: 0, cents: 0, owed: 0, sent: 0, lists: [], xl: [], mon: {} });
+  const M = (t, m) => t.mon[m] || (t.mon[m] = { owed: 0, sent: 0, jobs: 0, cents: 0 });
   for (const m of months) {
     const x = rpMonth(m, m === months[months.length - 1] ? upTo : "");
     if (!x) return null;
     if (x.from) s.from.add(x.from);
     s.missing += x.missing;
     for (const [k, v] of Object.entries(x.by)) {
-      const t = s.by[k] || (s.by[k] = { jobs: 0, cents: 0, owed: 0, sent: 0, lists: [], xl: [] });
-      t.jobs += v.jobs; t.cents += v.cents; t.owed += rpOwed(k, v, x.from);
+      const t = T(k), owed = rpOwed(k, v, x.from, m), e = M(t, m);
+      t.jobs += v.jobs; t.cents += v.cents; t.owed += owed;
+      e.owed += owed; e.jobs += v.jobs; e.cents += v.cents;
       if (v.list) t.lists.push(...v.list); else t.xl.push([m, v]);
     }
+    for (const r of rpData.rules) {   // one-time rewards in a month the partner had no jobs
+      const k = rpKey(r.partner);
+      if (r.kind !== "once" || r.from !== m || x.by[k]) continue;
+      const t = T(k), c = Math.round(r.amount * 100);
+      t.owed += c; M(t, m).owed += c;
+    }
   }
-  for (const x of rpData.sent) if (months.includes(x.month)) { const k = rpKey(x.partner), t = s.by[k] || (s.by[k] = { jobs: 0, cents: 0, owed: 0, sent: 0, lists: [], xl: [] }); t.sent += x.cents; }
+  for (const x of rpData.sent) if (months.includes(x.month)) { const t = T(rpKey(x.partner)); t.sent += x.cents; M(t, x.month).sent += x.cents; }
   return s;
 }
 const rpMonthsOf = (from, to) => { const out = []; for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = cpmNextMonth(m)) out.push(m); return out; };
@@ -17227,33 +17258,37 @@ function rpEl() {
   out.push(h("div", { class: "cpm-tots rp-tots" },
     h("div", { class: "of-tot" }, h("small", { text: "Referred jobs" }), h("b", { id: "rpTotJobs", text: fmt(tot.jobs) })),
     h("div", { class: "of-tot" }, h("small", { text: "Revenue" }), h("b", { id: "rpTotMoney", text: lbMoney(tot.cents / 100) })),
-    h("div", { class: "of-tot" }, h("small", { text: "Rewards" }), h("b", { id: "rpTotOwed", text: lbMoney(tot.owed / 100) })),
-    h("div", { class: "of-tot" + (left ? " down" : "") }, h("small", { text: left ? "Still to send" : "Sent" }), h("b", { id: "rpTotSent", text: lbMoney((left || tot.sent) / 100) }))));
+    h("div", { class: "of-tot" }, h("small", { text: "Rewards" }), h("b", { id: "rpTotOwed", text: rpMoney(tot.owed) })),
+    h("div", { class: "of-tot" + (left ? " down" : "") }, h("small", { text: left ? "Still to send" : "Sent" }), h("b", { id: "rpTotSent", text: rpMoney(left || tot.sent) }))));
   const from = cur.from.has("xl") && cur.from.has("hcp") ? "From Housecall Pro, and the Excel for months before it" : cur.from.has("xl") ? "From the Excel (Referral Partners): before Housecall Pro" : "From Housecall Pro: the customers tagged “Referral Client By …”";
   out.push(h("p", { class: "meta cpm-from", id: "rpFrom", text: `${from}.` }));
   if (!keys.length) out.push(h("p", { class: "meta", id: "rpEmpty", text: `No referred jobs ${per === "month" ? "this month" : "this year"} yet.` }));
   else {
-    const act = admin && per === "month";   // Sent… (a month at a time)
-    const head = h("div", { class: "rp-row cpm-head", role: "row" }, ["Partner", "Jobs", "Revenue", per === "month" ? "Year so far" : "Months", "Reward", "Sent"].concat(act ? [""] : []).map(t => h("span", { role: "columnheader", text: t })));
-    out.push(h("div", { class: "cpm-table rp-table" + (act ? " act" : ""), id: "rpTable", role: "table" }, head, keys.map((k, i) => {
-      const x = cur.by[k], y = ytd.by[k] || { jobs: 0, cents: 0 }, name = names[k] || k, rule = rpRule(k);
+    const last = months[months.length - 1];
+    const head = h("div", { class: "rp-row cpm-head", role: "row" }, ["Partner", "Jobs", "Revenue", per === "month" ? "Year so far" : "Months", "Reward", "Sent"].map(t => h("span", { role: "columnheader", text: t })));
+    out.push(h("div", { class: "cpm-table rp-table", id: "rpTable", role: "table" }, head, keys.map((k, i) => {
+      const x = cur.by[k], y = ytd.by[k] || { jobs: 0, cents: 0 }, name = names[k] || k;
       const go = () => rpJobsDlg(k, name, x, r.label);
-      const owe = Math.max(0, x.owed - x.sent);
+      const owe = Math.max(0, x.owed - x.sent), once = months.reduce((t, m) => t + rpOnce(k, m), 0);
+      const ruleTxt = [rpRuleShort(rpRuleAt(k, last)), once ? `+${rpMoney(once)} once` : ""].filter(Boolean).join(" ");
+      // admins: the Reward and Sent cells are buttons (set the reward; mark one sent)
+      const cell = (cls, attrs, kids) => admin ? h("span", { class: cls, role: "cell" }, h("button", Object.assign({ class: "rp-cellbtn", type: "button" }, attrs), ...kids)) : h("span", { class: cls, role: "cell" }, ...kids);
       return h("div", { class: "rp-row cpm-open", role: "row", "data-partner": name, tabindex: "0", title: "Its jobs", onclick: go, onkeydown: ev => { if (ev.target === ev.currentTarget && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); go(); } } },
-        h("span", { class: "cpm-name rp-name", role: "cell" }, h("b", { text: `#${i + 1} ` }), name, h("small", { text: rule && rule.kind !== "none" ? `${rule.kind === "pct" ? `${rule.amount}%` : `$${rule.amount}`}${rule.kind === "job" ? " a job" : rule.kind === "month" ? " a month" : ""}` : "" })),
+        h("span", { class: "cpm-name rp-name", role: "cell" }, h("b", { text: `#${i + 1} ` }), name),
         h("span", { class: "cpm-n", role: "cell" }, h("b", { text: fmt(x.jobs) })),
         h("span", { class: "cpm-money", role: "cell" }, h("b", { text: lbMoney(x.cents / 100) }), h("small", { text: tot.cents ? `${Math.round(x.cents / tot.cents * 100)}%` : "" })),
         h("span", { class: "cpm-each", role: "cell" }, h("b", { text: per === "month" ? lbMoney(y.cents / 100) : String(new Set(x.lists.map(j => j.d.slice(0, 7)).concat(x.xl.map(z => z[0]))).size) }), per === "month" ? h("small", { text: `${fmt(y.jobs)} job${y.jobs === 1 ? "" : "s"}` }) : null),
-        h("span", { class: "rp-owed", role: "cell" }, h("b", { text: x.owed ? lbMoney(x.owed / 100) : "–" })),
-        h("span", { class: "rp-sent" + (owe ? " due" : ""), role: "cell" }, h("b", { text: x.sent ? lbMoney(x.sent / 100) : "–" }), owe ? h("small", { text: `${lbMoney(owe / 100)} to send` }) : null),
-        act ? h("span", { class: "rp-act", role: "cell" }, h("button", { class: "btn small", type: "button", "data-send": name, onclick: ev => { ev.stopPropagation(); rpSentDlg(months[0], name, owe); } }, "Sent…")) : null);
+        cell("rp-owed", { "data-reward": name, title: "Set the reward", "aria-label": `${name}: set the reward`, onclick: ev => { ev.stopPropagation(); rpRewardDlg(k, name, last); } },
+          [h("b", { text: x.owed ? rpMoney(x.owed) : "–" }), h("small", { class: ruleTxt ? "" : "rp-set", text: ruleTxt || (admin ? "Set reward" : "") })]),
+        cell("rp-sent" + (owe ? " due" : ""), { "data-sent": name, title: "Mark a reward sent", "aria-label": `${name}: mark a reward sent`, onclick: ev => { ev.stopPropagation(); rpSentDlg(k, name, months, x); } },
+          [h("b", { text: x.sent ? rpMoney(x.sent) : "–" }), owe ? h("small", { text: `${rpMoney(owe)} to send` }) : admin ? h("small", { class: "rp-set", text: "Mark sent" }) : null].filter(Boolean)));
     })));
   }
   // the rewards sent in the period
   const sentList = rpData.sent.filter(x => months.includes(x.month)).sort((a, b) => (a.day < b.day ? 1 : -1));
   if (sentList.length) out.push(h("div", { class: "rp-sentlist", id: "rpSentList" }, h("h4", { class: "of-sec", text: "Rewards sent" }),
     h("ul", { class: "of-bk-list" }, sentList.map(x => h("li", { class: "of-bk-row", "data-id": x.id },
-      h("b", { text: lbMoney(x.cents / 100) }), h("span", { class: "of-bk-client", text: `${names[rpKey(x.partner)] || x.partner} · ${rpMonthText(x.month)}` }),
+      h("b", { text: rpMoney(x.cents) }), h("span", { class: "of-bk-client", text: `${names[rpKey(x.partner)] || x.partner} · ${rpMonthText(x.month)}` }),
       h("span", { class: "of-bk-day", text: `sent ${lbDayText(x.day)}` }),
       admin ? h("button", { class: "btn small ghost", type: "button", "aria-label": "Take back", title: "Take back", onclick: async ev => {
         const b = ev.currentTarget;
@@ -17263,7 +17298,7 @@ function rpEl() {
         renderOffice();
       } }, "×") : h("span"),
       h("small", { class: "of-bk-st", text: [x.note, x.by ? `by ${x.by}` : ""].filter(Boolean).join(" · ") }))))));
-  out.push(howFold("rpHow", h("p", { class: "hint", text: "A referral partner's clients: the customers tagged “Referral Client By <partner>” in Housecall Pro (every job of theirs counts). Jobs: first visits (1234-2 and later add money only); Revenue: each job's amount on the day it's on the schedule (canceled ones left out). Reward: each partner's rule (Partners): a % of the money, $ a job, or $ a month with a job; months from the Excel show its MONTHLY REWARD. Sent: what's been marked sent for those months. Months Housecall Pro doesn't have come from the Excel (Load from Excel)." }), "How it's counted"));
+  out.push(howFold("rpHow", h("p", { class: "hint", text: "A referral partner's clients: the customers tagged “Referral Client By <partner>” in Housecall Pro (every job of theirs counts). Jobs: first visits (1234-2 and later add money only); Revenue: each job's amount on the day it's on the schedule (canceled ones left out). Reward (tap it to set one): a % of the money, $ a job, or $ a month with a job, from the month you pick until the partner's next one; or a one-time $ for one month, on top. Months from the Excel show its MONTHLY REWARD. Sent (tap it to mark one): what's been marked sent for those months. Months Housecall Pro doesn't have come from the Excel (Load from Excel)." }), "How it's counted"));
   return out;
 }
 /** A partner's jobs in the period (numbers open them in Housecall Pro); the Excel's months named with their totals. */
@@ -17283,15 +17318,99 @@ function rpJobsDlg(k, name, x, period) {
           h("td", { class: "cpm-j-amt", text: lbMoney(j.cents / 100) }), h("td", { text: j.first ? "Yes" : "Later visit" })))))) : null].filter(Boolean)),
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
 }
-/** Admin: a reward sent for a month: how much (what's left to send, to start), the day, a note (the gift card…). */
-function rpSentDlg(month, name, left) {
+/** Admin: a partner's reward: a % of the money, $ a job or $ a month (with a job), from a month on until its next one;
+ *  a one-time $ for one month (on top); or none. What it comes to for the month is shown as it's typed. Its rewards
+ *  so far are listed (× takes one away). back: the window to go back to (Partners). */
+function rpRewardDlg(k, name, month, back) {
+  const err = h("p", { class: "dlg-err", role: "alert" }), now = rpRuleAt(k, month);
+  const pname = (rpRules(k)[0] || {}).partner || name;   // the spelling its rules were saved with
+  const kind = h("select", { id: "rpKind" }, Object.entries(RP_KIND).map(([v, t]) => h("option", { value: v, text: t })));
+  kind.value = now ? now.kind : "pct";
+  const amt = h("input", { type: "text", inputmode: "decimal", id: "rpRuleAmt", autocomplete: "off", placeholder: "0", value: now && now.kind !== "none" ? String(now.amount) : "" });
+  const unit = h("span", { class: "rp-unit" });
+  const ms = [];
+  for (let m = lbToday().slice(0, 7), n = 0; n < 36; n++, m = rpPrevMonth(m)) ms.push(m);
+  if (!ms.includes(month)) ms.push(month);
+  const from = h("select", { id: "rpStart" }, h("option", { value: "", text: "From the start (every month)" }), ms.map(m => h("option", { value: m, text: rpMonthText(m) })));
+  from.value = month;
+  const fromLbl = h("span"), amtField = h("label", { class: "field" }, h("span", { text: "Amount" }), h("span", { class: "rp-amt" }, amt, unit));
+  const preview = h("p", { class: "meta rp-preview", id: "rpPreview" });
+  const num = () => Number(String(amt.value).replace(/[$%,\s]/g, ""));
+  const sync = () => {
+    const kv = kind.value, once = kv === "once", m = from.value || month, a = num();
+    unit.textContent = kv === "pct" ? "%" : "$";
+    unit.parentNode.classList.toggle("pre", kv !== "pct");   // $10, 10%
+    amtField.hidden = kv === "none";
+    fromLbl.textContent = once ? "For the month" : "Starting";
+    from.options[0].disabled = once;
+    if (once && !from.value) from.value = month;
+    // what it comes to for the month
+    const x = rpMonth(m, ""), v = x && x.by[k] ? x.by[k] : { jobs: 0, cents: 0 };
+    let t = "";
+    if (kv === "none") t = "No reward from then on.";
+    else if (!(a >= 0) || amt.value.trim() === "") t = "";
+    else if (once) t = `${rpMoney(a * 100)} for ${rpMonthText(m)}, on top of the partner's other reward.`;
+    else if (!x) t = "";
+    else if (x.from === "xl") t = `${rpMonthText(m)} comes from the Excel: its MONTHLY REWARD counts for that month.`;
+    else {
+      const c = rpRuleOwed({ kind: kv, amount: a }, v);
+      t = `${rpMonthText(m)}: ${kv === "pct" ? `${a}% of ${lbMoney(v.cents / 100)}` : kv === "job" ? `${fmt(v.jobs)} job${v.jobs === 1 ? "" : "s"} × ${rpMoney(a * 100)}` : v.jobs || v.cents ? "it had jobs" : "no jobs"} = ${rpMoney(c)}.`;
+    }
+    preview.textContent = t;
+  };
+  kind.onchange = sync; from.onchange = sync; amt.oninput = () => { dlgDirty = true; sync(); };
+  const list = rpRules(k).sort((a, b) => ((a.from || "") < (b.from || "") ? 1 : (a.from || "") > (b.from || "") ? -1 : a.kind === "once" ? 1 : -1));
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `Reward · ${name}` }),
+    h("label", { class: "field" }, h("span", { text: "Reward" }), kind),
+    amtField,
+    h("label", { class: "field" }, fromLbl, from),
+    preview,
+    list.length ? h("div", { class: "rp-rules", id: "rpRules" }, h("h4", { class: "of-sec", text: "Its rewards" }), list.map(r => h("div", { class: "rp-rule", "data-from": r.from, "data-kind": r.kind },
+      h("span", null, h("b", { text: rpRuleText(r) }), ` · ${rpWhen(r)}`, h("small", { text: r.by ? ` · set by ${r.by}` : "" })),
+      h("button", { class: "btn small ghost", type: "button", "aria-label": "Take it away", title: "Take it away", onclick: async ev => {
+        const b = ev.currentTarget;
+        if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Sure? Tap again"; return; }
+        b.disabled = true;
+        try { rpSet(await api("rpRule", { partner: r.partner, kind: r.kind, from: r.from, del: true })); toast("Taken away"); renderOffice(); rpRewardDlg(k, name, month, back); }
+        catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; }
+      } }, "×")))) : null,
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => back ? back() : closeDialog(), text: back ? "Back" : "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "rpRuleSave", text: "Save", onclick: async ev => {
+        const btn = ev.currentTarget, kv = kind.value, a = kv === "none" ? 0 : num();
+        if (kv !== "none" && (amt.value.trim() === "" || !(a > 0))) { err.textContent = kv === "pct" ? "Type the % (like 10)." : "Type the $ amount."; return; }
+        if (kv === "pct" && a > 100) { err.textContent = "A % up to 100."; return; }
+        btn.disabled = true;
+        try {
+          rpSet(await api("rpRule", { partner: pname, kind: kv, amount: a, from: from.value }));
+          dlgDirty = false; toast(`${name}: ${kv === "none" ? "no reward" : rpRuleText({ kind: kv, amount: a })} · ${rpWhen({ kind: kv, from: from.value })}`); renderOffice();
+          if (back) back(); else closeDialog();
+        } catch (e) { err.textContent = errText(e, "Nothing"); btn.disabled = false; }
+      } }))));
+  sync();
+}
+/** Admin: a reward sent: the month it's for (the period's; to start, the first with something left to send), how
+ *  much (what's left for that month), the day, a note (the gift card…). t: the partner's numbers in the period. */
+function rpSentDlg(k, name, months, t) {
   const err = h("p", { class: "dlg-err", role: "alert" });
-  const amt = h("input", { type: "text", inputmode: "decimal", id: "rpAmt", autocomplete: "off", value: left ? String(Math.round(left) / 100) : "" });
+  const left = m => { const v = (t && t.mon && t.mon[m]) || { owed: 0, sent: 0 }; return Math.max(0, v.owed - v.sent); };
+  const pick = months.find(m => left(m) > 0) || months[months.length - 1];
+  let typed = false;
+  const amt = h("input", { type: "text", inputmode: "decimal", id: "rpAmt", autocomplete: "off", value: left(pick) ? String(left(pick) / 100) : "", oninput: () => { typed = true; dlgDirty = true; } });
+  const mon = h("select", { id: "rpMon" }, months.slice().reverse().map(m => {
+    const v = (t && t.mon && t.mon[m]) || { owed: 0, sent: 0 };
+    return h("option", { value: m, text: rpMonthText(m) + (v.owed || v.sent ? ` · reward ${rpMoney(v.owed)} · sent ${rpMoney(v.sent)}` : "") });
+  }));
+  mon.value = pick;
+  mon.onchange = () => { if (!typed) amt.value = left(mon.value) ? String(left(mon.value) / 100) : ""; };
   const day = h("input", { type: "date", id: "rpDay", value: lbToday() });
   const note = h("input", { type: "text", id: "rpNote", maxlength: "200", placeholder: "e.g. Amazon gift card, sent by email" });
+  const pname = (rpRules(k)[0] || {}).partner || name;
   openDialog(
     h("h3", { id: "dlgTitle", text: `Reward sent · ${name}` }),
-    h("p", { class: "hint", text: `For ${rpMonthText(month)}.` }),
+    months.length > 1 ? h("label", { class: "field" }, h("span", { text: "For the month" }), mon) : h("p", { class: "hint", text: `For ${rpMonthText(months[0])}.` }),
     h("label", { class: "field" }, h("span", { text: "Amount ($)" }), amt),
     h("label", { class: "field" }, h("span", { text: "Sent on" }), day),
     h("label", { class: "field" }, h("span", { text: "Note" }), note),
@@ -17299,37 +17418,27 @@ function rpSentDlg(month, name, left) {
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
       h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
       h("button", { class: "btn primary", type: "button", id: "rpSave", text: "Save", onclick: async ev => {
-        const btn = ev.currentTarget, a = Number(String(amt.value).replace(/[$,\s]/g, ""));
+        const btn = ev.currentTarget, a = Number(String(amt.value).replace(/[$,\s]/g, "")), m = months.length > 1 ? mon.value : months[0];
         if (!(a > 0)) { err.textContent = "Type how much was sent."; return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(day.value)) { err.textContent = "Pick the day it was sent."; return; }
         btn.disabled = true;
-        try { rpSet(await api("rpSent", { month, partner: name, amount: a, day: day.value, note: note.value })); dlgDirty = false; closeDialog(); toast(`${name}: ${lbMoney(a)} sent`); renderOffice(); }
+        try { rpSet(await api("rpSent", { month: m, partner: pname, amount: a, day: day.value, note: note.value })); dlgDirty = false; closeDialog(); toast(`${name}: ${rpMoney(a * 100)} sent for ${rpMonthText(m)}`); renderOffice(); }
         catch (e) { err.textContent = errText(e, "Nothing"); btn.disabled = false; }
       } }))));
 }
-/** Admin: each partner's reward rule: none, a % of the money, $ a job, or $ a month with a job. */
-function rpPartnersDlg() {
+/** Admin: every partner (customers' tags and the Excel) with its reward now; Set reward opens its window. */
+function rpPartnersDlg(month) {
   const names = rpNames(), keys = Object.keys(names).sort((a, b) => names[a].localeCompare(names[b]));
-  const err = h("p", { class: "dlg-err", role: "alert" });
   openDialog(
     h("h3", { id: "dlgTitle", text: "Referral partners" }),
-    h("p", { class: "hint", text: "Every partner from the customers' tags in Housecall Pro (and the Excel). Set what each one gets; Save on its line." }),
+    h("p", { class: "hint", text: `Every partner from the customers' tags in Housecall Pro (and the Excel), with its reward for ${rpMonthText(month)}. You can also tap a partner's Reward on the page.` }),
     keys.length ? h("div", { class: "rp-partners", id: "rpPartners" }, keys.map(k => {
-      const r = rpRule(k) || { kind: "none", amount: 0, note: "" }, n = rpData.partners[names[k]] || 0;
-      const kind = h("select", { "aria-label": "Reward", "data-k": k }, Object.entries(RP_KIND).map(([v, t]) => h("option", { value: v, text: t })));
-      kind.value = r.kind;
-      const amt = h("input", { type: "text", inputmode: "decimal", "aria-label": "Amount", value: r.kind === "none" ? "" : String(r.amount), placeholder: "0" });
-      const save = h("button", { class: "btn small", type: "button", text: "Save", onclick: async () => {
-        const a = kind.value === "none" ? 0 : Number(String(amt.value).replace(/[$%,\s]/g, ""));
-        if (!(a >= 0) || (kind.value === "pct" && a > 100)) { err.textContent = `${names[k]}: type the amount (a % up to 100).`; return; }
-        save.disabled = true;
-        try { rpSet(await api("rpRule", { partner: names[k], kind: kind.value, amount: a })); err.textContent = ""; toast(`${names[k]}: saved`); renderOffice(); }
-        catch (e) { err.textContent = errText(e, "Nothing"); }
-        save.disabled = false;
-      } });
-      return h("div", { class: "rp-p", "data-partner": names[k] }, h("span", { class: "rp-p-name" }, names[k], h("small", { text: n ? `${n} customer${n === 1 ? "" : "s"} tagged` : "from the Excel" })), kind, amt, save);
+      const r = rpRuleAt(k, month), n = rpData.partners[names[k]] || 0, more = rpRules(k).length - (r ? 1 : 0);
+      return h("div", { class: "rp-p", "data-partner": names[k] },
+        h("span", { class: "rp-p-name" }, names[k], h("small", { text: n ? `${n} customer${n === 1 ? "" : "s"} tagged` : "from the Excel" })),
+        h("span", { class: "rp-p-rule" }, r ? rpRuleText(r) : "No reward set", h("small", { text: [r ? rpWhen(r) : "", more > 0 ? `${more} more` : ""].filter(Boolean).join(" · ") })),
+        h("button", { class: "btn small", type: "button", text: "Set reward", onclick: () => rpRewardDlg(k, names[k], month, () => rpPartnersDlg(month)) }));
     })) : h("p", { class: "meta", text: "No partners yet: tag a customer “Referral Client By <partner>” in Housecall Pro." }),
-    err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
 }
 /** The Excel's year tabs ("Referrals 2026", "Referral 2021"): each month's block, each partner's JOBS, TOTAL, MONTHLY

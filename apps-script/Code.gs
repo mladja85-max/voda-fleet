@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 111;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 112;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4272,10 +4272,12 @@ function cpmImport_(req, user) {
    customers (read again as they change). Each job's day, number and money come from the Revenue tab's jobs (the app
    reads those like Operations); a job → its customer from Past clients' jobs. Months before Housecall Pro: the
    "9. REFERRAL PARTNERS" Excel, loaded by an admin (each month's jobs, $, reward and gift card notes per partner). ---- */
-const RP_RULES = "Referral partners", RP_RULE_COLS = ["Partner", "Reward", "Amount", "Note", "Changed by", "Changed at"];
+const RP_RULES = "Referral partners", RP_RULE_COLS = ["Partner", "Reward", "Amount", "Note", "Changed by", "Changed at", "Starts"];
 const RP_SENT = "Referral rewards", RP_SENT_COLS = ["Id", "Month", "Partner", "Amount $", "Sent on", "Note", "By", "At"];
 const RP_HIST = "Referral history", RP_HIST_COLS = ["Month", "Partner", "Jobs", "Revenue $", "Reward $", "Note", "From"];
-const RP_KINDS = ["none", "pct", "job", "month"];   // no reward; a % of the money; $ a job; $ a month with a job
+const RP_KINDS = ["none", "pct", "job", "month", "once"];   // no reward; a % of the money; $ a job; $ a month with a job (each from its
+                                                             // Starts month on, "" from the start); once: $ for its month only
+const rpName_ = function (v) { return String(v === null || v === undefined ? "" : v).replace(/\s+/g, " ").trim().slice(0, 80); };
 const RP_YM = /^\d{4}-(0[1-9]|1[0-2])$/;
 const RP_TAG = /^\s*(?:referr?al|referred)\b[^,]*?\bby\b\s*[:\-–]?\s*(.+?)\s*$/i;
 /** The partner on a customer's tags ("Referral Client By Maple Ridge Realty, LLC" → "Maple Ridge Realty, LLC"), or "". */
@@ -4315,24 +4317,37 @@ function rpRead_() {
   });
   const jobs = {};
   pcRows_(PC_JOBS, PC_JOB_COLS.length).forEach(function (r) { const c = String(r[1] || ""); if (cust[c]) jobs[String(r[0])] = c; });
-  const rules = mktRows_(mktSheet_(RP_RULES, RP_RULE_COLS, false), RP_RULE_COLS.length).filter(function (r) { return mktName_(r[0]); })
-    .map(function (r) { return { partner: mktName_(r[0]), kind: RP_KINDS.indexOf(String(r[1])) !== -1 ? String(r[1]) : "none", amount: Number(r[2]) || 0, note: String(r[3] || "") }; });
+  const rules = mktRows_(mktSheet_(RP_RULES, RP_RULE_COLS, false), RP_RULE_COLS.length).filter(function (r) { return rpName_(r[0]); })
+    .map(function (r) { return { partner: rpName_(r[0]), kind: RP_KINDS.indexOf(String(r[1])) !== -1 ? String(r[1]) : "none", amount: Number(r[2]) || 0, note: String(r[3] || ""), by: String(r[4] || ""), from: rpMonth_(r[6], tz) }; })
+    .filter(function (r) { return r.kind !== "once" || r.from; });
   const sent = mktRows_(mktSheet_(RP_SENT, RP_SENT_COLS, false), RP_SENT_COLS.length).filter(function (r) { return r[0]; }).map(function (r) {
-    return { id: String(r[0]), month: rpMonth_(r[1], tz), partner: mktName_(r[2]), cents: Math.round((Number(r[3]) || 0) * 100), day: pcDay_(r[4], tz), note: String(r[5] || ""), by: String(r[6] || "") };
+    return { id: String(r[0]), month: rpMonth_(r[1], tz), partner: rpName_(r[2]), cents: Math.round((Number(r[3]) || 0) * 100), day: pcDay_(r[4], tz), note: String(r[5] || ""), by: String(r[6] || "") };
   });
-  const hist = mktRows_(mktSheet_(RP_HIST, RP_HIST_COLS, false), RP_HIST_COLS.length).filter(function (r) { return rpMonth_(r[0], tz) && mktName_(r[1]); })
-    .map(function (r) { return [rpMonth_(r[0], tz), mktName_(r[1]), Number(r[2]) || 0, Math.round((Number(r[3]) || 0) * 100), Math.round((Number(r[4]) || 0) * 100), String(r[5] || "")]; });
+  const hist = mktRows_(mktSheet_(RP_HIST, RP_HIST_COLS, false), RP_HIST_COLS.length).filter(function (r) { return rpMonth_(r[0], tz) && rpName_(r[1]); })
+    .map(function (r) { return [rpMonth_(r[0], tz), rpName_(r[1]), Number(r[2]) || 0, Math.round((Number(r[3]) || 0) * 100), Math.round((Number(r[4]) || 0) * 100), String(r[5] || "")]; });
   return { ok: true, ready: ready, cust: cust, jobs: jobs, partners: names, rules: rules, sent: sent, hist: hist, at: Number(P.getProperty(PC_AT)) || 0,
     sync: sync && !sync.ok ? { error: sync.error } : null };
 }
-/** Admin: a partner's reward rule ({ partner, kind: none | pct | job | month, amount, note }). */
+/** Admin: a partner's reward ({ partner, kind: none | pct | job | month | once, amount, from: yyyy-MM or "" (from the
+ *  start), note }): a rule runs from its month until the partner's next one; "once" is $ for its month only (on top).
+ *  The same partner and month (and once or not) replaces; { …, del: true } takes one away. */
 function rpRule_(req, user) {
-  const partner = mktName_(req.partner), kind = String(req.kind || ""), amount = Number(req.amount);
-  if (!partner || RP_KINDS.indexOf(kind) === -1 || !(amount >= 0 && amount <= (kind === "pct" ? 100 : 100000))) return { ok: false, error: "bad_request" };
-  const s = mktSheet_(RP_RULES, RP_RULE_COLS, true), rows = mktRows_(s, RP_RULE_COLS.length).filter(function (r) { return mktName_(r[0]); });
-  const i = rows.findIndex(function (r) { return mktName_(r[0]).toLowerCase() === partner.toLowerCase(); });
-  const row = [partner, kind, kind === "none" ? 0 : Math.round(amount * 100) / 100, String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140), String(user.name || "").slice(0, 60), new Date().toISOString()];
-  if (i === -1) rows.push(row); else rows[i] = row;
+  const tz = Session.getScriptTimeZone(), partner = rpName_(req.partner), kind = String(req.kind || ""), amount = Number(req.amount);
+  const from = req.from === undefined || req.from === null ? "" : String(req.from).trim(), once = kind === "once";
+  if (!partner || RP_KINDS.indexOf(kind) === -1 || (from && !RP_YM.test(from)) || (once && !from)) return { ok: false, error: "bad_request" };
+  if (!req.del && !(amount >= 0 && amount <= (kind === "pct" ? 100 : 100000))) return { ok: false, error: "bad_request" };
+  const s = mktSheet_(RP_RULES, RP_RULE_COLS, true), rows = mktRows_(s, RP_RULE_COLS.length).filter(function (r) { return rpName_(r[0]); });
+  const same = function (r) { return rpName_(r[0]).toLowerCase() === partner.toLowerCase() && rpMonth_(r[6], tz) === from && (String(r[1]) === "once") === once; };
+  const i = rows.findIndex(same);
+  if (req.del) {
+    if (i === -1) return { ok: false, error: "gone" };
+    rows.splice(i, 1);
+  } else {
+    const row = [partner, kind, kind === "none" ? 0 : Math.round(amount * 100) / 100, String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140), String(user.name || "").slice(0, 60), new Date().toISOString(), from];
+    if (i === -1) rows.push(row); else rows[i] = row;
+  }
+  s.getRange(1, 1, 1, RP_RULE_COLS.length).setValues([RP_RULE_COLS]).setFontWeight("bold");   // the Starts column on a tab made before it
+  s.getRange("G:G").setNumberFormat("@");   // a month like 2026-11 stays text
   mktWrite_(s, RP_RULE_COLS, rows);
   return rpRead_();
 }
@@ -4345,7 +4360,7 @@ function rpSent_(req, user) {
     mktWrite_(s, RP_SENT_COLS, left);
     return rpRead_();
   }
-  const month = String(req.month || ""), partner = mktName_(req.partner), amount = Number(req.amount), day = String(req.day || "");
+  const month = String(req.month || ""), partner = rpName_(req.partner), amount = Number(req.amount), day = String(req.day || "");
   if (!RP_YM.test(month) || !partner || !(amount > 0 && amount <= 100000) || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: "bad_request" };
   rows.push([Utilities.getUuid(), month, partner, Math.round(amount * 100) / 100, day, String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 200), String(user.name || "").slice(0, 60), new Date().toISOString()]);
   mktWrite_(s, RP_SENT_COLS, rows);
@@ -4357,10 +4372,10 @@ function rpImport_(req) {
   if (!rows || rows.length > 20000) return { ok: false, error: "bad_request" };
   const out = [];
   rows.forEach(function (x) {
-    if (!Array.isArray(x) || !RP_YM.test(String(x[0] || "")) || !mktName_(x[1])) return;
+    if (!Array.isArray(x) || !RP_YM.test(String(x[0] || "")) || !rpName_(x[1])) return;
     const jobs = Math.round(Number(x[2]) || 0), v = Math.round((Number(x[3]) || 0) * 100) / 100, rw = Math.round((Number(x[4]) || 0) * 100) / 100, note = String(x[5] || "").replace(/\s+/g, " ").trim().slice(0, 300);
     if (!jobs && !v && !rw && !note) return;
-    out.push([String(x[0]), mktName_(x[1]), Math.max(0, jobs), v, rw, note, "Excel"]);
+    out.push([String(x[0]), rpName_(x[1]), Math.max(0, jobs), v, rw, note, "Excel"]);
   });
   out.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1; });
   mktWrite_(mktSheet_(RP_HIST, RP_HIST_COLS, true), RP_HIST_COLS, out);
