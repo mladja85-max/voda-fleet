@@ -14576,6 +14576,15 @@ function cpTake(o) {
 /** Draws Contractor Payroll where it is: its own page (someone who sees it without Repairs Payroll), or the column
  *  beside Repairs Payroll. */
 const cpRedraw = () => { if (view.tab === "contractors") renderContractors(); else if (view.tab === "repairs") renderRevenue(); };
+/** All / Waiting / Paid tapped: the list redrawn with the buttons where they were (a shorter list doesn't pull the page
+ *  up under your finger: the panel keeps its height while you switch). */
+function cpFilterTo(k) {
+  const was = $("cpFilter"), top = was ? was.getBoundingClientRect().top : null, panel = $("cpPanel"), hgt = panel ? panel.getBoundingClientRect().height : 0;
+  cpFilter = k; cpAll = false; cpRedraw();
+  const now = $("cpFilter"), p2 = $("cpPanel");
+  if (p2 && hgt) { p2.style.minHeight = `${Math.round(hgt)}px`; p2.style.alignContent = "start"; }   // the room left over stays at the bottom
+  if (now && top != null) { const d = now.getBoundingClientRect().top - top; if (Math.abs(d) > 1) window.scrollBy(0, d); }
+}
 let cpAll = false;   // the column beside Repairs Payroll: every batch, not just the newest
 /** The batches: the totals, All / Waiting / Paid, and the list (compact: the column beside Repairs Payroll). */
 function cpBlock(compact) {
@@ -14591,7 +14600,7 @@ function cpBlock(compact) {
   const list = cpFilter === "waiting" ? waiting : cpFilter === "paid" ? paid : all, MAX = 8;
   const shown = compact && !cpAll ? list.slice(0, MAX) : list;
   const seg = h("div", { class: "seg", role: "group", "aria-label": "Show", id: "cpFilter" }, [["all", "All"], ["waiting", "Waiting"], ["paid", "Paid"]].map(([k, t]) =>
-    h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(cpFilter === k), onclick: () => { cpFilter = k; cpAll = false; cpRedraw(); } }, t)));
+    h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(cpFilter === k), onclick: () => cpFilterTo(k) }, t)));
   const sum = (l, f) => l.reduce((n, b) => n + (b[f] || 0), 0);
   const tiles = h("div", { class: "cp-kpis", id: "cpKpis" },
     h("div", { class: "cp-kpi" + (waiting.length ? " due" : "") }, h("small", { text: "Waiting for accounting" }), h("b", { text: lbCash(sum(waiting, "total") / 100) }), h("span", { text: cpPlural(waiting.length, "batch") })),
