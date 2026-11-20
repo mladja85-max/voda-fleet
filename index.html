@@ -317,6 +317,17 @@ button { font: inherit; color: inherit; }
 .quick.view-only { grid-template-columns: minmax(0, 1fr); }
 .user-row { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
 /* Users: a line each (a tap opens the person); the person's window: Job, then what he sees by area */
+/* Employees: one person's page (a tap on him in the list): only his card, under ‹ Employees */
+.emp-hid { display: none !important; }
+#dlg .lb-team input[type="checkbox"], #dlg .lb-rvrow input[type="checkbox"] { appearance: none; -webkit-appearance: none; flex: none; width: 38px; height: 22px; margin: 0; border-radius: 11px; cursor: pointer;
+  background: var(--line) radial-gradient(circle at 11px 50%, #fff 7.5px, transparent 8.5px) no-repeat 0 0; transition: background-color .15s, background-position .15s; }
+#dlg .lb-team input[type="checkbox"]:checked, #dlg .lb-rvrow input[type="checkbox"]:checked { background-color: var(--ok); background-position: 16px 0; }
+#dlg .lb-team input[type="checkbox"]:disabled, #dlg .lb-rvrow input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+#dlg .lb-team input[type="checkbox"]:focus-visible, #dlg .lb-rvrow input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lb-cnt-as { display: flex; align-items: center; gap: 8px; font-size: .86rem; font-weight: 600; }
+.lb-cnt-as select { font: inherit; font-weight: 700; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--accent); background: var(--surface); color: var(--ink); }
+form.emp-one .emp-focus .lb-order, form.emp-one .emp-focus .lb-chev { display: none; }
+form.emp-one .emp-focus > .lb-sum { cursor: default; }
 .ul-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 .ul-row:hover { border-color: var(--accent); } .ul-row.off { opacity: .7; }
 .ul-av { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 800; font-size: .78rem; }
@@ -6955,16 +6966,19 @@ const dlgMayClose = back => !(dlgDirty && dlgHasSave()) || confirm(back ? "Go ba
 function dismissDialog() { if (dlg.open && dlgMayClose()) closeDialog(); }
 const dlgStack = [];                    // the windows under the one open: [{ form, top, dirty, title }]
 let dlgNoPush = false, dlgClosing = false;
+let dlgBackTo = null;                    // a page inside the window open (one person in Employees): { title, go } for ‹ Back
 const dlgTitleOf = form => { const t = form && form.querySelector("h2, h3"); return t ? t.textContent.trim() : ""; };
 /** The ✕, and ‹ back to the window under this one. */
-const dlgBar = () => h("div", { class: "dlg-xbar" },
-  dlgStack.length ? h("button", { class: "dlg-back", type: "button", id: "dlgBack", "aria-label": `Back to ${dlgStack[dlgStack.length - 1].title}`, onclick: () => dlgBack() },
-    h("span", { "aria-hidden": "true", text: "‹" }), h("span", { text: dlgStack[dlgStack.length - 1].title })) : null,
-  h("button", { class: "dlg-x", type: "button", id: "dlgX", "aria-label": "Close", title: "Close", onclick: () => dismissDialog() }, "✕"));
+const dlgBar = () => { const bt = dlgBackTo ? dlgBackTo.title : dlgStack.length ? dlgStack[dlgStack.length - 1].title : ""; return h("div", { class: "dlg-xbar" },
+  bt ? h("button", { class: "dlg-back", type: "button", id: "dlgBack", "aria-label": `Back to ${bt}`, onclick: () => dlgBack() },
+    h("span", { "aria-hidden": "true", text: "‹" }), h("span", { text: bt })) : null,
+  h("button", { class: "dlg-x", type: "button", id: "dlgX", "aria-label": "Close", title: "Close", onclick: () => dismissDialog() }, "✕")); };
+const dlgBarAgain = () => { const b = dlg.querySelector(":scope > .dlg-xbar"); if (b) b.replaceWith(dlgBar()); };
 /** Back a window (the first one: closes, asking first if something typed isn't saved). A window that says how to draw
  *  itself (Settings) is drawn fresh; any other comes back as it was left. */
 function dlgBack() {
   if (!dlg.open) return;
+  if (dlgBackTo) { dlgBackTo.go(); return; }   // a page inside this window: back to the window itself (what's typed stays)
   if (!dlgStack.length) { dismissDialog(); return; }
   if (!dlgMayClose(true)) return;
   const s = dlgStack.pop();
@@ -7041,6 +7055,7 @@ let totalsQueued = false;
 new MutationObserver(() => { if (!totalsQueued) { totalsQueued = true; requestAnimationFrame(() => { totalsQueued = false; labelTotals(); }); } })
   .observe(document.documentElement, { childList: true, subtree: true });
 function openDialog(...content) {
+  dlgBackTo = null;
   // On phones the form itself takes focus, so the keyboard stays down until a box is tapped.
   const touch = isTouch();
   const typed = e => !(e.target && e.target.closest && e.target.closest("[data-nodirty]"));   // a search box isn't something typed to save
@@ -7061,7 +7076,7 @@ function openDialog(...content) {
   const a = document.activeElement;
   if (touch && a && dlg.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) form.focus({ preventScroll: true });
 }
-function closeDialog() { if (dlg.open) { dlgClosing = true; dlg.close(); } dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; unsentRedraw = null; dlgStack.length = 0; }
+function closeDialog() { dlgBackTo = null; if (dlg.open) { dlgClosing = true; dlg.close(); } dlg.replaceChildren(); dlgDirty = false; revUnpaidRedraw = null; unsentRedraw = null; dlgStack.length = 0; }
 /* ---- file pickers: a box to drag files onto (a computer) or tap to choose (a phone); the input inside keeps its id and
    what it does, and the box shows the files chosen ---- */
 const DROP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>';
@@ -11421,7 +11436,7 @@ function openLbTeams() {
         // and said on his row in the window just opened again
         const row = [...document.querySelectorAll("#dlg .lb-team, #dlg .lb-rvrow")].find(r => r.dataset.name === to);
         if (row) {
-          row.classList.add("open");
+          if (row._focus && !empAll) row._focus(); else row.classList.add("open");
           (row.querySelector(".lb-team-top") || row).appendChild(h("p", { class: "lb-rename-msg ok", role: "status", text: `Renamed from ${name}: every year's numbers, shared jobs, reviews and pay rates now say ${to}.` }));
           row.scrollIntoView({ block: "nearest" });
         }
@@ -11461,6 +11476,11 @@ function openLbTeams() {
     // Counts in: what he's left out of ("Counts nowhere": off the leaderboard, no reviews, not in Production)
     const offs = [["sales", "sales goal"], ["rv", "reviews"], ["prod", "Production"]].filter(([k]) => f(`.c-${k}`) && !f(`.c-${k}`).checked).map(x => x[1]);
     const nowhere = !(team && f(".t-on").checked) && f(".c-rv") && !f(".c-rv").checked && !f(".c-prod").checked;
+    const as = row.querySelector(".c-as");
+    if (as) {
+      const tk = c => { const b = f(`.c-${c}`); return !!(b && b.checked); }, on = team && f(".t-on").checked;
+      as.value = as.dataset.cur = on && tk("sales") && tk("rv") && (tk("prod") || !f(".c-prod")) ? "tech" : !on && !tk("sales") && !tk("rv") && !tk("prod") ? "est" : !on && !tk("sales") && tk("rv") && !tk("prod") ? "rv" : "custom";
+    }
     const se = sum.querySelector(".lb-se");
     se.hidden = !offs.length;
     se.textContent = nowhere ? "Counts nowhere" : `No ${offs.join(", ")}`;
@@ -11475,9 +11495,10 @@ function openLbTeams() {
     const order = row.classList.contains("lb-team") ? body.querySelector(".lb-order") : null;
     const sum = h("div", { class: "lb-sum", role: "button", tabindex: "0", "aria-expanded": "false", title: "Open or close" },
       order, h("span", { class: "lb-av", "aria-hidden": "true" }), h("strong", { class: "lb-sn" }), h("span", { class: "lb-su" }), h("span", { class: "lb-sr" }),
-      h("span", { class: "lb-ss" }), h("span", { class: "lb-se", text: "" }), h("span", { class: "lb-chev", "aria-hidden": "true", text: "▾" }));
+      h("span", { class: "lb-ss" }), h("span", { class: "lb-se", text: "" }), h("span", { class: "lb-chev", "aria-hidden": "true", text: empAll ? "▾" : "›" }));
     row.replaceChildren(sum, body);
-    const toggle = e => { if (e.target.closest(".lb-order")) return; setOpen(row, !row.classList.contains("open")); };
+    const toggle = e => { if (e.target.closest(".lb-order")) return; if (!empAll) { if (empOne !== row) empFocus(row); return; } setOpen(row, !row.classList.contains("open")); };
+    row._focus = () => empFocus(row);
     sum.addEventListener("click", toggle);
     sum.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target === sum) { e.preventDefault(); toggle(e); } });
     row.addEventListener("input", () => { summarize(row); filter(); });
@@ -11485,6 +11506,40 @@ function openLbTeams() {
     summarize(row);
     if (open) setOpen(row, true);
     return row;
+  };
+  /* One person's page (the list's way of opening someone; Open all keeps everyone open in the list instead): only his
+     fields, under ‹ Employees; Save saves and brings the list back, Cancel drops what was changed. */
+  let empOne = null, empFormerWas = false;
+  const empFocus = row => {
+    const form = row.closest("form.dlg");
+    if (!form) return;
+    if (empOne && empOne !== row) empUnfocus(true);
+    empOne = row;
+    if (formerBox.contains(row)) { empFormerWas = formerBox.open; formerBox.open = true; }
+    form.classList.add("emp-one");
+    for (let el = row; el && el !== form; el = el.parentElement)
+      for (const sib of el.parentElement.children) if (sib !== el && !sib.classList.contains("dlg-foot") && sib !== err) sib.classList.add("emp-hid");
+    row.classList.add("emp-focus");
+    setOpen(row, true);
+    dlgBackTo = { title: "Employees", go: () => empUnfocus() };
+    dlgBarAgain();
+    dlg.scrollTop = 0;
+  };
+  const empUnfocus = quiet => {
+    const row = empOne;
+    if (!row) return;
+    empOne = null;
+    const form = row.closest("form.dlg");
+    if (form) { form.classList.remove("emp-one"); for (const x of form.querySelectorAll(".emp-hid")) x.classList.remove("emp-hid"); }
+    row.classList.remove("emp-focus");
+    if (formerBox.contains(row)) formerBox.open = empFormerWas;
+    setOpen(row, false);
+    if (quiet) return;
+    dlgBackTo = null;
+    dlgBarAgain();
+    err.textContent = "";
+    filter();
+    row.scrollIntoView({ block: "center" });
   };
   // search a name, a unit, Open all
   let empUnit = "all";
@@ -11534,11 +11589,15 @@ function openLbTeams() {
     set("sales", k === "tech"); set("rv", k !== "est"); set("prod", k === "tech");
     summarize(row);
   };
+  // Counts as: Technician (everything), Estimator (nothing), Reviews only, or Custom (the ticks as they are), like a Job
+  const cntAs = ev => { const sel = ev.currentTarget, v = sel.value; if (v === sel.dataset.cur) return; sel.dataset.cur = v; if (v !== "custom") cntPick(sel.closest(".lb-team, .lb-rvrow"), v); };
   const cntBox = (row, ...ticks) => h("div", { class: "lb-cnt-box" },
     h("div", { class: "lb-cnt-head" }, h("b", { text: "Counts in" }),
-      h("div", { class: "lb-cnt-picks", role: "group", "aria-label": "Quick picks" }, [["tech", "Technician"], ["est", "Estimator"], ["rv", "Reviews only"]].map(([k, t]) =>
-        h("button", { class: "chip-btn sm", type: "button", "data-pick": k, title: k === "tech" ? "Everything: on the leaderboard, sales, reviews, Production" : k === "est" ? "Nowhere: off the leaderboard, no sales, no reviews, not in Production" : "Only 5-star reviews",
-          onclick: ev => cntPick(ev.currentTarget.closest(".lb-team, .lb-rvrow"), k) }, t)))),
+      h("label", { class: "lb-cnt-as" }, h("span", { text: "Counts as" }),
+        h("select", { class: "c-as", "aria-label": "Counts as", title: "Technician: everything (on the leaderboard, sales, reviews, Production). Estimator: nowhere. Reviews only: his 5-star reviews.",
+          // on its own input (before the card reads its ticks again), once
+          oninput: ev => cntAs(ev), onchange: ev => cntAs(ev) },
+          [["tech", "Technician"], ["est", "Estimator"], ["rv", "Reviews only"], ["custom", "Custom"]].map(([k, t]) => h("option", { value: k, text: t }))))),
     ...ticks);
   const rowEl = (t, isNew) => {
     // the check mark is on while he has no last day; with one (also a day still to come) it's off and the day shows
@@ -11675,12 +11734,12 @@ function openLbTeams() {
       h("p", { class: "hint", text: "Not on the leaderboard: still with the company, not ranked: helpers and techs who don't compete for a spot yet, and anyone who came off the leaderboard (a tech who became a supervisor). Their reviews and the jobs they help on count. Tick On the leaderboard to rank someone from that day. Removing a helper's name keeps what was typed for it." })),
     onHead,
     list,
-    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: startDay.slice(0, 7), on: startDay, to: "" }, true)); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); filter(); } }, "+ Add a person to the leaderboard")),
+    h("div", null, h("button", { class: "btn small", type: "button", id: "lbAddTeam", onclick: () => { list.append(rowEl({ name: "", unit: LB_GROUPS[0], from: startDay.slice(0, 7), on: startDay, to: "" }, true)); if (!empAll) empFocus(list.lastElementChild); const i = list.lastElementChild.querySelector(".t-name"); if (i) i.focus(); filter(); } }, "+ Add a person to the leaderboard")),
     h("div", { class: "lb-rvsec" },
       offHead,
       offList, rvList,
       h("div", { class: "lb-rvbtns" },
-        h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); filter(); } }, "+ Add a person"))),
+        h("button", { class: "btn small", type: "button", id: "lbAddRv", onclick: () => { rvList.append(rvRow({ name: "", unit: LB_GROUPS[0] }, true)); if (!empAll) empFocus(rvList.lastElementChild); const i = rvList.lastElementChild.querySelector(".r-name"); if (i) i.focus(); filter(); } }, "+ Add a person"))),
     formerBox,
     // the rest: the sales goal and the tools, together at the bottom
     h("div", { class: "lb-tools", id: "lbTools" }, h("h4", { class: "lb-emp-h", text: "Tools" }),
@@ -11692,7 +11751,7 @@ function openLbTeams() {
     err,
     h("div", { class: "dlg-foot lb-emp-foot" },
       h("div", { class: "right" },
-        h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }),
+        h("button", { class: "btn", type: "button", id: "lbTeamsCancel", text: "Cancel", onclick: () => { if (empOne) { dlgDirty = false; openLbTeams(); } else closeDialog(); } }),
         h("button", { class: "btn primary", type: "button", id: "lbTeamsSave", text: "Save", onclick: async () => {
           const teams = [], names = new Set();
           // each person's email and phone (blank clears them) and the names he had before a rename
@@ -11775,8 +11834,8 @@ function openLbTeams() {
             for (const c of Object.values(lbYearCache)) c.config = lbData.config;   // one roster for every year
             if (out.names) lbData.names = Object.assign(lbData.names || {}, out.names);
             lbTouch();
-            closeDialog();
-            toast("Teams saved");
+            if (empOne) { const who = empOne.dataset.name || "Employees"; dlgDirty = false; openLbTeams(); toast(`${who} saved`); }   // a person's page: back to the list
+            else { closeDialog(); toast("Teams saved"); }
             renderLeaderboard();
           } catch (e) { err.textContent = errText(e, "Nothing"); b.disabled = false; b.textContent = "Save"; }
         } }))));
