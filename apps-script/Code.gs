@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 105;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 106;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -5458,10 +5458,15 @@ function ofEstMark_(req, user) {
 const KPI = "kpi", KPI_SHEET = "KPI log", KPI_COLS = ["id", "person", "day", "kpi", "text", "count", "by", "at"];
 const KPI_KEYS = ["est", "rep", "inv", "e2j", "coll", "xact"];
 const KPI_TEXT = 300, KPI_MAX_N = 999, KPI_LINES_DAYS = 62;
+const kpiColorOk_ = function (c) { return /^#[0-9a-f]{6}$/i.test(String(c || "")); };
 function kpiPeople_() {
   let p = [];
   try { p = JSON.parse(PropertiesService.getScriptProperties().getProperty("KPI_PEOPLE") || "[]") || []; } catch (e) { p = []; }
-  return Array.isArray(p) ? p.filter(function (x) { return x && x.name; }).map(function (x) { return { name: String(x.name), user: String(x.user || ""), off: !!x.off }; }) : [];
+  return Array.isArray(p) ? p.filter(function (x) { return x && x.name; }).map(function (x) {
+    const o = { name: String(x.name), user: String(x.user || ""), off: !!x.off };
+    if (kpiColorOk_(x.color)) o.color = String(x.color).toLowerCase();   // his color (the Excel's tab color, or picked)
+    return o;
+  }) : [];
 }
 /** The names this login types for: his own (Admins: everyone's). */
 function kpiMine_(user, people) {
@@ -5531,7 +5536,9 @@ function kpiSetPeople_(req) {
     if (seen[name.toLowerCase()]) return { ok: false, error: "twice", name: name };
     if (user && !ids[user]) return { ok: false, error: "no_user", name: name };
     seen[name.toLowerCase()] = true;
-    out.push({ name: name, user: user, off: !!x.off });
+    const o = { name: name, user: user, off: !!x.off };
+    if (kpiColorOk_(x.color)) o.color = String(x.color).toLowerCase();
+    out.push(o);
   }
   PropertiesService.getScriptProperties().setProperty("KPI_PEOPLE", JSON.stringify(out));
   return { ok: true, people: out };
@@ -5540,7 +5547,17 @@ function kpiSetPeople_(req) {
  *  person's month is replaced by the Excel's lines; a name not on the KPI yet is added (with the login of that first
  *  name, if exactly one has it; in the order of { order }), and someone whose last month is long gone is marked left. */
 function kpiImport_(req) {
-  if (!Array.isArray(req.months) || !req.months.length || req.months.length > 40) return { ok: false, error: "bad_request" };
+  if (!Array.isArray(req.months) || req.months.length > 40) return { ok: false, error: "bad_request" };
+  if (!req.months.length) {   // just the people's colors (their tabs' colors in the Excel), no month replaced
+    if (!req.colors || typeof req.colors !== "object") return { ok: false, error: "bad_request" };
+    const ppl = kpiPeople_();
+    ppl.forEach(function (x) {
+      const k = Object.keys(req.colors).filter(function (n) { return String(n).toLowerCase() === x.name.toLowerCase(); })[0];
+      if (k && kpiColorOk_(req.colors[k])) x.color = String(req.colors[k]).toLowerCase();
+    });
+    PropertiesService.getScriptProperties().setProperty("KPI_PEOPLE", JSON.stringify(ppl));
+    return { ok: true, saved: 0, people: ppl };
+  }
   const tz = Session.getScriptTimeZone(), at = tmNow_().toISOString(), drop = {}, add = [];
   let n = 0;
   for (let i = 0; i < req.months.length; i++) {
@@ -5579,6 +5596,11 @@ function kpiImport_(req) {
     people.push({ name: p, user: same.length === 1 && used.indexOf(same[0].id) === -1 ? same[0].id : "", off: !!req.left && req.left.indexOf(p) !== -1 });
   });
   if (Array.isArray(req.left)) people.forEach(function (x) { if (req.left.indexOf(x.name) !== -1 && !x.user) x.off = true; });
+  // each person's color: his tabs' color in the Excel
+  if (req.colors && typeof req.colors === "object") people.forEach(function (x) {
+    const k = Object.keys(req.colors).filter(function (n) { return String(n).toLowerCase() === x.name.toLowerCase(); })[0];
+    if (k && kpiColorOk_(req.colors[k])) x.color = String(req.colors[k]).toLowerCase();
+  });
   PropertiesService.getScriptProperties().setProperty("KPI_PEOPLE", JSON.stringify(people));
   return { ok: true, saved: n, people: people };
 }
