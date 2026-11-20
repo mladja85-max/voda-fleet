@@ -8368,6 +8368,48 @@ async function openUsers() {
       : e && e.error === "not_allowed" && !["setPayroll", "setPriceCheck"].includes(action) ? "Only the owner of Settings and the people he picks can change that." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
       : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
+  // A change to someone (a tick, a job, on or off): on the screen at once, saved behind it. Taps made while one is
+  // saving go together in the next save; the list isn't read again (the save answers with the person).
+  const pend = {}, busy = {};
+  const redrawOne = id => {
+    const one = $("uEdit"), top = dlg.scrollTop;
+    listBox.replaceChildren(...users.map(row));   // the list under it too (Back shows it as it is now)
+    if (one && one.isConnected && one.dataset.id === id) { openOne(id); dlg.scrollTop = top; }
+  };
+  const quick = (u, patch, okMsg) => {
+    err.textContent = "";
+    if (patch.access) u.access = patch.access.concat((u.access || []).filter(a => ACC_EXTRA.includes(a) && !patch.access.includes(a)));   // the extras stay (the script keeps them)
+    if (patch.role) u.role = patch.role;
+    if (patch.status) u.status = patch.status;
+    u.saving = true;
+    pend[u.id] = Object.assign(pend[u.id] || {}, patch, { msg: okMsg });
+    redrawOne(u.id);
+    if (!busy[u.id]) flush(u.id);
+  };
+  const flush = async id => {
+    const p = pend[id];
+    if (!p) return;
+    delete pend[id]; busy[id] = true;
+    const data = Object.assign({ id }, p); delete data.msg;
+    try {
+      const out = await api("saveUser", data);
+      if (!pend[id]) {   // nothing changed since: what was saved is what's on the screen
+        const i = users.findIndex(x => x.id === id);
+        if (i !== -1 && out && out.user) users[i] = Object.assign({}, users[i], out.user, { saving: false });
+        const c = stPre.users;
+        if (c && c.data && Array.isArray(c.data.users)) c.data = Object.assign({}, c.data, { users: users.map(x => Object.assign({}, x, { saving: undefined })) });
+        if (p.msg) toast(p.msg);
+      }
+    } catch (e) {
+      delete pend[id]; busy[id] = false;
+      err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
+        : e && e.error === "not_allowed" ? "Only the owner of Settings and the people he picks can change that." : "That wasn't saved: " + errText(e, "Nothing");
+      await load(true);   // back to what's saved
+      return;
+    }
+    busy[id] = false;
+    if (pend[id]) flush(id); else redrawOne(id);
+  };
   const fmtAt = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "never";
   let owner = "", can = stCan();
   // the list: one line each (name, job, what they see, last sign-in); a tap opens that person's window
@@ -8428,11 +8470,11 @@ async function openUsers() {
         h("button", { class: "btn small primary", type: "button", id: "uJobYes", onclick: async () => {
           const j = jobSet(jobAsk), name = jobName(jobAsk);
           jobAsk = "";
-          await call("saveUser", Object.assign({ id: u.id, role: j.role }, j.role === "admin" ? {} : { access: j.access }),
+          quick(u, Object.assign({ role: j.role }, j.role === "admin" ? {} : { access: j.access }),
             `${u.name} is now ${j.role === "admin" ? "an Admin" : /^[AEIOU]/.test(name) ? "an " + name : "a " + name}`);
         } }, "Yes, change it"),
         h("button", { class: "btn small ghost", type: "button", id: "uJobNo", onclick: () => { jobAsk = ""; openOne(u.id); } }, "Cancel"))) : null;
-    const save = async (next, name, on) => { await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`); };
+    const save = (next, name, on) => quick(u, { access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
     const sees = u.role === "admin"
       ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: "Sees" }), h("p", { class: "meta", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }),
           h("div", { class: "acc" }, can ? pay : null, can ? pc : null))
@@ -8447,12 +8489,13 @@ async function openUsers() {
             ? h("button", { class: "btn small", type: "button", text: "Reset passcode", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, true); } })
             : null,
            h("button", { class: "btn small ghost" + (u.status === "active" ? " danger" : ""), type: "button", text: u.status === "active" ? "Turn off" : "Turn on",
-             onclick: () => call("saveUser", { id: u.id, status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]);
+             onclick: () => quick(u, { status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]);
     openDialog(
       h("h3", { id: "dlgTitle", text: u.name }),
       h("div", { class: "user-edit", id: "uEdit", "data-id": u.id, "data-user": u.username || u.name, "data-nodirty": "" },
         h("div", { class: "user-top" }, u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
-          u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null, st),
+          u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null, st,
+          h("span", { class: "user-meta u-saving", id: "uSaving", role: "status", text: u.saving ? "Saving…" : "" })),
         h("span", { class: "user-meta", text: status }),
         u.role === "admin" && off ? null : h("label", { class: "u-jobl" }, h("span", { text: "Job" }), jobSel),
         !off && !asking ? h("p", { class: "hint", text: "A job sets what they see. Change any of it below." }) : null,
