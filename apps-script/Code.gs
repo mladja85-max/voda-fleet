@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 109;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 110;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4172,8 +4172,9 @@ function revSync_(req) {
     if (first) cv[i + 1]++;
     // still owed: done or under way (a visit still to come isn't owed yet)
     const owes = Math.round(Number(job.outstanding_balance) || 0);
+    // (then, for Clients Per Month's lists: its Clients key and its Job type)
     a.jobs.push([String(job.id || ""), String(job.invoice_number || ""), hcpClient_(job), k, Math.round(cents), owes,
-      String(job.description || type || "").replace(/\s+/g, " ").trim().slice(0, 80), String(job.work_status || "").slice(0, 30), first ? 1 : 0]);
+      String(job.description || type || "").replace(/\s+/g, " ").trim().slice(0, 80), String(job.work_status || "").slice(0, 30), first ? 1 : 0, ck, type.slice(0, 80)]);
     if (owes > 0 && !/^(scheduled|unscheduled|needs scheduling)$/i.test(String(job.work_status || "").trim()))
       a.unpaid.push([String(job.id || ""), String(job.invoice_number || ""), hcpClient_(job), k, Math.round(cents), owes,
         String(job.description || type || "").replace(/\s+/g, " ").trim().slice(0, 80)]);
