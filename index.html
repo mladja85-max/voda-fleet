@@ -654,6 +654,12 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .seg-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: .95rem; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 /* the picked option is filled in VODA blue, so it's clear what's selected */
 .seg-btn { transition: background-color .15s ease, color .15s ease; }
+/* Office's row of tabs on a PC: one line as wide as its names need (past the reading width when there's room), and a
+   second line only when the screen is too narrow for all of them */
+@media (min-width: 601px) {
+  .seg.of-tabs { width: max-content; max-width: calc(100vw - 64px); flex-wrap: wrap; box-sizing: border-box; }
+  .seg.of-tabs .seg-btn { padding-inline: 11px; }
+}
 /* Office's four tabs on a phone: two by two, every name whole */
 @media (max-width: 600px) {
   .seg.of-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
