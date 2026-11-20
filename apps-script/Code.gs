@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 114;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 115;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -479,6 +479,9 @@ function doPost(e) {
       case "mktPut":
         if (!canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return mktPut_(req, user); }));
+      case "mktMove":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return mktMove_(req, user); }));
       case "mktImport":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return mktImport_(req, user); }));
@@ -4467,6 +4470,36 @@ function mktPut_(req, user) {
     mktWrite_(s, MKT_MAP_COLS, rows.filter(function (r) { return mktName_(r[1]); }));
   }
   return mktRead_();
+}
+/** Admin: ad spend typed (or imported) under one line moved to another, months a..b ({ from, to, a, b }): added to
+ *  what the other line has that month, taken off the first. Spend imported from the spreadsheets keeps saying so
+ *  (importing them again puts it back where the spreadsheet has it). */
+function mktMove_(req, user) {
+  const tz = Session.getScriptTimeZone(), from = mktName_(req.from), to = mktName_(req.to), a = mktMonth_(req.a, tz), b = mktMonth_(req.b, tz);
+  if (!from || !to || from.toLowerCase() === to.toLowerCase() || !a || !b || a > b) return { ok: false, error: "bad_request" };
+  const s = mktSheet_(MKT_SPEND, MKT_SPEND_COLS, true), at = new Date().toISOString();
+  const rows = mktRows_(s, MKT_SPEND_COLS.length).map(function (r) { return [mktMonth_(r[0], tz), mktName_(r[1]), r[2], String(r[3] || ""), r[4], r[5]]; })
+    .filter(function (r) { return r[0] && r[1] && r[2] !== "" && r[2] !== null; });
+  const idx = {};
+  rows.forEach(function (r, i) { idx[r[0] + "	" + r[1]] = i; });
+  let n = 0, cents = 0;
+  const gone = {};
+  rows.forEach(function (r, i) {
+    if (r[1] !== from || r[0] < a || r[0] > b) return;
+    const v = mktMoney_(r[2]);
+    if (v === null) return;
+    const k = r[0] + "	" + to;
+    if (idx[k] !== undefined) {
+      const t = rows[idx[k]], sum = Math.round(((mktMoney_(t[2]) || 0) + v) * 100) / 100;
+      rows[idx[k]] = [t[0], to, sum, t[3] === "typed" || r[3] === "typed" ? "typed" : t[3], user.name, at];
+    } else { idx[k] = rows.length; rows.push([r[0], to, v, r[3] || "typed", user.name, at]); }
+    gone[i] = true; n++; cents += Math.round(v * 100);
+  });
+  if (!n) return { ok: false, error: "nothing" };
+  const keep = rows.filter(function (r, i) { return !gone[i]; });
+  keep.sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0; });
+  mktWrite_(s, MKT_SPEND_COLS, keep);
+  return Object.assign(mktRead_(), { moved: { months: n, cents: cents } });
 }
 /** Admin: the months from Clients Per Month and Summary Advertising, read in the app. hist: [month, source, department
  *  ("r", "c", "p" or ""), revenue $, jobs] replaces everything imported before; spend: [month, source, $] replaces the
