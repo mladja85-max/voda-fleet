@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 110;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 111;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -401,6 +401,18 @@ function doPost(e) {
       case "revSync":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
+      case "rpRead":
+        if (!canCpm_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(rpRead_());
+      case "rpRule":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return rpRule_(req, user); }));
+      case "rpSent":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return rpSent_(req, user); }));
+      case "rpImport":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return rpImport_(req); }));
       case "cpmRead":
         if (!canCpm_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(cpmRead_());
@@ -4254,6 +4266,107 @@ function cpmImport_(req, user) {
   return Object.assign(cpmRead_(), { saved: Object.keys(clean).length });
 }
 
+/* ---- Referral Partners (Office, admins and Revenue): who sends us clients, their jobs and money each month, and the
+   rewards (a partner's rule: a % of the money, $ a job or $ a month; what's been sent, when and how). Who referred a
+   client: the customer's tag in Housecall Pro ("Referral Client By Maple Ridge Realty, LLC"), kept with Past clients'
+   customers (read again as they change). Each job's day, number and money come from the Revenue tab's jobs (the app
+   reads those like Operations); a job → its customer from Past clients' jobs. Months before Housecall Pro: the
+   "9. REFERRAL PARTNERS" Excel, loaded by an admin (each month's jobs, $, reward and gift card notes per partner). ---- */
+const RP_RULES = "Referral partners", RP_RULE_COLS = ["Partner", "Reward", "Amount", "Note", "Changed by", "Changed at"];
+const RP_SENT = "Referral rewards", RP_SENT_COLS = ["Id", "Month", "Partner", "Amount $", "Sent on", "Note", "By", "At"];
+const RP_HIST = "Referral history", RP_HIST_COLS = ["Month", "Partner", "Jobs", "Revenue $", "Reward $", "Note", "From"];
+const RP_KINDS = ["none", "pct", "job", "month"];   // no reward; a % of the money; $ a job; $ a month with a job
+const RP_YM = /^\d{4}-(0[1-9]|1[0-2])$/;
+const RP_TAG = /^\s*(?:referr?al|referred)\b[^,]*?\bby\b\s*[:\-–]?\s*(.+?)\s*$/i;
+/** The partner on a customer's tags ("Referral Client By Maple Ridge Realty, LLC" → "Maple Ridge Realty, LLC"), or "". */
+function rpOfTags_(list) {
+  for (let i = 0; i < (list || []).length; i++) { const m = RP_TAG.exec(String(list[i] || "")); if (m && m[1]) return m[1].replace(/\s+/g, " ").slice(0, 80); }
+  return "";
+}
+/** The same from a customer's tags kept as one text ("a, b, c"): a company ending after a comma stays with its name. */
+function rpOfTagText_(text) {
+  const out = [];
+  String(text || "").split(/,\s*/).forEach(function (p) {
+    const t = p.trim();
+    if (!t) return;
+    if (out.length && /^(l\.?l\.?c\.?|inc\.?|incorporated|corp\.?|co\.?|ltd\.?|l\.?p\.?|llp|pllc|p\.?c\.?)$/i.test(t)) out[out.length - 1] += ", " + t;
+    else out.push(t);
+  });
+  return rpOfTags_(out);
+}
+function rpMonth_(v, tz) { return v instanceof Date ? Utilities.formatDate(v, tz, "yyyy-MM") : (RP_YM.test(String(v || "").trim()) ? String(v).trim() : ""); }
+/** Everything the page needs: who referred each customer (cust: customer id → partner), the jobs of those customers
+ *  (jobs: job id → customer id), each partner's reward rule, the rewards sent, and the Excel's months. Past clients'
+ *  customers and jobs are read again from Housecall Pro first when they're 15 minutes old. */
+function rpRead_() {
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), now = tmNow_().getTime();
+  const ready = P.getProperty(PC_DONE) === "yes";
+  let sync = null, cur = {};
+  try { cur = JSON.parse(P.getProperty(PC_CUR) || "{}") || {}; } catch (e) { cur = {}; }
+  if (ready && hcpKey_() && cur.stage !== "back" && now - (Number(P.getProperty(PC_AT)) || 0) > PC_STALE && now - (Number(P.getProperty(PC_BUSY)) || 0) > 90e3) {
+    P.setProperty(PC_BUSY, String(now));
+    try { sync = pcSync_({}, PC_READ_PAGES); } catch (e) { sync = { ok: false, error: "server" }; }
+    P.deleteProperty(PC_BUSY);
+  }
+  const cust = {}, names = {};
+  pcRows_(PC_CUST, PC_CUST_COLS.length).forEach(function (r) {
+    const by = String(r[8] || "") || rpOfTagText_(r[4]);
+    if (by) { cust[String(r[0])] = by; names[by] = (names[by] || 0) + 1; }
+  });
+  const jobs = {};
+  pcRows_(PC_JOBS, PC_JOB_COLS.length).forEach(function (r) { const c = String(r[1] || ""); if (cust[c]) jobs[String(r[0])] = c; });
+  const rules = mktRows_(mktSheet_(RP_RULES, RP_RULE_COLS, false), RP_RULE_COLS.length).filter(function (r) { return mktName_(r[0]); })
+    .map(function (r) { return { partner: mktName_(r[0]), kind: RP_KINDS.indexOf(String(r[1])) !== -1 ? String(r[1]) : "none", amount: Number(r[2]) || 0, note: String(r[3] || "") }; });
+  const sent = mktRows_(mktSheet_(RP_SENT, RP_SENT_COLS, false), RP_SENT_COLS.length).filter(function (r) { return r[0]; }).map(function (r) {
+    return { id: String(r[0]), month: rpMonth_(r[1], tz), partner: mktName_(r[2]), cents: Math.round((Number(r[3]) || 0) * 100), day: pcDay_(r[4], tz), note: String(r[5] || ""), by: String(r[6] || "") };
+  });
+  const hist = mktRows_(mktSheet_(RP_HIST, RP_HIST_COLS, false), RP_HIST_COLS.length).filter(function (r) { return rpMonth_(r[0], tz) && mktName_(r[1]); })
+    .map(function (r) { return [rpMonth_(r[0], tz), mktName_(r[1]), Number(r[2]) || 0, Math.round((Number(r[3]) || 0) * 100), Math.round((Number(r[4]) || 0) * 100), String(r[5] || "")]; });
+  return { ok: true, ready: ready, cust: cust, jobs: jobs, partners: names, rules: rules, sent: sent, hist: hist, at: Number(P.getProperty(PC_AT)) || 0,
+    sync: sync && !sync.ok ? { error: sync.error } : null };
+}
+/** Admin: a partner's reward rule ({ partner, kind: none | pct | job | month, amount, note }). */
+function rpRule_(req, user) {
+  const partner = mktName_(req.partner), kind = String(req.kind || ""), amount = Number(req.amount);
+  if (!partner || RP_KINDS.indexOf(kind) === -1 || !(amount >= 0 && amount <= (kind === "pct" ? 100 : 100000))) return { ok: false, error: "bad_request" };
+  const s = mktSheet_(RP_RULES, RP_RULE_COLS, true), rows = mktRows_(s, RP_RULE_COLS.length).filter(function (r) { return mktName_(r[0]); });
+  const i = rows.findIndex(function (r) { return mktName_(r[0]).toLowerCase() === partner.toLowerCase(); });
+  const row = [partner, kind, kind === "none" ? 0 : Math.round(amount * 100) / 100, String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140), String(user.name || "").slice(0, 60), new Date().toISOString()];
+  if (i === -1) rows.push(row); else rows[i] = row;
+  mktWrite_(s, RP_RULE_COLS, rows);
+  return rpRead_();
+}
+/** Admin: a reward sent ({ month, partner, amount, day, note }), or one taken back ({ id, del: true }). */
+function rpSent_(req, user) {
+  const s = mktSheet_(RP_SENT, RP_SENT_COLS, true), rows = mktRows_(s, RP_SENT_COLS.length).filter(function (r) { return r[0]; });
+  if (req.del) {
+    const id = String(req.id || ""), left = rows.filter(function (r) { return String(r[0]) !== id; });
+    if (left.length === rows.length) return { ok: false, error: "gone" };
+    mktWrite_(s, RP_SENT_COLS, left);
+    return rpRead_();
+  }
+  const month = String(req.month || ""), partner = mktName_(req.partner), amount = Number(req.amount), day = String(req.day || "");
+  if (!RP_YM.test(month) || !partner || !(amount > 0 && amount <= 100000) || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: "bad_request" };
+  rows.push([Utilities.getUuid(), month, partner, Math.round(amount * 100) / 100, day, String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 200), String(user.name || "").slice(0, 60), new Date().toISOString()]);
+  mktWrite_(s, RP_SENT_COLS, rows);
+  return rpRead_();
+}
+/** Admin: the Excel's months ({ rows: [[month, partner, jobs, $, reward $, note]] }): they replace what was loaded before. */
+function rpImport_(req) {
+  const rows = Array.isArray(req.rows) ? req.rows : null;
+  if (!rows || rows.length > 20000) return { ok: false, error: "bad_request" };
+  const out = [];
+  rows.forEach(function (x) {
+    if (!Array.isArray(x) || !RP_YM.test(String(x[0] || "")) || !mktName_(x[1])) return;
+    const jobs = Math.round(Number(x[2]) || 0), v = Math.round((Number(x[3]) || 0) * 100) / 100, rw = Math.round((Number(x[4]) || 0) * 100) / 100, note = String(x[5] || "").replace(/\s+/g, " ").trim().slice(0, 300);
+    if (!jobs && !v && !rw && !note) return;
+    out.push([String(x[0]), mktName_(x[1]), Math.max(0, jobs), v, rw, note, "Excel"]);
+  });
+  out.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1; });
+  mktWrite_(mktSheet_(RP_HIST, RP_HIST_COLS, true), RP_HIST_COLS, out);
+  return Object.assign(rpRead_(), { saved: out.length });
+}
+
 /* ---------------- Marketing: where clients come from, what they bring in, and what the ads cost ---------------- */
 // What each source brought in comes from Housecall Pro (the Sources column of the Revenue tab, above). Three tabs keep
 // the rest, all typed or matched in the app:
@@ -5005,7 +5118,7 @@ function estSync_(req, user) {
    the marks in "Past client calls". ---------------- */
 const PC_JOBS = "Past client jobs", PC_CUST = "Past clients", PC_CALLS = "Past client calls";
 const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Created", "Job type", "Address", "Changed", "Tags"];
-const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed"];
+const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed", "Referred by"];
 const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who", "Call back on", "Note"];
 const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
 const PC_ASSIGN = "PC_ASSIGN";   // who calls each group: { "6": [user ids], ... }; a group nobody has is everyone's
@@ -5067,7 +5180,9 @@ function pcCustRow_(cu, old) {
   const name = [cu.first_name, cu.last_name].filter(Boolean).join(" ").replace(/\s+/g, " ").trim() || String(cu.company || "").trim();
   const tags = Array.isArray(cu.tags) ? cu.tags.map(function (t) { return String((t && t.name) || t || "").trim(); }).filter(Boolean).join(", ").slice(0, 300) : old ? String(old[4] || "") : "";
   const dns = typeof cu.do_not_service === "boolean" ? (cu.do_not_service ? "yes" : "") : old ? String(old[6] || "") : "";
-  return [String(cu.id), name.slice(0, 80), uniq[0] || "", uniq[1] || "", tags, String(cu.company || "").slice(0, 80), dns, String(cu.updated_at || "").slice(0, 40)];
+  // the referral partner from its tags ("Referral Client By Maple Ridge Realty, LLC"): Referral Partners
+  const by = Array.isArray(cu.tags) ? rpOfTags_(cu.tags.map(function (t) { return String((t && t.name) || t || ""); })) : old ? String(old[8] || "") : "";
+  return [String(cu.id), name.slice(0, 80), uniq[0] || "", uniq[1] || "", tags, String(cu.company || "").slice(0, 80), dns, String(cu.updated_at || "").slice(0, 40), by];
 }
 function pcSheet_(name, cols) {
   const ss = SpreadsheetApp.getActive();

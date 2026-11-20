@@ -980,6 +980,29 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .of-val { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 9px; }
 .of-in:has(.of-ratio) .of-val { padding-right: 6.6em; }
 .of-row-stats { grid-column: 3; margin: 0; justify-self: end; text-align: right; font-size: .82rem; }
+/* Referral Partners: a line a partner (tap: its jobs); phone: name, then the numbers */
+.rp-row { display: grid; grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, 1fr)); gap: 4px 12px; align-items: baseline; padding: 8px 12px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.rp-row > span { display: flex; flex-direction: column; min-width: 0; }
+.rp-row > span:not(:first-child) { text-align: right; align-items: flex-end; }
+.rp-row small { color: var(--muted); font-size: .74rem; font-weight: 500; }
+.rp-row.cpm-head { border-top: 0; }
+.rp-name { display: block !important; }
+.rp-name b { color: var(--muted); font-weight: 700; margin-right: 2px; }
+.rp-name small { display: block; }
+.rp-sent.due small { color: var(--due); font-weight: 700; }
+.rp-table.act .rp-row { grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, 1fr)) 5.5rem; }
+.rp-sentlist { margin-top: 12px; display: grid; gap: 6px; }
+.rp-partners { display: grid; gap: 6px; max-height: 60vh; overflow: auto; }
+.rp-p { display: grid; grid-template-columns: minmax(0, 1fr) auto 6em auto; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rp-p-name { display: grid; } .rp-p-name small { color: var(--muted); font-size: .74rem; }
+.rp-p select, .rp-p input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+@media (max-width: 640px) {
+  .rp-row, .rp-table.act .rp-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 10px; }
+  .rp-row .rp-name { grid-column: 1 / -1; }
+  .rp-row .cpm-each, .rp-row .rp-owed { display: none; }
+  .rp-row > span.rp-act { grid-column: 1 / -1; align-items: flex-start; }
+  .rp-p { grid-template-columns: minmax(0, 1fr) 5em auto; } .rp-p-name { grid-column: 1 / -1; }
+}
 /* Clients Per Month: the totals, then one table (sources by group); phone: two lines a source */
 .of-fold { display: grid; gap: 12px; justify-items: start; }
 @media (max-width: 600px) { .of-fold { justify-items: stretch; } }
@@ -12294,7 +12317,7 @@ async function revLoad(y) {
 /** Whichever screen shows Housecall Pro's days. */
 function revRedraw() {
   if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing();
-  else if (view.tab === "office" && ofView.tab === "cpm" && !ofTypingNow()) renderOffice();
+  else if (view.tab === "office" && (ofView.tab === "cpm" || ofView.tab === "rp") && !ofTypingNow()) renderOffice();
   if (cpmJobsRedraw && dlg.open) cpmJobsRedraw();
   if (estRepRedraw && dlg.open) estRepRedraw();
   if (revUnpaidRedraw && dlg.open) revUnpaidRedraw();
@@ -16577,7 +16600,7 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates", kpi: "KPI", cpm: "Clients Per Month" };
+const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", est: "Estimates", kpi: "KPI", cpm: "Clients Per Month", rp: "Referral Partners" };
 const OF_EST_API = 95;                                   // the Google script version with Office › Estimates (Cleaning's)
 const OF_EST_FU_API = 99;                                // ... and who follows them up, with the call marks
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
@@ -16672,11 +16695,13 @@ function ofTabsEl(cur) {
   const of = ofCan(), estOk = (!apiLevel || apiLevel >= OF_EST_API) && (!ofData || ofData.estOk !== false);
   const list = [];
   for (const [k, t] of Object.entries(OF_TABS)) {
+    if (k === "rp") continue;   // after Marketing
     const ok = k === "kpi" ? kpiCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());
     if (ok) list.push([k, t]);
     if (k === "kpi" && atInOf()) list.push(["at", "Attendance"]);
   }
   if (mkInOf()) list.push(["mkt", "Marketing"]);
+  if (of && rpCan()) list.push(["rp", OF_TABS.rp]);
   const seg = lbSeg(list, cur, k => {
     if (k === cur) return;
     if (view.tab === "office") ofFlush();   // a day being typed is saved first
@@ -16710,21 +16735,22 @@ function renderOffice() {
     return;
   }
   const cfg = ofCfg(), admin = isAdmin();
-  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()));
+  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()));
   if (!shown.some(([k]) => k === ofView.tab)) ofView.tab = "today";
-  const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm";   // People and Load from Excel: the KPI's on its tab; Clients Per Month: its Excel
+  const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm", rp = ofView.tab === "rp";   // People and Load from Excel: the KPI's on its tab; Clients Per Month and Referral Partners: their Excels
   const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" }),
     admin ? h("div", { class: "lb-acts" },
-      cpm ? null : h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
-      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : openOfExcel() }, "Load from Excel")) : null);
+      cpm ? null : rp ? h("button", { class: "btn", type: "button", id: "rpPartnersBtn", disabled: !rpData, onclick: () => rpPartnersDlg() }, "Partners")
+        : h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
+      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : rp ? openRpExcel() : openOfExcel() }, "Load from Excel")) : null);
   const tabs = ofTabsEl(ofView.tab);
-  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi && !cpm) {
+  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi && !cpm && !rp) {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
       ofErr ? h("p", { class: "dlg-err", text: ofErr }) : "");
     return;
   }
-  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : cpm ? cpmEl() : ofTodayEl();
+  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : cpm ? cpmEl() : rp ? rpEl() : ofTodayEl();
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
   if (ofView.tab === "today") ofShowSave();
 }
@@ -17056,6 +17082,328 @@ function openCpmExcel() {
       renderOffice();
     } catch (x) {
       err.textContent = x && x.error === "bad_request" && (Number(x.api) || 0) < CPM_API ? "The Google script needs its new version first (Deploy › Manage deployments › New version)." : errText(x, "Nothing");
+      go.disabled = false; go.textContent = "Load"; armed = false;
+    }
+  };
+}
+/* ---- Referral Partners (Office; admins and people with Revenue): who sends us clients, their jobs and money each month
+   and year, and the rewards: each partner's rule (a % of the money, $ a job or $ a month), what that comes to, and what's
+   been sent (when, how much, a note like the gift card). Who referred a client: the customer's tag in Housecall Pro
+   ("Referral Client By Maple Ridge Realty, LLC"), kept with Past clients' customers. The jobs (day, number, money) are each
+   day's Jobs, read from Housecall Pro like Operations. Months before Housecall Pro: the Excel, loaded by an admin. ---- */
+const RP_API = 111;                                      // the Google script version with Referral Partners
+const K_RP_VIEW = "voda.rpView1";
+const rpView = Object.assign({ per: "month", off: 0 }, store.get(K_RP_VIEW) || {});
+rpView.off = 0;
+let rpData = null, rpLoading = false, rpErr = "", rpOld = false, rpHistCache = null;
+const RP_PER = { month: "Month", year: "Year" };
+const RP_KIND = { none: "No reward", pct: "% of the money", job: "$ a job", month: "$ a month (with a job)" };
+const rpCan = () => isAdmin() || canSee("revenue");
+/** A partner's name without the Excel's numbering or "Referral Client By" ("17) Referral Client By Maple Ridge Realty" →
+ *  "Maple Ridge Realty"). */
+const rpClean = n => String(n || "").replace(/^\s*\d+\)\s*/, "").replace(/^\s*(?:referr?al|referred)\b[^,]*?\bby\b\s*[:\-–]?\s*/i, "").replace(/^\s*-\s*/, "").replace(/\s+/g, " ").trim();
+/** ... and to match the Excel's with the tags': no "The", LLC, Inc, punctuation; lower case. */
+const rpKey = n => rpClean(n).toLowerCase().replace(/^the\s+/, "").replace(/\b(l\.?l\.?c\.?|inc\.?|corp\.?|co\.?|ltd\.?|llp|pllc)(?=\W|$)/g, "").replace(/[^a-z0-9&]+/g, " ").trim();
+async function rpLoad() {
+  if (!session || !rpCan() || rpLoading) return;
+  rpLoading = true;
+  try { rpSet(await api("rpRead", {}, 170000)); rpErr = ""; rpOld = false; }
+  catch (e) { rpOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < RP_API); rpErr = rpOld ? "" : errText(e, "Referral Partners"); }
+  rpLoading = false;
+  if (view.tab === "office" && ofView.tab === "rp") renderOffice();
+}
+function rpSet(out) {
+  rpData = { cust: out.cust || {}, jobs: out.jobs || {}, partners: out.partners || {}, rules: out.rules || [], sent: out.sent || [], hist: out.hist || [], ready: out.ready !== false, at: Date.now() };
+  rpHistCache = null;
+}
+/** Every partner by its key → the name shown: the tag's (Housecall Pro), else the rule's, else the Excel's. */
+function rpNames() {
+  const out = {};
+  for (const n of Object.keys(rpData.partners)) out[rpKey(n)] = n;
+  for (const r of rpData.rules) if (!out[rpKey(r.partner)]) out[rpKey(r.partner)] = r.partner;
+  for (const x of rpData.hist) if (!out[rpKey(x[1])]) out[rpKey(x[1])] = rpClean(x[1]);
+  return out;
+}
+const rpRule = k => rpData.rules.find(r => rpKey(r.partner) === k) || null;
+/** The Excel's months: { "2022-04": { key: { jobs, cents, reward, note } } }. */
+function rpHist() {
+  if (rpHistCache && rpHistCache.of === rpData) return rpHistCache.by;
+  const by = {};
+  for (const [m, p, jobs, cents, reward, note] of rpData.hist) {
+    const k = rpKey(p), x = (by[m] || (by[m] = {}))[k] || (by[m][k] = { jobs: 0, cents: 0, reward: 0, note: "" });
+    x.jobs += jobs; x.cents += cents; x.reward += reward; if (note) x.note = x.note ? `${x.note}; ${note}` : note;
+  }
+  rpHistCache = { of: rpData, by };
+  return by;
+}
+/** A month (up to upTo) by partner: Housecall Pro once every day of it is read with its jobs and it has jobs; else the
+ *  Excel's; else whatever Housecall Pro has (missing: days still to read). null while its year loads. */
+function rpMonth(m, upTo) {
+  const doc = revDoc(Number(m.slice(0, 4)));
+  if (!doc) { revLoad(Number(m.slice(0, 4))); return null; }
+  const today = lbToday(), last = `${m}-${String(lbDaysIn(m)).padStart(2, "0")}`;
+  let end = upTo && upTo < last ? upTo : last;
+  if (end > today) end = today;
+  const out = { by: {}, from: "", missing: 0 };
+  let has = 0;
+  for (let d = `${m}-01`; d <= end; d = lbAddDays(d, 1)) {
+    const v = doc.days[d];
+    if (!v || !Array.isArray(v[13])) { out.missing++; continue; }
+    for (const j of v[13]) {
+      if (!Array.isArray(j)) continue;
+      has++;
+      const cid = rpData.jobs[j[0]];
+      if (!cid || !rpData.cust[cid]) continue;
+      const k = rpKey(rpData.cust[cid]), x = out.by[k] || (out.by[k] = { jobs: 0, cents: 0, list: [] });
+      x.cents += Number(j[4]) || 0;
+      if (j[8]) x.jobs++;
+      x.list.push({ d, id: j[0], inv: j[1], client: j[2], cents: Number(j[4]) || 0, first: !!j[8], type: String(j[10] || j[6] || "") });
+    }
+  }
+  const hist = rpHist()[m];
+  if (has && !out.missing) out.from = "hcp";
+  else if (hist) { out.by = {}; out.from = "xl"; for (const [k, x] of Object.entries(hist)) out.by[k] = Object.assign({ list: null }, x); }
+  else if (has) out.from = "hcp";
+  return out;
+}
+/** What a partner's reward comes to for a month (cents): the Excel's for its months; else the partner's rule. */
+function rpOwed(k, x, from) {
+  if (from === "xl") return x.reward || 0;
+  const r = rpRule(k);
+  if (!r || r.kind === "none") return 0;
+  if (r.kind === "pct") return Math.round(x.cents * r.amount / 100);
+  if (r.kind === "job") return Math.round(x.jobs * r.amount * 100);
+  return x.jobs || x.cents ? Math.round(r.amount * 100) : 0;
+}
+/** months (yyyy-MM, the last one up to upTo) added up by partner: jobs, cents, owed, sent, each month's lists. */
+function rpPeriod(months, upTo) {
+  const s = { by: {}, from: new Set(), missing: 0 };
+  for (const m of months) {
+    const x = rpMonth(m, m === months[months.length - 1] ? upTo : "");
+    if (!x) return null;
+    if (x.from) s.from.add(x.from);
+    s.missing += x.missing;
+    for (const [k, v] of Object.entries(x.by)) {
+      const t = s.by[k] || (s.by[k] = { jobs: 0, cents: 0, owed: 0, sent: 0, lists: [], xl: [] });
+      t.jobs += v.jobs; t.cents += v.cents; t.owed += rpOwed(k, v, x.from);
+      if (v.list) t.lists.push(...v.list); else t.xl.push([m, v]);
+    }
+  }
+  for (const x of rpData.sent) if (months.includes(x.month)) { const k = rpKey(x.partner), t = s.by[k] || (s.by[k] = { jobs: 0, cents: 0, owed: 0, sent: 0, lists: [], xl: [] }); t.sent += x.cents; }
+  return s;
+}
+const rpMonthsOf = (from, to) => { const out = []; for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = cpmNextMonth(m)) out.push(m); return out; };
+const rpMonthText = m => `${lbMonthLong(Number(m.slice(5)))} ${m.slice(0, 4)}`;
+function rpEl() {
+  const out = [];
+  if (rpOld || (apiLevel && apiLevel < RP_API)) {
+    out.push(h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+      h("p", { class: "meta", text: "Referral Partners needs the newest Google script: Deploy › Manage deployments › pencil › New version › Deploy." })));
+    return out;
+  }
+  if (!rpData) { out.push(h("p", { class: "loading", text: rpErr || "Loading Referral Partners…" })); if (!rpLoading && !rpErr) rpLoad(); return out; }
+  if (Date.now() - rpData.at > 15 * 60e3 && !rpLoading) rpLoad();   // tags added in Housecall Pro since
+  const per = RP_PER[rpView.per] ? rpView.per : "month", off = Math.min(0, Number(rpView.off) || 0);
+  const r = ofRange(per, off), today = lbToday(), to = r.to > today ? today : r.to;
+  const step = n => { rpView.off = Math.min(0, off + n); store.set(K_RP_VIEW, { per: rpView.per }); renderOffice(); };
+  out.push(h("div", { class: "lb-bar" },
+    lbSeg(Object.entries(RP_PER), per, k => { rpView.per = k; rpView.off = 0; store.set(K_RP_VIEW, { per: k }); renderOffice(); }, "Period"),
+    h("div", { class: "of-step" },
+      h("button", { class: "btn small", type: "button", id: "rpPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+      h("strong", { id: "rpRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
+      h("button", { class: "btn small", type: "button", id: "rpNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›"))));
+  if (!rpData.ready) out.push(h("p", { class: "dlg-err", id: "rpNotReady", text: "Who referred each client comes from the customers' tags, read with Past clients: Office › Past clients needs its first read from Housecall Pro." }));
+  const months = rpMonthsOf(r.from, to), ytdMonths = rpMonthsOf(`${to.slice(0, 4)}-01-01`, to);
+  const cur = rpPeriod(months, to), ytd = per === "month" ? rpPeriod(ytdMonths, to) : cur;
+  if (!cur || !ytd) { out.push(h("p", { class: "loading", text: "Loading…" })); return out; }
+  const range = [`${months[0]}-01`, to];
+  if (cur.missing || ytd.missing) setTimeout(() => revEnsure([[`${ytdMonths[0] < months[0] ? ytdMonths[0] : months[0]}-01`, to]], false, "rp"), 0);   // days read before they kept their jobs too
+  if (revSync.busy) out.push(h("p", { class: "meta rev-status busy", id: "rpReading", text: `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…` }));
+  else if (revSync.err && cur.missing) out.push(h("p", { class: "dlg-err" }, revSync.err, " ", h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; revEnsure([range], false, "rp"); } }, "Try again")));
+  const names = rpNames(), admin = isAdmin();
+  const keys = Object.keys(cur.by).filter(k => { const t = cur.by[k]; return t.jobs || t.cents || t.owed || t.sent; }).sort((a, b) => cur.by[b].cents - cur.by[a].cents || cur.by[b].jobs - cur.by[a].jobs);
+  const tot = keys.reduce((t, k) => { const x = cur.by[k]; t.jobs += x.jobs; t.cents += x.cents; t.owed += x.owed; t.sent += x.sent; return t; }, { jobs: 0, cents: 0, owed: 0, sent: 0 });
+  const left = Math.max(0, tot.owed - tot.sent);
+  out.push(h("div", { class: "cpm-tots rp-tots" },
+    h("div", { class: "of-tot" }, h("small", { text: "Referred jobs" }), h("b", { id: "rpTotJobs", text: fmt(tot.jobs) })),
+    h("div", { class: "of-tot" }, h("small", { text: "Revenue" }), h("b", { id: "rpTotMoney", text: lbMoney(tot.cents / 100) })),
+    h("div", { class: "of-tot" }, h("small", { text: "Rewards" }), h("b", { id: "rpTotOwed", text: lbMoney(tot.owed / 100) })),
+    h("div", { class: "of-tot" + (left ? " down" : "") }, h("small", { text: left ? "Still to send" : "Sent" }), h("b", { id: "rpTotSent", text: lbMoney((left || tot.sent) / 100) }))));
+  const from = cur.from.has("xl") && cur.from.has("hcp") ? "From Housecall Pro, and the Excel for months before it" : cur.from.has("xl") ? "From the Excel (Referral Partners): before Housecall Pro" : "From Housecall Pro: the customers tagged “Referral Client By …”";
+  out.push(h("p", { class: "meta cpm-from", id: "rpFrom", text: `${from}.` }));
+  if (!keys.length) out.push(h("p", { class: "meta", id: "rpEmpty", text: `No referred jobs ${per === "month" ? "this month" : "this year"} yet.` }));
+  else {
+    const act = admin && per === "month";   // Sent… (a month at a time)
+    const head = h("div", { class: "rp-row cpm-head", role: "row" }, ["Partner", "Jobs", "Revenue", per === "month" ? "Year so far" : "Months", "Reward", "Sent"].concat(act ? [""] : []).map(t => h("span", { role: "columnheader", text: t })));
+    out.push(h("div", { class: "cpm-table rp-table" + (act ? " act" : ""), id: "rpTable", role: "table" }, head, keys.map((k, i) => {
+      const x = cur.by[k], y = ytd.by[k] || { jobs: 0, cents: 0 }, name = names[k] || k, rule = rpRule(k);
+      const go = () => rpJobsDlg(k, name, x, r.label);
+      const owe = Math.max(0, x.owed - x.sent);
+      return h("div", { class: "rp-row cpm-open", role: "row", "data-partner": name, tabindex: "0", title: "Its jobs", onclick: go, onkeydown: ev => { if (ev.target === ev.currentTarget && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); go(); } } },
+        h("span", { class: "cpm-name rp-name", role: "cell" }, h("b", { text: `#${i + 1} ` }), name, h("small", { text: rule && rule.kind !== "none" ? `${rule.kind === "pct" ? `${rule.amount}%` : `$${rule.amount}`}${rule.kind === "job" ? " a job" : rule.kind === "month" ? " a month" : ""}` : "" })),
+        h("span", { class: "cpm-n", role: "cell" }, h("b", { text: fmt(x.jobs) })),
+        h("span", { class: "cpm-money", role: "cell" }, h("b", { text: lbMoney(x.cents / 100) }), h("small", { text: tot.cents ? `${Math.round(x.cents / tot.cents * 100)}%` : "" })),
+        h("span", { class: "cpm-each", role: "cell" }, h("b", { text: per === "month" ? lbMoney(y.cents / 100) : String(new Set(x.lists.map(j => j.d.slice(0, 7)).concat(x.xl.map(z => z[0]))).size) }), per === "month" ? h("small", { text: `${fmt(y.jobs)} job${y.jobs === 1 ? "" : "s"}` }) : null),
+        h("span", { class: "rp-owed", role: "cell" }, h("b", { text: x.owed ? lbMoney(x.owed / 100) : "–" })),
+        h("span", { class: "rp-sent" + (owe ? " due" : ""), role: "cell" }, h("b", { text: x.sent ? lbMoney(x.sent / 100) : "–" }), owe ? h("small", { text: `${lbMoney(owe / 100)} to send` }) : null),
+        act ? h("span", { class: "rp-act", role: "cell" }, h("button", { class: "btn small", type: "button", "data-send": name, onclick: ev => { ev.stopPropagation(); rpSentDlg(months[0], name, owe); } }, "Sent…")) : null);
+    })));
+  }
+  // the rewards sent in the period
+  const sentList = rpData.sent.filter(x => months.includes(x.month)).sort((a, b) => (a.day < b.day ? 1 : -1));
+  if (sentList.length) out.push(h("div", { class: "rp-sentlist", id: "rpSentList" }, h("h4", { class: "of-sec", text: "Rewards sent" }),
+    h("ul", { class: "of-bk-list" }, sentList.map(x => h("li", { class: "of-bk-row", "data-id": x.id },
+      h("b", { text: lbMoney(x.cents / 100) }), h("span", { class: "of-bk-client", text: `${names[rpKey(x.partner)] || x.partner} · ${rpMonthText(x.month)}` }),
+      h("span", { class: "of-bk-day", text: `sent ${lbDayText(x.day)}` }),
+      admin ? h("button", { class: "btn small ghost", type: "button", "aria-label": "Take back", title: "Take back", onclick: async ev => {
+        const b = ev.currentTarget;
+        if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Sure? Tap again"; return; }
+        b.disabled = true;
+        try { rpSet(await api("rpSent", { id: x.id, del: true })); toast("Taken back"); } catch (e) { toast(errText(e, "Nothing")); }
+        renderOffice();
+      } }, "×") : h("span"),
+      h("small", { class: "of-bk-st", text: [x.note, x.by ? `by ${x.by}` : ""].filter(Boolean).join(" · ") }))))));
+  out.push(howFold("rpHow", h("p", { class: "hint", text: "A referral partner's clients: the customers tagged “Referral Client By <partner>” in Housecall Pro (every job of theirs counts). Jobs: first visits (1234-2 and later add money only); Revenue: each job's amount on the day it's on the schedule (canceled ones left out). Reward: each partner's rule (Partners): a % of the money, $ a job, or $ a month with a job; months from the Excel show its MONTHLY REWARD. Sent: what's been marked sent for those months. Months Housecall Pro doesn't have come from the Excel (Load from Excel)." }), "How it's counted"));
+  return out;
+}
+/** A partner's jobs in the period (numbers open them in Housecall Pro); the Excel's months named with their totals. */
+function rpJobsDlg(k, name, x, period) {
+  const list = x.lists.slice().sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : String(b.inv).localeCompare(String(a.inv), undefined, { numeric: true })));
+  const sum = list.reduce((t, j) => [t[0] + j.cents, t[1] + (j.first ? 1 : 0)], [0, 0]);
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `${name} · ${period}` }),
+    h("div", { class: "cpm-jobs" }, ...[
+      h("p", { class: "meta", id: "rpJobsSum" }, h("b", { text: `${fmt(list.length)} job${list.length === 1 ? "" : "s"} · ${lbMoney(sum[0] / 100)} · ${fmt(sum[1])} first visit${sum[1] === 1 ? "" : "s"}` })),
+      x.xl.length ? h("p", { class: "meta", id: "rpJobsXl", text: `From the Excel, no jobs to list: ${x.xl.map(([m, v]) => `${rpMonthText(m)} (${fmt(v.jobs)} jobs · ${lbMoney(v.cents / 100)}${v.note ? ` · ${v.note}` : ""})`).join("; ")}.` }) : null,
+      list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cpm-jobs-table", id: "rpJobsTable" },
+        h("thead", null, h("tr", null, ["Day", "#", "Client", "Job type", "Amount", "Job?"].map(t => h("th", { text: t })))),
+        h("tbody", null, list.map(j => h("tr", { "data-inv": j.inv },
+          h("td", { text: lbDayText(j.d) }), h("td", null, j.inv ? hcpLink("job", j.id, `#${j.inv}`) : hcpLink("job", j.id, "Open")),
+          h("td", { class: "cpm-j-client", text: j.client || "(no name)" }), h("td", { class: "cpm-j-type", text: j.type || "" }),
+          h("td", { class: "cpm-j-amt", text: lbMoney(j.cents / 100) }), h("td", { text: j.first ? "Yes" : "Later visit" })))))) : null].filter(Boolean)),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+}
+/** Admin: a reward sent for a month: how much (what's left to send, to start), the day, a note (the gift card…). */
+function rpSentDlg(month, name, left) {
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const amt = h("input", { type: "text", inputmode: "decimal", id: "rpAmt", autocomplete: "off", value: left ? String(Math.round(left) / 100) : "" });
+  const day = h("input", { type: "date", id: "rpDay", value: lbToday() });
+  const note = h("input", { type: "text", id: "rpNote", maxlength: "200", placeholder: "e.g. Amazon gift card, sent by email" });
+  openDialog(
+    h("h3", { id: "dlgTitle", text: `Reward sent · ${name}` }),
+    h("p", { class: "hint", text: `For ${rpMonthText(month)}.` }),
+    h("label", { class: "field" }, h("span", { text: "Amount ($)" }), amt),
+    h("label", { class: "field" }, h("span", { text: "Sent on" }), day),
+    h("label", { class: "field" }, h("span", { text: "Note" }), note),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }),
+      h("button", { class: "btn primary", type: "button", id: "rpSave", text: "Save", onclick: async ev => {
+        const btn = ev.currentTarget, a = Number(String(amt.value).replace(/[$,\s]/g, ""));
+        if (!(a > 0)) { err.textContent = "Type how much was sent."; return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day.value)) { err.textContent = "Pick the day it was sent."; return; }
+        btn.disabled = true;
+        try { rpSet(await api("rpSent", { month, partner: name, amount: a, day: day.value, note: note.value })); dlgDirty = false; closeDialog(); toast(`${name}: ${lbMoney(a)} sent`); renderOffice(); }
+        catch (e) { err.textContent = errText(e, "Nothing"); btn.disabled = false; }
+      } }))));
+}
+/** Admin: each partner's reward rule: none, a % of the money, $ a job, or $ a month with a job. */
+function rpPartnersDlg() {
+  const names = rpNames(), keys = Object.keys(names).sort((a, b) => names[a].localeCompare(names[b]));
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Referral partners" }),
+    h("p", { class: "hint", text: "Every partner from the customers' tags in Housecall Pro (and the Excel). Set what each one gets; Save on its line." }),
+    keys.length ? h("div", { class: "rp-partners", id: "rpPartners" }, keys.map(k => {
+      const r = rpRule(k) || { kind: "none", amount: 0, note: "" }, n = rpData.partners[names[k]] || 0;
+      const kind = h("select", { "aria-label": "Reward", "data-k": k }, Object.entries(RP_KIND).map(([v, t]) => h("option", { value: v, text: t })));
+      kind.value = r.kind;
+      const amt = h("input", { type: "text", inputmode: "decimal", "aria-label": "Amount", value: r.kind === "none" ? "" : String(r.amount), placeholder: "0" });
+      const save = h("button", { class: "btn small", type: "button", text: "Save", onclick: async () => {
+        const a = kind.value === "none" ? 0 : Number(String(amt.value).replace(/[$%,\s]/g, ""));
+        if (!(a >= 0) || (kind.value === "pct" && a > 100)) { err.textContent = `${names[k]}: type the amount (a % up to 100).`; return; }
+        save.disabled = true;
+        try { rpSet(await api("rpRule", { partner: names[k], kind: kind.value, amount: a })); err.textContent = ""; toast(`${names[k]}: saved`); renderOffice(); }
+        catch (e) { err.textContent = errText(e, "Nothing"); }
+        save.disabled = false;
+      } });
+      return h("div", { class: "rp-p", "data-partner": names[k] }, h("span", { class: "rp-p-name" }, names[k], h("small", { text: n ? `${n} customer${n === 1 ? "" : "s"} tagged` : "from the Excel" })), kind, amt, save);
+    })) : h("p", { class: "meta", text: "No partners yet: tag a customer “Referral Client By <partner>” in Housecall Pro." }),
+    err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+}
+/** The Excel's year tabs ("Referrals 2026", "Referral 2021"): each month's block, each partner's JOBS, TOTAL, MONTHLY
+ *  REWARD and the gift card / sent notes → [[month, partner, jobs, $, reward $, note]]. The weekly layout (2016–2018) and
+ *  the copies ("Copy of …") aren't read. */
+function rpReadXlsx(tabs) {
+  const out = [], skipped = [];
+  const monthOf = (a, y) => { const t = a.toLowerCase().replace(/\.$/, ""); const i = MKT_MON.findIndex(m => m === t || m.slice(0, 3) === t || (t === "sept" && m === "september")); return i >= 0 ? `${y}-${String(i + 1).padStart(2, "0")}` : ""; };
+  for (const t of tabs) {
+    const ym = /^\s*referrals?\s+(\d{4})\s*$/i.exec(t.name || "");
+    if (!ym) continue;
+    const y = ym[1], rows = t.rows || [], cell = (r, c) => { const v = (rows[r] || [])[c]; return v == null ? "" : v; };
+    let m = "", n = 0;
+    for (let r = 0; r < rows.length; r++) {
+      const a = String(cell(r, 0)).replace(/\s+/g, " ").trim();
+      const mm = a.length <= 10 ? monthOf(a, y) : "";
+      if (mm) { m = mm; continue; }
+      if (!m || /^total\b/i.test(a)) continue;
+      const pm = /^\d+\)\s*(.+)$/.exec(a);
+      if (!pm) continue;
+      const jobs = Math.round(mktNum(cell(r, 1))), money = Math.round(mktNum(cell(r, 2)) * 100) / 100, reward = Math.round(mktNum(cell(r, 6)) * 100) / 100;
+      const bits = [];
+      for (let c = 7; c < 34; c++) {
+        const v = cell(r, c);
+        if (v === "" || /^(date|sent to):?$/i.test(String(v).trim())) continue;
+        bits.push(typeof v === "number" && lbDay(v) ? lbDayText(lbDay(v)) : v instanceof Date ? lbDayText(lbDay(v)) : String(v).replace(/\s+/g, " ").trim());
+      }
+      const note = bits.filter(Boolean).join(" · ").slice(0, 300);
+      if (!jobs && !money && !reward && !note) continue;
+      out.push([m, pm[1].trim(), jobs, money, reward, note]); n++;
+    }
+    if (!n) skipped.push(y);
+  }
+  return { rows: out, skipped };
+}
+/** Admin: Load from Excel on Referral Partners. */
+function openRpExcel() {
+  let got = null, armed = false;
+  const err = h("p", { class: "dlg-err", role: "alert" }), status = h("p", { class: "meta", role: "status" }), sum = h("div", { id: "rpXlSum" });
+  const go = h("button", { class: "btn primary", type: "button", id: "rpXlGo", disabled: true, text: "Load" });
+  openDialog(
+    h("h3", { id: "dlgTitle", text: "Load Referral Partners from Excel" }),
+    howFold("rpXlHow", h("p", { class: "hint", text: "Choose an Excel copy of 9. REFERRAL PARTNERS (File > Download > Microsoft Excel). The app reads each year tab's month blocks: every partner's JOBS, TOTAL, MONTHLY REWARD and the gift card notes. Housecall Pro's numbers are still used for any month it has; the Excel fills the months before it. Loading again replaces what was loaded." }), "How it works"),
+    h("input", { type: "file", id: "rpXlFile", accept: ".xlsx", onchange: async e => {
+      err.textContent = ""; sum.replaceChildren(); go.disabled = true; armed = false; go.textContent = "Load";
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        status.textContent = "Reading…";
+        got = rpReadXlsx(await lbReadXlsx(await f.arrayBuffer(), n => /^\s*referrals?\s+\d{4}\s*$/i.test(n)));
+        status.textContent = "";
+        if (!got.rows.length) { err.textContent = "No month blocks (JANUARY, then “1) …” partners) on year tabs like “Referrals 2026” in that file."; return; }
+        const years = {};
+        for (const [m, , jobs, money, reward] of got.rows) { const y = years[m.slice(0, 4)] || (years[m.slice(0, 4)] = { months: new Set(), jobs: 0, v: 0, rw: 0 }); y.months.add(m); y.jobs += jobs; y.v += money; y.rw += reward; }
+        sum.replaceChildren(h("table", { class: "lb-table", id: "rpXlTable" }, h("thead", null, h("tr", null, ["Year", "Months", "Jobs", "Revenue", "Rewards"].map(t => h("th", { text: t })))),
+          h("tbody", null, Object.keys(years).sort().reverse().map(y => h("tr", { "data-year": y }, h("th", { text: y }), h("td", { text: String(years[y].months.size) }), h("td", { text: fmt(years[y].jobs) }),
+            h("td", { text: lbMoney(years[y].v) }), h("td", { text: lbMoney(years[y].rw) }))))),
+          got.skipped.length ? h("p", { class: "meta", text: `Not read: ${got.skipped.join(", ")} (no month blocks).` }) : null);
+        go.disabled = false; dlgDirty = true;
+      } catch (x) { status.textContent = ""; err.textContent = x && x.message === "not_xlsx" ? "That isn't an Excel (.xlsx) file." : "Couldn't read that file: " + ((x && x.message) || x); }
+    } }),
+    status, sum, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Cancel" }), go)));
+  go.onclick = async () => {
+    if (!got) return;
+    if (!armed) { armed = true; go.textContent = "Tap again to load"; return; }
+    go.disabled = true; go.textContent = "Saving…";
+    try {
+      const out = await api("rpImport", { rows: got.rows }, 170000);
+      rpSet(out); dlgDirty = false; closeDialog();
+      toast(`Referral Partners: ${fmt(out.saved || 0)} lines loaded`);
+      renderOffice();
+    } catch (x) {
+      err.textContent = x && x.error === "bad_request" && (Number(x.api) || 0) < RP_API ? "The Google script needs its new version first (Deploy › Manage deployments › New version)." : errText(x, "Nothing");
       go.disabled = false; go.textContent = "Load"; armed = false;
     }
   };
