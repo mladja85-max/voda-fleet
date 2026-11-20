@@ -316,6 +316,31 @@ button { font: inherit; color: inherit; }
 .qf input.locked, .df input.locked { background: transparent; border-style: dashed; color: var(--muted); }
 .quick.view-only { grid-template-columns: minmax(0, 1fr); }
 .user-row { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+/* Users: a line each (a tap opens the person); the person's window: Job, then what he sees by area */
+.ul-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.ul-row:hover { border-color: var(--accent); } .ul-row.off { opacity: .7; }
+.ul-av { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 800; font-size: .78rem; }
+.ul-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ul-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ul-sum { color: var(--ink); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ul-go { flex: none; font-size: 1.3rem; color: var(--muted); }
+.u-job { font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.user-edit { display: grid; gap: 10px; }
+.u-jobl { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; }
+.u-jobl select, .acc-lvl select { font: inherit; font-size: .92rem; font-weight: 600; min-width: 160px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.u-jobl select { border-color: var(--accent); }
+.u-jobl select:focus, .acc-lvl select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.u-ask { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); font-size: .88rem; }
+.acc-ed { display: grid; gap: 4px; }
+.acc-sec { display: grid; gap: 2px; border-top: 1px solid var(--line); padding-top: 8px; }
+.acc-h { margin: 0 0 2px; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.acc-lvl { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: .92rem; }
+.acc-sw { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 7px 0; border: 0; background: none; font: inherit; font-size: .92rem; color: var(--ink); cursor: pointer; text-align: left; }
+.acc-sw:disabled { cursor: default; opacity: .65; }
+.acc-knob { flex: none; position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--line); transition: background .15s; }
+.acc-knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left .15s; }
+.acc-sw[aria-checked="true"] .acc-knob { background: var(--ok); } .acc-sw[aria-checked="true"] .acc-knob::after { left: 19px; }
+.u-acts { border-top: 1px solid var(--line); padding-top: 10px; }
 .user-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .user-top strong { font-size: 1rem; }
 .user-meta { color: var(--muted); font-size: .84rem; } .user-meta.warn { color: var(--due); font-weight: 600; }
@@ -8175,10 +8200,28 @@ async function openUsers() {
   };
   const fmtAt = iso => iso ? `${fmtWhen(iso)} ${fmtTime(new Date(iso))}` : "never";
   let owner = "", can = stCan();
+  // the list: one line each (name, job, what they see, last sign-in); a tap opens that person's window
+  let users = [], jobAsk = "";
   const row = u => {
+    const me = session && u.id === session.id, job = jobOf(u);
+    const tag = u.status === "invited" ? h("span", { class: "pill", text: "Invited" }) : u.status === "disabled" ? h("span", { class: "pill", text: "Off" })
+      : h("span", { class: "u-job", text: job === "custom" && u.role === "csr" ? "CSR · custom" : (USER_JOBS.find(x => x[0] === job) || [, ""])[1] });
+    return h("button", { class: "user-row ul-row" + (u.status === "disabled" ? " off" : ""), type: "button", "data-user": u.username || u.name, onclick: () => { jobAsk = ""; openOne(u.id); } },
+      h("span", { class: "ul-av", "aria-hidden": "true", text: String(u.name || "?").split(/\s+/).map(w => w[0] || "").join("").slice(0, 2).toUpperCase() }),
+      h("span", { class: "ul-main" },
+        h("span", { class: "ul-top" }, h("strong", { text: u.name }), me ? h("span", { class: "tag", text: "You" }) : null, tag,
+          owner && u.id === owner ? h("span", { class: "tag st-owner", text: "Owns Settings" }) : null),
+        h("small", { class: "ul-sum", text: accessSummary(u) }),
+        h("small", { class: "user-meta", text: u.status === "invited" ? `Invite not used yet (until ${fmtWhen(u.inviteUntil)})` : u.status === "disabled" ? "Turned off" : `Last sign-in: ${fmtAt(u.lastLogin)}` })),
+      h("span", { class: "ul-go", "aria-hidden": "true", text: "›" }));
+  };
+  /** A person's window: Job (sets what a job sees, after a yes), then what they see by area, then the buttons. */
+  const openOne = id => {
+    const u = users.find(x => x.id === id);
+    if (!u) return;
     const me = session && u.id === session.id;
     const isOwner = !!owner && u.id === owner, hasSt = Array.isArray(u.access) && u.access.includes("settings");
-    // Settings: the owner lets someone change them (or not); the others see who can
+    const off = !can || me || isOwner;
     const st = apiLevel < ST_API || !owner || u.status === "invited" ? null
       : isOwner ? h("span", { class: "tag st-owner", text: "Owns Settings" })
       : session.id === owner ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "settings", id: "st-" + (u.username || u.id), "aria-pressed": String(hasSt),
@@ -8186,14 +8229,6 @@ async function openUsers() {
           onclick: () => call("settingsOwner", { id: u.id, on: !hasSt }, `${u.name} ${hasSt ? "can't change Settings any more" : "can change Settings now"}`) }, "Changes settings")
       : hasSt ? h("span", { class: "user-meta", text: "Changes settings" }) : null;
     const status = u.status === "invited" ? `Invite not used yet (code works until ${fmtWhen(u.inviteUntil)})` : u.status === "disabled" ? "Turned off" : `Last sign-in: ${fmtAt(u.lastLogin)}`;
-    const role = h("select", { "aria-label": `Role for ${u.name}`, disabled: me, onchange: e => {
-        const r = e.target.value, data = { id: u.id, role: r }, mine = access.filter(a => a !== "pricecheck");
-        if (r === "csr" && CSR_SEES.some(a => !mine.includes(a))) data.access = mine.concat(CSR_SEES.filter(a => !mine.includes(a)));   // a CSR sees Office (kept: what was ticked)
-        call("saveUser", data, `${u.name} is now ${r === "admin" ? "an Admin" : r === "csr" ? "a CSR" + (data.access ? " (sees Office)" : "") : "a Non-admin"}`);
-      } },
-      h("option", { value: "tech", text: "Non-admin" }), apiLevel >= CSR_API || u.role === "csr" ? h("option", { value: "csr", text: "CSR" }) : null, h("option", { value: "admin", text: "Admin" }));
-    role.value = u.role;
-    const access = Array.isArray(u.access) ? u.access.slice() : ["trucks"];
     // Payroll: only admins switched on see it; an admin who sees it switches it for the others (the first time: anyone)
     const hasPay = Array.isArray(u.access) && u.access.includes("payroll");
     const canPay = apiLevel >= PAY_API && u.status !== "invited" && (apiLevel >= ST_PAY_API && owner && session.id === owner ? true : payMe ? !me : !payAny);   // the owner of Settings: anyone, himself too
@@ -8210,29 +8245,51 @@ async function openUsers() {
           title: hasPc ? "Tap to switch off" : "Tap to switch on",
           onclick: () => call("setPriceCheck", { id: u.id, on: !hasPc }, `${me ? "You" : u.name} ${hasPc ? "no longer check" + (me ? "" : "s") : "now check" + (me ? "" : "s")} price changes`) }, "Checks price changes")
       : h("span", { class: "user-meta", text: hasPc ? "Checks price changes" : "Doesn't check price changes" });
-    const sees = u.role === "admin" ? h("div", { class: "acc" }, h("span", { class: "acc-lbl", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }), can ? pay : null, can ? pc : null)
-      : !can ? (() => { const c = accessChips(access.filter(a => a !== "pricecheck"), () => {}, "acc-" + (u.username || u.id)); c.querySelectorAll("button").forEach(b => { b.disabled = true; }); return c; })()
-      : apiLevel >= SUP_API ? [accessChips(access.filter(a => a !== "pricecheck"), async (next, name, on) => {
-          const out = await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
-          if (!out) load();
-        }, "acc-" + (u.username || u.id)),
-        // a technician can be switched on for price changes too (he needs Operations to see them)
-        pc ? h("div", { class: "acc acc-pc" }, h("span", { class: "acc-lbl", text: "Price changes:" }), pc,
-          hasPc && !access.includes("revenue") ? h("span", { class: "user-meta warn", text: "Tick Operations too, so they see them." }) : null) : null] : null;
-    return h("div", { class: "user-row", "data-user": u.username || u.name },
-      h("div", { class: "user-top" }, h("strong", { text: u.name }), u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
-        u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null, st),
-      h("span", { class: "user-meta", text: status }),
-      sees,
-      me || !can || isOwner ? null : h("div", { class: "user-acts" }, role,
-        u.status === "invited"
-          ? [h("button", { class: "btn small", type: "button", text: "New code", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, false); } }),
-             h("button", { class: "btn small ghost danger", type: "button", text: "Cancel invite", onclick: () => call("saveUser", { id: u.id, remove: true }, "Invite cancelled") })]
-          : [u.status === "active"
-              ? h("button", { class: "btn small", type: "button", text: "Reset passcode", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, true); } })
-              : null,
-             h("button", { class: "btn small ghost" + (u.status === "active" ? " danger" : ""), type: "button", text: u.status === "active" ? "Turn off" : "Turn on",
-               onclick: () => call("saveUser", { id: u.id, status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]));
+    const access = (Array.isArray(u.access) ? u.access : []).filter(a => !ACC_EXTRA.includes(a));
+    const job = jobOf(u), jobName = k => (USER_JOBS.find(x => x[0] === k) || [, ""])[1];
+    const jobSel = h("select", { id: "uJob", "aria-label": `Job for ${u.name}`, disabled: off,
+      onchange: ev => { jobAsk = ev.target.value; openOne(u.id); } },
+      USER_JOBS.filter(([k]) => k !== "csr" || apiLevel >= CSR_API || u.role === "csr").map(([k, t]) => h("option", { value: k, text: t })));
+    jobSel.value = jobAsk || job;
+    const asking = jobAsk && jobAsk !== job && jobAsk !== "custom";
+    const ask = asking ? h("div", { class: "u-ask", id: "uJobAsk" },
+      h("span", { text: jobAsk === "admin" ? `Make ${u.name} an Admin? Admins see and change everything.` : `Change what ${u.name} sees to a ${jobName(jobAsk)}'s? What's ticked now is replaced.` }),
+      h("div", { class: "user-acts" },
+        h("button", { class: "btn small primary", type: "button", id: "uJobYes", onclick: async () => {
+          const j = jobSet(jobAsk), name = jobName(jobAsk);
+          jobAsk = "";
+          await call("saveUser", Object.assign({ id: u.id, role: j.role }, j.role === "admin" ? {} : { access: j.access }),
+            `${u.name} is now ${j.role === "admin" ? "an Admin" : /^[AEIOU]/.test(name) ? "an " + name : "a " + name}`);
+        } }, "Yes, change it"),
+        h("button", { class: "btn small ghost", type: "button", id: "uJobNo", onclick: () => { jobAsk = ""; openOne(u.id); } }, "Cancel"))) : null;
+    const save = async (next, name, on) => { await call("saveUser", { id: u.id, access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`); };
+    const sees = u.role === "admin"
+      ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: "Sees" }), h("p", { class: "meta", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }),
+          h("div", { class: "acc" }, can ? pay : null, can ? pc : null))
+      : apiLevel >= SUP_API ? h("div", { class: "acc-ed", id: "uAcc" }, ...accessEditor(access, save, off, "acc-" + (u.username || u.id)).filter(Boolean),
+          pc ? h("div", { class: "acc acc-pc" }, h("span", { class: "acc-lbl", text: "Price changes:" }), can ? pc : h("span", { class: "user-meta", text: (u.access || []).includes("pricecheck") ? "Checks price changes" : "Doesn't check price changes" }),
+            (u.access || []).includes("pricecheck") && !access.includes("revenue") ? h("span", { class: "user-meta warn", text: "Tick Operations too, so they see them." }) : null) : null) : null;
+    const acts = me || !can || isOwner ? null : h("div", { class: "user-acts u-acts" },
+      u.status === "invited"
+        ? [h("button", { class: "btn small", type: "button", text: "New code", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, false); } }),
+           h("button", { class: "btn small ghost danger", type: "button", text: "Cancel invite", onclick: async () => { const out = await call("saveUser", { id: u.id, remove: true }, "Invite cancelled"); if (out) dlgBack(); } })]
+        : [u.status === "active"
+            ? h("button", { class: "btn small", type: "button", text: "Reset passcode", onclick: async () => { const out = await call("resetUser", { id: u.id }); if (out) showCode(u.name, out.code, true); } })
+            : null,
+           h("button", { class: "btn small ghost" + (u.status === "active" ? " danger" : ""), type: "button", text: u.status === "active" ? "Turn off" : "Turn on",
+             onclick: () => call("saveUser", { id: u.id, status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]);
+    openDialog(
+      h("h3", { id: "dlgTitle", text: u.name }),
+      h("div", { class: "user-edit", id: "uEdit", "data-id": u.id, "data-user": u.username || u.name, "data-nodirty": "" },
+        h("div", { class: "user-top" }, u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
+          u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null, st),
+        h("span", { class: "user-meta", text: status }),
+        u.role === "admin" && off ? null : h("label", { class: "u-jobl" }, h("span", { text: "Job" }), jobSel),
+        !off && !asking ? h("p", { class: "hint", text: "A job sets what they see. Change any of it below." }) : null,
+        ask,
+        sees,
+        acts),
+      codeBox, err);
   };
   let payAny = false, payMe = false, pcAny = false, pcMe = false;   // does any admin see Payroll (check price changes) yet; do I
   const load = async force => {
@@ -8240,11 +8297,12 @@ async function openUsers() {
     catch (e) { if (!stHave("users")) listBox.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Nothing") })); }
   };
   const draw = out => {
-    if (!listBox.isConnected && drawn) return;
+    const one = $("uEdit"), oneOpen = !!(one && one.isConnected);
+    if (!listBox.isConnected && drawn && !oneOpen && !dlgStack.length) return;
     drawn = true;
     {
       owner = String(out.owner || ""); session.owner = owner; store.set(K_SESSION, session); can = stCan();
-      const users = (out.users || []).slice().sort((a, b) => (a.status === "invited") - (b.status === "invited") || String(a.name).localeCompare(String(b.name)));
+      users = (out.users || []).slice().sort((a, b) => (a.status === "invited") - (b.status === "invited") || String(a.name).localeCompare(String(b.name)));
       const ownerName = (users.find(u => u.id === owner) || {}).name || "";
       stBox.replaceChildren(...(apiLevel < ST_API ? [] : !owner
         ? [h("p", { class: "meta", text: "Nobody owns Settings yet, so every admin can change them. Take them and only you, and the people you pick, can." }),
@@ -8252,51 +8310,58 @@ async function openUsers() {
              if (!confirm("Make you the owner of Settings? Only you, and the people you pick, will change users and what each one sees.")) return;
              const r = await call("settingsOwner", { claim: true }, "You own Settings now"); if (r) refresh(true); } }, "Make me the owner") : null]
         : [h("p", { class: "meta", id: "stWho", text: `${ownerName || "The owner"} owns Settings: only ${session.id === owner ? "you" : ownerName || "the owner"} and the people ${session.id === owner ? "you tap Changes settings on" : "he picks"} change users and what each one sees.${can ? "" : " You can see them here."}` })]));
-      inviteBox.hidden = !can;
+      newBtn.hidden = !can;
       const pays = u => u.role === "admin" && u.status === "active" && Array.isArray(u.access) && u.access.includes("payroll");
       payAny = users.some(pays); payMe = users.some(u => session && u.id === session.id && pays(u));
       const pcs = u => u.status === "active" && Array.isArray(u.access) && u.access.includes("pricecheck");
       pcAny = users.some(pcs); pcMe = users.some(u => session && u.id === session.id && pcs(u));
       listBox.replaceChildren(...users.map(row));
+      if (oneOpen && users.some(u => u.id === one.dataset.id)) openOne(one.dataset.id);
     }
   };
   let drawn = false;
   const stBox = h("div", { class: "st-own", id: "stOwn" });
-  let inviteBox = null;
-  const inviteAccess = ["trucks"];
-  const inviteChips = apiLevel >= SUP_API ? accessChips(inviteAccess, () => {}, "u-acc") : null;
-  const roleSel = h("select", { id: "u-role", onchange: () => {
-      if (!inviteChips) return;
-      inviteChips.hidden = roleSel.value === "admin";
-      if (roleSel.value === "csr") {   // a CSR: Office ticked (the rest can still be ticked)
-        inviteAccess.splice(0, inviteAccess.length, ...CSR_SEES);
-        for (const b of inviteChips.querySelectorAll("button[data-acc]")) b.setAttribute("aria-pressed", String(inviteAccess.includes(b.dataset.acc)));
-      }
-    } },
-    h("option", { value: "tech", text: "Non-admin" }), apiLevel >= CSR_API ? h("option", { value: "csr", text: "CSR" }) : null, h("option", { value: "admin", text: "Admin" }));
+  const openInvite = () => {
+    const state = { name: "", job: "tech", role: "tech", access: jobSet("tech").access.slice() };
+    const draw2 = () => {
+      const jobSel = h("select", { id: "u-job", "aria-label": "Job", onchange: ev => { state.job = ev.target.value; const j = jobSet(state.job); if (j) { state.role = j.role; state.access = j.access.slice(); } draw2(); } },
+        USER_JOBS.filter(([k]) => k !== "csr" || apiLevel >= CSR_API).map(([k, t]) => h("option", { value: k, text: t })));
+      jobSel.value = state.job;
+      const name = h("input", { id: "u-name", type: "text", maxlength: "40", autocomplete: "off", placeholder: "Joe", value: state.name, oninput: ev => { state.name = ev.target.value; } });
+      openDialog(
+        h("h3", { id: "dlgTitle", text: "Invite someone" }),
+        h("div", { class: "user-edit", id: "uInvite" },
+          h("div", { class: "grid2" },
+            h("div", { class: "field" }, h("label", { for: "u-name", text: "Their name" }), name),
+            h("div", { class: "field" }, h("label", { for: "u-job", text: "Job" }), jobSel)),
+          state.role === "admin" ? h("p", { class: "meta", text: "Admins see and change everything." })
+            : apiLevel >= SUP_API ? h("div", { class: "acc-ed", id: "uInvAcc" }, ...accessEditor(state.access, next => { state.access = next; const k = jobOf({ role: state.role, access: next }); state.job = k; if (k === "custom") state.role = state.role === "csr" ? "csr" : "tech"; draw2(); }, false, "u-acc").filter(Boolean)) : null,
+          h("div", null, h("button", { class: "btn primary", type: "button", id: "u-invite", text: "Create invite code", onclick: async () => {
+            const nm = String(state.name || "").trim();
+            if (!nm) { err.textContent = "Enter their name."; return; }
+            const data = { name: nm, role: state.role };
+            if (state.role !== "admin" && apiLevel >= SUP_API) {
+              if (!state.access.length) { err.textContent = "Pick at least one thing they'll see (Trucks, a checklist or the Leaderboard)."; return; }
+              data.access = state.access.slice();
+            }
+            const out = await call("invite", data);
+            if (out) { state.name = ""; $("u-name").value = ""; dlgDirty = false; showCode(nm, out.code, false); }
+          } })),
+          codeBox),
+        err);
+      if (!state.name) { const f = $("u-name"); if (f && !isTouch()) f.focus(); }
+    };
+    codeBox.replaceChildren(); err.textContent = "";
+    draw2();
+  };
+  const newBtn = h("button", { class: "btn small primary", type: "button", id: "u-new", hidden: !can, onclick: openInvite }, "+ Invite someone");
   openDialog(
     h("h3", { id: "dlgTitle", text: "Users and invites" }),
     howFold("usersHow", h("p", { text: apiLevel >= SUP_API
-      ? "Admins see and do everything. Non-admins see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "") + (apiLevel >= CSR_API ? " CSRs are Non-admins in the office: picking CSR ticks Office, you can tick more for them the same way, and only CSRs can be linked under Office › People." : "")
+      ? "Tap someone to open what he sees. A Job (Technician, Supervisor, Office / CSR, Manager, Admin) sets what that job usually sees in one go; any of it can still be changed after (then his Job shows Custom). Admins see and do everything. Non-admins see only what you tick for them: Trucks (they can update TM hours), each checklist (they can send what's missing), Leaderboard (they see the standings), Leaderboard numbers (they type each day's numbers and set up the teams) and Leaderboard reviews (they type only the 5-star reviews and see nothing else there)." + (apiLevel >= PRICE_SW_API ? " Tap VODA Payroll (admins) or Checks price changes (anyone) to switch it on or off (✓ means on). Whoever checks price changes sees them on Operations and marks them checked." : "") + (apiLevel >= CSR_API ? " CSRs are Non-admins in the office: picking CSR ticks Office, you can tick more for them the same way, and only CSRs can be linked under Office › People." : "")
       : "Admins can do everything. Non-admins can view everything and update only TM hours on truckmount trucks." }), "How access works"),
     stBox,
-    inviteBox = h("fieldset", { hidden: !can }, h("legend", { text: "Invite someone" }),
-      h("div", { class: "grid2" },
-        h("div", { class: "field" }, h("label", { for: "u-name", text: "Their name" }), h("input", { id: "u-name", type: "text", maxlength: "40", autocomplete: "off", placeholder: "Joe" })),
-        h("div", { class: "field" }, h("label", { for: "u-role", text: "Role" }), roleSel)),
-      inviteChips,
-      h("div", null, h("button", { class: "btn primary", type: "button", id: "u-invite", text: "Create invite code", onclick: async () => {
-        const name = val("u-name");
-        if (!name) { err.textContent = "Enter their name."; return; }
-        const data = { name, role: roleSel.value };
-        if (inviteChips && roleSel.value !== "admin") {
-          if (!inviteAccess.length) { err.textContent = "Tick at least one thing they'll see (Trucks, a checklist or the Leaderboard)."; return; }
-          data.access = inviteAccess.slice();
-        }
-        const out = await call("invite", data);
-        if (out) { $("u-name").value = ""; showCode(name, out.code, false); }
-      } })),
-      codeBox),
+    newBtn,
     err,
     h("h4", { text: "Everyone", style: "margin:4px 0 0" }),
     listBox,
@@ -9263,32 +9328,80 @@ function openChecklistEditor(listId) {
   draw(L ? null : "ed-list");
 }
 
-/** Admin: Trucks and checklist toggles for one technician (or for an invite). */
-function accessChips(selected, onchange, idPrefix) {
+/** What someone can be given (by the Google script version): [id, name, area]. Areas: est (Estimates), of (Office),
+ *  lb (Leaderboard), wh (Warehouse: Trucks and each checklist), more. */
+function accessItems() {
   const lists = (supplies && supplies.lists) || [];
-  const items = [["trucks", "Trucks"]].concat(lists.map(l => [l.id, l.name]),
-    apiLevel >= LB_API ? [["leaderboard", "Leaderboard"], ["leaderboard-import", "Leaderboard numbers"]] : [],
-    apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews"]] : [],
-    apiLevel >= OF_API ? [["office", "Office"]] : [],
-    apiLevel >= OF_EDIT_API ? [["office-edit", "Office (any day)"]] : [],
-    apiLevel >= AT_API ? [["attendance", "Attendance"]] : [],
-    apiLevel >= REV_API ? [["revenue", "Operations"]] : [],
-    apiLevel >= EST_API ? [["estimates", "Estimates (his own)"], ["estimates-all", "Estimates (all)"]] : [],
-    apiLevel >= REP_API ? [["repairs", "Repairs Payroll"]] : [],
-    apiLevel >= MKT_API ? [["marketing", "Marketing"]] : [],
-    apiLevel >= CP_API ? [["contractors", "Contractor Payroll"]] : [],
-    apiLevel >= KPI_API ? [["kpi", "KPI"]] : []);
-  return h("div", { class: "acc", role: "group", "aria-label": "Can see" },
-    h("span", { class: "acc-lbl", text: "Sees:" }),
-    items.map(([id, name]) => h("button", { class: "chip-btn sm", type: "button", "data-acc": id, id: idPrefix ? `${idPrefix}-${id}` : null,
-      "aria-pressed": String(selected.includes(id)),
-      onclick: ev => {
-        const on = ev.currentTarget.getAttribute("aria-pressed") !== "true";
-        ev.currentTarget.setAttribute("aria-pressed", String(on));
-        const next = items.map(x => x[0]).filter(k => k === id ? on : selected.includes(k));
-        selected.splice(0, selected.length, ...next);
-        onchange(next.slice(), name, on);
-      } }, name)));
+  return [["trucks", "Trucks", "wh"]].concat(lists.map(l => [l.id, l.name, "wh"]),
+    apiLevel >= LB_API ? [["leaderboard", "Leaderboard", "lb"], ["leaderboard-import", "Leaderboard numbers", "lb"]] : [],
+    apiLevel >= LB_RVONLY_API ? [["leaderboard-reviews", "Leaderboard reviews", "lb"]] : [],
+    apiLevel >= OF_API ? [["office", "Office", "of"]] : [],
+    apiLevel >= OF_EDIT_API ? [["office-edit", "Office (any day)", "of"]] : [],
+    apiLevel >= AT_API ? [["attendance", "Attendance", "more"]] : [],
+    apiLevel >= REV_API ? [["revenue", "Operations", "more"]] : [],
+    apiLevel >= EST_API ? [["estimates", "Estimates (his own)", "est"], ["estimates-all", "Estimates (all)", "est"]] : [],
+    apiLevel >= REP_API ? [["repairs", "Repairs Payroll", "more"]] : [],
+    apiLevel >= MKT_API ? [["marketing", "Marketing", "more"]] : [],
+    apiLevel >= CP_API ? [["contractors", "Contractor Payroll", "more"]] : [],
+    apiLevel >= KPI_API ? [["kpi", "KPI", "more"]] : []);
+}
+/* Jobs: a Job sets someone's role and what he sees in one go (after a yes); his ticks can still be changed one by one.
+   A person's job is the one whose role and ticks are exactly his, else Custom. Checks price changes, VODA Payroll and
+   Changes settings are switched on their own (not part of a job). */
+const USER_JOBS = [["tech", "Technician"], ["sup", "Supervisor"], ["csr", "Office / CSR"], ["mgr", "Manager"], ["admin", "Admin"], ["custom", "Custom"]];
+const ACC_EXTRA = ["pricecheck", "payroll", "settings"];
+function jobSet(k) {
+  const have = accessItems().map(x => x[0]), lists = (supplies && supplies.lists) || [];
+  const like = (re, not) => lists.filter(l => re.test(l.name) && !(not && not.test(l.name))).map(l => l.id), pick = a => have.filter(id => a.includes(id));
+  if (k === "admin") return { role: "admin", access: [] };
+  if (k === "tech") return { role: "tech", access: pick(["trucks"].concat(like(/clean/i, /water|mold|hvac/i))) };   // the cleaning checklist
+  if (k === "sup") return { role: "tech", access: pick(["trucks", "leaderboard", "estimates"].concat(like(/water|mold|hvac/i))) };
+  if (k === "csr") return { role: apiLevel >= CSR_API ? "csr" : "tech", access: pick(CSR_SEES.concat(["kpi", "leaderboard-reviews"])) };
+  if (k === "mgr") return { role: "tech", access: pick(["estimates-all", "revenue", "office", "office-edit", "attendance", "leaderboard", "leaderboard-import"]) };
+  return null;
+}
+function jobOf(u) {
+  if (u.role === "admin") return "admin";
+  const mine = (u.access || []).filter(a => !ACC_EXTRA.includes(a)).slice().sort().join();
+  return ["tech", "sup", "csr", "mgr"].find(k => { const j = jobSet(k); return (j.role === "csr") === (u.role === "csr") && j.access.slice().sort().join() === mine; }) || "custom";
+}
+/** What someone sees, in a line: "Estimates (own) · Trucks · Leaderboard". */
+function accessSummary(u) {
+  const a = u.access || [];
+  if (u.role === "admin") return "Everything" + (a.includes("payroll") ? " · VODA Payroll" : "");
+  const out = [];
+  accessItems().forEach(([id, name]) => {
+    if (!a.includes(id)) return;
+    if (id === "estimates" && a.includes("estimates-all")) return;
+    if (id === "office" && a.includes("office-edit")) return;
+    out.push(id === "estimates" ? "Estimates (own)" : name);
+  });
+  if (a.includes("pricecheck")) out.push("Price changes");
+  return out.join(" · ") || "Nothing ticked";
+}
+/** What someone sees, by area: Estimates and Office as a choice each (None / His own / All; None / Today only / Any day),
+ *  the rest on and off switches. set(next, name, on) gets the new list (in the usual order). */
+function accessEditor(access, set, off, prefix) {
+  const items = accessItems(), has = id => items.some(x => x[0] === id), a = access;
+  const order = list => items.map(x => x[0]).filter(id => list.includes(id));
+  const without = ids => a.filter(x => !ids.includes(x));
+  const sw = ([id, name]) => h("button", { class: "acc-sw", type: "button", role: "switch", "aria-checked": String(a.includes(id)), "aria-pressed": String(a.includes(id)), "data-acc": id,
+    id: `${prefix}-${id}`, disabled: off, onclick: () => set(order(a.includes(id) ? a.filter(x => x !== id) : a.concat(id)), name, !a.includes(id)) },
+    h("span", { text: name }), h("i", { class: "acc-knob", "aria-hidden": "true" }));
+  const lvl = (key, label, opts, cur, apply) => h("label", { class: "acc-lvl" }, h("span", { text: label }),
+    h("select", { id: `${prefix}-${key}`, "data-lvl": key, disabled: off, "aria-label": label, onchange: ev => apply(ev.target.value) },
+      opts.map(([v, t]) => h("option", { value: v, text: t, selected: v === cur }))));
+  const sec = (title, kids) => (kids = kids.filter(Boolean)).length ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: title }), ...kids) : null;
+  const est = has("estimates") ? lvl("est", "Estimates", [["", "None"], ["estimates", "His own"], ["estimates-all", "All"]],
+    a.includes("estimates-all") ? "estimates-all" : a.includes("estimates") ? "estimates" : "",
+    v => set(order(without(["estimates", "estimates-all"]).concat(v ? [v] : [])), v === "estimates-all" ? "Estimates (all)" : v ? "Estimates (his own)" : "Estimates", !!v)) : null;
+  const office = has("office") ? lvl("office", "Office", [["", "None"], ["office", "Today only"]].concat(has("office-edit") ? [["office-edit", "Any day"]] : []),
+    a.includes("office-edit") ? "office-edit" : a.includes("office") ? "office" : "",
+    v => set(order(without(["office", "office-edit"]).concat(v === "office-edit" ? ["office", "office-edit"] : v ? ["office"] : [])), v === "office-edit" ? "Office (any day)" : "Office", !!v)) : null;
+  return [sec("Estimates and Office", [est, office]),
+    sec("Leaderboard", items.filter(x => x[2] === "lb").map(sw)),
+    sec("Warehouse", items.filter(x => x[2] === "wh").map(sw)),
+    sec("More", items.filter(x => x[2] === "more").map(sw))];
 }
 
 /* ---------- leaderboard ---------- */
