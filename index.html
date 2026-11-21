@@ -691,17 +691,27 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   .seg.of-tabs { width: max-content; max-width: calc(100vw - 64px); flex-wrap: wrap; box-sizing: border-box; }
   .seg.of-tabs .seg-btn { padding-inline: 11px; }
 }
-/* Office's tabs on a phone: two by two, every name whole; more than four: one line, the tab you're on with ▾, and
-   tapped, all of them two by two under it (the one you're on stays first, ▴) */
+/* Office's tabs on a phone: two by two, every name whole. More than four: one line for all of it: OFFICE, the tab
+   you're on as a blue button (▾: every tab two by two under the line) and ⋯ (the tab's own buttons, People, Load from
+   Excel…, on a line under it). A PC: as it was. */
+.of-pick, .of-top .of-more { display: none; }
 @media (max-width: 600px) {
   .seg.of-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
   .seg.of-tabs .seg-btn { justify-content: center; text-align: center; white-space: nowrap; padding: 9px 6px; }
-  .seg.of-tabs.of-drop:not(.open) .seg-btn:not([aria-selected="true"]) { display: none; }
-  .seg.of-tabs.of-drop .seg-btn[aria-selected="true"] { grid-column: 1 / -1; order: -1; position: relative; padding: 10px 40px; font-size: 1rem; }
-  .seg.of-tabs.of-drop .seg-btn[aria-selected="true"]::after { content: ""; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; margin-top: -6px;
+  .seg.of-tabs.of-drop:not(.open) { display: none; }
+  .lb-top.of-top.has-pick { flex-wrap: wrap; gap: 8px; }
+  .of-top.has-pick .lb-title { flex: none; overflow: visible; }
+  .of-top.has-pick .of-pick { all: unset; box-sizing: border-box; display: flex; align-items: center; flex: 1 1 0; min-width: 0; position: relative; cursor: pointer;
+    padding: 9px 34px 9px 14px; border-radius: 11px; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: .98rem; box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
+  .of-top.has-pick .of-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .of-top.has-pick .of-pick::after { content: ""; position: absolute; right: 14px; top: 50%; width: 8px; height: 8px; margin-top: -6px;
     border: solid currentColor; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); transition: transform .15s ease; }
-  .seg.of-tabs.of-drop.open .seg-btn[aria-selected="true"]::after { transform: rotate(-135deg); margin-top: -2px; }
-  .seg.of-tabs.of-drop.open .seg-btn[aria-selected="true"] { margin-bottom: 4px; }
+  .of-top.has-pick .of-pick.open::after { transform: rotate(-135deg); margin-top: -2px; }
+  .of-top.has-pick .of-pick:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+  .of-top.has-pick .of-more { display: inline-flex; flex: none; width: 42px; justify-content: center; padding-inline: 0; font-size: 1.2rem; line-height: 1; }
+  .of-top.has-pick.acts-open .of-more { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .of-top.has-pick .of-acts { display: none; }
+  .of-top.has-pick.acts-open .of-acts { display: flex; flex: 1 1 100%; justify-content: flex-end; order: 9; }
 }
 .seg-btn:hover:not([aria-selected="true"]):not([aria-pressed="true"]) { color: var(--ink); }
 .seg-btn:active { transform: scale(.97); }
@@ -17012,7 +17022,13 @@ function ofShowSave() {
 /* ---- the screen ---- */
 /** Office's row of tabs: its own (Office Calls … Clients Per Month, as the login may see them), with Attendance after KPI
  *  and Marketing after Clients Per Month for whoever sees those too (they're their own pages: the row takes you there). */
-let ofTabsOpen = false;   // a phone: the list of tabs opened (the tab you're on, tapped)
+let ofTabsOpen = false, ofActsOpen = false;   // a phone: the list of tabs opened (the blue button by Office); the tab's own buttons (⋯)
+/** A phone: open or close the list of tabs (the blue button by Office, or the tab you're on in the list). */
+function ofTabsToggle(open) {
+  ofTabsOpen = open;
+  document.querySelectorAll(".seg.of-tabs.of-drop").forEach(x => x.classList.toggle("open", open));
+  const b = $("ofPick"); if (b) { b.setAttribute("aria-expanded", String(open)); b.classList.toggle("open", open); }
+}
 function ofTabsEl(cur) {
   const of = ofCan(), estOk = (!apiLevel || apiLevel >= OF_EST_API) && (!ofData || ofData.estOk !== false);
   const list = [];
@@ -17025,13 +17041,8 @@ function ofTabsEl(cur) {
   if (mkInOf()) list.push(["mkt", "Marketing"]);
   if (of && rpCan()) list.push(["rp", OF_TABS.rp]);
   const seg = lbSeg(list, cur, k => {
-    if (k === cur) {   // a phone with more than four tabs: the tab you're on opens (or closes) the list
-      if (!seg.classList.contains("of-drop")) return;
-      ofTabsOpen = !ofTabsOpen; seg.classList.toggle("open", ofTabsOpen);
-      const on = seg.querySelector('.seg-btn[aria-selected="true"]'); if (on) on.setAttribute("aria-expanded", String(ofTabsOpen));
-      return;
-    }
-    ofTabsOpen = false;
+    if (k === cur) { if (seg.classList.contains("of-drop")) ofTabsToggle(false); return; }   // a phone: the one you're on closes the list
+    ofTabsOpen = false; ofActsOpen = false;
     if (view.tab === "office") ofFlush();   // a day being typed is saved first
     if (k === "at") { setTab("attendance"); return; }
     if (k === "mkt") { setTab("marketing"); return; }
@@ -17039,16 +17050,26 @@ function ofTabsEl(cur) {
     if (view.tab !== "office") setTab("office"); else renderOffice();
   }, "Office");
   seg.classList.add("of-tabs");
-  // a phone with more than four tabs: one line, the tab you're on (▾); tapped, all of them two by two (a PC: one row)
-  if (list.length > 4) {
-    seg.classList.add("of-drop"); if (ofTabsOpen) seg.classList.add("open");
-    const on = seg.querySelector('.seg-btn[aria-selected="true"]');
-    if (on) { on.setAttribute("aria-haspopup", "true"); on.setAttribute("aria-expanded", String(ofTabsOpen)); on.title = "All the tabs"; }
-  }
+  // a phone with more than four tabs: the row hides; the blue button by Office opens it, two by two (a PC: one row)
+  if (list.length > 4) { seg.classList.add("of-drop"); if (ofTabsOpen) seg.classList.add("open"); seg.dataset.cur = (list.find(([k]) => k === cur) || [, ""])[1]; }
   return seg;
 }
+/** Office's title row: Office, and on a phone (more than four tabs) the tab you're on as a blue button (▾: every tab
+ *  under the row) and ⋯ for the tab's own buttons (People, Load from Excel…), which a PC shows as they are. */
+function ofTopEl(seg, acts) {
+  const drop = seg.classList.contains("of-drop"), list = (acts || []).filter(Boolean);
+  const top = h("div", { class: "lb-top of-top" + (drop ? " has-pick" : "") + (drop && ofActsOpen ? " acts-open" : "") }, h("h2", { class: "lb-title", text: "Office" }));
+  if (drop) top.append(h("button", { class: "of-pick" + (ofTabsOpen ? " open" : ""), type: "button", id: "ofPick", "aria-haspopup": "true", "aria-expanded": String(ofTabsOpen), title: "All the tabs",
+    onclick: () => ofTabsToggle(!ofTabsOpen) }, h("span", { text: seg.dataset.cur || "Tabs" })));
+  if (list.length) {
+    top.append(h("div", { class: "lb-acts of-acts" }, list));
+    if (drop) top.append(h("button", { class: "btn of-more", type: "button", id: "ofMore", "aria-label": "More: " + list.map(b => b.textContent).join(", "), "aria-expanded": String(ofActsOpen),
+      onclick: ev => { ofActsOpen = !ofActsOpen; top.classList.toggle("acts-open", ofActsOpen); ev.currentTarget.setAttribute("aria-expanded", String(ofActsOpen)); } }, "⋯"));
+  }
+  return top;
+}
 /** Attendance's and Marketing's top when they're in Office's row: Office's name and the row (their own buttons stay theirs). */
-const ofFoldTop = cur => [h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" })), ofTabsEl(cur)];
+const ofFoldTop = cur => { const seg = ofTabsEl(cur); return [ofTopEl(seg, null), seg]; };
 function renderOffice() {
   const box = $("ofView");
   if (!box || view.tab !== "office" || !session) return;
@@ -17072,13 +17093,12 @@ function renderOffice() {
   const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()) && (k !== "trc" || trcCan()));
   if (!shown.some(([k]) => k === ofView.tab)) ofView.tab = "today";
   const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm", rp = ofView.tab === "rp", trc = ofView.tab === "trc";   // People and Load from Excel: the KPI's on its tab; Clients Per Month and Referral Partners: their Excels
-  const top = h("div", { class: "lb-top" }, h("h2", { class: "lb-title", text: "Office" }),
-    admin ? h("div", { class: "lb-acts" },
+  const tabs = ofTabsEl(ofView.tab);
+  const top = ofTopEl(tabs, admin ? [
       cpm ? null : trc ? h("button", { class: "btn", type: "button", id: "trcWhoBtn", onclick: () => openTrcWho() }, "Who calls")
         : rp ? h("button", { class: "btn", type: "button", id: "rpPartnersBtn", disabled: !rpData, onclick: () => rpPartnersDlg(rpShownMonth()) }, "Partners")
         : h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
-      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : rp ? openRpExcel() : trc ? openTrcExcel() : openOfExcel() }, "Load from Excel")) : null);
-  const tabs = ofTabsEl(ofView.tab);
+      h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : rp ? openRpExcel() : trc ? openTrcExcel() : openOfExcel() }, "Load from Excel")] : null);
   if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi && !cpm && !rp && !trc) {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
