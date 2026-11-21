@@ -239,7 +239,7 @@ button { font: inherit; color: inherit; }
 .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 @media (min-width: 1280px) {
   .layout { grid-template-columns: minmax(0, 1fr) 320px; }
-  .aside { position: sticky; top: 74px; max-height: calc(100vh - 90px); overflow: auto; }
+  .aside.stick { position: sticky; top: 74px; }   /* only when it fits in the window (stickFit): taller, it scrolls with the page */
   .how-bottom { display: none; }
 }
 @media (max-width: 1279px) { .aside { display: none; } }
@@ -909,7 +909,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
      they are on every other tab */
   body[data-tab="estimates"] .page:has(#estView > .est-calls) { max-width: none; width: auto; margin-left: max(0px, calc((100% - var(--page-w) - 48px) / 2)); margin-right: 0; }
   body[data-tab="estimates"] #estView:has(> .est-calls) { max-width: none; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; column-gap: 24px; }
-  .est-calls { order: 0; position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
+  .est-calls { order: 0; } .est-calls.stick { position: sticky; top: calc(var(--top-h, 74px) + 12px); }   /* see stickFit */
 }
 .pc-row.marked .pc-name, .pc-row.marked .pc-name a { color: var(--muted); }
 .pc-contact { font-size: .9rem; }
@@ -1530,7 +1530,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 @media (max-width: 1399px) { .rev-aside { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); } .rev-aside-head { grid-column: 1 / -1; } }
 @media (min-width: 1400px) {
   body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
-  .rev-aside { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; }
+  .rev-aside.stick { position: sticky; top: calc(var(--top-h, 74px) + 12px); }   /* see stickFit */
 }
 /* Operations: price changes (admins), under the period: a red box with each changed job; a plain line when none */
 .price-warn { display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--radius); border: 1.5px solid color-mix(in srgb, var(--due) 55%, var(--line));
@@ -1710,7 +1710,7 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 /* a wide screen: the goal in its own column, right of the panel, in the space beside the page */
 @media (min-width: 2040px) {
   body[data-tab="revenue"] #revView.goal3 { max-width: none; width: 1768px; grid-template-columns: minmax(0, 1000px) 360px 360px; }
-  #revView.goal3 > .goal { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 214, 90, .6) transparent; }
+  #revView.goal3 > .goal.stick { position: sticky; top: calc(var(--top-h, 74px) + 12px); }   /* see stickFit */
 }
 /* Operations: Accounts receivable (a tile on top of the panel on the right; a bar under the totals on a smaller screen) */
 .rev-ar { cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px; display: grid; gap: 4px; grid-template-columns: 1fr auto; }
@@ -12523,6 +12523,23 @@ async function revLoad(y) {
   }
 }
 /** Whichever screen shows Housecall Pro's days. */
+/* A column beside the page (Operations' goal, receivable and average job; Estimates' Today's calls; Trucks' Needs
+   attention) stays in sight while the page scrolls only when it fits in the window. Taller, it scrolls with the page:
+   one scroll, so the mouse wheel works wherever the pointer is and nothing in it is out of reach. (It used to keep its
+   own scroll, which the wheel only moved with the pointer over it.) */
+const STICK_SEL = ".aside, .est-calls, #revView > .rev-aside, #revView.goal3 > .goal";
+const stickTop = () => (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--top-h")) || 74) + 12;
+function stickFit(el) { const hgt = el.offsetHeight; el.classList.toggle("stick", hgt > 0 && hgt <= innerHeight - stickTop() - 12); }
+const stickRO = window.ResizeObserver ? new ResizeObserver(es => es.forEach(e => stickFit(e.target))) : null;
+const stickSeen = new WeakSet();
+let stickQ = 0;
+function stickScan() {
+  stickQ = 0;
+  document.querySelectorAll(STICK_SEL).forEach(el => { if (!stickSeen.has(el)) { stickSeen.add(el); if (stickRO) stickRO.observe(el); } stickFit(el); });
+}
+const stickSoon = () => { if (!stickQ) stickQ = requestAnimationFrame(stickScan); };
+new MutationObserver(stickSoon).observe(document.body, { childList: true, subtree: true });   // a page drawn (again)
+addEventListener("resize", stickSoon);
 function revRedraw() {
   if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing();
   else if (view.tab === "office" && (ofView.tab === "cpm" || ofView.tab === "rp") && !ofTypingNow()) renderOffice();
