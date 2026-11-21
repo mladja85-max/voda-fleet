@@ -522,6 +522,53 @@ dialog.drawer::backdrop { background: rgba(8, 12, 18, .45); }
 .dr-tab { all: unset; box-sizing: border-box; cursor: pointer; padding: 9px 10px 8px; font-weight: 700; font-size: .88rem; color: var(--muted); white-space: nowrap; border-bottom: 3px solid transparent; }
 .dr-tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 .dr-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+/* Trucks › a truck › Stops: each stop next to the schedule of the person driving it */
+.stp { display: grid; gap: 10px; }
+.stp-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+.stp-days { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.stp-days input[type=date] { font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+.stp-who { display: grid; gap: 4px; font-weight: 600; font-size: .85rem; color: var(--muted); }
+.stp-who select, .stp-type input { font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 7px 10px; min-width: 0; max-width: 100%; }
+.stp-type { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.stp-sum { margin: 0; font-size: .92rem; }
+.stp-badtext { color: var(--due); }
+.stp-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.stp-row { display: grid; grid-template-columns: 152px minmax(0, 1fr); gap: 4px 12px; padding: 9px 12px; border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 10px; background: var(--surface); }
+.stp-row.k-ok { border-left-color: var(--ok); }
+.stp-row.k-warn { border-left-color: var(--soon); background: color-mix(in srgb, var(--soon-bg) 45%, var(--surface)); }
+.stp-row.k-bad { border-left-color: var(--due); background: color-mix(in srgb, var(--due-bg) 55%, var(--surface)); }
+.stp-time { display: grid; font-weight: 700; font-size: .9rem; }
+.stp-time small { font-weight: 600; color: var(--muted); }
+.stp-time .nw { white-space: nowrap; }
+.stp-main { display: grid; gap: 3px; min-width: 0; }
+.stp-where { overflow-wrap: anywhere; }
+.stp-why { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: .86rem; }
+.stp-badge { font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.stp-badge.ok { background: var(--ok-bg); color: var(--ok); }
+.stp-badge.warn { background: var(--soon-bg); color: var(--soon); }
+.stp-badge.bad { background: var(--due-bg); color: var(--due); }
+.stp-ref { color: var(--muted); overflow-wrap: anywhere; }
+.stp-noflag { font-size: .84rem; }
+.stp-day { margin: 8px 0 2px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
+.stp-day small { font-weight: 500; color: var(--muted); font-size: .84rem; }
+.stp-dayblock { display: grid; gap: 6px; }
+.stp-none { padding-left: 2px; }
+.stp-missed { padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-size: .88rem; }
+.stp-missed ul { margin: 4px 0 0; padding-left: 18px; }
+.stp-shape pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .78rem; }
+.stp-places { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.stp-places li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; }
+.stp-places small { color: var(--muted); }
+.stp-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; gap: 6px; }
+.stp-add input { font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+@media (max-width: 560px) {
+  .stp-row { grid-template-columns: minmax(0, 1fr); }
+  .stp-time { grid-auto-flow: column; justify-content: start; gap: 8px; align-items: baseline; }
+  .stp-add { grid-template-columns: minmax(0, 1fr); }
+  .stp-bar { align-items: stretch; }
+  .stp-who select { width: 100%; }
+}
 .tab-panel[hidden] { display: none !important; }
 .dr-head .titles { flex: 1; min-width: 0; }
 .title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -6305,6 +6352,7 @@ const HOW = [
   ["Van engine hours", "from One Step GPS are shown for reference only. TM hours are always the ones you type in."],
   ["After an oil change or service", "open the truck and tap Log oil change / service so the countdown restarts. It's added to the truck's service history too."],
   ["Service history", "everything done to a truck, in its details. Add tires, brakes, repairs and the like with + Add record; tap a record to fix it."],
+  ["Stops (Admins)", "open a truck with GPS, then Stops: every stop it made that day or week, next to the Housecall Pro jobs and estimates of the person driving it. The same street (any house number) counts as his appointment; anything else is flagged to ask about. Mark his home or the supply store as places not to flag."],
   ["Monday TM hrs check", "every Monday, type or confirm the TM hrs on each truckmount truck. Not done shows amber on Monday; from Tuesday it's red, the trucks missed are listed at the top of Trucks, and a red number on Warehouse and Trucks counts them until each is done. When the company is closed on a Monday, it's due Tuesday. A truck that isn't there can be marked Not available this week. Saving only miles doesn't count. Settings › TM hrs email sends the list each morning."]
 ];
 function howList() { return h("ul", null, HOW.map(([b, t]) => h("li", null, h("strong", { text: b + ": " }), t))); }
@@ -6842,7 +6890,7 @@ function pencilIcon() {
   return span;
 }
 
-/* ---------- the truck panel's tabs: Overview · Service history · GPS · Activity ---------- */
+/* ---------- the truck panel's tabs: Overview · Service history · GPS · Stops (Admins) · Activity ---------- */
 let drawerTab = "overview";
 const tabPanel = (key, el) => el ? (el.classList.add("tab-panel"), el.dataset.tab = key, el) : null;
 function showTab(key, quiet) {
@@ -6850,6 +6898,7 @@ function showTab(key, quiet) {
   for (const p of drawer.querySelectorAll(".tab-panel")) p.hidden = p.dataset.tab !== key;
   for (const b of drawer.querySelectorAll(".dr-tab")) b.setAttribute("aria-selected", String(b.id === "tab-" + key));
   if (!quiet) drawer.scrollTop = 0;
+  if (key === "stops" && openId) stopsShown(openId);
 }
 function renderDrawer(id) {
   const t = byId(id);
@@ -6857,7 +6906,7 @@ function renderDrawer(id) {
   const prog = progOf(t);
   const v = currentValues(t);
   const theme = truckTheme(t.color) || null;
-  const tabs = [["overview", "Overview"], ["service", "Service history"], gpsOn() ? ["gps", "GPS"] : null, ["activity", "Activity"]].filter(Boolean);
+  const tabs = [["overview", "Overview"], ["service", "Service history"], gpsOn() ? ["gps", "GPS"] : null, stopsTabOn(t) ? ["stops", "Stops"] : null, ["activity", "Activity"]].filter(Boolean);
   if (!tabs.some(([k]) => k === drawerTab)) drawerTab = "overview";
   drawer.replaceChildren(
     h("div", { class: "dr-top" },
@@ -6892,6 +6941,7 @@ function renderDrawer(id) {
       h("p", { class: "meta", id: "d-meta" })),
       tabPanel("service", serviceSection(t)),
       tabPanel("gps", gpsSection(t)),
+      tabPanel("stops", stopsSection(t)),
       tabPanel("activity", h("div", { class: "dr-section" }, h("h3", { text: "Recent activity" }), h("ul", { class: "history", id: "d-hist" })))));
   showTab(drawerTab, true);
   updateDrawer(id);
@@ -7013,6 +7063,219 @@ function shopButton(t, here) {
         renderAll();
       } catch (ex) { toast(ex && ex.error === "offline" ? "No connection. Try again when you're back online." : errText(ex)); b.disabled = false; }
     } }));
+}
+
+/* ---------- Stops (Admins): every stop a truck made (One Step GPS), next to the schedule of the person driving it ----------
+ * Same street as one of his jobs or estimates that day (any house number), or right next to it: his. The shop and the
+ * places marked "not to flag": never flagged. Someone else's job, or only the same zip code: worth a look. Anything
+ * else: flagged, to ask him about. */
+const STOPS_API = 127;
+const stopsCache = {};                                   // "truck|from|to" -> { p, data, error }
+const stopsView = Object.assign({ day: "", week: false, only: false }, (() => { const v = store.get("voda.stops"); return v && typeof v === "object" ? { week: !!v.week, only: !!v.only } : {}; })());
+const stopsKeep = () => store.set("voda.stops", { week: stopsView.week, only: stopsView.only });
+const stopsTabOn = t => isAdmin() && gpsOn() && !!(t && t.gps);
+const stopsAdd = (iso, n) => { const [y, m, d] = iso.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+const stopsDow = iso => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d).getDay(); };
+const stopsDayText = iso => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+const stopsDur = min => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
+const stopsHm = hm => { const m = /^(\d\d):(\d\d)$/.exec(String(hm || "")); if (!m) return ""; const hh = Number(m[1]); return `${hh % 12 || 12}:${m[2]} ${hh < 12 ? "AM" : "PM"}`; };
+/** The days shown: the day picked, or its week (Sunday to Saturday, the pay week). */
+function stopsRange() {
+  const day = isoDay(stopsView.day) ? stopsView.day : (stopsView.day = todayIso());
+  if (!stopsView.week) return [day, day];
+  const from = stopsAdd(day, -stopsDow(day));
+  return [from, stopsAdd(from, 6)];
+}
+const stopsKey = id => [id, ...stopsRange()].join("|");
+function stopsLoad(id, force) {
+  if (apiLevel < STOPS_API) return;
+  const key = stopsKey(id), [from, to] = stopsRange();
+  const c = stopsCache[key] || (stopsCache[key] = {});
+  if (c.p && !force) return;
+  c.error = null;
+  const p = c.p = api("gpsStops", { truck: id, from, to, force: !!force }, 120000)
+    .then(d => { if (c.p === p) { c.data = d; c.p = null; } }, e => { if (c.p === p) { c.error = e; c.p = null; } })
+    .then(() => stopsDraw(id));
+  stopsDraw(id);
+}
+/** The tab was opened (or drawn again while open): read what isn't here yet. */
+function stopsShown(id) { const c = stopsCache[stopsKey(id)]; if (!c || (!c.data && !c.p && !c.error)) stopsLoad(id); }
+function stopsSection(t) {
+  if (!stopsTabOn(t)) return null;
+  const el = h("div", { class: "dr-section stp", id: "d-stops" });
+  queueMicrotask(() => stopsDraw(t.id));
+  return el;
+}
+const stopsFirst = name => String(name || "").trim().split(/\s+/)[0] || "";
+/** [class, what it is, which appointment] for a stop. */
+function stopsWhy(s, who) {
+  const a = s.appt, his = who ? `${stopsFirst(who)}'s` : "his", what = a ? (a.kind === "est" ? "estimate" : "job") : "";
+  const ref = a ? [`${a.kind === "est" ? "Estimate" : "Job"} #${a.n}`, a.client, a.time ? stopsHm(a.time) : "", a.st && !/^(scheduled|open|needs scheduling)$/i.test(a.st) ? a.st : ""].filter(Boolean).join(" · ") : "";
+  if (s.kind === "his") return ["ok", s.how === "street" ? `Same street as ${his} ${what} (another number)` : s.how === "near" ? `Next to ${his} ${what}` : `${his.charAt(0).toUpperCase() + his.slice(1)} ${what}`, ref];
+  if (s.kind === "other") return ["warn", `${a.who || "Someone else"}'s ${what}, not ${who ? stopsFirst(who) + "'s" : "his"}`, ref];
+  if (s.kind === "zip") return ["warn", `Same zip code as ${his} ${what}, another street`, [ref, a.addr].filter(Boolean).join(" · ")];
+  if (s.kind === "shop") return ["muted", "Shop", ""];
+  if (s.kind === "place") return ["muted", s.place || "Known place", "Never flagged"];
+  return ["bad", who ? `Not on ${stopsFirst(who)}'s schedule` : "Not on anyone's schedule", ""];
+}
+const stopsFlagged = s => s.kind === "flag" || s.kind === "zip" || s.kind === "other";
+function stopsSum(stops, who) {
+  const n = k => stops.filter(s => k.includes(s.kind));
+  const bad = n(["flag"]), look = n(["zip", "other"]), mins = bad.reduce((a, s) => a + s.min, 0);
+  const parts = [`${stops.length} stop${stops.length === 1 ? "" : "s"}`];
+  const his = n(["his"]).length; if (his) parts.push(`${his} on ${who ? stopsFirst(who) + "'s" : "his"} schedule`);
+  if (bad.length) parts.push(h("strong", { class: "stp-badtext", text: `${bad.length} to ask about (${stopsDur(mins)})` }));
+  if (look.length) parts.push(`${look.length} worth a look`);
+  const quiet = n(["shop", "place"]).length; if (quiet) parts.push(`${quiet} at the shop or a known place`);
+  return parts.flatMap((p, i) => i ? [" · ", p] : [p]);
+}
+function stopsRow(id, s, who) {
+  const [cls, what, ref] = stopsWhy(s, who);
+  const map = s.lat !== null && s.lng !== null ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : "";
+  const where = s.a || (map ? `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}` : "No location sent");
+  const from = fmtTime(new Date(s.f)), to = fmtTime(new Date(s.t));
+  return h("li", { class: "stp-row k-" + cls },
+    h("div", { class: "stp-time" }, h("span", null, h("span", { class: "nw", text: `${s.cut.includes("a") ? "Before 12 AM" : from} –` }), " ", h("span", { class: "nw", text: s.cut.includes("b") ? "after 12 AM" : to })),
+      h("small", { text: stopsDur(s.min) })),
+    h("div", { class: "stp-main" },
+      h("div", { class: "stp-where" }, map ? h("a", { class: "link", href: map, target: "_blank", rel: "noopener", text: where }) : h("span", { text: where }),
+        s.wait ? h("small", { class: "meta", text: " Street not looked up yet: Read again in a minute." }) : null),
+      h("div", { class: "stp-why" }, h("span", { class: "stp-badge " + cls, text: (cls === "ok" ? "✓ " : cls === "bad" ? "! " : "") + what }), ref ? h("span", { class: "stp-ref", text: ref }) : null,
+        stopsFlagged(s) && s.lat !== null ? h("button", { class: "link stp-noflag", type: "button", text: "Don't flag this place", onclick: () => stopsNoFlag(id, s) }) : null)));
+}
+function stopsDraw(id) {
+  const el = $("d-stops");
+  if (!el) return;
+  const t = byId(id);
+  const head = h("h3", { text: "Stops vs schedule" });
+  if (apiLevel < STOPS_API) { el.replaceChildren(head, h("p", { class: "meta", text: "Stops need the updated Google script (version 127). Paste the new Code.gs, then Deploy › Manage deployments › pencil › New version › Deploy." })); return; }
+  const [from, to] = stopsRange(), c = stopsCache[stopsKey(id)] || {}, d = c.data, today = todayIso();
+  const go = n => { stopsView.day = stopsAdd(stopsView.day, n * (stopsView.week ? 7 : 1)); stopsLoad(id); };
+  const dayIn = h("input", { type: "date", id: "stpDay", value: stopsView.day, max: today, "aria-label": "Day", onchange: e => { if (isoDay(e.target.value)) { stopsView.day = e.target.value; stopsLoad(id); } } });
+  const who = d ? d.person : "";
+  const people = d ? [...new Set([...(d.people || []), d.person].filter(x => x && x !== d.driver))].sort() : [];
+  const sel = h("select", { id: "stpWho", "aria-label": "Whose schedule", disabled: !d, onchange: e => {
+    const v = e.target.value;
+    if (v === "__type__") { stopsView.typing = true; stopsDraw(id); const i = $("stpWhoIn"); if (i) i.focus(); return; }
+    stopsView.typing = false; stopsPerson(id, v === "__driver__" ? null : v);
+  } },
+    h("option", { value: "__driver__", text: d && d.driver ? `${d.driver} (drives it)` : "The truck's driver (none set)" }),
+    people.map(p => h("option", { value: p, text: p })),
+    h("option", { value: "__type__", text: "Type a name…" }));
+  sel.value = stopsView.typing ? "__type__" : d && d.person && d.person !== d.driver ? d.person : "__driver__";
+  const typed = stopsView.typing ? h("span", { class: "stp-type" },
+    h("input", { type: "text", id: "stpWhoIn", placeholder: "Name in Housecall Pro", value: stopsView.typed || "", oninput: e => { stopsView.typed = e.target.value; },
+      onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); $("stpWhoSave").click(); } } }),
+    h("button", { class: "btn small primary", type: "button", id: "stpWhoSave", text: "Use", onclick: () => { const v = String(stopsView.typed || "").trim(); if (v) { stopsView.typing = false; stopsPerson(id, v); } } })) : null;
+  const bar = h("div", { class: "stp-bar" },
+    h("div", { class: "stp-days" },
+      h("button", { class: "icon-btn", type: "button", id: "stpPrev", "aria-label": stopsView.week ? "Week before" : "Day before", text: "‹", onclick: () => go(-1) }),
+      dayIn,
+      h("button", { class: "icon-btn", type: "button", id: "stpNext", "aria-label": stopsView.week ? "Next week" : "Next day", text: "›", disabled: to >= today, onclick: () => go(1) }),
+      lbSeg([["day", "Day"], ["week", "Week"]], stopsView.week ? "week" : "day", k => { stopsView.week = k === "week"; stopsKeep(); stopsLoad(id); }, "Day or week")),
+    h("label", { class: "stp-who" }, h("span", { text: "Whose schedule" }), sel, typed));
+  const out = [head, bar];
+  if (c.p && !d) { out.push(h("p", { class: "meta", id: "stpLoading", text: "Reading One Step GPS and the schedule… (a few seconds)" })); el.replaceChildren(...out); return; }
+  if (c.error) {
+    const e = c.error;
+    out.push(h("p", { class: "warn", id: "stpErr", text: e.error === "no_gps" ? "This truck isn't linked to a GPS tracker (column C of the GPS tab)."
+      : e.error === "gps" ? `One Step GPS didn't send the stops: ${e.message || "no reason given"}${/40[13]/.test(e.message || "") ? " Ask One Step support to let the API key read route history (route/drive-stop)." : ""}`
+      : e.error === "bad_request" || e.error === "unknown_action" ? "Stops need the updated Google script (version 127)." : errText(e, "Stops") }),
+      h("button", { class: "btn small", type: "button", text: "Try again", onclick: () => stopsLoad(id, true) }));
+    el.replaceChildren(...out); return;
+  }
+  if (!d) { el.replaceChildren(...out); return; }
+  const days = d.days.filter(x => x.day <= d.today);
+  const all = days.flatMap(x => x.stops);
+  const shown = s => !stopsView.only || stopsFlagged(s);
+  out.push(h("p", { class: "stp-sum", id: "stpSum" }, ...stopsSum(all, who), c.p ? h("small", { class: "meta", text: " · reading again…" }) : null));
+  const nFlag = all.filter(stopsFlagged).length;
+  out.push(h("div", { class: "stp-tools" },
+    lbSeg([["all", "All stops"], ["only", `Flagged${nFlag ? ` (${nFlag})` : ""}`]], stopsView.only ? "only" : "all", k => { stopsView.only = k === "only"; stopsKeep(); stopsDraw(id); }, "Which stops"),
+    nFlag ? h("button", { class: "btn small", type: "button", id: "stpCopy", text: "Copy the flagged ones", onclick: () => stopsCopy(d) }) : null,
+    h("button", { class: "btn small", type: "button", id: "stpPlaces", text: `Places not to flag${d.places.length ? ` (${d.places.length})` : ""}`, onclick: () => stopsPlacesDlg(id, d.places) }),
+    h("button", { class: "btn small", type: "button", id: "stpReload", text: "Read again", disabled: !!c.p, onclick: () => stopsLoad(id, true) })));
+  if (!who) out.push(h("p", { class: "warn", text: "Pick whose schedule this truck is compared with (the truck has no driver set)." }));
+  for (const x of days) {
+    const list = x.stops.filter(shown);
+    const sec = [];
+    if (stopsView.week) sec.push(h("h4", { class: "stp-day" }, h("span", { text: stopsDayText(x.day) }), x.stops.length ? h("small", null, ...stopsSum(x.stops, who)) : null));
+    if (!x.stops.length) sec.push(h("p", { class: "meta stp-none", text: x.day === d.today ? "No stops yet today." : "No stops." }));
+    else if (!list.length) sec.push(h("p", { class: "meta stp-none", text: "Nothing flagged." }));
+    else sec.push(h("ol", { class: "stp-list" }, list.map(s => stopsRow(id, s, who))));
+    if (x.missed.length) sec.push(h("div", { class: "stp-missed" },
+      h("strong", { text: `On ${who ? stopsFirst(who) + "'s" : "his"} schedule, no stop found` }),
+      h("ul", null, x.missed.map(m => h("li", { text: [`${m.kind === "est" ? "Estimate" : "Job"} #${m.n}`, m.client, stopsHm(m.time), m.addr].filter(Boolean).join(" · ") })))));
+    out.push(h("div", { class: "stp-dayblock", "data-day": x.day }, ...sec));
+  }
+  if (!all.length && d.shape) out.push(h("details", { class: "stp-shape" }, h("summary", { text: "What One Step GPS sent (for Claude)" }),
+    h("pre", { text: JSON.stringify(d.shape) })));
+  if (d.left) out.push(h("p", { class: "meta", text: `${d.left} street${d.left === 1 ? "" : "s"} still to look up (Google allows so many at a time). Tap Read again in a minute.` }));
+  (d.note || []).forEach(n => out.push(h("p", { class: "meta", text: n })));
+  out.push(h("p", { class: "hint", text: "Same street as one of his jobs or estimates that day (any house number), or right next to it, counts as that appointment. Stops of 5 minutes and longer, as One Step GPS records them." }));
+  el.replaceChildren(...out);
+}
+function stopsForget(id) { for (const k of Object.keys(stopsCache)) if (k.startsWith(id + "|")) delete stopsCache[k]; }
+async function stopsPerson(id, person) {
+  try { await api("gpsStopsSet", { truck: id, person }); }
+  catch (e) { toast(errText(e)); }
+  stopsForget(id); stopsLoad(id);
+}
+async function stopsSavePlaces(places) {
+  const out = await api("gpsStopsSet", { places });
+  for (const k of Object.keys(stopsCache)) delete stopsCache[k];
+  return out.places || [];
+}
+function stopsCopy(d) {
+  const who = d.person;
+  const lines = d.days.flatMap(x => x.stops.filter(stopsFlagged).map(s => [stopsDayText(x.day), `${fmtTime(new Date(s.f))} – ${fmtTime(new Date(s.t))} (${stopsDur(s.min)})`,
+    s.a || (s.lat !== null ? `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}` : ""), stopsWhy(s, who)[1]].filter(Boolean).join(" · ")));
+  const text = `${d.unit}${who ? " · " + who : ""}\n` + lines.join("\n");
+  const done = () => toast(`Copied ${lines.length} stop${lines.length === 1 ? "" : "s"}`);
+  try { navigator.clipboard.writeText(text).then(done, () => toast("Couldn't copy here. Long-press the list instead.")); } catch (e) { toast("Couldn't copy here."); }
+}
+/** "Don't flag this place": a name for the spot of a stop; stops there aren't flagged from now on. */
+function stopsNoFlag(id, s) {
+  const name = h("input", { type: "text", id: "stpPlaceName", placeholder: "e.g. his home, the supply store, the gas station", maxlength: "40" });
+  const err = h("p", { class: "warn", id: "stpPlaceErr", hidden: true });
+  const save = async e => {
+    const b = e.currentTarget; b.disabled = true; err.hidden = true;
+    try {
+      const cur = ((stopsCache[stopsKey(id)] || {}).data || {}).places || [];
+      await stopsSavePlaces(cur.concat({ n: name.value.trim() || (s.a || "Known place").split(",")[0], a: s.a || "", lat: s.lat, lng: s.lng }));
+      closeDialog(); toast("Saved. Stops there aren't flagged."); stopsLoad(id);
+    } catch (ex) { err.textContent = errText(ex); err.hidden = false; b.disabled = false; }
+  };
+  openDialog(h("h3", { id: "dlgTitle", text: "Don't flag this place" }),
+    h("p", { class: "hint", text: `${s.a || "This spot"}: stops within about 500 ft of it won't be flagged on any truck.` }),
+    h("label", { class: "field" }, h("span", { text: "What is it?" }), name), err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Cancel", onclick: () => closeDialog() }),
+      h("button", { class: "btn primary", type: "button", id: "stpPlaceSave", text: "Save", onclick: save }))));
+}
+/** Places not to flag: the list, remove one, add one by its address. */
+function stopsPlacesDlg(id, places) {
+  let list = places.slice();
+  const err = h("p", { class: "warn", id: "stpPlacesErr", hidden: true });
+  const box = h("ul", { class: "stp-places", id: "stpPlacesList" });
+  const draw = () => box.replaceChildren(...(list.length ? list.map((p, i) => h("li", null, h("span", null, h("strong", { text: p.n }), p.a ? h("small", { text: " · " + p.a }) : null),
+    h("button", { class: "link", type: "button", text: "Remove", "aria-label": "Remove " + p.n, onclick: e => keep(list.filter((x, j) => j !== i), e.currentTarget) }))) : [h("li", { class: "meta", text: "None yet." })]));
+  const keep = async (next, b, after) => {
+    if (b) b.disabled = true; err.hidden = true;
+    try { list = await stopsSavePlaces(next); draw(); if (after) after(); stopsLoad(id); }
+    catch (ex) { err.textContent = ex && ex.error === "no_place" ? `Google couldn't find ${ex.message || "that address"}. Check it and try again.` : errText(ex); err.hidden = false; }
+    if (b) b.disabled = false;
+  };
+  const n = h("input", { type: "text", id: "stpNewName", placeholder: "Name (e.g. the supply store)", maxlength: "40" });
+  const a = h("input", { type: "text", id: "stpNewAddr", placeholder: "Address", maxlength: "120" });
+  draw();
+  openDialog(h("h3", { id: "dlgTitle", text: "Places not to flag" }),
+    h("p", { class: "hint", text: "Stops within about 500 ft of these are never flagged, on any truck: his home, the supply store, the gas station. The shop never is." }),
+    box,
+    h("div", { class: "stp-add" }, n, a, h("button", { class: "btn", type: "button", id: "stpAdd", text: "Add", onclick: e => {
+      if (!a.value.trim()) { a.focus(); return; }
+      keep(list.concat({ n: n.value.trim() || a.value.trim().split(",")[0], a: a.value.trim(), lat: null, lng: null }), e.currentTarget, () => { n.value = ""; a.value = ""; });
+    } })), err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn primary", type: "button", id: "stpPlacesDone", text: "Done", onclick: () => closeDialog() }))));
 }
 
 /* ---------- service history ---------- */
