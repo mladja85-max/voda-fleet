@@ -1707,8 +1707,11 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .goal-dlg .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .goal-dlg h3 { margin: 14px 0 6px; font-size: 1rem; } .goal-dlg-total { margin: 4px 0 0; font-weight: 800; color: var(--accent); }
 @media (max-width: 560px) { .goal { padding: 14px 14px 16px; border-radius: 16px; } .goal-deps { padding: 8px 10px 10px; column-gap: 10px; } .goal-dlg .grid3 { grid-template-columns: 1fr; } }
-/* a wide screen: the goal in its own column, right of the panel, in the space beside the page */
-@media (min-width: 2040px) {
+/* a wide screen (1840 and up, a 1920 monitor too): the goal in its own column, right of Accounts receivable, Money in and
+   Average job, so they're beside the list (not under the goal) */
+@media (min-width: 1840px) {
+  /* the page (and the bar on top) as wide as the three columns, centered: a 1920 screen has the room */
+  body[data-tab="revenue"]:has(#revView.goal3) { --page-w: 1768px; }
   body[data-tab="revenue"] #revView.goal3 { max-width: none; width: 1768px; grid-template-columns: minmax(0, 1000px) 360px 360px; }
   #revView.goal3 > .goal.stick { position: sticky; top: calc(var(--top-h, 74px) + 12px); }   /* see stickFit */
 }
@@ -13633,7 +13636,7 @@ const goalBar = (done, goal, cls) => h("span", { class: "goal-bar" + (cls ? " " 
 const goalKicker = text => { const i = h("span", { class: "goal-ic" }); i.innerHTML = GOAL_SVG; return h("span", { class: "goal-kicker" }, i, text); };
 /** Which spot the goal takes: its own column right of the panel (a wide screen), the top of that panel (a PC), or
  *  under the period's numbers' heading (a smaller screen, a phone). */
-const GOAL_WIDE = "(min-width: 2040px)", GOAL_SIDE = "(min-width: 1400px)";
+const GOAL_WIDE = "(min-width: 1840px)", GOAL_SIDE = "(min-width: 1400px)";
 const revGoalSlot = () => (matchMedia(GOAL_WIDE).matches ? "wide" : matchMedia(GOAL_SIDE).matches ? "side" : "top");
 for (const q of [GOAL_WIDE, GOAL_SIDE]) { const mq = matchMedia(q); const f = () => { if (view.tab === "revenue") renderRevenue(); }; if (mq.addEventListener) mq.addEventListener("change", f); }
 /** The goal, as of a day (the last day of the period on screen, today at most). */
