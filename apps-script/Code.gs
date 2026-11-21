@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 125;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 126;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -367,6 +367,9 @@ function doPost(e) {
       case "pcRead":
         if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(pcRead_(req, user));
+      case "comClients":
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(comClients_(user));
       case "pcSync":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(pcSyncStep_(req));
@@ -5594,17 +5597,19 @@ function estSync_(req, user) {
    company is closed moves to the next working day. Each call is marked (No answer, Voicemail, Booked, Don't call again)
    with who and when. A client in a group whose day went by without a mark (since the lists started) stays in "Missed"
    until marked or the next group's day.
-   Housecall Pro is read once (every job created in the last 42 months, newest first, a few pages a step: an admin's
+   Housecall Pro is read once (every job there is, newest first: the lists use the last 42 months, Commercial clients
+   every year; a few pages a step: an admin's
    "Read from Housecall Pro"), then only what changed (jobs, then customers, by when they changed; when the lists are
    opened, at most every 15 minutes). It all stays in this Sheet: the "Past client jobs" and "Past clients" tabs, and
    the marks in "Past client calls". ---------------- */
 const PC_JOBS = "Past client jobs", PC_CUST = "Past clients", PC_CALLS = "Past client calls";
-const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Created", "Job type", "Address", "Changed", "Tags"];
+const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Created", "Job type", "Address", "Changed", "Tags", "Amount (cents)"];
 const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed", "Referred by"];
 const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who", "Call back on", "Note"];
 const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
 const PC_ASSIGN = "PC_ASSIGN";   // who calls each group: { "6": [user ids], ... }; a group nobody has is everyone's
-const PC_SCHEMA = "PC_SCHEMA", PC_V = "2";   // 2: the jobs' tags (read all again once)
+const PC_SCHEMA = "PC_SCHEMA", PC_V = "3";   // 2: the jobs' tags; 3: every year since the first and each job's amount (Commercial clients) (read all again once)
+const PC_FROM = "2010-01-01";   // the first read (and all again) goes back to here: every job there is (the lists use the last 42 months)
 const PC_DONE = "PC_BACKFILL_DONE", PC_AT = "PC_SYNC_AT", PC_START = "PC_START", PC_CUR = "PC_CURSOR", PC_SORTS = "PC_SORTS", PC_BUSY = "PC_BUSY";
 const PC_RESULTS = { na: "Not now", vm: "Voicemail", booked: "Booked", dnc: "Don't call again", cb: "Call back", clear: "" };   // "na" was "No answer"
 const PC_DNC = /do\s*n[o']?t\s*(call|contact|service)|\bdnc\b/i;   // "Do not call", "DNC" (not "No calls before 9")
@@ -5653,7 +5658,8 @@ function pcJobRow_(job, tz) {
   const a = job.address || {};
   const addr = [a.street, a.street_line_2, a.city].filter(Boolean).join(", ").replace(/\s+/g, " ").trim().slice(0, 120);
   const tags = Array.isArray(job.tags) ? job.tags.map(function (t) { return String((t && t.name) || t || "").trim(); }).filter(Boolean).join(", ").slice(0, 300) : "";
-  return [String(job.id), cid, String(job.invoice_number || "").slice(0, 30), st, day, dayOf(job.created_at), hcpJobType_(job).slice(0, 80), addr, String(job.updated_at || "").slice(0, 40), tags];
+  return [String(job.id), cid, String(job.invoice_number || "").slice(0, 30), st, day, dayOf(job.created_at), hcpJobType_(job).slice(0, 80), addr, String(job.updated_at || "").slice(0, 40), tags,
+    String(Math.round(Number(job.total_amount) || 0))];
 }
 /** A customer as the "Past clients" tab keeps one (what Housecall Pro didn't send stays as it was). */
 function pcCustRow_(cu, old) {
@@ -5733,7 +5739,7 @@ function pcSync_(req, pages) {
   let sorts = {};
   try { sorts = JSON.parse(P.getProperty(PC_SORTS) || "{}") || {}; } catch (e) { sorts = {}; }
   const today = Utilities.formatDate(new Date(now), tz, "yyyy-MM-dd");
-  const cutoff = pcAddMonths_(today, -PC_BACK_MONTHS), recent = tmAddDays_(today, -60);
+  const cutoff = PC_FROM, recent = tmAddDays_(today, -60);   // (every year: Commercial clients look back to the first)
   const dayOf = function (v) { const d = new Date(v || ""); return v && !isNaN(d.getTime()) ? Utilities.formatDate(d, tz, "yyyy-MM-dd") : ""; };
   const jobs = [], custs = [];
   let n = 0, total = 0, backDone = false, passDone = false;
@@ -5857,6 +5863,41 @@ function pcLeft_(c, s, cu, never) {
  *  marked Commercial. */
 function pcCom_(s, cu) {
   return !!s.com || String(cu[4] || "").split(/\s*,\s*/).some(function (t) { return PC_COM.test(t); });
+}
+/** Office › Estimates › Commercial clients: every commercial client (a Commercial job type, or a commercial / property
+ *  manager tag) with a job done before this year and nothing this year (no job done since January 1, none booked):
+ *  who to win back, the last ones first. Left off: do not call (marked here, a tag, Housecall Pro's do not service) and
+ *  moved away. From the Past clients tabs (read from Housecall Pro there). { ready, year, list: [{ id, name, contact,
+ *  phone, phone2, addr, last, lastInv, lastJob, type, years, jobs, spent }], n: { com, back, dnc, away }, from, reread } */
+function comClients_(user) {
+  const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
+  const year = today.slice(0, 4), y0 = year + "-01-01", admin = user.role === "admin";
+  if (P.getProperty(PC_DONE) !== "yes") return { ok: true, ready: false, admin: admin, year: Number(year) };
+  const K = pcKnown_(tz), jr = pcRows_(PC_JOBS, PC_JOB_COLS.length), ex = {};
+  let from = "";
+  jr.forEach(function (r) {   // each client's years with a job done, and what those jobs came to
+    const c = String(r[1] || ""), d = pcDay_(r[4], tz);
+    if (!c || String(r[3]) !== "done" || !d) return;
+    const e = ex[c] || (ex[c] = { years: {}, spent: 0 });
+    e.years[d.slice(0, 4)] = true; e.spent += Number(r[10]) || 0;
+    if (!from || d < from) from = d;
+  });
+  const n = { com: 0, back: 0, dnc: 0, away: 0 }, list = [];
+  Object.keys(K.by).forEach(function (c) {
+    const s = K.by[c], cu = K.cust[c] || [];
+    if (!s.last || !pcCom_(s, cu)) return;
+    n.com++;
+    // this year: a job done since January 1, or one booked (on the schedule this year or later, or not scheduled yet)
+    if (s.last >= y0 || s.open.some(function (o) { return o[0] ? o[0] >= y0 : o[1] >= y0 || !o[1]; })) { n.back++; return; }
+    const left = pcLeft_(c, s, cu, K.never);
+    if (left && left.why !== "booked") { n[left.why] = (n[left.why] || 0) + 1; return; }
+    const nm = pcName_(cu), e = ex[c] || { years: {}, spent: 0 };
+    list.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, lastInv: s.lastInv, lastJob: s.lastJob,
+      type: s.type || s.com, years: Object.keys(e.years).sort().reverse().map(Number), jobs: s.jobs, spent: e.spent });
+  });
+  // the last ones first; then the ones with us the most years; then the most spent
+  list.sort(function (a, b) { return a.last.slice(0, 4) < b.last.slice(0, 4) ? 1 : a.last.slice(0, 4) > b.last.slice(0, 4) ? -1 : b.years.length - a.years.length || b.spent - a.spent || (a.last < b.last ? 1 : -1); });
+  return { ok: true, ready: true, admin: admin, year: Number(year), list: list, n: n, from: from, reread: P.getProperty(PC_SCHEMA) !== PC_V };
 }
 /** Who calls each group (Admins pick, under Past clients): { 6: [user ids], ... }, only the groups someone has. */
 function pcAssign_() {

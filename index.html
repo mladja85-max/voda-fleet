@@ -1760,6 +1760,20 @@ dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
   #cashJobs th, #cashJobs td { padding-left: .3rem; padding-right: .3rem; } #cashJobs th.l, #cashJobs td.l { text-align: left; } #cashJobs { font-size: .82rem; }
 }
 /* Operations › Services */
+/* Office › Estimates › Commercial clients: beside the estimates on a wide screen */
+.of-est-wrap { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 1400px) { body[data-tab="office"] #ofView:has(.of-est-wrap) { max-width: 1480px; } .of-est-wrap { grid-template-columns: minmax(0, 1000px) minmax(300px, 460px); } .com-box { position: sticky; top: calc(var(--top-h, 74px) + 12px); max-height: calc(100vh - var(--top-h, 74px) - 24px); overflow: auto; } }
+.com-box { display: grid; gap: 10px; align-content: start; } .com-box h3 { margin: 0; } .com-box h3 small { color: var(--muted); font-weight: 600; font-size: .8rem; }
+.com-years { flex-wrap: wrap; } .com-years .seg-btn small { color: var(--muted); font-weight: 600; } .com-years .seg-btn[aria-pressed="true"] small { color: inherit; }
+.com-q { font: inherit; font-size: .9rem; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); width: 100%; box-sizing: border-box; }
+.com-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.com-row { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 3px; background: var(--surface); }
+.com-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; } .com-name { font-size: .98rem; } .com-spent { font-weight: 800; color: var(--accent); white-space: nowrap; }
+.com-contact, .com-addr { color: var(--muted); } .com-meta { font-size: .84rem; color: var(--ink); }
+.com-years-l { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; } .com-y { font-size: .74rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--surface-2, #f1f4f8); border: 1px solid var(--line); }
+.com-y.last { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); color: var(--accent); } .com-years-l small { color: var(--muted); }
+.com-ph { display: flex; gap: 12px; flex-wrap: wrap; } .com-tel { font-weight: 700; color: var(--accent); text-decoration: none; } .com-tel:hover { text-decoration: underline; }
+.com-reread { border: 1px dashed var(--accent); border-radius: 10px; padding: 8px 10px; background: var(--accent-soft); display: grid; gap: 6px; justify-items: start; } .com-reread p { margin: 0; }
 .srv-acts { justify-content: flex-end; margin: -4px 0 0; }
 .srv-table th { font-weight: 600; text-align: left; } .srv-table tr.zero td, .srv-table tr.zero th { color: var(--muted); font-weight: 400; }
 .srv-table th small { color: var(--muted); font-weight: 500; } .srv-table tr.srv-uns th, .srv-ntable tr.srv-uns th { color: var(--due); }
@@ -19805,7 +19819,7 @@ function pcEl() {
       admin && pcData.assign ? h("button", { class: "btn small", type: "button", id: "pcAssignBtn", title: "Pick who calls each group", onclick: openPcAssign }, "Who calls which") : null)));
   out.push(h("p", { class: "lb-sub pc-upd", id: "pcUpd" }, read, read ? h("span", { class: "pc-upd-more", text: " · it reads what changed every 15 minutes while this is open, and Read again reads it now" }) : null));
   if (pcErr) out.push(h("p", { class: "dlg-err", text: pcErr }));
-  if (pcData.reread && !pcData.rereading) out.push(h("div", { class: "panel pc-reread", id: "pcReread" }, h("p", { class: "meta", text: "One more step (Admins): read Housecall Pro all again once, so the lists also use the tags on jobs (moved to another state, do not call). A few minutes; the lists keep working for everyone meanwhile." }),
+  if (pcData.reread && !pcData.rereading) out.push(h("div", { class: "panel pc-reread", id: "pcReread" }, h("p", { class: "meta", text: "One more step (Admins): read Housecall Pro all again once, so the lists also use the tags on jobs (moved to another state, do not call), and Commercial clients (Office › Estimates) has every year and what each client spent. A few minutes (longer the first time: every year); the lists keep working for everyone meanwhile." }),
     h("button", { class: "btn primary small", type: "button", id: "pcRereadGo", onclick: () => pcBackfill(true) }, "Read all again now")));
   if (pcData.sync && pcData.sync.error) out.push(h("p", { class: "meta pc-note", text: `Couldn't read what changed in Housecall Pro just now (${revErrText(pcData.sync).replace(/\.$/, "")}). These lists are from the last read.` }));
   if (per !== "day") return out.concat(pcPeriodEl(rg, today));
@@ -20511,16 +20525,69 @@ function ofEstEl() {
     }
     end(); sg.onscroll = end;
   });
-  return head.concat(h("div", { class: "panel est-list", id: "ofEstList" },
+  return head.concat(h("div", { class: "of-est-wrap" }, h("div", { class: "panel est-list", id: "ofEstList" },
     h("h3", null, `Cleaning estimates · ${fmt(shown.length)}`, h("small", { text: " newest first" })),
     filters,
     shown.length ? h("div", { class: "est-rows", id: "ofEstRows" },
       h("div", { class: "est-row est-hdr of-est-row", "aria-hidden": "true" }, ["Scheduled", "#", "Client", "Amount", "Status", "In charge"].map(t => h("span", { text: t }))),   // all Cleaning: no Group
       shown.slice(0, ofEstShown).map(e => ofEstRowEl(e, today)))
       : h("p", { class: "lb-sub", id: "ofEstNone", text: list.length ? "No estimates match." : `No Cleaning estimates in ${r.label}.` }),
-    more > 0 ? h("button", { class: "btn small", type: "button", id: "ofEstMore", onclick: () => { ofEstShown += 100; renderOffice(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null));
+    more > 0 ? h("button", { class: "btn small", type: "button", id: "ofEstMore", onclick: () => { ofEstShown += 100; renderOffice(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null), comEl()));
 }
 
+/* ---- Office › Estimates › Commercial clients: every commercial client from Housecall Pro (every year read on
+   Past clients) with a job done before this year and nothing this year (none done since January 1, none booked):
+   who to win back, the last ones first (then the ones with us the most years, then the most spent). Do not call and
+   moved away are left off. Beside the estimates on a wide screen, under them on a smaller one. ---- */
+const COM_API = 126;
+let comDoc = null, comErr = "", comLoading = false;
+const comView = Object.assign({ y: "all", q: "" }, store.get("voda.com") || {});
+let comShown = 60;
+async function comLoad() {
+  comLoading = true;
+  try { const out = await api("comClients", {}); comDoc = Object.assign(out, { t: Date.now() }); comErr = ""; }
+  catch (e) { comErr = errText(e, "The commercial clients"); }
+  finally { comLoading = false; }
+  if (view.tab === "office") renderOffice();
+}
+function comEl() {
+  const box = (...kids) => h("aside", { class: "panel com-box", id: "comBox", "aria-label": "Commercial clients" }, h("h3", null, "Commercial clients", h("small", { text: comDoc && comDoc.ready ? ` · not back in ${comDoc.year}` : "" })), ...kids);
+  if (apiLevel && apiLevel < COM_API) return box(h("p", { class: "meta", text: "Needs the newest Google script: paste the latest Code.gs, then Deploy › Manage deployments › pencil › New version › Deploy." }));
+  if ((!comDoc || Date.now() - comDoc.t > 10 * 60e3) && !comLoading && !comErr) setTimeout(comLoad, 0);
+  if (comErr) return box(h("p", { class: "dlg-err" }, comErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { comErr = ""; comLoad(); } }, "Try again")));
+  if (!comDoc) return box(h("p", { class: "loading", text: "Loading the commercial clients…" }));
+  const goPc = h("button", { class: "btn small", type: "button", onclick: () => { ofView.tab = "pc"; if (typeof ofSaveView === "function") ofSaveView(); renderOffice(); } }, "Open Past clients");
+  if (!comDoc.ready) return box(h("p", { class: "meta", text: "Housecall Pro hasn't been read yet: an Admin reads it once on Office › Past clients (it reads every year there)." }), goPc);
+  const reread = comDoc.reread ? h("div", { class: "com-reread", id: "comReread" }, h("p", { class: "meta", text: "One more step: read Housecall Pro all again once (Past clients), so this list has every year (not only the last 3½) and what each client spent." }),
+    comDoc.admin && typeof pcBackfill === "function" ? h("button", { class: "btn primary small", type: "button", id: "comRereadGo", onclick: async () => { try { await pcBackfill(true); } finally { comDoc = null; renderOffice(); } } }, "Read all again now") : goPc) : null;
+  const list = comDoc.list || [], yOf = x => Number(x.last.slice(0, 4)), last = comDoc.year - 1;
+  // the years to pick: last year and the 4 before it, then the earlier ones together
+  const ys = [last, last - 1, last - 2, last - 3, last - 4], cnt = k => list.filter(x => (k === "all" ? true : k === "old" ? yOf(x) < last - 4 : yOf(x) === k)).length;
+  const yk = comView.y === "all" || comView.y === "old" || ys.includes(Number(comView.y)) ? comView.y : "all";
+  const q = String(comView.q || "").trim().toLowerCase();
+  const shown = list.filter(x => (yk === "all" || (yk === "old" ? yOf(x) < last - 4 : yOf(x) === Number(yk))) && (!q || [x.name, x.contact, x.phone, x.addr, x.type].some(v => String(v || "").toLowerCase().includes(q))));
+  const set = (k, v) => { comView[k] = v; store.set("voda.com", { y: comView.y, q: comView.q }); comShown = 60; renderOffice(); };
+  const chips = h("div", { class: "seg com-years", role: "group", "aria-label": "Last job in" },
+    [["all", "All"], ...ys.map(y => [y, String(y)]), ["old", `Before ${last - 4}`]].map(([k, t]) => { const n = cnt(k);
+      return n || k === "all" ? h("button", { class: "seg-btn", type: "button", "data-y": String(k), "aria-pressed": String(String(yk) === String(k)), onclick: () => set("y", k) }, t, h("small", { text: ` ${fmt(n)}` })) : null; }));
+  const search = h("input", { type: "search", class: "com-q", id: "comQ", placeholder: "Client, phone, address…", value: comView.q || "", "aria-label": "Search the commercial clients", "data-nodirty": "1" });
+  search.addEventListener("input", () => { comView.q = search.value; clearTimeout(comEl.t); comEl.t = setTimeout(() => { store.set("voda.com", { y: comView.y, q: comView.q }); comShown = 60; renderOffice(); const s = $("comQ"); if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }, 350); });
+  const tel = p => h("a", { class: "com-tel", href: `tel:${String(p).replace(/[^\d+]/g, "")}`, text: p });
+  const row = x => h("li", { class: "com-row", "data-id": x.id },
+    h("div", { class: "com-top" }, h("b", { class: "com-name", text: x.name || "No name" }), x.spent ? h("span", { class: "com-spent", title: "What their jobs came to, every year", text: lbMoney(Math.round(x.spent / 100)) }) : null),
+    x.contact ? h("small", { class: "com-contact", text: x.contact }) : null,
+    h("div", { class: "com-meta" }, `Last job ${lbDayText(x.last)}`, x.lastInv ? [" · ", hcpLink("job", x.lastJob, `#${x.lastInv}`)] : null, x.type ? ` · ${x.type}` : ""),
+    h("div", { class: "com-years-l" }, x.years.map(y => h("span", { class: "com-y" + (y === last ? " last" : ""), text: String(y) })), h("small", { text: ` ${fmt(x.jobs)} job${x.jobs === 1 ? "" : "s"}` })),
+    x.phone || x.phone2 ? h("div", { class: "com-ph" }, x.phone ? tel(x.phone) : null, x.phone2 ? tel(x.phone2) : null) : null,
+    x.addr ? h("small", { class: "com-addr", text: x.addr }) : null);
+  const n = comDoc.n || {};
+  return box(
+    h("p", { class: "lb-sub", id: "comSub", text: `${fmt(list.length)} to win back · from ${fmt(n.com || 0)} commercial clients${comDoc.from ? ` since ${comDoc.from.slice(0, 4)}` : ""} · ${fmt(n.back || 0)} back this year${n.dnc ? ` · ${fmt(n.dnc)} do not call` : ""}` }),
+    reread, chips, search,
+    shown.length ? h("ol", { class: "com-list", id: "comList" }, shown.slice(0, comShown).map(row)) : h("p", { class: "lb-sub", id: "comNone", text: list.length ? "No one matches." : "Every commercial client has been back this year." }),
+    shown.length > comShown ? h("button", { class: "btn small", type: "button", id: "comMore", onclick: () => { comShown += 60; renderOffice(); } }, `Show ${fmt(Math.min(60, shown.length - comShown))} more (${fmt(shown.length - comShown)} left)`) : null,
+    howFold("comHow", h("p", { class: "hint", text: "Commercial: a Commercial job type, or a commercial / property manager tag in Housecall Pro. Listed: a job done before this year, and none done since January 1 or booked. The last year with us first, then the most years, then the most spent. Left off: do not call (a tag, Housecall Pro's do not service, or marked on Past clients) and moved away. From what Past clients reads from Housecall Pro (what changed, every 15 minutes while it's open)." }), "How it's picked"));
+}
 /* ---- Office › Estimates follow-up: the call marks on each estimate, as on Past clients (Not now, Voicemail, Booked,
    Call back…, Don't call again). The open ones get the buttons; a decided one keeps its mark. Who follows them up:
    Admins pick (nobody picked: everyone with Office). ---- */
