@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 123;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 124;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -460,6 +460,9 @@ function doPost(e) {
       case "estimates":
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(estRead_(req.year, user));
+      case "estReportPdf":
+        if (!estAll_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(estReportPdf_(req));
       case "estReportsPut":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return estReportsPut_(req); }));
@@ -4926,6 +4929,20 @@ const EST_ACCESS = ["estimates", "estimates-all"];   // sees every estimate he's
 const EST_PAGES = 6, EST_AT = "EST_SYNC_AT", EST_DONE = "EST_BACKFILL_DONE", EST_SCHEMA = "EST_SCHEMA", EST_V = "5";   // 2: water/mold from tags; 3: every estimate (not only from last year), read again once; 4: each option's id (Housecall Pro's page for an estimate is its option's), read again once; 5: the day it was scheduled for, read again once
 function canEst_(user) { return canSee_(user, "estimates") || canSee_(user, "estimates-all"); }
 function estAll_(user) { return !!user && (user.role === "admin" || canSee_(user, "estimates-all")); }
+/** Estimates › a department's report as a PDF to download: the page the app makes of it (plain HTML, its styles inline)
+ *  turned into a PDF here, in this Google account. Only text and tables: scripts, pictures, links to other files and
+ *  anything fetched from elsewhere are taken out first. { name, data (base64) } */
+function estReportPdf_(req) {
+  let html = String(req.html || "");
+  if (!html || html.length > 400000) return { ok: false, error: "bad_request" };
+  html = html.replace(/<(script|style|iframe|object|svg|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<\/?(script|style|iframe|object|embed|svg|link|img|meta|base|frame|frameset|noscript|template|form|input)\b[^>]*>/gi, "")
+    .replace(/\s(src|href|srcset|xlink:href|on\w+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "").replace(/url\s*\([^)]*\)?/gi, "none");
+  const name = (String(req.name || "Report").replace(/[^\w .,()&+\u2013-]/g, "").replace(/\s+/g, " ").trim().slice(0, 90) || "Report").replace(/\.pdf$/i, "") + ".pdf";
+  const doc = '<html><head><meta charset="utf-8"></head><body style="font-family:Arial,Helvetica,sans-serif;color:#111827;margin:26px">' + html + "</body></html>";
+  const pdf = Utilities.newBlob(doc, "text/html", "report.html").getAs("application/pdf").setName(name);
+  return { ok: true, name: name, data: Utilities.base64Encode(pdf.getBytes()) };
+}
 function estSheet_(create) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(EST_SHEET);

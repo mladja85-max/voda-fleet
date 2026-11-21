@@ -3118,9 +3118,21 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .er-edit { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .er-edit label { display: grid; gap: 3px; flex: 1 1 150px; font-size: .74rem; font-weight: 700; color: var(--muted); }
 .er-edit input { font: inherit; font-size: .9rem; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; }
+/* the pickers: a dropdown (In charge); chips with a dropdown to add one (With) */
+.er-edit .er-with { display: grid; gap: 3px; flex: 2 1 240px; font-size: .74rem; font-weight: 700; color: var(--muted); min-width: 0; }
+.er-pick { display: flex; min-width: 0; } .er-many { display: grid; gap: 6px; min-width: 0; } .er-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.er-dept .er-edit { align-items: start; } .er-dept .er-edit > button { margin-top: calc(.74rem * 1.25 + 3px); }
+.er-sel { font: inherit; font-size: .9rem; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; max-width: 100%; }
+.er-pick .er-sel, .er-pick .er-typed { width: 100%; }
+.er-many .er-add, .er-many .er-typed { width: 100%; box-sizing: border-box; }
+.er-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-size: .86rem; font-weight: 600; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.er-x { all: unset; cursor: pointer; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); font-size: 1rem; line-height: 1; }
+.er-x:hover, .er-x:focus-visible { background: color-mix(in srgb, var(--due) 14%, transparent); color: var(--due); }
 .er { display: grid; gap: 10px; }
 .er h4 { margin: 8px 0 0; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .er-head { display: grid; gap: 8px; } .er-sub { margin: 0; color: var(--muted); font-size: .9rem; }
+.er-cmp-l { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.er-cmp { font: inherit; font-size: .88rem; font-weight: 600; letter-spacing: 0; text-transform: none; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .er-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .er-tile { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
 .er-tile small { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -17163,10 +17175,11 @@ function estRowEl(e, today) {
    before; what the open estimates are likely to bring (their age: how often, in the past, estimates still open at that
    age were approved later); the ones to follow up; by person. Printable. ---- */
 const EST_REP_API = 60;                                 // the Google script that keeps who's in charge of each report
+const EST_PDF_API = 124;                                // ... and that makes a report's PDF to download
 const EST_REP_DEPTS = [["p", "Repairs"], ["c", "Cleaning"], ["r", "Restoration"]];
 const EST_REP_PER = { week: "Week", month: "Month", year: "Year" };
 const EST_AGES = [[0, "0–7 days"], [8, "8–30 days"], [31, "31–60 days"], [61, "61–120 days"], [121, "Over 120 days"]];
-const estRepView = Object.assign({ per: "week", off: 0 }, store.get("voda.estRep") || {});
+const estRepView = Object.assign({ per: "week", off: 0, cmp: 1 }, store.get("voda.estRep") || {});   // cmp: years back (1: last year), or "prev"
 let estRepRedraw = null;                                // the report on screen, drawn again when its data comes in
 /** The period before, up to the same point (a week, a month or a year so far against the same days of the one before). */
 function estRepPrev(per, r, to) {
@@ -17175,6 +17188,25 @@ function estRepPrev(per, r, to) {
   if (per === "week") return { from: p.from, to: lbAddDays(p.from, revLen(r.from, to) - 1), label: p.label };
   if (per === "month") { const dd = Math.min(Number(to.slice(8)), lbDaysIn(p.from.slice(0, 7))); return { from: p.from, to: `${p.from.slice(0, 7)}-${String(dd).padStart(2, "0")}`, label: p.label }; }
   return { from: p.from, to: revShift(to, 1, "year"), label: p.label };
+}
+/** What the report is compared with: the period before ("prev": last week, last month), or the same days n years before
+ *  (a week: the same weekdays, 52 weeks a year back; a month or a year: the same dates). { from, to, label, vs, n } */
+function estRepCmp(per, r, to) {
+  const n = estRepView.cmp === "prev" ? 0 : Math.max(1, Number(estRepView.cmp) || 1);
+  if (!n || (per === "year" && n === 1 && estRepView.cmp === "prev")) { const p = estRepPrev(per, r, to); return Object.assign(p, { n: 0, vs: `vs ${per === "week" ? "last week" : per === "month" ? "last month" : "last year"}` }); }
+  const from = revShift(r.from, n, per), t = revShift(to, n, per), y = Number(from.slice(0, 4));
+  const label = per === "year" ? String(y) : per === "month" ? `${new Date(y, Number(from.slice(5, 7)) - 1, 1).toLocaleString("en-US", { month: "long" })} ${y}` : `Week of ${revSpanText(from, revShift(r.to, n, per))}`;
+  return { from, to: t, label, n, vs: `vs ${per === "year" ? y : per === "month" ? `${MONTHS[Number(from.slice(5, 7)) - 1]} ${y}` : `same week ${y}`}` };
+}
+/** The Compare dropdown's choices for the period on screen: the period before (not for a year: that's last year), then
+ *  each year with estimates read before this one, the newest first. [[value, label]] */
+function estRepCmpOpts(per, r) {
+  const ry = Number(r.from.slice(0, 4)), have = new Set(((estData && estData.years) || []).map(Number).filter(y => y < ry));
+  have.add(ry - 1);
+  const ys = [...have].sort((a, b) => b - a);
+  const mon = new Date(ry, Number(r.from.slice(5, 7)) - 1, 1).toLocaleString("en-US", { month: "long" });
+  return [...(per === "year" ? [] : [["prev", per === "week" ? "Last week" : "Last month"]]),
+    ...ys.map(y => [String(ry - y), per === "year" ? String(y) : per === "month" ? `${mon} ${y}` : `Same week, ${y}`])];
 }
 /** How often an estimate still open at each age was approved later: from the department's estimates old enough to know
  *  (created at least 60 days past that age), the ones still open at that age, and of them the ones approved after. */
@@ -17195,18 +17227,79 @@ function estChances(dep, today) {
 const estChanceOf = (ch, age) => ch.filter(x => x.a <= age).pop();
 /** Who's in charge of a department's report (and who's with him). */
 const estRepOwner = d => ((estData && estData.reports) || {})[d] || { lead: "", team: [] };
-/** Estimates › Reports: the departments (and who's in charge of each); an admin sets the names. */
-function estReportsDlg() {
+/** The people to pick from in Reports: Housecall Pro's (in charge of, or on, an estimate this year: their full names,
+ *  as estimates are matched to them) and the app's logins (still on). [[group, [names]]], each sorted, none twice. */
+function estPeople(users) {
+  const hcp = new Set(), app = new Set(), low = new Set();
+  for (const doc of [estData, ...Object.values(estOther || {})]) for (const e of (doc && doc.estimates) || [])
+    for (const n of [e.inc, ...String(e.emps || "").split(",")]) { const t = String(n || "").trim(); if (t && t !== "-") hcp.add(t); }
+  for (const n of hcp) low.add(n.toLowerCase());
+  for (const u of users || []) { const t = String((u && u.name) || "").trim(); if (t && u.status !== "disabled" && !low.has(t.toLowerCase())) app.add(t); }
+  const sort = x => [...x].sort((a, b) => a.localeCompare(b));
+  return [["In Housecall Pro (on estimates)", sort(hcp)], ["VODA Hub logins", sort(app)]].filter(g => g[1].length);
+}
+/** A dropdown of the people (one name: In charge). A name that isn't on the list stays, at the top; "Type a name…"
+ *  turns it into a box to type one. { el, get } */
+function estPickOne(people, cur, label) {
+  const wrap = h("span", { class: "er-pick", "data-nodirty": "1" });
+  let typed = null;
+  const sel = h("select", { class: "er-sel", "aria-label": label },
+    h("option", { value: "", text: "Nobody yet" }),
+    cur && !people.some(g => g[1].includes(cur)) ? h("option", { value: cur, text: cur }) : null,
+    people.map(([g, names]) => h("optgroup", { label: g }, names.map(n => h("option", { value: n, text: n })))),
+    h("option", { value: "__type__", text: "Type a name…" }));
+  sel.value = cur || "";
+  sel.addEventListener("change", () => {
+    if (sel.value !== "__type__") return;
+    typed = h("input", { type: "text", class: "er-typed", "data-nodirty": "1", maxlength: "40", placeholder: "Name", "aria-label": label });
+    wrap.replaceChildren(typed); typed.focus();
+  });
+  wrap.append(sel);
+  return { el: wrap, get: () => (typed ? typed.value : sel.value).trim() };
+}
+/** The people with him (With): each a chip with ×, and a dropdown to add one (or type one). { el, get } */
+function estPickMany(people, cur, label) {
+  const chosen = [...new Set((cur || []).filter(Boolean))];
+  const wrap = h("span", { class: "er-many", role: "group", "aria-label": label, "data-nodirty": "1" });
+  const draw = () => {
+    const add = h("select", { class: "er-sel er-add", "aria-label": `${label}: add a person` },
+      h("option", { value: "", text: chosen.length ? "+ Add a person" : "Pick people…" }),
+      people.map(([g, names]) => { const left = names.filter(n => !chosen.includes(n)); return left.length ? h("optgroup", { label: g }, left.map(n => h("option", { value: n, text: n }))) : null; }),
+      h("option", { value: "__type__", text: "Type a name…" }));
+    add.addEventListener("change", () => {
+      if (add.value === "__type__") {
+        const box = h("input", { type: "text", class: "er-typed", "data-nodirty": "1", maxlength: "40", placeholder: "Name, then Enter", "aria-label": `${label}: type a name` });
+        const take = () => { const v = box.value.trim(); if (v && !chosen.includes(v)) chosen.push(v); draw(); };
+        box.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); take(); } if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); draw(); } });
+        box.addEventListener("blur", take);
+        add.replaceWith(box); box.focus(); return;
+      }
+      if (add.value && !chosen.includes(add.value)) chosen.push(add.value);
+      draw(); const nx = wrap.querySelector(".er-add"); if (nx) nx.focus();
+    });
+    // the dropdown on the line with In charge; the people picked under it
+    wrap.replaceChildren(add, chosen.length ? h("span", { class: "er-chips" }, chosen.map((n, i) => h("span", { class: "er-chip" }, h("span", { text: n }),
+      h("button", { type: "button", class: "er-x", "aria-label": `Take ${n} off`, title: "Take off", text: "×", onclick: () => { chosen.splice(i, 1); draw(); } })))) : null);
+  };
+  draw();
+  return { el: wrap, get: () => chosen.slice() };
+}
+/** Estimates › Reports: the departments (and who's in charge of each); an admin picks the names. */
+async function estReportsDlg() {
   const doc = estData;
   if (!doc) return;
+  // the app's logins, to pick from (an admin's; kept while the app is open)
+  let users = stHave("users");
+  if (!users && isAdmin()) try { users = await stFetch("users", () => api("users")); } catch (e) { users = null; }
+  const people = estPeople((users && users.users) || []);
   const row = ([d, name]) => {
     const o = estRepOwner(d);
-    const lead = h("input", { type: "text", class: "er-lead", "data-nodirty": "1", value: o.lead || "", placeholder: "Name", maxlength: "40", "aria-label": `${name}: in charge` });
-    const team = h("input", { type: "text", class: "er-team", "data-nodirty": "1", value: (o.team || []).join(", "), placeholder: "Names, with commas", maxlength: "200", "aria-label": `${name}: with` });
+    const lead = estPickOne(people, o.lead || "", `${name}: in charge`);
+    const team = estPickMany(people, o.team || [], `${name}: with`);
     const save = h("button", { class: "btn small", type: "button", onclick: async () => {
       if (apiLevel && apiLevel < EST_REP_API) { toast("Update the Google script first (paste the latest Code.gs, then Deploy › Manage deployments › New version)."); return; }
       save.disabled = true;
-      try { const out = await api("estReportsPut", { dept: d, lead: lead.value.trim(), team: team.value.split(",").map(x => x.trim()).filter(Boolean) }); estData.reports = out.reports || {}; store.set(K_EST, estData); toast(`${name}: saved`); estReportsDlg(); }
+      try { const out = await api("estReportsPut", { dept: d, lead: lead.get(), team: team.get() }); estData.reports = out.reports || {}; store.set(K_EST, estData); toast(`${name}: saved`); estReportsDlg(); }
       catch (e) { toast(errText(e, "Nothing")); } finally { save.disabled = false; }
     } }, "Save");
     return h("div", { class: "er-dept", "data-d": d },
@@ -17214,7 +17307,7 @@ function estReportsDlg() {
         h("span", { class: "er-name" }, h("i", { class: "est-dot " + (d === "r" ? "w" : d) }), `${name} report`),
         h("span", { class: "er-who", text: [o.lead, ...(o.team || [])].filter(Boolean).join(" · ") || (isAdmin() ? "Set who's in charge below" : "") }),
         h("span", { class: "er-go", "aria-hidden": "true", text: "›" })),
-      isAdmin() ? h("div", { class: "er-edit" }, h("label", null, h("span", { text: "In charge" }), lead), h("label", null, h("span", { text: "With" }), team), save) : null);
+      isAdmin() ? h("div", { class: "er-edit" }, h("label", null, h("span", { text: "In charge" }), lead.el), h("div", { class: "er-with" }, h("span", { text: "With" }), team.el), save) : null);
   };
   openDialog(h("h3", { id: "dlgTitle", text: "Reports" }),
     howFold("erDlgHow", h("p", { class: "hint", text: "A department's estimates for the meeting: a week, a month or a year; what was created, approved and produced, the goal, what the open estimates are likely to bring, and who to follow up. The names also decide By person in charge on Estimates: each one under With gets the estimates he's assigned to in Housecall Pro; In charge gets the rest." }), "How it works"),
@@ -17236,18 +17329,25 @@ function estReportOpen(d) {
 }
 function estReportEl(d, name) {
   const per = EST_REP_PER[estRepView.per] ? estRepView.per : "week", off = Math.min(0, Number(estRepView.off) || 0);
-  const today = lbToday(), r = ofRange(per, off), to = r.to > today ? today : r.to, pv = estRepPrev(per, r, to);
+  const today = lbToday(), r = ofRange(per, off), to = r.to > today ? today : r.to, pv = estRepCmp(per, r, to);
   const o = estRepOwner(d);
-  const set = (k, v) => { estRepView[k] = v; if (k === "per") estRepView.off = 0; store.set("voda.estRep", { per: estRepView.per, off: estRepView.off }); estRepRedraw && estRepRedraw(); };
+  const set = (k, v) => { estRepView[k] = v; if (k === "per") estRepView.off = 0; store.set("voda.estRep", { per: estRepView.per, off: estRepView.off, cmp: estRepView.cmp }); estRepRedraw && estRepRedraw(); };
+  const cmpOpts = estRepCmpOpts(per, r), cmpNow = pv.n ? String(pv.n) : "prev";
+  const cmpSel = h("select", { class: "er-cmp", id: "erCmp", "aria-label": "Compare with" }, cmpOpts.map(([v, t]) => h("option", { value: v, text: t })));
+  cmpSel.value = cmpOpts.some(x => x[0] === cmpNow) ? cmpNow : cmpOpts[0][0];
+  cmpSel.addEventListener("change", () => set("cmp", cmpSel.value === "prev" ? "prev" : Number(cmpSel.value)));
   const head = h("div", { class: "er-head" },
-    h("p", { class: "er-sub" }, [o.lead ? `In charge: ${o.lead}` : "", (o.team || []).length ? `with ${o.team.join(", ")}` : ""].filter(Boolean).join(" · ") || "All the department's estimates"),
+    h("p", { class: "er-sub" }, [o.lead ? `In charge: ${o.lead}` : "", (o.team || []).length ? `with ${o.team.join(", ")}` : ""].filter(Boolean).join(" · ") || "All the department's estimates",
+      h("span", { class: "er-cmp-t", id: "erCmpT", text: ` · compared with ${pv.label}${pv.n && per !== "year" ? ` (${revSpanText(pv.from, pv.to)})` : ""}` })),
     h("div", { class: "lb-bar" },
       lbSeg(Object.entries(EST_REP_PER), per, k => set("per", k), "Period"),
       h("div", { class: "of-step" },
         h("button", { class: "btn small", type: "button", id: "erPrev", "aria-label": "Earlier", onclick: () => set("off", off - 1) }, "‹"),
         h("strong", { id: "erLabel", text: r.label + (r.to >= today && r.from <= today ? " (so far)" : "") }),
         h("button", { class: "btn small", type: "button", id: "erNext", "aria-label": "Later", disabled: off >= 0, onclick: () => set("off", off + 1) }, "›")),
-      h("button", { class: "btn small", type: "button", id: "erPrint", onclick: () => estReportPrint(d, name) }, "PDF / Print")));
+      h("label", { class: "er-cmp-l" }, h("span", { text: "Compare" }), cmpSel),
+      h("button", { class: "btn small primary", type: "button", id: "erPdf", onclick: ev => estReportPdf(d, name, ev.currentTarget) }, "Download PDF"),
+      h("button", { class: "btn small", type: "button", id: "erPrint", onclick: () => estReportPrint(d, name) }, "Print")));
   if (r.from > today) return h("div", { class: "er" }, head, h("p", { class: "lb-sub", text: "These days haven't come yet." }));
   // the estimates: the period, the one before, and two years for how old estimates do
   const histFrom = `${Number(today.slice(0, 4)) - 1}-01-01`, from = [r.from, pv.from, histFrom].sort()[0];
@@ -17256,7 +17356,7 @@ function estReportEl(d, name) {
   const R = estRepData(d, per, r, to, pv, all, today);
   const poss = /s$/.test(name) ? `${name}'` : `${name}'s`;   // Repairs' goal, Cleaning's goal
   // against the period before: a count or dollars (money: "in $" when the big number is a count), or a rate in points
-  const vsWhen = `vs ${per === "week" ? "last week" : per === "month" ? "last month" : "last year"}`;
+  const vsWhen = pv.vs;   // vs last month, vs Nov 2025, vs 2024
   const vs = (now, then, money, say$) => { const c = revChange(now, then); return h("small", { class: "er-vs " + c.cls, title: `${pv.label}: ${money ? lbMoney(then / 100) : fmt(then)}` }, `${c.text}${say$ && c.text !== "–" && c.text !== "new" ? " in $" : ""} ${vsWhen}`); };
   const vsPts = (now, then) => {
     if (now === null && then === null) return h("small", { class: "er-vs", text: `– ${vsWhen}` });
@@ -17364,7 +17464,69 @@ function estRepData(d, per, r, to, pv, all, today) {
   }
   return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, contr, daysLeft, fc, people, kinds };
 }
-/** The report on paper (or a PDF: Print › Save as PDF). */
+/** The report on screen as plain HTML for a PDF (styles inline, tables only: what the Google script's PDF maker reads):
+ *  the title, who's in charge and what it's compared with, the tiles, the goal with its bars, then each table. */
+function estReportPdfHtml(src, title, sub) {
+  const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const txt = el => (el ? el.textContent : "").replace(/\s+/g, " ").trim();
+  const C = { ink: "#111827", mute: "#5b6474", line: "#dfe3ea", up: "#17803d", down: "#c0281a", r: "#1f4fbf", c: "#0f766e", p: "#985a05", gold: "#d99a06" };
+  const H4 = t => `<div style="font-size:10px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:${C.mute};margin:16px 0 6px">${esc(t)}</div>`;
+  const tile = el => { const vs = el.querySelector(".er-vs"), col = vs && vs.classList.contains("up") ? C.up : vs && vs.classList.contains("down") ? C.down : C.mute;
+    return `<td style="width:25%;vertical-align:top;border:1px solid ${C.line};padding:8px 10px"><div style="font-size:9px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:${C.mute}">${esc(txt(el.querySelector("small:not(.er-vs)")))}</div>`
+      + `<div style="font-size:20px;font-weight:bold;margin:2px 0">${esc(txt(el.querySelector("b")))}</div><div style="font-size:9.5px;color:${C.mute}">${esc(txt(el.querySelector("span")))}</div>`
+      + (vs ? `<div style="font-size:9.5px;font-weight:bold;color:${col};margin-top:3px">${esc(txt(vs))}</div>` : "") + "</td>"; };
+  const bar = (pct, color) => { const w = Math.max(0, Math.min(100, pct));
+    return `<table style="width:100%;border-collapse:collapse;margin:4px 0"><tr>${w > 0 ? `<td style="width:${w}%;height:7px;background:${color};padding:0"></td>` : ""}${w < 100 ? `<td style="height:7px;background:#e5e7eb;padding:0"></td>` : ""}</tr></table>`; };
+  const goal = el => { const pct = parseInt(txt(el.querySelector(".er-gs em")), 10) || 0, gs = el.querySelector(".er-gs"), em = gs && gs.querySelector("em");
+    const left = gs ? txt(gs).replace(em ? txt(em) : "", "").trim() : "", k = el.dataset.k, color = k === "sup" ? C.gold : "#f59e0b";
+    return `<div style="border:1px solid ${C.line};padding:8px 10px;margin:0 0 6px">`
+      + `<table style="width:100%;border-collapse:collapse"><tr><td style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em;padding:0">${esc(txt(el.querySelector(".er-gn")))}</td><td style="text-align:right;font-size:13px;font-weight:bold;padding:0">${esc(txt(el.querySelector(":scope > b")))}</td></tr></table>`
+      + bar(pct, color) + `<table style="width:100%;border-collapse:collapse"><tr><td style="font-size:10px;padding:0">${esc(left)}</td><td style="text-align:right;font-size:10px;font-weight:bold;padding:0">${esc(em ? txt(em) : "")}</td></tr></table>`
+      + (el.querySelector(".er-bon") ? `<div style="font-size:9px;color:${C.mute};margin-top:3px">${esc(txt(el.querySelector(".er-bon")))}</div>` : "") + "</div>"; };
+  const table = t => { const head = [...t.querySelectorAll("thead th")], cols = head.map(th => th.classList.contains("num"));
+    const cell = (x, i, th) => `<${th ? "th" : "td"} style="padding:4px 5px;border-bottom:1px solid ${th ? C.line : "#eef0f4"};font-size:${th ? 8.5 : 9.5}px;${th ? `color:${C.mute};text-transform:uppercase;letter-spacing:.04em;` : ""}text-align:${cols[i] || x.classList.contains("num") ? "right" : "left"};vertical-align:top${x.querySelector("b") && !th ? ";font-weight:bold" : ""}">${esc(txt(x))}</${th ? "th" : "td"}>`;
+    return `<table style="width:100%;border-collapse:collapse;margin:0 0 6px"><tr>${head.map((x, i) => cell(x, i, true)).join("")}</tr>`
+      + [...t.querySelectorAll("tbody tr")].map(tr => `<tr>${[...tr.children].map((x, i) => cell(x, i, false)).join("")}</tr>`).join("") + "</table>"; };
+  const out = [`<table style="width:100%;border-collapse:collapse;border-bottom:3px solid ${C.r}"><tr><td style="padding:0 0 8px"><div style="font-size:20px;font-weight:bold;text-transform:uppercase;letter-spacing:.03em">${esc(title)}</div>`
+    + `<div style="font-size:10px;color:${C.mute};margin-top:3px">${esc(sub)}</div></td><td style="padding:0 0 8px;text-align:right;vertical-align:top;font-size:10px;color:${C.mute}">VODA Hub</td></tr></table>`];
+  const walk = el => {
+    for (const x of el.children) {
+      if (x.matches(".er-head, details, button, .lb-bar")) continue;
+      if (x.matches(".er-tiles")) out.push(`<table style="width:100%;border-collapse:separate;border-spacing:6px 0;margin:12px -6px 0"><tr>${[...x.querySelectorAll(".er-tile")].map(tile).join("")}</tr></table>`);
+      else if (x.matches("h4")) out.push(H4(txt(x)));
+      else if (x.matches(".er-goals")) { for (const g of x.children) { if (g.matches(".er-goal")) out.push(goal(g)); else if (g.matches(".er-note")) out.push(`<div style="font-size:9px;color:${C.mute};margin:2px 0 4px">${esc(txt(g))}</div>`); } }
+      else if (x.matches(".er-big")) out.push(`<div style="font-size:12px;margin:0 0 6px">${esc(txt(x))}</div>`);
+      else if (x.matches("table")) out.push(table(x));
+      else if (x.querySelector("table, .er-big, .er-goal")) walk(x);
+      else if (txt(x)) out.push(`<div style="font-size:10px;color:${C.mute};margin:0 0 6px">${esc(txt(x))}</div>`);
+    }
+  };
+  walk(src);
+  return out.join("");
+}
+/** Download PDF: the report on screen made into a PDF by the Google script (in this account) and saved as a file. */
+async function estReportPdf(d, name, b) {
+  const src = dlg.querySelector(".er");
+  if (!src) return;
+  if (apiLevel && apiLevel < EST_PDF_API) { toast("Update the Google script first: paste the latest Code.gs, then Deploy › Manage deployments › pencil › New version › Deploy."); return; }
+  if (/…|Loading/.test(($("erTiles") || {}).textContent || "") || !$("erTiles")) { toast("Still loading the report: try again in a moment."); return; }
+  const per = EST_REP_PER[estRepView.per] ? estRepView.per : "week";
+  const label = (($("erLabel") || {}).textContent || "").replace(/\s*\(so far\)/, "");
+  const sub = [($("erLabel") || {}).textContent || "", (dlg.querySelector(".er-sub") || {}).textContent || "", `Made ${lbDayText(lbToday())}`].map(x => x.replace(/^\s*·\s*/, "").trim()).filter(Boolean).join(" · ");
+  const file = `${name} report – ${label || EST_REP_PER[per]}`;
+  const was = b ? b.textContent : "";
+  if (b) { b.disabled = true; b.textContent = "Making the PDF…"; }
+  try {
+    const o = await api("estReportPdf", { html: estReportPdfHtml(src, `${name} report · ${EST_REP_PER[per]}`, sub), name: file }, 120000);
+    const bytes = Uint8Array.from(atob(o.data), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = h("a", { href: url, download: o.name || `${file}.pdf`, style: "display:none" });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    toast("PDF downloaded");
+  } catch (e) { toast(errText(e, "The PDF")); }
+  finally { if (b) { b.disabled = false; b.textContent = was; } }
+}
+/** The report on paper (Print; Download PDF makes a file). */
 function estReportPrint(d, name) {
   const box = $("printReport"), src = dlg.querySelector(".er");
   if (!box || !src) return;
