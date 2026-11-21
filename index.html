@@ -711,7 +711,10 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
   .of-top.has-pick .of-more { display: inline-flex; flex: none; width: 42px; justify-content: center; padding-inline: 0; font-size: 1.2rem; line-height: 1; }
   .of-top.has-pick.acts-open .of-more { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   .of-top.has-pick .of-acts { display: none; }
-  .of-top.has-pick.acts-open .of-acts { display: flex; flex: 1 1 100%; justify-content: flex-end; order: 9; }
+  .of-top.has-pick.acts-open .of-acts { display: flex; flex-wrap: wrap; flex: 1 1 100%; justify-content: flex-end; order: 9; gap: 6px; }
+  .of-top.has-pick .of-acts .btn { font-size: .9rem; padding: 7px 12px; min-height: 0; }
+  /* its Read again gone behind ⋯: ‹ the month › across the line, the month in the middle */
+  .lb-bar > .of-step:only-child { flex: 1 1 100%; } .lb-bar > .of-step:only-child strong { flex: 1; min-width: 0; text-align: center; }
 }
 .seg-btn:hover:not([aria-selected="true"]):not([aria-pressed="true"]) { color: var(--ink); }
 .seg-btn:active { transform: scale(.97); }
@@ -17027,7 +17030,7 @@ let ofTabsOpen = false, ofActsOpen = false;   // a phone: the list of tabs opene
 function ofTabsToggle(open) {
   ofTabsOpen = open;
   document.querySelectorAll(".seg.of-tabs.of-drop").forEach(x => x.classList.toggle("open", open));
-  const b = $("ofPick"); if (b) { b.setAttribute("aria-expanded", String(open)); b.classList.toggle("open", open); }
+  document.querySelectorAll(".of-pick").forEach(b => { b.setAttribute("aria-expanded", String(open)); b.classList.toggle("open", open); });   // Office's, and Attendance's or Marketing's
 }
 function ofTabsEl(cur) {
   const of = ofCan(), estOk = (!apiLevel || apiLevel >= OF_EST_API) && (!ofData || ofData.estOk !== false);
@@ -17061,13 +17064,35 @@ function ofTopEl(seg, acts) {
   const top = h("div", { class: "lb-top of-top" + (drop ? " has-pick" : "") + (drop && ofActsOpen ? " acts-open" : "") }, h("h2", { class: "lb-title", text: "Office" }));
   if (drop) top.append(h("button", { class: "of-pick" + (ofTabsOpen ? " open" : ""), type: "button", id: "ofPick", "aria-haspopup": "true", "aria-expanded": String(ofTabsOpen), title: "All the tabs",
     onclick: () => ofTabsToggle(!ofTabsOpen) }, h("span", { text: seg.dataset.cur || "Tabs" })));
-  if (list.length) {
-    top.append(h("div", { class: "lb-acts of-acts" }, list));
-    if (drop) top.append(h("button", { class: "btn of-more", type: "button", id: "ofMore", "aria-label": "More: " + list.map(b => b.textContent).join(", "), "aria-expanded": String(ofActsOpen),
-      onclick: ev => { ofActsOpen = !ofActsOpen; top.classList.toggle("acts-open", ofActsOpen); ev.currentTarget.setAttribute("aria-expanded", String(ofActsOpen)); } }, "⋯"));
-  }
+  if (list.length) { top.append(h("div", { class: "lb-acts of-acts" }, list)); if (drop) top.append(ofMoreBtn(top)); }
   return top;
 }
+/** ⋯ on Office's line (a phone): shows or hides the buttons tucked behind it, on a line under it. */
+function ofMoreBtn(top) {
+  return h("button", { class: "btn of-more", type: "button", id: "ofMore", "aria-label": "More", "aria-expanded": String(ofActsOpen),
+    onclick: ev => { ofActsOpen = !ofActsOpen; top.classList.toggle("acts-open", ofActsOpen); ev.currentTarget.setAttribute("aria-expanded", String(ofActsOpen)); } }, "⋯");
+}
+/* A phone: the page's small buttons (Read again, Who calls which, Who follows up, Attendance's People and Load from
+   Excel) go behind ⋯ too, first on its line; a PC keeps them where they are. */
+const OF_TUCK = ["pcRefresh", "ofEstRead", "trcRead", "cpmRead", "rpRead", "pcAssignBtn", "ofEstWhoBtn", "atPeopleBtn", "atExcelBtn"];
+const ofPhone = () => !!(window.matchMedia && window.matchMedia("(max-width: 600px)").matches);
+/** Before the page is drawn: `nodes` are its parts (Office's line among them). */
+function ofTuck(nodes) {
+  const all = nodes.filter(n => n && n.nodeType === 1), top = all.find(n => n.matches(".of-top.has-pick"));
+  if (!top || !ofPhone()) return;
+  const find = id => { for (const n of all) { const x = n.id === id ? n : n.querySelector("#" + id); if (x) return x; } return null; };
+  const got = OF_TUCK.map(find).filter(Boolean);
+  if (!got.length) return;
+  let acts = top.querySelector(".of-acts");
+  if (!acts) { acts = h("div", { class: "lb-acts of-acts" }); top.append(acts, ofMoreBtn(top)); }
+  for (const b of got) { const was = b.parentElement; b.remove(); if (was && was.matches(".rev-tools") && !was.children.length) was.remove(); }   // an empty row of them goes too
+  acts.prepend(...got);
+  const more = top.querySelector("#ofMore"); if (more) more.setAttribute("aria-label", "More: " + [...acts.children].map(b => b.textContent).join(", "));
+}
+// turned to or from a phone's width: Office drawn again (the buttons back where they belong)
+if (window.matchMedia) window.matchMedia("(max-width: 600px)").addEventListener("change", () => {
+  if (view.tab === "office") renderOffice(); else if (view.tab === "attendance") renderAttendance();
+});
 /** Attendance's and Marketing's top when they're in Office's row: Office's name and the row (their own buttons stay theirs). */
 const ofFoldTop = cur => { const seg = ofTabsEl(cur); return [ofTopEl(seg, null), seg]; };
 function renderOffice() {
@@ -17106,6 +17131,7 @@ function renderOffice() {
     return;
   }
   const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : cpm ? cpmEl() : rp ? rpEl() : trc ? trcEl() : ofTodayEl();
+  ofTuck([top, tabs, ...body]);
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
   if (ofView.tab === "today") ofShowSave();
 }
@@ -20215,6 +20241,7 @@ function renderAttendance() {
     atSaveErr ? [h("span", { text: atSaveErr }), " ", atRetry ? h("button", { class: "btn small", type: "button", id: "atRetry", onclick: () => { const j = atRetry; atRetry = null; atSaveErr = ""; atSaveDays(j.key, j.days); } }, "Try again") : null]
       : atInflight.length ? "Saving…" : "");
   const head = [...top, bar, saveNote].filter(Boolean);
+  ofTuck(head);
   const days = atDaysIn(r.from, r.to);
   if (!days) { box.replaceChildren(...head, h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4) === r.to.slice(0, 4) ? r.from.slice(0, 4) : `${r.from.slice(0, 4)} – ${r.to.slice(0, 4)}`}…` })); return; }
   const people = atPeopleFor(r.from, r.to, days);
