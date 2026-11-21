@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 126;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 127;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -328,6 +328,12 @@ function doPost(e) {
         return json_(rcptFile_(req));
       case "setShop":
         return json_(setShop_(req));
+      case "gpsStops":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(gpsStops_(req));
+      case "gpsStopsSet":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return gpsStopsSet_(req); }));
       case "supplies":
         return json_({ ok: true, supplies: suppliesForApp_(false, user) });
       case "supplyReport":
@@ -716,7 +722,7 @@ function appendRows_(sheet, width, rows) {
 const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech", "csr"];   // csr: a Non-admin in the office (sees what's ticked, like a Non-admin)
-const ADMIN_ACTIONS = ["hcpTest", "estProbe", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
+const ADMIN_ACTIONS = ["hcpTest", "estProbe", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop", "gpsStops", "gpsStopsSet",
   "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist", "backupInfo", "backupSet"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
@@ -2557,6 +2563,356 @@ function setShop_(req) {
   if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return { ok: false, error: "bad_request" };
   p.setProperty("SHOP_AT", lat.toFixed(5) + ", " + lng.toFixed(5));
   return { ok: true, shop: shopAt_() };
+}
+
+/* ---------------- GPS stops vs the schedule (Trucks › a truck › Stops, Admins) ----------------
+ * Every stop a truck made (One Step GPS keeps them: route/drive-stop), laid next to that day's Housecall Pro jobs and
+ * estimates of the person who drives it. Same street as one of his appointments (any house number), or within
+ * STOP_NEAR_M of it, counts as that appointment; the shop and the places an Admin marks are never flagged; anything
+ * else is flagged to ask about. Past days are kept in the "GPS stops" tab, so One Step is read once for them. */
+const GPS_DS_URL = "https://track.onestepgps.com/v3/api/public/route/drive-stop";
+const STOP_SHEET = "GPS stops";
+const STOP_COLS = ["Truck id", "Day", "GPS device", "Read at", "Stops"];
+const STOP_MIN = 5;            // One Step reports stops this many minutes and longer
+const STOP_NEAR_M = 150;       // a stop this close to an appointment is that appointment
+const STOP_TOWN_M = 3000;      // the same street name farther than this is another street (another town)
+const STOP_GEO = 40;           // street lookups per read (the rest show the next time)
+const STOP_PLACE_M = 150;
+const STOP_SUF = { street: "st", st: "st", avenue: "ave", ave: "ave", av: "ave", road: "rd", rd: "rd", drive: "dr", dr: "dr", boulevard: "blvd", blvd: "blvd",
+  lane: "ln", ln: "ln", court: "ct", ct: "ct", place: "pl", pl: "pl", circle: "cir", cir: "cir", parkway: "pkwy", pkwy: "pkwy", highway: "hwy", hwy: "hwy",
+  terrace: "ter", ter: "ter", trail: "trl", trl: "trl", square: "sq", sq: "sq", way: "way", pike: "pike", turnpike: "tpke", tpke: "tpke", alley: "aly",
+  expressway: "expy", freeway: "fwy", loop: "loop", run: "run", row: "row", crossing: "xing", xing: "xing", point: "pt", pt: "pt", ridge: "rdg", plaza: "plz" };
+const STOP_DIR = { north: "n", n: "n", south: "s", s: "s", east: "e", e: "e", west: "w", w: "w", northeast: "ne", ne: "ne", northwest: "nw", nw: "nw",
+  southeast: "se", se: "se", southwest: "sw", sw: "sw" };
+
+/** "1200-1210 N. Main Street, Apt 4" → { n: "1200", s: "n main st", c: "main", z } (number, street, the street's own name, zip). */
+function stopAddrKey_(street, zip) {
+  let t = String(street || "").replace(/,.*$/, "").replace(/\./g, "").replace(/\s+/g, " ").trim();
+  const m = /^(\d+[a-z]?)(?:\s*-\s*\d+[a-z]?)?\s+(.+)$/i.exec(t);
+  const n = m ? m[1].toLowerCase() : "";
+  if (m) t = m[2];
+  t = t.replace(/\s*(?:#|\b(?:apt|apartment|unit|ste|suite|bldg|building|fl|floor|rm|room|lot|spc|space|trlr)\b)\s*[\w-]*\s*$/i, "").trim();
+  const words = t.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean)
+    .map(function (w) { return STOP_SUF[w] || STOP_DIR[w] || w; });
+  const isSuf = function (w) { return Object.prototype.hasOwnProperty.call(STOP_SUF, w) && STOP_SUF[w] === w; };
+  const isDir = function (w) { return Object.prototype.hasOwnProperty.call(STOP_DIR, w) && STOP_DIR[w] === w; };
+  let core = words.filter(function (w) { return !isSuf(w) && !isDir(w); });
+  if (!core.length) core = words.filter(function (w) { return !isSuf(w); });
+  if (!core.length) core = words;
+  const z = /(\d{5})(?:-\d{4})?\s*$/.exec(String(zip || "").trim());
+  return { n: n, s: words.join(" "), c: core.join(" "), z: z ? z[1] : "" };
+}
+
+/** How a stop at address key k (and lat/lng) sits with an appointment: "exact", "street", "near", "zip" or "". */
+function stopFit_(k, lat, lng, ap) {
+  const d = isFinite(ap.lat) && isFinite(ap.lng) && isFinite(lat) && isFinite(lng) ? gpsDistM_(lat, lng, ap.lat, ap.lng) : NaN;
+  if (isFinite(d) && d <= STOP_NEAR_M) return k && k.c && k.c === ap.k.c && k.n && k.n === ap.k.n ? "exact" : "near";
+  if (k && k.c && ap.k.c && k.c === ap.k.c && !(k.z && ap.k.z && k.z !== ap.k.z) && !(isFinite(d) && d > STOP_TOWN_M))
+    return k.n && k.n === ap.k.n ? "exact" : "street";
+  if (k && k.z && k.z === ap.k.z) return "zip";
+  return "";
+}
+
+/** A latitude or longitude Housecall Pro sends ("38.9", 38.9), or NaN for none ("", null, 0). */
+function stopCoord_(v) { const n = v === "" || v === null || v === undefined ? NaN : Number(v); return isFinite(n) && n !== 0 ? n : NaN; }
+
+/** A name picked for the truck matches a Housecall Pro employee: the same name, or one starts the other (a first name alone). */
+function stopNameHit_(emp, who) {
+  const a = String(emp || "").toLowerCase().replace(/\s+/g, " ").trim(), b = String(who || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!a || !b) return false;
+  return a === b || (b.length >= 3 && a.indexOf(b) === 0) || (a.length >= 3 && b.indexOf(a) === 0);
+}
+
+/** One Step's stops for a device from..to (Dates): [{ f, t, lat, lng, a }] (ms, ms, coords, its address if it sends one). */
+function stopFetch_(device, from, to) {
+  const iso = function (d) { return d.toISOString().replace(/\.\d{3}Z$/, "Z"); };
+  const url = GPS_DS_URL + "?device_id=" + encodeURIComponent(device) + "&dt_tracker_from=" + encodeURIComponent(iso(from)) +
+    "&dt_tracker_to=" + encodeURIComponent(iso(to)) + "&stop_duration=" + STOP_MIN + "m0s";
+  const json = gpsFetch_(url).json;
+  const list = json && Array.isArray(json.drive_stop_list) ? json.drive_stop_list : gpsList_(json);
+  const pos = function (r) {
+    const keys = ["lat_lng_best_first", "lat_lng_from", "first_valid_lat_lng", "lat_lng_best_last", "lat_lng_to", "last_valid_lat_lng", "location", "point"];
+    for (let i = 0; i < keys.length; i++) {
+      const p = r[keys[i]];
+      if (p && typeof p === "object") {
+        const lat = Number(p.lat !== undefined ? p.lat : p.latitude), lng = Number(p.lng !== undefined ? p.lng : p.lon !== undefined ? p.lon : p.longitude);
+        if (isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return [lat, lng];
+      }
+    }
+    const lat = Number(r.lat !== undefined ? r.lat : r.latitude), lng = Number(r.lng !== undefined ? r.lng : r.longitude);
+    return isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0) ? [lat, lng] : null;
+  };
+  const out = [];
+  list.forEach(function (r) {
+    if (!r || typeof r !== "object") return;
+    const type = String(r.type || r.event_type || "").toLowerCase();
+    if (type && type.indexOf("stop") === -1 && type.indexOf("park") === -1) return;   // drives (and idles) aren't stops
+    const f = new Date(r.time_from || r.dt_from || r.start_time || r.from || "").getTime(), t = new Date(r.time_to || r.dt_to || r.end_time || r.to || "").getTime();
+    if (!isFinite(f) || !isFinite(t)) return;
+    const p = pos(r);
+    const a = typeof r.address === "string" ? r.address : typeof r.formatted_address === "string" ? r.formatted_address : "";
+    out.push({ f: Math.min(f, t), t: Math.max(f, t), lat: p ? p[0] : NaN, lng: p ? p[1] : NaN, a: String(a || "").replace(/, USA$/, "").slice(0, 120) });
+  });
+  out.sort(function (x, y) { return x.f - y.f; });
+  return { stops: out, shape: out.length ? null : { keys: Object.keys(json || {}).slice(0, 20), rows: list.length,
+    first: list[0] && typeof list[0] === "object" ? Object.keys(list[0]).slice(0, 30) : [] } };
+}
+
+/** The street address at a stop, from Google's lookup (kept 6 hours): { a, n, s, z } or null when out of lookups. */
+function stopGeo_(lat, lng, budget) {
+  if (!isFinite(lat) || !isFinite(lng)) return { a: "", n: "", s: "", z: "" };
+  const key = "stopgeo:" + lat.toFixed(4) + "," + lng.toFixed(4), cache = CacheService.getScriptCache();
+  const hit = cache.get(key);
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* look it up again */ } }
+  if (budget.geo <= 0) return null;
+  budget.geo--;
+  let out = { a: "", n: "", s: "", z: "" };
+  try {
+    const r = Maps.newGeocoder().reverseGeocode(lat, lng);
+    const list = (r && r.results) || [];
+    const best = list.filter(function (x) { return (x.types || []).some(function (t) { return t === "street_address" || t === "premise" || t === "subpremise"; }); })[0] || list[0];
+    if (best) {
+      const comp = function (type) { const c = (best.address_components || []).filter(function (x) { return (x.types || []).indexOf(type) !== -1; })[0]; return c ? String(c.short_name || c.long_name || "") : ""; };
+      out = { a: String(best.formatted_address || "").replace(/, USA$/, "").slice(0, 120), n: comp("street_number"), s: comp("route"), z: comp("postal_code") };
+    }
+  } catch (e) { return null; }
+  try { cache.put(key, JSON.stringify(out), 21600); } catch (e) { /* too big to keep */ }
+  return out;
+}
+
+/** An appointment's spot from Google's lookup (kept 6 hours), for the ones Housecall Pro sends without one. */
+function stopGeoFwd_(addr, budget) {
+  if (!addr) return null;
+  const key = "stopfwd:" + String(addr).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 200), cache = CacheService.getScriptCache();
+  const hit = cache.get(key);
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* look it up again */ } }
+  if (budget.geo <= 0) return null;
+  budget.geo--;
+  let out = { lat: NaN, lng: NaN };
+  try {
+    const r = Maps.newGeocoder().geocode(addr);
+    const g = r && r.results && r.results[0] && r.results[0].geometry && r.results[0].geometry.location;
+    if (g) out = { lat: Number(g.lat), lng: Number(g.lng) };
+  } catch (e) { return null; }
+  try { cache.put(key, JSON.stringify(out), 21600); } catch (e) { /* ignore */ }
+  return out;
+}
+
+/** The days from..to (yyyy-MM-dd) of jobs and estimates: { day: [{ kind, id, n, client, addr, who, time, st, lat, lng, k }] }. */
+function stopAppts_(from, to, tz) {
+  const days = {}, note = [];
+  const put = function (day, ap) { (days[day] = days[day] || []).push(ap); };
+  if (hcpKey_()) {
+    const r = hcpJobsIn_(tmAddDays_(from, -7), to);   // a job that started up to a week before still counts on its later days
+    if (r.error) note.push("Housecall Pro jobs couldn't be read right now (" + r.error + ").");
+    (r.jobs || []).forEach(function (j) {
+      const sc = j.schedule || {}, s = new Date(sc.scheduled_start || ""), e = new Date(sc.scheduled_end || sc.scheduled_start || "");
+      if (!isFinite(s.getTime())) return;
+      const a = j.address || {};
+      const first = Utilities.formatDate(s, tz, "yyyy-MM-dd");
+      let last = isFinite(e.getTime()) ? Utilities.formatDate(e, tz, "yyyy-MM-dd") : first;
+      if (last < first || last > tmAddDays_(first, 13)) last = first;
+      const who = (Array.isArray(j.assigned_employees) ? j.assigned_employees : [])
+        .map(function (x) { return [x && x.first_name, x && x.last_name].filter(Boolean).join(" ").replace(/\s+/g, " ").trim(); }).filter(Boolean);
+      const ap = { kind: "job", id: String(j.id || ""), n: String(j.invoice_number || ""), client: hcpClient_(j), addr: estAddress_(a),
+        who: who, time: Utilities.formatDate(s, tz, "HH:mm"), st: String(j.work_status || "").replace(/_/g, " ").slice(0, 30),
+        lat: stopCoord_(a.latitude), lng: stopCoord_(a.longitude), k: stopAddrKey_(a.street, a.zip) };
+      for (let d = first < from ? from : first; d <= last && d <= to; d = tmAddDays_(d, 1)) put(d, ap);
+    });
+  } else note.push("Housecall Pro isn't connected, so only the estimates in the Estimates tab are compared.");
+  const s = estSheet_(false);
+  const rows = estRows_(s);
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id];
+    const at = new Date(r[28] || "");
+    if (!isFinite(at.getTime())) return;   // not scheduled: no visit to make
+    const day = Utilities.formatDate(at, tz, "yyyy-MM-dd");
+    if (day < from || day > to) return;
+    const who = String(r[16] || "").split(/\s*,\s*/).concat([String(r[21] || "")]).map(function (x) { return x.trim(); })
+      .filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+    put(day, { kind: "est", id: id, n: String(r[1] || ""), client: String(r[4] || ""), addr: String(r[29] || r[5] || ""), who: who,
+      time: Utilities.formatDate(at, tz, "HH:mm"), st: String(r[9] || "").slice(0, 30), lat: NaN, lng: NaN,
+      k: stopAddrKey_(String(r[5] || ""), String(r[29] || "")) });
+  });
+  return { days: days, note: note };
+}
+
+function stopSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(STOP_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(STOP_SHEET);
+    s.getRange(1, 1, 1, STOP_COLS.length).setValues([STOP_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange("B:B").setNumberFormat("@");
+  }
+  return s;
+}
+
+/** The truck's people and places, as the app shows them. */
+function stopPrefs_() {
+  const p = PropertiesService.getScriptProperties();
+  const parse = function (k, d) { try { const v = JSON.parse(p.getProperty(k) || ""); return v && typeof v === "object" ? v : d; } catch (e) { return d; } };
+  return { person: parse("GPS_PERSON", {}), places: parse("GPS_PLACES", []).filter(function (x) { return x && isFinite(x.lat) && isFinite(x.lng); }) };
+}
+
+/** Admin: a truck's stops on day..to (≤ 14 days), each laid next to the schedule of the person driving it.
+ *  { truck, from, to, person, people, days: [{ day, stops: [...], missed: [...] }], places, note, left }. */
+function gpsStops_(req) {
+  const tz = Session.getScriptTimeZone();
+  const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")); };
+  const from = String(req.from || ""), to = String(req.to || req.from || "");
+  if (!isDay(from) || !isDay(to) || to < from || tmAddDays_(from, 13) < to) return { ok: false, error: "bad_request" };
+  const found = readTrucks_().filter(function (x) { return String(x.truck.id) === String(req.truck || ""); })[0];
+  if (!found) return { ok: false, error: "not_found" };
+  const t = found.truck;
+  const gs = SpreadsheetApp.getActive().getSheetByName("GPS");
+  let device = "";
+  if (gs && gs.getLastRow() > 1) {
+    const rows = gs.getRange(2, 1, gs.getLastRow() - 1, 4).getValues().filter(function (r) { return t.unit && String(r[2]) === String(t.unit) && String(r[1] || "").trim(); });
+    rows.sort(function (a, b) { return (b[3] === true ? 1 : 0) - (a[3] === true ? 1 : 0); });
+    device = rows[0] ? String(rows[0][1]).trim() : "";
+  }
+  if (!device) return { ok: false, error: "no_gps" };
+  const prefs = stopPrefs_();
+  const person = String(prefs.person[t.id] !== undefined ? prefs.person[t.id] : t.driver || "").trim();
+  const today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
+  const end = to > today ? today : to;
+  const budget = { geo: STOP_GEO };
+  const note = [];
+
+  // 1. the stops, a day at a time: past days from the GPS stops tab, the rest from One Step in one read
+  const sheet = stopSheet_(true), kept = {}, keptRow = {};
+  if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, STOP_COLS.length).getValues().forEach(function (r, i) {
+    const day = repDay_(r[1], tz);
+    if (String(r[0]) !== String(t.id) || day < from || day > end || String(r[2]) !== device) return;
+    keptRow[day] = i + 2;
+    if (req.force === true) return;
+    try { kept[day] = JSON.parse(String(r[4] || "[]")); } catch (e) { /* read it again */ }
+  });
+  const want = [];
+  for (let d = from; d <= end; d = tmAddDays_(d, 1)) if (!kept[d]) want.push(d);
+  const byDay = {};
+  let shape = null;
+  if (want.length) {
+    // a minute more on each side: a stop One Step cuts at the edge still shows it went past midnight
+    const a = new Date(new Date(hcpDayStart_(want[0])).getTime() - 60000), b = new Date(new Date(hcpDayStart_(tmAddDays_(want[want.length - 1], 1))).getTime() + 60000);
+    let got;
+    try { got = stopFetch_(device, a, b > tmNow_() ? tmNow_() : b); }
+    catch (e) { return { ok: false, error: "gps", message: String(e && e.message || e).slice(0, 300) }; }
+    shape = got.shape;
+    want.forEach(function (d) { byDay[d] = []; });
+    got.stops.forEach(function (s) {   // a stop over midnight is cut into each day's part
+      for (let d = Utilities.formatDate(new Date(s.f), tz, "yyyy-MM-dd"); d <= want[want.length - 1]; d = tmAddDays_(d, 1)) {
+        const ds = new Date(hcpDayStart_(d)).getTime(), de = new Date(hcpDayStart_(tmAddDays_(d, 1))).getTime();
+        if (ds >= s.t) break;
+        const f = Math.max(s.f, ds), u = Math.min(s.t, de);
+        if (byDay[d] && u - f >= STOP_MIN * 60000) byDay[d].push({ f: f, t: u, lat: s.lat, lng: s.lng, a: s.a, cut: (s.f < ds ? "a" : "") + (s.t > de ? "b" : "") });
+      }
+    });
+  }
+  // 2. the street at each stop (Google's lookup for the ones One Step sends without it)
+  let left = 0;
+  const stopsOf = {};
+  for (let d = from; d <= end; d = tmAddDays_(d, 1)) {
+    if (kept[d]) { stopsOf[d] = kept[d].map(function (x) { return { f: x[0], t: x[1], lat: x[2], lng: x[3], a: x[4], n: x[5], s: x[6], z: x[7], cut: x[8] || "" }; }); continue; }
+    let all = true;
+    stopsOf[d] = (byDay[d] || []).map(function (x) {
+      const geo = stopGeo_(x.lat, x.lng, budget);
+      if (!geo) { all = false; left++; }
+      const k = geo || {};
+      const parsed = x.a ? stopAddrKey_(x.a, x.a) : null;
+      return { f: x.f, t: x.t, lat: x.lat, lng: x.lng, a: x.a || k.a || "", n: k.n || (parsed ? parsed.n : ""), s: k.s || (x.a ? String(x.a).replace(/,.*$/, "").replace(/^\d+[a-z]?(?:-\d+[a-z]?)?\s+/i, "") : ""),
+        z: k.z || (parsed ? parsed.z : ""), cut: x.cut, wait: !geo };
+    });
+    const doneAt = new Date(hcpDayStart_(tmAddDays_(d, 1))).getTime() + 2 * 3600000;   // One Step can report a little late
+    if (all && tmNow_().getTime() > doneAt) {
+      const json = JSON.stringify(stopsOf[d].map(function (x) { return [x.f, x.t, isFinite(x.lat) ? x.lat : null, isFinite(x.lng) ? x.lng : null, x.a, x.n, x.s, x.z, x.cut]; }));
+      const row = [String(t.id), d, device, new Date().toISOString(), json.slice(0, 49000)];
+      if (keptRow[d]) sheet.getRange(keptRow[d], 1, 1, STOP_COLS.length).setValues([row]);
+      else { keptRow[d] = sheet.getLastRow() + 1; sheet.getRange(keptRow[d], 1, 1, STOP_COLS.length).setValues([row]); }
+    }
+  }
+  // 3. the schedule, and how each stop sits with it
+  const ap = stopAppts_(from, end, tz);
+  ap.note.forEach(function (n) { note.push(n); });
+  const shop = shopAt_(), people = {};
+  const days = [];
+  for (let d = from; d <= end; d = tmAddDays_(d, 1)) {
+    const list = ap.days[d] || [];
+    list.forEach(function (x) { x.who.forEach(function (w) { people[w] = true; }); });
+    const mine = list.filter(function (x) { return person && x.who.some(function (w) { return stopNameHit_(w, person); }); });
+    mine.forEach(function (x) {
+      if (!isFinite(x.lat) && x.addr) { const p = stopGeoFwd_(x.addr, budget); if (p) { x.lat = p.lat; x.lng = p.lng; } }
+    });
+    const seen = {};
+    const stops = (stopsOf[d] || []).map(function (s) {
+      const k = s.s || s.n || s.z ? stopAddrKey_((s.n ? s.n + " " : "") + s.s, s.z) : null;
+      const out = { f: s.f, t: s.t, min: Math.round((s.t - s.f) / 60000), lat: isFinite(s.lat) ? s.lat : null, lng: isFinite(s.lng) ? s.lng : null,
+        a: s.a || "", cut: s.cut || "", kind: "flag" };
+      if (s.wait) out.wait = true;
+      if (shop && isFinite(s.lat) && gpsDistM_(s.lat, s.lng, shop.lat, shop.lng) <= shop.radius) { out.kind = "shop"; return out; }
+      const place = prefs.places.filter(function (p) { return isFinite(s.lat) && gpsDistM_(s.lat, s.lng, p.lat, p.lng) <= (Number(p.r) || STOP_PLACE_M); })[0];
+      if (place) { out.kind = "place"; out.place = String(place.n || "Known place"); return out; }
+      const rank = { exact: 4, street: 3, near: 2, zip: 1, "": 0 };
+      const best = function (arr) {
+        let top = null, how = "";
+        arr.forEach(function (x) { const f = stopFit_(k, s.lat, s.lng, x); if (rank[f] > rank[how]) { top = x; how = f; } });
+        return top ? { x: top, how: how } : null;
+      };
+      const appt = function (x) { return { kind: x.kind, n: x.n, client: x.client, addr: x.addr, who: x.who.join(", "), time: x.time, st: x.st }; };
+      const m = best(mine);
+      if (m && m.how !== "zip") { out.kind = "his"; out.how = m.how; out.appt = appt(m.x); seen[m.x.kind + m.x.id] = true; return out; }
+      const o = best(list.filter(function (x) { return mine.indexOf(x) === -1; }));
+      if (o && o.how !== "zip") { out.kind = "other"; out.how = o.how; out.appt = appt(o.x); return out; }
+      if (m) { out.kind = "zip"; out.appt = appt(m.x); return out; }
+      return out;
+    });
+    const missed = mine.filter(function (x) { return !seen[x.kind + x.id]; })
+      .map(function (x) { return { kind: x.kind, n: x.n, client: x.client, addr: x.addr, time: x.time, st: x.st }; });
+    days.push({ day: d, stops: stops, appts: mine.length, missed: missed });
+  }
+  if (to > today) note.push("Days after today have no stops yet.");
+  const out = { ok: true, truck: String(t.id), unit: String(t.unit || ""), from: from, to: to, today: today, person: person, driver: String(t.driver || ""),
+    people: Object.keys(people).sort(), places: prefs.places.map(function (p) { return { n: String(p.n || ""), a: String(p.a || ""), lat: p.lat, lng: p.lng }; }),
+    days: days, note: note, left: left, shop: !!shop };
+  if (shape && want.length) out.shape = shape;
+  return out;
+}
+
+/** Admin: whose schedule a truck is compared with ({ truck, person }; "" goes back to the truck's driver), and the
+ *  places never flagged ({ places: [{ n, a, lat?, lng? }] }, an address without a spot is looked up). */
+function gpsStopsSet_(req) {
+  const p = PropertiesService.getScriptProperties();
+  const prefs = stopPrefs_();
+  if (req.truck !== undefined) {
+    const id = String(req.truck || "");
+    if (!id || !readTrucks_().some(function (x) { return String(x.truck.id) === id; })) return { ok: false, error: "not_found" };
+    const who = String(req.person || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    if (req.person === null || req.person === undefined) delete prefs.person[id]; else prefs.person[id] = who;
+    p.setProperty("GPS_PERSON", JSON.stringify(prefs.person));
+  }
+  if (Array.isArray(req.places)) {
+    const budget = { geo: 10 }, out = [];
+    for (let i = 0; i < req.places.length && out.length < 60; i++) {
+      const x = req.places[i] || {};
+      const n = String(x.n || "").replace(/\s+/g, " ").trim().slice(0, 40), a = String(x.a || "").replace(/\s+/g, " ").trim().slice(0, 120);
+      const coord = function (v) { return v === null || v === undefined || v === "" ? NaN : Number(v); };
+      let lat = coord(x.lat), lng = coord(x.lng);
+      if ((!isFinite(lat) || !isFinite(lng)) && a) {
+        const g = stopGeoFwd_(a, budget);
+        if (!g || !isFinite(g.lat)) return { ok: false, error: "no_place", message: a };
+        lat = g.lat; lng = g.lng;
+      }
+      if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return { ok: false, error: "bad_request" };
+      out.push({ n: n || "Known place", a: a, lat: Math.round(lat * 1e5) / 1e5, lng: Math.round(lng * 1e5) / 1e5 });
+    }
+    const json = JSON.stringify(out);
+    if (json.length > 8800) return { ok: false, error: "too_big" };
+    p.setProperty("GPS_PLACES", json);
+  }
+  const now = stopPrefs_();
+  return { ok: true, person: now.person, places: now.places };
 }
 
 /* ---------------- checklists (cleaning supplies, products, equipment) ---------------- */
