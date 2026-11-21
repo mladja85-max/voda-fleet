@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 124;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 125;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -434,6 +434,15 @@ function doPost(e) {
       case "cashSync":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(cashSync_(req));   // the reading isn't locked (it takes a while); the writing is
+      case "srvSync":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(srvSync_(req));
+      case "srvRead":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(srvRead_(req));
+      case "srvMapPut":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return srvMapPut_(req); }));
       case "cashRead":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(cashRead_(req));
@@ -4265,6 +4274,145 @@ function cashCmp_(rows, have, items, from, to, jf, jt) {
     if (above || stale || short) t.diff.push([id, b.day, b.dep, b.inv, b.client, b.c, b.col, all]);
   });
   return t;
+}
+
+/* ---- Services: each job's service lines (its line items in Housecall Pro: Carpet cleaning, Stretching, Maxim, the
+   card fee, discounts…), kept on the "Service lines" tab and read in turns like Money in. The app adds them up by
+   service, day by day, as in the TOTAL SERVICES REVENUE workbook; which column a service name goes to is the
+   service map (an admin picks it once; the app guesses the rest). ---- */
+const SRV_SHEET = "Service lines";
+const SRV_COLS = ["Job id", "Job day", "Department", "Invoice #", "Job type", "Charged (cents)", "Read at", "Lines"];
+const SRV_MAP = "SRV_MAP";   // Script Property: { "service name, lower case": column key }
+const SRV_KEYS = ["carpet", "comcarpet", "stretch", "rugin", "rugplant", "uph", "hfpolish", "hfsandless", "vct", "maid", "tile", "water", "mold", "duct", "repair",
+  "maxcarpet", "maxrug", "maxuph", "sealer", "spots", "deodor", "ccfee", "disc", "sdisc", "skip"];
+function srvSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(SRV_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(SRV_SHEET);
+    if (s.getMaxColumns() < SRV_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), SRV_COLS.length - s.getMaxColumns());
+    s.getRange(1, 1, 1, SRV_COLS.length).setValues([SRV_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange(2, 1, Math.max(s.getMaxRows() - 1, 1), 5).setNumberFormat("@");   // ids, days, invoice numbers stay text
+  }
+  return s;
+}
+function srvRows_(s) {
+  const out = {};
+  if (!s || s.getLastRow() < 2) return out;
+  const tz = Session.getScriptTimeZone();
+  s.getRange(2, 1, s.getLastRow() - 1, SRV_COLS.length).getValues().forEach(function (r, i) {
+    const id = String(r[0] || "");
+    if (!id) return;
+    let lines = [];
+    try { lines = JSON.parse(String(r[7] || "[]")); } catch (e) { lines = []; }
+    out[id] = { row: i + 2, day: r[1] instanceof Date ? Utilities.formatDate(r[1], tz, "yyyy-MM-dd") : String(r[1] || ""), dep: String(r[2] || "o"), inv: String(r[3] || ""), type: String(r[4] || ""),
+      c: Number(r[5]) || 0, at: r[6] ? new Date(r[6]).getTime() || 0 : 0, lines: Array.isArray(lines) ? lines : [] };
+  });
+  return out;
+}
+/** The jobs (each visit) on the Revenue tab's days from..to: id → { day, dep, inv, type, c }. */
+function srvJobs_(from, to, rows) {
+  rows = rows || revRows_(revSheet_(false));
+  const out = {};
+  Object.keys(rows).sort().forEach(function (d) {
+    if (d < from || d > to) return;
+    let js = null;
+    try { js = JSON.parse(rows[d][14] || "null"); } catch (e) { js = null; }
+    if (!Array.isArray(js)) return;
+    js.forEach(function (x) {
+      const id = String(x[0] || "");
+      if (!id || out[id]) return;
+      out[id] = { day: d, dep: "rcp".indexOf(String(x[3] || "")) >= 0 && x[3] ? String(x[3]) : "o", inv: String(x[1] || ""), type: String(x[10] || ""), c: Number(x[4]) || 0 };
+    });
+  });
+  return out;
+}
+/** A job's service lines: [[name, kind, cents]] (its amount, else its total price, else price × quantity), or null when
+ *  Housecall Pro didn't answer. A line of $0 is left out. */
+function srvLinesOf_(r) {
+  if (!r || r.error) return null;
+  const d = r.data || {}, list = Array.isArray(d) ? d : Array.isArray(d.data) ? d.data : Array.isArray(d.line_items) ? d.line_items : [];
+  const out = [];
+  list.forEach(function (it) {
+    if (!it) return;
+    const name = String(it.name || it.service_name || it.title || it.description || "").replace(/\s+/g, " ").trim().slice(0, 80) || "(no name)";
+    const amt = it.amount !== undefined && it.amount !== null ? Number(it.amount) : it.total_price !== undefined && it.total_price !== null ? Number(it.total_price)
+      : (Number(it.unit_price) || 0) * (it.quantity !== undefined && it.quantity !== null ? Number(it.quantity) || 0 : 1);
+    const c = Math.round(amt) || 0;
+    if (c) out.push([name, String(it.kind || it.type || "").slice(0, 20), c]);
+  });
+  return out;
+}
+const SRV_BUDGET = 22000, SRV_BATCH = 12;
+/** Reads the service lines of the jobs from..to (on the Revenue tab) not read yet, or whose amount changed (force: all
+ *  of them again), the newest first, in turns. { ok, read, failed, left, done } */
+function srvSync_(req) {
+  if (!hcpKey_()) return { ok: false, error: "no_key" };
+  const ok = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  const from = String(req.from || ""), to = String(req.to || "");
+  if (!ok(from) || !ok(to) || to < from) return { ok: false, error: "bad_request" };
+  const start = Date.now(), s = srvSheet_(true), have = srvRows_(s), jobs = srvJobs_(from, to);
+  const todo = Object.keys(jobs).filter(function (id) { const j = jobs[id], h = have[id]; return j.c !== 0 && (!h || h.c !== j.c || (req.force && h.at < start - 60e3)); })
+    .sort(function (a, b) { return jobs[a].day < jobs[b].day ? 1 : jobs[a].day > jobs[b].day ? -1 : 0; });
+  let read = 0, failed = 0;
+  const lines = [];
+  for (let i = 0; i < todo.length && Date.now() - start < SRV_BUDGET; i += SRV_BATCH) {
+    const part = todo.slice(i, i + SRV_BATCH);
+    const res = hcpGetAll_(part.map(function (id) { return { path: "/jobs/" + encodeURIComponent(id) + "/line_items" }; }));
+    let stop = false;
+    part.forEach(function (id, k) {
+      const ls = srvLinesOf_(res[k]);
+      if (!ls) { failed++; if (res[k] && (res[k].error === "hcp_key" || res[k].error === "hcp_forbidden")) stop = res[k].error; return; }
+      const j = jobs[id];
+      lines.push([id, j.day, j.dep, j.inv, j.type, j.c, new Date().toISOString(), JSON.stringify(ls)]);
+      read++;
+    });
+    if (stop) return { ok: false, error: stop };
+  }
+  if (lines.length) withLock_(function () {
+    const now = srvRows_(s), adds = [];
+    lines.forEach(function (l) { const h = now[l[0]]; if (h) s.getRange(h.row, 1, 1, SRV_COLS.length).setValues([l]); else { adds.push(l); now[l[0]] = { row: -1 }; } });
+    if (adds.length) appendRows_(s, SRV_COLS.length, adds);
+  });
+  const left = Math.max(0, todo.length - read - failed);
+  return { ok: true, read: read, failed: failed, left: left, done: left === 0 };
+}
+/** The jobs from..to (on the Revenue tab) with their service lines: items [[job id, day, department, invoice #, job
+ *  type, charged ¢, lines]] (lines null: not read yet); left: still to read; map: the service map; at: newest read. */
+function srvRead_(req) {
+  const ok = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  const from = String(req.from || ""), to = String(req.to || "");
+  if (!ok(from) || !ok(to) || to < from) return { ok: false, error: "bad_request" };
+  const have = srvRows_(srvSheet_(false)), jobs = srvJobs_(from, to), items = [];
+  let at = 0, left = 0;
+  Object.keys(jobs).forEach(function (id) {
+    const j = jobs[id], h = have[id], fresh = h && h.c === j.c;
+    if (h && h.at > at) at = h.at;
+    if (j.c !== 0 && !fresh) left++;
+    items.push([id, j.day, j.dep, j.inv, j.type, j.c, h ? h.lines : null]);
+  });
+  items.sort(function (a, b) { return a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0; });
+  return { ok: true, items: items, left: left, map: srvMap_(), at: at ? new Date(at).toISOString() : "" };
+}
+function srvMap_() {
+  let m = {};
+  try { m = JSON.parse(PropertiesService.getScriptProperties().getProperty(SRV_MAP) || "{}") || {}; } catch (e) { m = {}; }
+  return m && typeof m === "object" ? m : {};
+}
+/** Admins: the service map, { map: { name: key } } merged in (a key of "" takes a name off, back to the app's guess). */
+function srvMapPut_(req) {
+  const m = srvMap_(), add = req.map && typeof req.map === "object" ? req.map : null;
+  if (!add) return { ok: false, error: "bad_request" };
+  Object.keys(add).forEach(function (n) {
+    const name = String(n).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 80), k = String(add[n] || "");
+    if (!name) return;
+    if (!k) delete m[name]; else if (SRV_KEYS.indexOf(k) !== -1) m[name] = k;
+  });
+  const text = JSON.stringify(m);
+  if (text.length > 8800) return { ok: false, error: "too_big" };
+  PropertiesService.getScriptProperties().setProperty(SRV_MAP, text);
+  return { ok: true, map: m };
 }
 
 const UNSENT_CACHE = "unsent_v1", UNSENT_PAGES = 20, UNSENT_JOBS = 80, UNSENT_ALT = 300;
