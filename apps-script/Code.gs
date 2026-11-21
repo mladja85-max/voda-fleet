@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 120;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 121;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -431,6 +431,12 @@ function doPost(e) {
       case "cpmImport":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return cpmImport_(req, user); }));
+      case "cashSync":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(cashSync_(req));   // the reading isn't locked (it takes a while); the writing is
+      case "cashRead":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(cashRead_(req));
       case "unsentRead":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(unsentRead_(req));
@@ -4083,6 +4089,135 @@ function revOut_(row) {
 // matched to its job for the department, client and day (the Revenue tab's jobs, else read from Housecall Pro); only
 // finished jobs count. When /invoices can't be read, the Revenue tab's finished jobs that still owe have their invoices
 // read one by one instead (/jobs/{id}/invoices).
+/* ---- Money in: every payment on the day it came in, whatever the job's day (a balance from March paid on November 21
+   counts on November 21). Each job's invoices are read from Housecall Pro (their payments: amount and day; deposits
+   too) and kept on the "Payments" tab, one line a job. The jobs come from the Revenue tab (every day read). A job is
+   read the first time, when its charged or owed changes there, and, while someone still owes, again after 20 hours
+   (payments come in); a paid-up job stays as read. Read in turns (cashSync, newest jobs first), so the first time
+   (every job) takes a few minutes in the background. ---- */
+const CASH_SHEET = "Payments";
+const CASH_COLS = ["Job id", "Job day", "Department", "Invoice #", "Client", "Charged (cents)", "Owed (cents)", "Read at", "Payments"];
+const CASH_AGAIN = 20 * 3600e3, CASH_BUDGET = 22000, CASH_BATCH = 12;
+function cashSheet_(create) {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(CASH_SHEET);
+  if (!s && create) {
+    s = ss.insertSheet(CASH_SHEET);
+    if (s.getMaxColumns() < CASH_COLS.length) s.insertColumnsAfter(s.getMaxColumns(), CASH_COLS.length - s.getMaxColumns());
+    s.getRange(1, 1, 1, CASH_COLS.length).setValues([CASH_COLS]).setFontWeight("bold");
+    s.setFrozenRows(1);
+    s.getRange(2, 1, Math.max(s.getMaxRows() - 1, 1), 5).setNumberFormat("@");   // ids, days and invoice numbers stay text
+  }
+  return s;
+}
+/** The Payments tab: { id: { row, day, dep, inv, client, c, owes, at (ms), pays: [[day, cents], …] } }. */
+function cashRows_(s) {
+  const out = {};
+  if (!s || s.getLastRow() < 2) return out;
+  s.getRange(2, 1, s.getLastRow() - 1, CASH_COLS.length).getValues().forEach(function (r, i) {
+    const id = String(r[0] || "");
+    if (!id) return;
+    let pays = [];
+    try { pays = JSON.parse(String(r[8] || "[]")); } catch (e) { pays = []; }
+    out[id] = { row: i + 2, day: String(r[1] || ""), dep: String(r[2] || "o"), inv: String(r[3] || ""), client: String(r[4] || ""), c: Number(r[5]) || 0, owes: Number(r[6]) || 0,
+      at: r[7] ? new Date(r[7]).getTime() || 0 : 0, pays: Array.isArray(pays) ? pays : [] };
+  });
+  return out;
+}
+/** Every job on the Revenue tab: { id: { day, dep, inv, client, c, owes } } (a job on several days: its first). */
+function cashJobs_() {
+  const rows = revRows_(revSheet_(false)), out = {};
+  Object.keys(rows).sort().forEach(function (d) {
+    let js = null;
+    try { js = JSON.parse(rows[d][14] || "null"); } catch (e) { js = null; }
+    if (!Array.isArray(js)) return;
+    js.forEach(function (x) {
+      const id = String(x[0] || "");
+      if (!id || out[id]) return;
+      out[id] = { day: d, dep: "rcp".indexOf(String(x[3] || "")) >= 0 && x[3] ? String(x[3]) : "o", inv: String(x[1] || ""), client: String(x[2] || ""), c: Number(x[4]) || 0, owes: Number(x[5]) || 0 };
+    });
+  });
+  return out;
+}
+/** One job's payments from its invoices: [[day, cents], …], or null when Housecall Pro didn't answer. A payment that
+ *  failed, was voided or refunded isn't counted; an invoice that's canceled isn't either. An invoice with no list of
+ *  payments but paid: what's been paid on it, on its paid day. */
+function cashPaysOf_(r, tz) {
+  if (!r || r.error) return null;
+  const d = r.data || {}, list = Array.isArray(d) ? d : Array.isArray(d.invoices) ? d.invoices : Array.isArray(d.data) ? d.data : [];
+  const day = v => { const t = v ? new Date(v) : null; return t && !isNaN(t.getTime()) ? Utilities.formatDate(t, tz, "yyyy-MM-dd") : ""; };
+  const out = [];
+  list.forEach(function (i) {
+    if (!i || /cancel|void/i.test(String(i.status || ""))) return;
+    const pays = Array.isArray(i.payments) ? i.payments : null;
+    if (pays && pays.length) {
+      pays.forEach(function (p) {
+        const a = Math.round(Number(p && p.amount) || 0), at = day(p && (p.paid_at || p.created_at || p.date));
+        if (a > 0 && at && !/fail|void|declin|refund|cancel/i.test(String((p && p.status) || ""))) out.push([at, a]);
+      });
+    } else {
+      const paid = Math.round((Number(i.amount) || 0) - (Number(i.due_amount) || 0)), at = day(i.paid_at);
+      if (paid > 0 && at) out.push([at, paid]);
+    }
+  });
+  return out.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+}
+/** The jobs to read (newest first): never read, charged or owed changed on the Revenue tab, or still owing and read
+ *  more than 20 hours ago (force: still owing, now). A job with nothing charged has nothing to read. */
+function cashToRead_(jobs, have, now, force) {
+  return Object.keys(jobs).filter(function (id) {
+    const j = jobs[id], h = have[id];
+    if (!(j.c > 0)) return false;
+    if (!h) return true;
+    if (h.c !== j.c || h.owes !== j.owes) return true;
+    return h.owes > 0 && (force || now - h.at > CASH_AGAIN);
+  }).sort(function (a, b) { return jobs[a].day < jobs[b].day ? 1 : jobs[a].day > jobs[b].day ? -1 : 0; });
+}
+/** A turn of reading (about 20 seconds): { ok, read, left, done }. The app asks again until done. */
+function cashSync_(req) {
+  if (!hcpKey_()) return { ok: false, error: "no_key" };
+  const tz = Session.getScriptTimeZone(), start = Date.now(), s = cashSheet_(true), have = cashRows_(s), jobs = cashJobs_();
+  const todo = cashToRead_(jobs, have, start, !!req.force);
+  let read = 0, failed = 0;
+  const lines = [];
+  for (let i = 0; i < todo.length && Date.now() - start < CASH_BUDGET; i += CASH_BATCH) {
+    const part = todo.slice(i, i + CASH_BATCH);
+    const res = hcpGetAll_(part.map(function (id) { return { path: "/jobs/" + encodeURIComponent(id) + "/invoices" }; }));
+    let stop = false;
+    part.forEach(function (id, k) {
+      const pays = cashPaysOf_(res[k], tz);
+      if (!pays) { failed++; if (res[k] && (res[k].error === "hcp_key" || res[k].error === "hcp_forbidden")) stop = res[k].error; return; }
+      const j = jobs[id];
+      lines.push([id, j.day, j.dep, j.inv, j.client, j.c, j.owes, new Date().toISOString(), JSON.stringify(pays)]);
+      read++;
+    });
+    if (stop) return { ok: false, error: stop };
+  }
+  if (lines.length) withLock_(function () {   // written by job: its line again, else a new one (read again inside the lock)
+    const now = cashRows_(s), adds = [];
+    lines.forEach(function (l) { const h = now[l[0]]; if (h) s.getRange(h.row, 1, 1, CASH_COLS.length).setValues([l]); else { adds.push(l); now[l[0]] = { row: -1 }; } });
+    if (adds.length) appendRows_(s, CASH_COLS.length, adds);
+  });
+  const left = Math.max(0, todo.length - read - failed);
+  return { ok: true, read: read, failed: failed, left: left, done: left === 0 };
+}
+/** The payments that came in from..to (up to 2 years): items [day paid, cents, department, job day, invoice #, client,
+ *  job id], oldest first; left: jobs still to read; at: when the newest was read. */
+function cashRead_(req) {
+  const ok = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  const from = String(req.from || ""), to = String(req.to || "");
+  if (!ok(from) || !ok(to) || to < from) return { ok: false, error: "bad_request" };
+  const have = cashRows_(cashSheet_(false)), jobs = cashJobs_(), items = [];
+  let at = 0;
+  Object.keys(have).forEach(function (id) {
+    const h = have[id];
+    if (h.at > at) at = h.at;
+    h.pays.forEach(function (p) { if (p[0] >= from && p[0] <= to) items.push([p[0], p[1], h.dep, h.day, h.inv, h.client, id]); });
+  });
+  items.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : b[1] - a[1]; });
+  return { ok: true, items: items, left: cashToRead_(jobs, have, Date.now(), false).length, at: at ? new Date(at).toISOString() : "" };
+}
+
 const UNSENT_CACHE = "unsent_v1", UNSENT_PAGES = 20, UNSENT_JOBS = 80, UNSENT_ALT = 300;
 /** The Revenue tab's jobs (every day read), by job id and by job #: the latest visit of each. */
 function unsentJobs_() {

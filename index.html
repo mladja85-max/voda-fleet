@@ -1713,6 +1713,31 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
   #revView.goal3 > .goal.stick { position: sticky; top: calc(var(--top-h, 74px) + 12px); }   /* see stickFit */
 }
 /* Operations: Accounts receivable (a tile on top of the panel on the right; a bar under the totals on a smaller screen) */
+/* Operations › Money in: Jobs / Money in beside the periods; its tiles, table (a line tapped: its payments) and the tile
+   under Accounts receivable */
+.rev-mode .seg-btn { padding-inline: 12px; }
+@media (min-width: 900px) { .lb-bar.rev-bar-top > .rev-mode { margin-left: auto; } }
+.cash-tots { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.cash-t { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 2px; align-content: start; min-width: 0; }
+.cash-t small { font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.cash-t b { font-family: var(--font-display); font-size: 1.55rem; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.cash-t > span { font-size: .78rem; color: var(--muted); font-weight: 600; } .cash-t > span.old { color: var(--soon); }
+.cash-t.all { grid-column: span 2; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); } .cash-t.all b { color: var(--accent); font-size: 1.9rem; }
+@media (max-width: 600px) { .cash-tots { grid-template-columns: 1fr 1fr; } .cash-t.all { grid-column: 1 / -1; } .cash-t b { font-size: 1.3rem; }
+  /* a phone: as the jobs' table (no Other column, smaller), how many in the Total only */
+  .cash-table td:not(.tot) small, .cash-table .cash-oldn, .cash-table .oth, .cash-table thead th .rev-dot { display: none; }
+  .cash-table { font-size: .8rem; } .cash-table th, .cash-table td { padding: 5px 4px; } .cash-table td.tot small { white-space: normal; min-width: 4.5em; }
+  .cash-table tbody th, .cash-table tfoot th { white-space: normal; min-width: 4.2em; max-width: 6.2em; } }
+.cash-table tr.cash-open { cursor: pointer; } .cash-table tr.cash-open:hover { background: var(--accent-soft); }
+.cash-table td small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; }
+.cash-list td.cash-old { color: var(--soon); font-weight: 700; }
+.cash-dlg .cash-list th.num, .cash-dlg .cash-list td.num { text-align: right; }
+dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
+.rev-cash-tile { cursor: pointer; background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: var(--radius); padding: 12px 16px; display: grid; gap: 2px; position: relative; }
+.rev-cash-tile small { font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.rev-cash-tile b { font-family: var(--font-display); font-size: 1.6rem; color: var(--accent); }
+.rev-cash-tile span { font-size: .8rem; color: var(--muted); } .rev-cash-tile .go { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; }
+.rev-cash-tile:hover { border-color: var(--accent); }
 .rev-ar { cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px; display: grid; gap: 4px; grid-template-columns: 1fr auto; }
 .rev-ar > * { grid-column: 1 / -1; }
 .rev-ar > small { grid-row: 1; grid-column: 1; } .rev-ar > b { grid-row: 2; grid-column: 1; }
@@ -12494,7 +12519,114 @@ let revSync = { busy: false, what: "", err: "", n: 0, done: 0 };
 const revAsked = {};                                    // day → when this window last read it (not again by itself for 10 minutes)
 const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0, sub: "dep", rper: "month", roff: 0, rfrom: "", rto: "" }, store.get(K_REV_VIEW) || {});
 const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp, sub: revView.sub, rper: revView.rper, roff: revView.roff, rfrom: revView.rfrom, rto: revView.rto });
-const REV_PER = { week: "Week", month: "Month", year: "Year", dates: "Dates" };
+const REV_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates: "Dates" };
+/* ---- Operations › Money in: every payment on the day it came in, whatever the job's day (a balance from March paid
+   on November 21 counts on November 21). Jobs / Money in beside the periods; the same Day, Week, Month, Year and Dates.
+   The Google script reads each job's payments from Housecall Pro onto its Payments tab, in turns (the first time:
+   every job, a few minutes); after that only what changed. ---- */
+const CASH_API = 121;                                    // the Google script version with Money in
+let cashDoc = null;                                      // { key: "from|to", items: [[day paid, ¢, dep, job day, inv #, client, job id]], left, at, t }
+const cashSt = { loading: "", syncing: false, err: "", left: 0, force: false };
+const cashCan = () => canSee("revenue") && (!apiLevel || apiLevel >= CASH_API);
+/** The payments from..to, or null while they load (asked for here; read again after 3 minutes). */
+function cashFor(from, to) {
+  const key = `${from}|${to}`, fresh = cashDoc && cashDoc.key === key && Date.now() - cashDoc.t < 180000;
+  if (!fresh && cashSt.loading !== key && !offline) cashLoad(from, to);
+  return cashDoc && cashDoc.key === key ? cashDoc : null;
+}
+async function cashLoad(from, to) {
+  const key = `${from}|${to}`;
+  cashSt.loading = key;
+  try {
+    const out = await api("cashRead", { from, to });
+    cashDoc = { key, items: Array.isArray(out.items) ? out.items : [], left: Number(out.left) || 0, at: out.at || "", t: Date.now() };
+    cashSt.left = cashDoc.left; cashSt.err = "";
+    if (cashDoc.left && !cashSt.syncing) cashSync(false);
+  } catch (e) { cashSt.err = revErrText(e); }
+  finally { if (cashSt.loading === key) cashSt.loading = ""; }
+  if (view.tab === "revenue") renderRevenue();
+}
+/** Reads payments from Housecall Pro in turns until every job is read (force: the jobs still owing, now: Read again). */
+async function cashSync(force) {
+  if (cashSt.syncing) return;
+  cashSt.syncing = true; cashSt.err = ""; cashPaintStatus();
+  try {
+    for (let n = 0, first = !!force; n < 400; n++, first = false) {
+      const out = await api("cashSync", { force: first }, 170000);
+      cashSt.left = Number(out.left) || 0; cashPaintStatus();
+      if (out.done || (!out.read && !first)) break;
+    }
+  } catch (e) { cashSt.err = revErrText(e); }
+  finally { cashSt.syncing = false; }
+  if (cashDoc) cashDoc.t = 0;   // read again with what came in
+  if (view.tab === "revenue") renderRevenue();
+}
+const cashStatusText = () => (cashSt.syncing ? `Reading payments from Housecall Pro…${cashSt.left ? ` ${fmt(cashSt.left)} job${cashSt.left === 1 ? "" : "s"} to go` : ""}` : "");
+function cashPaintStatus() { const el = $("cashSyncing"); if (el) el.textContent = cashStatusText(); }
+/** A day's (or a few days') payments: when, who, the job (its day, invoice, department), how much; the total. */
+function cashDayDlg(items, title) {
+  const list = items.slice().sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : b[1] - a[1]));
+  const dep = k => (REV_DEPTS.find(([x]) => x === k) || [k, "Other"])[1];
+  const tot = list.reduce((n, x) => n + x[1], 0);
+  openDialog(h("div", { class: "rp-dlg cash-dlg" },
+    h("h3", { id: "dlgTitle", text: `Money in · ${title}` }),
+    h("p", { class: "meta", text: `${fmt(list.length)} payment${list.length === 1 ? "" : "s"} · ${lbCash(tot / 100)} · each on the day it came in, whatever the job's day` }),
+    list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cash-list", id: "cashList" },
+      h("thead", null, h("tr", null, ["Paid", "Client", "Invoice", "Job's day", "Department", "Amount"].map((t, i) => h("th", { class: i === 5 ? "num" : "l", text: t })))),
+      h("tbody", null, list.map(x => h("tr", { "data-job": x[6] },
+        h("td", { class: "l", text: lbDayText(x[0]) }), h("td", { class: "l", text: x[5] || "–" }),
+        h("td", { class: "l" }, x[4] ? hcpLink("job", x[6], `#${x[4]}`) : "–"),
+        h("td", { class: "l" + (x[3] < x[0].slice(0, 8) + "01" ? " cash-old" : ""), text: x[3] ? lbDayText(x[3]) : "–" }),
+        h("td", { class: "l" }, h("i", { class: "rev-dot " + x[2] }), dep(x[2])), h("td", { class: "num", text: lbCash(x[1] / 100) })))),
+      h("tfoot", null, h("tr", null, h("th", { class: "l", colspan: "5", text: "Total" }), h("td", { class: "num" }, h("b", { text: lbCash(tot / 100) })))))) : h("p", { class: "meta", text: "No payments came in." }),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
+}
+/** Money in for the period on screen: tiles, the table (each line's payments by department, how many, and what came
+ *  in for jobs from before the period), and how it's counted. */
+function cashEl(per, r, today) {
+  const to = r.to > today ? today : r.to, doc = cashFor(r.from, to);
+  const status = h("p", { class: "lb-sub rev-status" + (cashSt.syncing ? " busy" : ""), id: "cashStatus", role: "status" },
+    h("span", { id: "cashSyncing", text: cashStatusText() }),
+    !cashSt.syncing && doc ? `Payments from Housecall Pro${doc.at ? ` · read ${revReadText(doc.at)}` : ""} · each on the day it came in` : null,
+    cashSt.err ? h("span", { class: "dlg-err", text: ` ${cashSt.err}` }) : null);
+  if (!doc) return [status, h("p", { class: "loading", id: "cashLoading", text: "Loading the payments…" })];
+  const sum = (a, b) => { const o = { r: [0, 0], c: [0, 0], p: [0, 0], o: [0, 0], t: [0, 0], old: 0, items: [] };
+    for (const x of doc.items) if (x[0] >= a && x[0] <= b) { const k = o[x[2]] && x[2] !== "t" ? x[2] : "o"; o[k][0] += x[1]; o[k][1]++; o.t[0] += x[1]; o.t[1]++; if (x[3] && x[3] < r.from) o.old += x[1]; o.items.push(x); }
+    return o; };
+  const all = sum(r.from, to), shown = REV_DEPTS.filter(([k]) => k !== "o" || all.o[1]);
+  const pays = n => `${fmt(n)} payment${n === 1 ? "" : "s"}`;
+  const span = revSpanText(r.from, to);
+  const tiles = h("div", { class: "cash-tots", id: "cashTots" },
+    h("div", { class: "cash-t all cash-tot-t" }, h("small", { text: `Money in · ${span}` }), h("b", { id: "cashTotal" }, revCash(all.t[0])),
+      h("span", { text: pays(all.t[1]) }), all.old ? h("span", { class: "old", text: `${lbMoney(Math.round(all.old / 100))} for jobs from before ${lbDayText(r.from)}` }) : null),
+    shown.map(([k, name]) => h("div", { class: "cash-t " + k }, h("small", null, h("i", { class: "rev-dot " + k }), name), h("b", null, revCash(all[k][0])),
+      h("span", { text: pays(all[k][1]) }))));
+  const lines = revLines(per, r, to, today);
+  const head = h("tr", null, h("th", { text: lines[0] && lines[0].month ? "Month" : lines[0] && lines[0].cls === "rev-yr" ? "Year" : "Day paid" }),
+    shown.map(([k, name, short]) => h("th", { class: k === "o" ? "oth" : `col-${k}` }, h("i", { class: "rev-dot " + k }), h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }))),
+    h("th", { text: "Total" }));
+  const cell = (v, cls) => h("td", { class: cls + (v[0] ? "" : " zero") }, revCash(v[0]), v[1] ? h("small", { text: pays(v[1]) }) : null);
+  const row = (L, x, foot) => h("tr", Object.assign({ class: [foot ? "rev-sum" : L.cls, L && L.future ? "future" : "", x && x.t[1] ? "cash-open" : ""].filter(Boolean).join(" ") },
+      L && L.day ? { "data-day": L.day } : {}, x && x.t[1] ? { tabindex: "0", title: "Its payments", onclick: () => cashDayDlg(x.items, foot ? span : L.label),
+        onkeydown: e => { if (e.key === "Enter") cashDayDlg(x.items, foot ? span : L.label); } } : {}),
+    foot ? h("th", { text: "Total" }) : h("th", null, L.label, L.sub ? h("small", { text: L.sub }) : null),
+    x ? shown.map(([k]) => cell(x[k], k === "o" ? "oth" : `col-${k}`)) : shown.map(([k]) => h("td", { class: k === "o" ? "oth" : `col-${k}`, text: "–" })),
+    x ? h("td", { class: "tot" + (x.t[0] ? "" : " zero") }, revCash(x.t[0]), x.t[1] ? h("small", null, pays(x.t[1]), x.old ? h("span", { class: "cash-oldn", text: ` · ${revShort(x.old)} older jobs` }) : null) : null) : h("td", { class: "tot", text: "–" }));
+  const table = h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cash-table", id: "cashTable" },
+    h("thead", null, head), h("tbody", null, lines.map(L => row(L, L.future ? null : sum(L.a, L.b)))), h("tfoot", null, row(null, all, true)))));
+  const how = howFold("cashHow", h("p", { class: "hint", text: `Money in: every payment on the day it came in, whatever the job's day: a balance from March paid on November 21 counts on November 21 (Jobs counts it in March, the job's day). Deposits count on the day they're paid; a failed or voided payment doesn't count. From Housecall Pro: each job's invoices and their payments, for the days read in Jobs (from ${lbDayText(LB_FIRST_DAY)}). A job still owing is read again after 20 hours; Read again reads them now. Tap a line for its payments.` }), "How it's counted");
+  return [status, tiles, table, how];
+}
+/** The Money in tile under Accounts receivable (both views): the period's total and what came in for older jobs. */
+function cashTileEl(r, today) {
+  const to = r.to > today ? today : r.to, doc = cashFor(r.from, to);
+  const tot = doc ? doc.items.reduce((n, x) => n + (x[0] >= r.from && x[0] <= to ? x[1] : 0), 0) : 0;
+  const old = doc ? doc.items.reduce((n, x) => n + (x[0] >= r.from && x[0] <= to && x[3] && x[3] < r.from ? x[1] : 0), 0) : 0;
+  const go = () => { revView.mode = "cash"; revSaveView(); renderRevenue(); scrollTo(0, 0); };
+  return h("div", { class: "rev-cash-tile", id: "revCashTile", role: "button", tabindex: "0", title: "Money in, day by day", onclick: go, onkeydown: e => { if (e.key === "Enter") go(); } },
+    h("small", { text: `Money in · ${revSpanText(r.from, to)}` }), h("b", { text: doc ? lbMoney(Math.round(tot / 100)) : "…" }),
+    h("span", { text: doc ? (old ? `${lbMoney(Math.round(old / 100))} for jobs from before ${lbDayText(r.from)}` : "each payment on the day it came in") : "Loading…" }), h("span", { class: "go", text: "›" }));
+}
 const REV_CMP_YEARS = 5;                                // compare with up to 5 years before
 // a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
 const REV_DEPTS = [["r", "Restoration", "Rest."], ["c", "Cleaning", "Clean."], ["p", "Repairs", "Repairs"], ["o", "Other", "Other"]];
@@ -12743,7 +12875,9 @@ function renderRevenue() {
   const per = REV_PER[revView.per] ? revView.per : "week";
   const off = Math.min(0, Number(revView.off) || 0);
   // counted up to yesterday (today's numbers aren't in until the day is over); today only when picked by hand (Dates)
-  const r = revRange(per, off), today = lbToday(), last = per === "dates" ? today : lbAddDays(today, -1), to = r.to > last ? last : r.to;
+  // (a Day: today too, as with Dates)
+  const r = revRange(per, off), today = lbToday(), last = per === "dates" || per === "day" ? today : lbAddDays(today, -1), to = r.to > last ? last : r.to;
+  const cash = cashCan() && revView.mode === "cash";   // Money in (payments by the day they came in) instead of the jobs
   const cmp = Math.max(0, Math.min(REV_CMP_YEARS, Number(revView.cmp) || 0));
   const cf = revShift(r.from, cmp, per), ct = revShift(to, cmp, per);
   const len = revLen(r.from, r.to);
@@ -12755,7 +12889,9 @@ function renderRevenue() {
   const ranges = () => [[r.from, to, true]].concat(cmp ? [[cf, ct]] : []);
   const title = secTitle("Operations");
   const top = title ? h("div", { class: "lb-top" }, title) : null;
-  const readBtn = h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > last,
+  const readBtn = cash ? h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: cashSt.syncing, title: "Read the payments of the jobs still owing again, now",
+      onclick: () => cashSync(true) }, "Read again")
+    : h("button", { class: "btn small", type: "button", id: "revReadBtn", disabled: revSync.busy || r.from > last,
     title: "Read these days from Housecall Pro again", onclick: () => { revSync.err = ""; revEnsure([[r.from, to]], true); } }, "Read again");
   // the period: Week / Month / Year with ‹ ›, or Dates (From – To), and what to compare it with
   const pick = (from, to2) => { if (from > to2) [from, to2] = [to2, from]; revView.from = from; revView.to = to2; revSaveView(); renderRevenue(); };
@@ -12767,7 +12903,11 @@ function renderRevenue() {
       h("option", { value: "0", text: "Off" }),
       yearsBack.map(n => h("option", { value: String(n), text: r.from.slice(0, 4) === r.to.slice(0, 4) ? `with ${Number(r.from.slice(0, 4)) - n}` : `${n} year${n === 1 ? "" : "s"} before` }))));
   cmpSel.querySelector("select").value = String(cmp);
-  const tools = h("div", { class: "rev-tools" }, readBtn, cmpSel);
+  const tools = h("div", { class: "rev-tools" }, readBtn, cash ? null : cmpSel);   // Compare: for the jobs
+  // Jobs (each job on its day) or Money in (each payment on the day it came in)
+  const modeSeg = cashCan() ? h("div", { class: "seg rev-mode", id: "revMode", role: "group", "aria-label": "Show" },
+    [["jobs", "Jobs"], ["cash", "Money in"]].map(([k, t]) => h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String((cash ? "cash" : "jobs") === k),
+      onclick: () => { if ((cash ? "cash" : "jobs") === k) return; revView.mode = k; revSaveView(); renderRevenue(); } }, t))) : null;
   const bar = h("div", { class: "lb-bar rev-bar-top" },
     lbSeg(Object.entries(REV_PER), per, k => {
       if (k === "dates" && per !== "dates") { revView.from = r.from; revView.to = to; }   // Dates starts from the period on screen
@@ -12781,9 +12921,9 @@ function renderRevenue() {
         h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: r.to >= today, onclick: () => step(1) }, "›"))
       : h("div", { class: "of-step" },
         h("button", { class: "btn small", type: "button", id: "revPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
-        h("strong", { id: "revRangeLabel", text: r.label + (r.to >= today && r.from <= today ? " (to yesterday)" : "") }),
+        h("strong", { id: "revRangeLabel", text: r.label + (per !== "day" && !cash && r.to >= today && r.from <= today ? " (to yesterday)" : cash && r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
         h("button", { class: "btn small", type: "button", id: "revNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
-    tools);
+    tools, modeSeg);
   const days = r.from > last ? {} : revDaysFor(r.from, to);
   const old = cmp && r.from <= last ? revDaysFor(cf, ct) : {};
   if (!days || !old) { box.replaceChildren(...[top, bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
@@ -12792,7 +12932,7 @@ function renderRevenue() {
   const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
     revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…`
       : s.read ? `From Housecall Pro · read ${revReadText(s.at)}` : r.from > last ? "" : "Not read from Housecall Pro yet.",
-    per !== "dates" && r.to >= today && r.from <= today ? h("span", { class: "rev-upto", id: "revUpto", text: ` · counted up to yesterday (${revSpanText(lbAddDays(today, -1), lbAddDays(today, -1))}); for today, pick Dates` }) : null,
+    per !== "dates" && per !== "day" && r.to >= today && r.from <= today ? h("span", { class: "rev-upto", id: "revUpto", text: ` · counted up to yesterday (${revSpanText(lbAddDays(today, -1), lbAddDays(today, -1))}); for today, pick Dates` }) : null,
     cmp && !revSync.busy ? h("span", { class: "rev-vs", id: "revVs", text: ` · compared with ${revSpanText(cf, ct)}${per === "week" ? " (the same weekdays)" : ""}` }) : null);
   const err = revSync.err ? h("p", { class: "dlg-err", id: "revErr" }, revSync.err, " ",
     h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; renderRevenue(); } }, "Try again")) : null;
@@ -12906,6 +13046,8 @@ function renderRevenue() {
             b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
       }));
   }
+  // Money in, under Accounts receivable (both views): tapped, the Money in view
+  if (cashCan() && aside) { const ct = cashTileEl(r, today); if (arCard && arCard.parentNode === aside) arCard.after(ct); else aside.prepend(ct); }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
   const goalDays = (per === "week" || per === "dates") && r.from <= last ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
@@ -12914,7 +13056,8 @@ function renderRevenue() {
   const gbox = goal || booked, slot = gbox ? revGoalSlot() : "";
   if (slot === "side") { if (aside) aside.prepend(gbox); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, gbox); }
   box.classList.toggle("goal3", slot === "wide");
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, status, err, revPriceEl(), slot === "top" ? gbox : null, r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, r.from > today ? null : table, ...notes].flat().filter(Boolean)),
+  const cashParts = cash ? cashEl(per, r, today) : null;
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, cash ? null : status, err, revPriceEl(), slot === "top" ? gbox : null, cash ? cashParts : r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, cash || r.from > today ? null : table, ...(cash ? [] : notes)].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [gbox] : []));
   if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
   // after the days on screen are read (their jobs tell each invoice's department)
