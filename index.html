@@ -441,6 +441,7 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
     -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
   #ofEstList .est-stseg.end { -webkit-mask-image: none; mask-image: none; }
   #ofEstList .est-stseg .seg-btn { flex: none; min-width: 86px; }
+  #ofEstList .est-stseg .seg-btn.est-sep { margin-left: 9px; } #ofEstList .est-stseg .seg-btn.est-sep::before { display: block; }   /* one sliding line: the line back */
 }
 /* Office › KPI: the six numbers as tiles, each one's lines and an Add box; tables by day, month and person */
 .kpi-who { margin: 2px 0 0; }
@@ -2942,6 +2943,8 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
 .est-stseg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .est-stseg::-webkit-scrollbar { display: none; } .est-stseg .seg-btn { flex: none; }
 .est-filters .seg-btn { padding: 6px 10px; font-size: .86rem; gap: 6px; }
+@media (min-width: 861px) { #ofEstList .est-stseg { flex-wrap: wrap; overflow: visible; row-gap: 3px; } }   /* a PC: every button in sight (a second line when it needs one) */
+.est-stseg .seg-btn.est-sep { margin-left: 9px; position: relative; } .est-stseg .seg-btn.est-sep::before { content: ""; position: absolute; left: -6px; top: 7px; bottom: 7px; width: 1px; background: var(--line); }
 .est-n { font-style: normal; font-size: .72rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .est-d { font-style: normal; font-size: .78rem; font-weight: 700; font-variant-numeric: tabular-nums; opacity: .8; margin-left: -2px; }   /* the status button's dollars */
 .est-filters select, .est-filters input[type="search"] { font: inherit; font-size: .9rem; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; }
@@ -2971,6 +2974,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
   .est-filters .seg-btn { padding: 6px 8px; font-size: .82rem; gap: 4px; } .est-filters select { flex: 1 1 140px; }
   /* by person: scrolls sideways (the names stay put, and wrap) */
   .est-pwrap th:first-child, .est-pwrap td:first-child { min-width: 112px; max-width: 132px; white-space: normal; overflow-wrap: anywhere; box-shadow: 1px 0 0 var(--line); }
+  .est-stseg .seg-btn.est-sep { margin-left: 0; } .est-stseg .seg-btn.est-sep::before { display: none; }   /* in rows of three: no line */
   /* the status buttons: two rows of three, nothing sliding sideways */
   .est-stseg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; overflow: visible; }
   .est-stseg .seg-btn { justify-content: center; padding: 6px 4px; flex-wrap: wrap; row-gap: 2px; column-gap: 5px; }
@@ -19454,7 +19458,11 @@ function ofScoreEl() {
 
 /* ---- Office › Estimates: every Cleaning estimate, as on Estimates (Day, Week, Month, Year or Dates; the list with its
    status, person and search), for everyone with Office. Read again reads what changed in Housecall Pro. ---- */
-const ofEstView = Object.assign({ per: "month", off: 0, from: "", to: "", st: "all", who: "", q: "" }, store.get("voda.ofEst") || {});
+const ofEstView = Object.assign({ per: "month", off: 0, from: "", to: "", st: "all", seg: "", who: "", q: "" }, store.get("voda.ofEst") || {});
+/** Residential or Commercial ("res" / "com"): Commercial when its Job type or a tag in Housecall Pro says commercial or
+ *  property management (as on Past clients); else Residential. */
+const EST_COM = /commercial|property\s*manag/i;
+const estSegOf = e => (EST_COM.test(String(e.type || "")) || String(e.tags || "").split(/\s*,\s*/).some(t => EST_COM.test(t)) ? "com" : "res");
 const ofEstDocs = {}, ofEstLoading = {};
 let ofEstErr = "", ofEstShown = 100;
 const ofEstSync = { busy: false, tried: 0, err: "" };
@@ -19551,26 +19559,42 @@ function ofEstEl() {
   const who = people.includes(ofEstView.who) ? ofEstView.who : "";
   const q = String(ofEstView.q || "").trim().toLowerCase();
   const base = list.filter(e => (!who || names(e).includes(who)) && (!q || [e.client, e.n, e.addr, e.type, e.emps, e.inc, e.lead, e.tags].some(v => String(v || "").toLowerCase().includes(q))));
-  const stOf = k => (k === "all" ? base : k === "notsent" ? base.filter(estNotSent) : base.filter(e => e.st === k));
-  const stCents = k => stOf(k).reduce((n, e) => n + (estValue(e) || 0), 0);
-  const shown = stOf(ofEstView.st in EST_ST ? ofEstView.st : "all").slice().sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
+  // Residential / Commercial and the status go together (Commercial + Open): each one's count is with the other picked
+  const seg = ofEstView.seg === "res" || ofEstView.seg === "com" ? ofEstView.seg : "", st = ofEstView.st in EST_ST ? ofEstView.st : "all";
+  const bySt = (xs, k) => (k === "all" ? xs : k === "notsent" ? xs.filter(estNotSent) : xs.filter(e => e.st === k));
+  const bySeg = (xs, g) => (g ? xs.filter(e => estSegOf(e) === g) : xs);
+  const stOf = k => bySt(bySeg(base, seg), k), segOf = g => bySt(bySeg(base, g), st);
+  const cents = xs => xs.reduce((n, e) => n + (estValue(e) || 0), 0), stCents = k => cents(stOf(k));
+  const shown = stOf(st).slice().sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
   const whoSel = h("select", { id: "ofEstWho", "aria-label": "In charge", onchange: ev => { ofEstView.who = ev.target.value; redraw(); } },
     h("option", { value: "", text: "Everyone" }), people.map(n => h("option", { value: n, text: n })));
   whoSel.value = who;
   const search = h("input", { type: "search", id: "ofEstFind", placeholder: "Client, estimate #, address…", value: ofEstView.q || "", "aria-label": "Search estimates",
     oninput: ev => { ofEstView.q = ev.target.value; ofEstShown = 100; const at = ev.target.selectionStart; renderOffice(); const f = $("ofEstFind"); if (f) { f.focus(); try { f.setSelectionRange(at, at); } catch (x) { /* fine */ } } } });
+  const nTxt = (t, xs) => `${t}: ${fmt(xs.length)} estimate${xs.length === 1 ? "" : "s"}, ${lbMoney(Math.round(cents(xs) / 100))}`;
+  const inner = (t, xs) => [h("span", { class: "est-sl", text: t }), h("i", { class: "est-n", text: fmt(xs.length) }), h("i", { class: "est-d", text: revShort(cents(xs)) })];
+  // All (everything: both cleared), Residential and Commercial (tapped again: both), then the statuses (tapped again: all)
+  const allBtn = h("button", { class: "seg-btn", type: "button", role: "tab", "data-k": "all", "aria-selected": String(st === "all" && !seg), title: nTxt("All", base),
+    onclick: () => { Object.assign(ofEstView, { st: "all", seg: "" }); redraw(); } }, ...inner(EST_ST.all, base));
+  const segBtn = (g, t) => h("button", { class: "seg-btn est-segb", type: "button", "data-seg": g, "aria-pressed": String(seg === g), title: nTxt(t, segOf(g)),
+    onclick: () => { ofEstView.seg = seg === g ? "" : g; redraw(); } }, ...inner(t, segOf(g)));
+  const stBtns = Object.entries(EST_ST).filter(([k]) => k !== "all").map(([k, t], i) => h("button", { class: "seg-btn" + (i ? "" : " est-sep"), type: "button", role: "tab", "data-k": k,
+    "aria-selected": String(st === k), title: nTxt(t, stOf(k)), onclick: () => { ofEstView.st = st === k ? "all" : k; redraw(); } }, ...inner(t, stOf(k))));
   const filters = h("div", { class: "est-filters" },
-    h("div", { class: "seg est-stseg", role: "tablist", "aria-label": "Status" }, Object.entries(EST_ST).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "data-k": k,
-      "aria-selected": String((ofEstView.st in EST_ST ? ofEstView.st : "all") === k), title: `${t}: ${fmt(stOf(k).length)} estimate${stOf(k).length === 1 ? "" : "s"}, ${lbMoney(Math.round(stCents(k) / 100))}`,
-      onclick: () => { ofEstView.st = k; redraw(); } }, h("span", { class: "est-sl", text: t }), h("i", { class: "est-n", text: fmt(stOf(k).length) }), h("i", { class: "est-d", text: revShort(stCents(k)) })))),
+    h("div", { class: "seg est-stseg", role: "tablist", "aria-label": "Status" }, allBtn, segBtn("res", "Residential"), segBtn("com", "Commercial"), ...stBtns),
     whoSel, search,
-    who || q || ofEstView.st !== "all" ? h("button", { class: "btn small ghost", type: "button", id: "ofEstClear", onclick: () => { Object.assign(ofEstView, { st: "all", who: "", q: "" }); redraw(); } }, "Show all") : null);
+    who || q || st !== "all" || seg ? h("button", { class: "btn small ghost", type: "button", id: "ofEstClear", onclick: () => { Object.assign(ofEstView, { st: "all", seg: "", who: "", q: "" }); redraw(); } }, "Show all") : null);
   const more = shown.length - ofEstShown;
   requestAnimationFrame(() => {   // a phone: the status buttons slide sideways; the one picked in sight, the fade gone at the end
-    const sg = document.querySelector("#ofEstList .est-stseg"), on = sg && sg.querySelector('[aria-selected="true"]');
+    const sg = document.querySelector("#ofEstList .est-stseg"), on = sg ? [...sg.querySelectorAll('[aria-selected="true"], [aria-pressed="true"]')] : [];
     if (!sg || sg.scrollWidth <= sg.clientWidth + 1) return;
     const end = () => sg.classList.toggle("end", sg.scrollLeft + sg.clientWidth >= sg.scrollWidth - 2);
-    if (on) { const a = sg.getBoundingClientRect(), b = on.getBoundingClientRect(); sg.scrollLeft += (b.left + b.width / 2) - (a.left + a.width / 2); }
+    if (on.length) {   // the ones picked (Commercial and Open) in the middle together; too wide for both: the status
+      const a = sg.getBoundingClientRect(), r = on.map(b => b.getBoundingClientRect());
+      let l = Math.min(...r.map(x => x.left)), rt = Math.max(...r.map(x => x.right));
+      if (rt - l > a.width) { l = r[r.length - 1].left; rt = r[r.length - 1].right; }
+      sg.scrollLeft += (l + rt) / 2 - (a.left + a.width / 2);
+    }
     end(); sg.onscroll = end;
   });
   return head.concat(h("div", { class: "panel est-list", id: "ofEstList" },
