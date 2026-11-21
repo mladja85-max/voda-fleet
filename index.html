@@ -796,6 +796,8 @@ textarea.report { width: 100%; min-height: 220px; font: inherit; font-size: .9re
 .ord-row.has-act .ord-meta { grid-column: 1; align-self: center; }
 .ord-act { grid-column: 2; justify-self: end; align-self: center; margin-top: 4px; }
 .ord-row.tappable { cursor: pointer; }
+.ord-meta .ord-paid { color: var(--ink); font-weight: 700; }
+.sl-paid { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .sl-cur { font-weight: 700; color: var(--muted); } .sl-each { color: var(--muted); font-weight: 600; }
 .ord-row.tappable:hover { background: var(--surface-2); }
 .ord-tip { flex-basis: 100%; order: 9; color: var(--muted); font-size: .78rem; }
 details.ord-closed summary { cursor: pointer; font-weight: 700; color: var(--accent); }
@@ -8894,6 +8896,10 @@ if (!supDraft.other || typeof supDraft.other !== "object") supDraft.other = {}; 
 const SEC_COLORS = ["#2f7a3f", "#1f4fbf", "#c2571a", "#b4233a", "#7c3aed", "#0d9488", "#92400e", "#475569"];   // the paper's colored blocks, then more
 const supOk = () => apiLevel >= SUP_API;
 // Something else: one thing that isn't on the checklist, typed in, sent with the list (the script keeps it as "other")
+let supHistOpen = false;                                 // History open: stays open when the list is drawn again (a price put in)
+const SUP_PAID_API = 120;                               // ... and the price paid on an order
+/** What an order cost in all, and each when there's more than one ("$24.00 paid · $12.00 each"), or "". */
+const supPaidText = r => (r.paid === null || r.paid === undefined || r.paid === "" ? "" : `${lbCash(Number(r.paid))} paid` + (Number(r.qty) > 1 ? ` · ${lbCash(Number(r.paid) / Number(r.qty))} each` : ""));
 const SUP_OTHER = "other", SUP_OTHER_API = 68, SUP_OTHER_COLOR = "#475569", SUP_OTHER_MAX = 120;
 const supOtherOk = () => apiLevel >= SUP_OTHER_API;
 const OPEN = r => r.status === "To order" || r.status === "Ordered";
@@ -9403,8 +9409,9 @@ function supOrdersBody(sc) {
   if (ordered.length) out.push(h("section", { class: "ord-sec ord", id: "ordOn" },
     h("div", { class: "ord-head" }, h("h3", { text: "Ordered, on the way" }), h("span", { class: "cnt", text: String(ordered.length) })),
     h("ul", { class: "ord-list" }, ordered.map(r => ordRow(r, admin)))));
-  if (closed.length) out.push(h("details", { class: "panel ord-closed", id: "ordClosed" },
-    h("summary", { text: `History: received or removed (${closed.length})` }),
+  const spent = closed.reduce((n, r) => n + (r.status === "Received" && r.paid !== null && r.paid !== undefined && r.paid !== "" ? Number(r.paid) || 0 : 0), 0);
+  if (closed.length) out.push(h("details", { class: "panel ord-closed", id: "ordClosed", open: supHistOpen || null, ontoggle: ev => { supHistOpen = ev.currentTarget.open; } },
+    h("summary", { text: `History: received or removed (${closed.length})${spent ? ` · ${lbCash(spent)} paid` : ""}` }),
     h("ul", { class: "ord-list" }, closed.map(r => ordRow(r, admin)))));
   return out;
 }
@@ -9420,13 +9427,15 @@ function ordRow(r, admin) {
     : r.status === "To order" ? btn("Mark ordered", "primary", () => supChange({ ids: [r.id], status: "Ordered" }, `${r.product}: ordered`))
     : r.status === "Ordered" ? btn("Mark received", "primary", () => supChange({ ids: [r.id], status: "Received" }, `${r.product}: received`))
     : btn("Undo", "ghost", () => supChange({ ids: [r.id], status: r.status === "Received" ? "Ordered" : "To order" }, `${r.product}: back on the list`));
-  const tapToChange = admin && open && !r.pending;   // admins: tap the line to change how many or remove it
+  // admins: tap the line to change how many, the price paid, or remove it (a received one: how many and the price)
+  const tapToChange = admin && !r.pending && (open || (r.status === "Received" && (!apiLevel || apiLevel >= SUP_PAID_API)));
+  const paid = r.status === "Ordered" || r.status === "Received" ? supPaidText(r) : "";
   return h("li", { class: "ord-row" + (r.pending ? " pending" : "") + (act ? " has-act" : "") + (tapToChange ? " tappable" : ""), "data-r": r.id,
     onclick: tapToChange ? () => openSupLine(r.id) : null },
     h("span", { class: "ord-name" }, r.status === "Received" || r.status === "Removed" ? h("span", { class: "st " + r.status.toLowerCase(), text: r.status }) : null,
       r.productId === SUP_OTHER ? h("span", { class: "st other", text: "Not on the list" }) : null, r.product),
     h("span", { class: "ord-qty", text: supQty(r.qty, r.container) }),
-    h("span", { class: "ord-meta", text: meta }),
+    h("span", { class: "ord-meta" }, paid ? h("b", { class: "ord-paid", text: paid }) : null, paid ? " · " : null, meta),
     act ? h("span", { class: "ord-act" }, act) : null);
 }
 /** Admin changes go straight to the sheet. The screen changes at once and goes back if the sheet says no. */
@@ -9437,6 +9446,7 @@ async function supChange(data, okMsg) {
   for (const r of supplies.requests) {
     if (!data.ids.includes(r.id)) continue;
     if (data.qty) r.qty = data.qty;
+    if ("paid" in data) r.paid = data.paid === "" ? null : data.paid;
     if (data.status && data.status !== r.status) {
       if (data.status === "To order") Object.assign(r, { orderedAt: "", orderedBy: "", closedAt: "", closedBy: "" });
       else if (data.status === "Ordered") Object.assign(r, { orderedAt: now, orderedBy: by, closedAt: "", closedBy: "" });
@@ -9492,29 +9502,44 @@ function openSupLine(id) {
   const qIn = h("input", { id: "sl-qty", type: "text", inputmode: "numeric", pattern: "[0-9]*", maxlength: "3", value: String(r.qty || 1), style: "width:70px;text-align:center;font-weight:700;font-size:1.15rem" });
   const qtyNow = () => parseInt(String(qIn.value).replace(/\D/g, ""), 10);
   const bump = d => { const q = qtyNow() || 0; qIn.value = String(Math.max(1, Math.min(999, q + d))); };
+  // the price paid (all of it): once it's ordered, and on a received one
+  const priced = (r.status === "Ordered" || r.status === "Received") && (!apiLevel || apiLevel >= SUP_PAID_API);
+  const has = r.paid !== null && r.paid !== undefined && r.paid !== "";
+  const pIn = priced ? h("input", { id: "sl-paid", type: "text", inputmode: "decimal", maxlength: "12", placeholder: "0.00", autocomplete: "off", value: has ? Number(r.paid).toFixed(2) : "",
+    style: "width:130px;font-weight:700;font-size:1.05rem" }) : null;
+  const each = h("small", { class: "sl-each", id: "sl-each" });
+  const paidNow = () => { const t = String(pIn.value).replace(/[$,\s]/g, ""); return t === "" ? "" : /^\d+(\.\d{0,2})?$|^\.\d{1,2}$/.test(t) ? Math.round(Number(t) * 100) / 100 : NaN; };
+  const showEach = () => { if (!pIn) return; const v = paidNow(), q = qtyNow(); each.textContent = v !== "" && isFinite(v) && v > 0 && q > 1 ? `${lbCash(v / q)} each` : ""; };
+  if (pIn) { pIn.addEventListener("input", () => { err.textContent = ""; showEach(); }); qIn.addEventListener("input", showEach); }
   const go = (status, msg) => {
     const q = qtyNow();
     if (!(q >= 1 && q <= 999)) { err.textContent = "How many: 1 to 999."; return; }
     const data = { ids: [id] };
     if (q !== r.qty) data.qty = q;
+    if (pIn) {
+      const v = paidNow();
+      if (v !== "" && !(isFinite(v) && v >= 0 && v <= 1000000)) { err.textContent = "Price paid: dollars and cents, like 24.99."; return; }
+      if (v !== (has ? Math.round(Number(r.paid) * 100) / 100 : "")) data.paid = v;
+    }
     if (status && status !== r.status) data.status = status;
     closeDialog();
-    if (data.qty || data.status) supChange(data, msg || `${r.product}: saved`);
+    if (data.qty || data.status || "paid" in data) supChange(data, msg || `${r.product}: saved`);
   };
   const b = (text, cls, onclick, idv) => h("button", { class: "btn" + (cls ? " " + cls : ""), type: "button", id: idv || null, text, onclick });
   openDialog(
     h("h3", { id: "dlgTitle", text: r.product }),
     h("p", { text: `${r.status}${r.status === "Ordered" ? " " + supDay(r.orderedAt) : ""} · asked by ${r.reportedBy || "?"} ${supWhen(r.reportedAt)}` }),
     h("div", { class: "field" }, h("label", { for: "sl-qty", text: `How many${r.container ? ` (${supPlural(r.container)})` : ""}` }),
-      h("div", { class: "sl-step step" }, h("button", { type: "button", "aria-label": "One less", text: "−", onclick: () => bump(-1) }), qIn,
-        h("button", { type: "button", "aria-label": "One more", text: "+", onclick: () => bump(1) }))),
+      h("div", { class: "sl-step step" }, h("button", { type: "button", "aria-label": "One less", text: "−", onclick: () => { bump(-1); showEach(); } }), qIn,
+        h("button", { type: "button", "aria-label": "One more", text: "+", onclick: () => { bump(1); showEach(); } }))),
+    pIn ? h("div", { class: "field" }, h("label", { for: "sl-paid", text: "Price paid, all of it ($)" }), h("div", { class: "sl-paid" }, h("span", { class: "sl-cur", text: "$" }), pIn, each)) : null,
     err,
     h("div", { class: "sl-acts" },
       r.status === "To order" ? b("✓ Mark ordered", "primary", () => go("Ordered", `${r.product}: ordered`), "sl-ordered") : null,
       r.status === "Ordered" ? b("✓ Mark received", "primary", () => go("Received", `${r.product}: received`), "sl-received") : null,
       r.status === "Ordered" ? b("Not ordered after all", "", () => go("To order", `${r.product}: back to To order`), "sl-back") : null),
     h("div", { class: "dlg-foot" },
-      b("Remove from list", "ghost danger", () => go("Removed", `${r.product}: removed from the list`), "sl-remove"),
+      r.status === "Received" ? h("span") : b("Remove from list", "ghost danger", () => go("Removed", `${r.product}: removed from the list`), "sl-remove"),
       h("div", { class: "right" }, b("Cancel", "", closeDialog), b("Save", "primary", () => go(null), "sl-save"))));
 }
 

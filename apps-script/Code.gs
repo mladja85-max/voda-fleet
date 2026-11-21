@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 119;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 120;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2553,11 +2553,11 @@ const SUP_SHEET = "Supplies";
 const SUP_COLS = ["id", "order", "section", "name", "container", "list"];
 const REQ_SHEET = "Supply orders";
 const REQ_COLS = ["id", "productId", "product", "container", "section", "qty", "status",
-  "reportedAt", "reportedBy", "orderedAt", "orderedBy", "closedAt", "closedBy", "updatedAt", "checkId", "list"];
+  "reportedAt", "reportedBy", "orderedAt", "orderedBy", "closedAt", "closedBy", "updatedAt", "checkId", "list", "paid"];   // paid: what the order cost in all ($), typed by an admin
 const CHK_SHEET = "Supply checks";
 const CHK_COLS = ["id", "at", "by", "missing", "items", "note", "list"];
 const REQ_STATUS = ["To order", "Ordered", "Received", "Removed"];
-const SUP_SCHEMA = "3";      // bumped when the tabs above gain columns; older tabs are brought up to date once
+const SUP_SCHEMA = "4";      // bumped when the tabs above gain columns; older tabs are brought up to date once
 const SUP_MAX_QTY = 999;
 const SUP_KEEP_DAYS = 45;    // received or removed items stay in the app this long (they stay in the sheet for good)
 const SUP_CHECKS_PER_LIST = 12;
@@ -2676,7 +2676,7 @@ function supSheets_() {
     p.s.autoResizeColumns(1, SUP_COLS.length);
     supBump_();
   }
-  const r = make(REQ_SHEET, REQ_COLS, ["qty"]);
+  const r = make(REQ_SHEET, REQ_COLS, ["qty", "paid"]);
   const c = make(CHK_SHEET, CHK_COLS, ["missing"]);
   supAddStarters_(l.s, p.s);
   PropertiesService.getScriptProperties().setProperty("SUP_SCHEMA", SUP_SCHEMA);
@@ -2766,14 +2766,14 @@ function supProducts_(s, fix) {
 
 function supReqFromRow_(r) {
   const o = {};
-  REQ_COLS.forEach(function (c, i) { o[c] = c === "qty" ? num_(r[i]) : supIso_(r[i]); });
+  REQ_COLS.forEach(function (c, i) { o[c] = c === "qty" || c === "paid" ? num_(r[i]) : supIso_(r[i]); });
   if (REQ_STATUS.indexOf(o.status) === -1) o.status = "To order";
   o.list = supListOf_(o.list);
   return o;
 }
 function supReqRow_(o) {
   return REQ_COLS.map(function (c) {
-    if (c === "qty") { const n = num_(o.qty); return n === null ? "" : n; }
+    if (c === "qty" || c === "paid") { const n = num_(o[c]); return n === null ? "" : n; }
     return o[c] === null || o[c] === undefined ? "" : String(o[c]);
   });
 }
@@ -2933,7 +2933,10 @@ function supplyStatus_(req) {
   const ids = (Array.isArray(req.ids) ? req.ids : [req.id]).map(function (x) { return String(x || ""); }).filter(Boolean).slice(0, 500);
   const status = req.status === undefined || req.status === null ? null : String(req.status);
   const qty = req.qty === undefined || req.qty === null ? null : Math.round(Number(req.qty));
-  if (!ids.length || (status === null && qty === null)) return { ok: false, error: "bad_request" };
+  // paid: what the order cost in all ($, up to two decimals); "" takes it away; left out: as it is
+  const setPaid = req.paid !== undefined, paid = !setPaid || req.paid === "" || req.paid === null ? null : Math.round(Number(req.paid) * 100) / 100;
+  if (setPaid && req.paid !== "" && req.paid !== null && !(isFinite(paid) && paid >= 0 && paid <= 1000000)) return { ok: false, error: "bad_request" };
+  if (!ids.length || (status === null && qty === null && !setPaid)) return { ok: false, error: "bad_request" };
   if (status !== null && REQ_STATUS.indexOf(status) === -1) return { ok: false, error: "bad_request" };
   if (qty !== null && !(qty >= 1 && qty <= SUP_MAX_QTY)) return { ok: false, error: "bad_request" };
   const all = supRequests_(sh.r);
@@ -2949,6 +2952,7 @@ function supplyStatus_(req) {
     if (done.indexOf(x) !== -1) return;
     const r = x.rec;
     if (qty !== null) r.qty = qty;
+    if (setPaid) r.paid = paid;
     if (status !== null && status !== r.status) supSetStatus_(r, status, now, by);
     r.updatedAt = now;
     done.push(x);
