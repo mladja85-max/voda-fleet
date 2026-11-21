@@ -1374,6 +1374,13 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .rp-line.sub { color: var(--muted); font-size: .82rem; } .rp-line.mon b { color: var(--soon); } .rp-line.vd b { color: var(--ok); } .rp-line.owe b { color: var(--due); }
 .rp-line.tot { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 2px; }
 .rp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bk-dlg h4 { margin: 10px 0 4px; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bk-st { margin: 0 0 6px; } .bk-st b.ok { color: var(--ok); } .bk-st b.due { color: var(--due); }
+.bk-row { display: flex; gap: 8px; flex-wrap: wrap; } .bk-row input { flex: 1 1 220px; min-width: 0; }
+.bk-steps { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); margin-top: 6px; }
+.bk-steps ol { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: .92rem; }
+.bk-code-wrap { display: grid; gap: 6px; justify-items: end; }
+.bk-code { width: 100%; box-sizing: border-box; font: .74rem/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); resize: vertical; white-space: pre; }
 .rp-invlist { display: grid; gap: 10px; }
 .rp-inv { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; position: relative; }
 .rp-inv:has(> .rp-tick) { padding-left: 46px; }
@@ -8225,6 +8232,7 @@ const ST_ICONS = {
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+  save: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>' };
 const stIcon = k => { const s = h("span", { class: "st-ic", "aria-hidden": "true" }); s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ST_ICONS[k]}</svg>`; return s; };
 /** One line of Settings: an icon, what it is, a few words on what's inside, and › when it opens something. */
@@ -8406,6 +8414,9 @@ function openSettings() {
     isAdmin() && apiLevel >= 10 ? h("p", { class: "st-grp", text: "Trucks" }) : null,
     isAdmin() && apiLevel >= 10 ? h("div", { class: "st-list", id: "st-trucks" },
       stRow("st-tmmail", "mail", "TM hrs email", "Monday's trucks to check, then the ones missed each morning", ev => openTmMail(ev.currentTarget))) : null,
+    isAdmin() && apiLevel >= BACKUP_API ? h("p", { class: "st-grp", text: "Backups" }) : null,
+    isAdmin() && apiLevel >= BACKUP_API ? h("div", { class: "st-list", id: "st-bk" },
+      stRow("st-backup", "save", "Backups", "Every night at 2 AM, and a second Google account", () => openBackups())) : null,
     isAdmin() && apiLevel >= HCP_API ? h("p", { class: "st-grp", text: "Connections" }) : null,
     isAdmin() && apiLevel >= HCP_API ? h("div", { class: "st-list", id: "st-conn" },
       stRow("st-hcp", "plug", "Housecall Pro", "Check the connection and each job type's totals", () => openHcpTest())) : null,
@@ -15036,6 +15047,97 @@ function openCpBatch(id) {
 
 /* ---- Settings › Payroll emails: accounting's and the contractors' addresses ---- */
 /** Settings › TM hrs email (Admins): on or off, who gets it, and a test now. Kept in the Google script. */
+/* ---- Settings › Backups: the nightly copy of the whole sheet (VODA Hub › Backups, the newest 30), and a second Google
+   account that keeps copies of its own, in its own Drive: the sheet is shared with it (view only) and a small script
+   in that account copies it every night at 2 AM. It owns those copies, so they stay even if the main account has
+   trouble. ---- */
+const BACKUP_API = 119;                                  // the Google script with Settings › Backups (nightly)
+/** The script the second account pastes (its own Drive, every night at 2 AM in our time zone, the newest 30 kept). */
+const backupScript = (id, tz) => `/* VODA Hub: a second backup, in this account's own Drive.
+   Every night around 2 AM a full copy of the VODA Hub sheet goes into the folder "VODA Hub backups" in this
+   Drive; the newest 30 are kept. This account owns the copies. Run "setup" once (pick it at the top, press Run,
+   and allow it). Run "backupNow" any time for a copy right away; "stop" turns it off. */
+const SOURCE_ID = "${id}";
+const FOLDER = "VODA Hub backups";
+const KEEP = 30;
+const TZ = "${tz}";
+
+function setup() {
+  stop();
+  ScriptApp.newTrigger("backupNow").timeBased().everyDays(1).atHour(2).inTimezone(TZ).create();
+  Logger.log("Nightly backup is on (about 2 AM). First copy: " + backupNow());
+}
+function stop() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "backupNow") ScriptApp.deleteTrigger(t); });
+}
+function backupNow() {
+  const src = DriveApp.getFileById(SOURCE_ID), prefix = src.getName() + " backup ";
+  const it = DriveApp.getFoldersByName(FOLDER);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER);
+  const name = prefix + Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH:mm");
+  src.makeCopy(name, folder);
+  const files = [], fi = folder.getFiles();
+  while (fi.hasNext()) { const f = fi.next(); if (f.getName().indexOf(prefix) === 0) files.push(f); }
+  files.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  files.slice(KEEP).forEach(function (f) { f.setTrashed(true); });
+  return name;
+}
+`;
+async function openBackups(back) {
+  if (apiLevel && apiLevel < BACKUP_API) { toast("Update the Google script first: paste the latest Code.gs, then Deploy › Manage deployments › New version."); return; }
+  let cur;
+  try { cur = await api("backupInfo", {}); } catch (e) { toast("Couldn't load the backups. Try again."); return; }
+  const err = h("p", { class: "dlg-err", role: "alert", id: "bkErr" });
+  const when = iso => { if (!iso) return ""; const d = new Date(iso); return `${LB_WD[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`; };
+  const run = async (b, body, okMsg) => {
+    b.disabled = true; err.textContent = "";
+    const was = b.textContent; if (body.now || body.on) b.textContent = "Copying…";
+    try { cur = await api("backupSet", body); toast(okMsg); draw(); }
+    catch (e) {
+      b.disabled = false; b.textContent = was;
+      err.textContent = e && e.error === "bad_email" ? "That isn't an email address." : e && e.error === "same_account" ? "That's the account that runs the app: pick another one."
+        : e && e.error === "share_failed" ? `Google didn't let the sheet be shared with it${e.why ? ` (${e.why})` : ""}. A Google Workspace may not allow sharing outside the company: its admin can allow it (Admin console › Apps › Google Workspace › Drive and Docs › Sharing settings).`
+        : "Couldn't save. Try again.";
+    }
+  };
+  const box = h("div", { class: "bk-box", id: "bkBox" });
+  const draw = () => {
+    const email = h("input", { type: "text", id: "bkEmail", inputmode: "email", autocapitalize: "none", autocorrect: "off", spellcheck: "false", maxlength: "100", value: cur.email2 || "", placeholder: "another Google account, e.g. a personal Gmail" });
+    const script = backupScript(cur.id, cur.tz || "America/New_York");
+    const code = h("textarea", { class: "bk-code", id: "bkCode", readonly: true, rows: "8", spellcheck: "false", "aria-label": "The script for the second account" });
+    code.value = script;
+    box.replaceChildren(
+      h("h4", { text: "This account" }),
+      h("p", { class: "bk-st", id: "bkMain" }, cur.on ? h("b", { class: "ok", text: "On · " }) : h("b", { class: "due", text: "Off · " }),
+        cur.on ? `every night around 2 AM into VODA Hub › Backups, the newest ${cur.keep} kept.` : "no nightly copy is being made.",
+        cur.last ? ` Last copy: ${when(cur.last)} (${cur.n} kept).` : " No copy yet."),
+      h("div", { class: "rp-actions" },
+        h("button", { class: "btn" + (cur.on ? "" : " primary"), type: "button", id: "bkOn", onclick: ev => run(ev.currentTarget, { on: !cur.on }, cur.on ? "Nightly backup off" : "Nightly backup on") }, cur.on ? "Turn off" : "Turn on"),
+        h("button", { class: "btn", type: "button", id: "bkNow", onclick: ev => run(ev.currentTarget, { now: true }, "A copy is made") }, "Back up now")),
+      h("h4", { text: "Second Google account" }),
+      h("p", { class: "hint", text: "It keeps copies of its own, in its own Drive, every night at 2 AM. It owns them, so they stay even if this account has trouble. The sheet is shared with it, view only: whoever signs in to it can see everything in the app, so keep 2-Step Verification on for it." }),
+      h("div", { class: "field" }, h("label", { for: "bkEmail", text: "Its email" }),
+        h("div", { class: "bk-row" }, email,
+          h("button", { class: "btn primary", type: "button", id: "bkSave", onclick: ev => { const v = email.value.trim(); if (v && !lbEmail(v)) { err.textContent = "That isn't an email address."; return; } run(ev.currentTarget, { email2: v }, v ? "Shared with it, view only" : "Taken away"); } }, "Save"),
+          cur.email2 ? h("button", { class: "btn ghost", type: "button", id: "bkRemove", onclick: ev => run(ev.currentTarget, { email2: "" }, "Taken away: the sheet isn't shared with it anymore") }, "Remove") : null)),
+      cur.email2 ? h("div", { class: "bk-steps", id: "bkSteps" },
+        h("p", { class: "bk-st" }, cur.shared ? h("b", { class: "ok", text: "Shared with it (view only). " }) : h("b", { class: "due", text: "Not shared with it yet: press Save again. " }),
+          "Then, once, in that account:"),
+        h("ol", null,
+          h("li", null, "Sign in to Google as ", h("b", { text: cur.email2 }), " (a private window works)."),
+          h("li", null, "Open ", h("b", { text: "script.google.com" }), " › New project."),
+          h("li", null, "Delete what's there and paste the script below (", h("b", { text: "Copy" }), "), then Save."),
+          h("li", null, "Pick ", h("b", { text: "setup" }), " at the top and press ", h("b", { text: "Run" }), ". Allow it (Review permissions › that account › Allow)."),
+          h("li", null, "Done: a folder named ", h("b", { text: "VODA Hub backups" }), " appears in that Drive with the first copy, and a new one every night.")),
+        h("div", { class: "bk-code-wrap" }, code,
+          h("button", { class: "btn small", type: "button", id: "bkCopy", onclick: async () => { try { await navigator.clipboard.writeText(script); toast("Copied"); } catch (e) { code.select(); toast("Select it and copy"); } } }, "Copy"))) : null);
+  };
+  draw();
+  openDialog(h("div", { class: "rp-dlg bk-dlg" },
+    h("h3", { id: "dlgTitle", text: "Backups" }),
+    box, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
+}
 async function openTmMail(b) {
   if (apiLevel && apiLevel < TM_MAIL_API) { toast("Update the Google script first: paste the latest Code.gs, then Deploy › Manage deployments › New version."); return; }
   let cur = stHave("tmMail");   // read when Settings opened

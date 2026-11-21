@@ -95,10 +95,11 @@
  * (change it with the Script Property SUPPLY_SUBJECT), then the checklist, how many items, and who sent it.
  * To see one: pick "supplyEmailTest" and click Run.
  *
- * WEEKLY BACKUP (optional, recommended)
- * Pick "backupSetup" and click Run (approve the Google Drive permission). Every Sunday around 2 AM a full copy of this
- * sheet goes into a Drive folder named "VODA Prime backups"; the newest 12 are kept. "backupNow" makes one right away;
- * "backupStop" turns it off. To restore, open a backup and copy what you need back (or use it as the new sheet).
+ * NIGHTLY BACKUP (optional, recommended)
+ * Pick "backupSetup" and click Run (approve the Google Drive permission), or turn it on in the app (Settings › Backups).
+ * Every night around 2 AM a full copy of this sheet goes into the Drive folder "VODA Hub › Backups"; the newest 30 are
+ * kept. "backupNow" makes one right away; "backupStop" turns it off. To restore, open a backup and copy what you need
+ * back (or use it as the new sheet). A second Google account can keep its own copies too: Settings › Backups.
  *
  * MOVING TO ANOTHER GOOGLE ACCOUNT (for example the company Google Workspace account)
  * A copied sheet doesn't bring the script's settings (sign-in key, access code, GPS key, emails) or its automatic jobs,
@@ -150,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 118;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 119;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -270,7 +271,10 @@ function doPost(e) {
     req.by = user.name;   // every change is stamped with the signed-in person, whatever the app sends
     switch (req.action) {
       case "me":
-        if (user.role === "admin") { try { hubTidyOnce_(); } catch (e) { /* the folders move in on their next use */ } }
+        if (user.role === "admin") {
+          try { hubTidyOnce_(); } catch (e) { /* the folders move in on their next use */ }
+          try { backupDailyOnce_(); } catch (e) { /* weekly until the next time */ }
+        }
         return json_({ ok: true, user: publicUser_(user), settings: canChangeSettings_(user), owner: settingsOwner_() });
       case "changePasscode":
         return json_(withLock_(function () { return changePasscode_(req); }));
@@ -301,6 +305,10 @@ function doPost(e) {
         return json_(withLock_(function () { return deleteTruck_(req); }));
       case "tmSkip":
         return json_(withLock_(function () { return tmSkip_(req); }));
+      case "backupInfo":
+        return json_(backupInfo_());
+      case "backupSet":
+        return json_(withLock_(function () { return backupSet_(req); }));
       case "tmMail":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return tmMail_(req); }));
@@ -688,7 +696,7 @@ const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech", "csr"];   // csr: a Non-admin in the office (sees what's ticked, like a Non-admin)
 const ADMIN_ACTIONS = ["hcpTest", "estProbe", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop",
-  "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist"];
+  "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist", "backupInfo", "backupSet"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
 const INVITE_DAYS = 14;      // an invite or reset code works this long
@@ -8057,26 +8065,86 @@ function payPut_(req) {
   return { ok: true, rates: doc };
 }
 
-/* ---------------- weekly backup ---------------- */
+/* ---------------- nightly backup ----------------
+   Every night around 2 AM a full copy of this sheet in VODA Hub › Backups, the newest 30 kept. A second Google account
+   (its email typed in Settings › Backups) can keep copies of its own: the sheet is shared with it, view only, and a
+   small script in that account copies it every night into its own Drive. It owns those copies, so they stay even if
+   this account has trouble. (Before: every Sunday, 12 kept; switched to nightly the first time an admin opens the app.) */
 
-const BACKUP_KEEP = 12;
+const BACKUP_KEEP = 30;
+const BACKUP2 = "BACKUP2_EMAIL";   // Script Property: the second account's email (the sheet is shared with it, view only)
 
-/** Run once: a full copy of this sheet every Sunday around 2 AM, newest 12 kept. Makes the first one now. */
+/** Run once: a full copy of this sheet every night around 2 AM, newest 30 kept. Makes the first one now. */
 function backupSetup() {
   backupSchedule_();
   const name = backupNow();
-  Logger.log('Weekly backup is on: every Sunday around 2 AM into the Drive folder "' + HUB_FOLDER + ' › ' + HUB_SUBS.BACKUP_FOLDER_ID[1] + '" (newest ' + BACKUP_KEEP + ' kept). First backup made: ' + name);
+  Logger.log('Nightly backup is on: every night around 2 AM into the Drive folder "' + HUB_FOLDER + ' › ' + HUB_SUBS.BACKUP_FOLDER_ID[1] + '" (newest ' + BACKUP_KEEP + ' kept). First backup made: ' + name);
 }
 function backupStop() {
+  const n = backupOff_();
+  Logger.log(n ? "Nightly backup stopped. The backups already made stay in Drive." : "Nightly backup wasn't on.");
+}
+function backupOff_() {
   let n = 0;
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "backupNow") { ScriptApp.deleteTrigger(tr); n++; } });
-  Logger.log(n ? "Weekly backup stopped. The backups already made stay in Drive." : "Weekly backup wasn't on.");
+  PropertiesService.getScriptProperties().setProperty("BACKUP_SCHED", "daily");   // off on purpose: not switched back on
+  return n;
 }
 function backupSchedule_() {
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === "backupNow") ScriptApp.deleteTrigger(tr); });
-  ScriptApp.newTrigger("backupNow").timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(2).create();
+  ScriptApp.newTrigger("backupNow").timeBased().everyDays(1).atHour(2).create();
+  PropertiesService.getScriptProperties().setProperty("BACKUP_SCHED", "daily");
 }
-/** A copy of the whole sheet in the backups folder; older ones beyond the newest 12 go to the Drive trash. */
+const backupIsOn_ = () => ScriptApp.getProjectTriggers().some(function (tr) { return tr.getHandlerFunction() === "backupNow"; });
+/** Once, when an admin opens the app: a weekly backup (from before) becomes nightly. One that's off stays off. */
+function backupDailyOnce_() {
+  const P = PropertiesService.getScriptProperties();
+  if (P.getProperty("BACKUP_SCHED") === "daily") return;
+  if (backupIsOn_()) backupSchedule_(); else P.setProperty("BACKUP_SCHED", "daily");
+}
+/** Settings › Backups: { on, last (the newest copy here), n (how many), keep, email2 (the second account), shared (the
+ *  sheet shared with it), id and name (for its script), tz }. Admins. */
+function backupInfo_() {
+  const ss = SpreadsheetApp.getActive(), prefix = ss.getName() + " backup ", P = PropertiesService.getScriptProperties();
+  let last = "", n = 0;
+  const folder = hubFind_("BACKUP_FOLDER_ID");   // none yet: none made
+  if (folder) {
+    const fi = folder.getFiles();
+    while (fi.hasNext()) { const f = fi.next(); if (f.isTrashed() || f.getName().indexOf(prefix) !== 0) continue; n++; const at = f.getDateCreated().toISOString(); if (at > last) last = at; }
+  }
+  const email2 = P.getProperty(BACKUP2) || "";
+  return { ok: true, on: backupIsOn_(), last: last, n: n, keep: BACKUP_KEEP, email2: email2, shared: email2 ? backupShared_(email2) : false,
+    id: ss.getId(), name: ss.getName(), tz: Session.getScriptTimeZone() };
+}
+/** Is the sheet shared with `email` (view or edit)? */
+function backupShared_(email) {
+  const f = DriveApp.getFileById(SpreadsheetApp.getActive().getId()), e = String(email).toLowerCase();
+  return f.getViewers().concat(f.getEditors()).some(function (u) { return String(u.getEmail()).toLowerCase() === e; });
+}
+/** Settings › Backups: { on: true/false } turns the nightly backup on (the first copy made when there's none) or off;
+ *  { now: true } makes a copy now; { email2 } sets the second account (the sheet shared with it, view only; the one
+ *  before unshared, unless it can edit), "" takes it away. Admins. */
+function backupSet_(req) {
+  const P = PropertiesService.getScriptProperties();
+  if (req.on === true) { backupSchedule_(); if (!backupInfo_().n) backupNow(); }
+  if (req.on === false) backupOff_();
+  if (req.now === true) backupNow();
+  if (req.email2 !== undefined) {
+    const e = String(req.email2 || "").trim().toLowerCase(), was = P.getProperty(BACKUP2) || "";
+    if (e && !CP_EMAIL.test(e)) return { ok: false, error: "bad_email" };
+    let me = "";
+    try { me = String(Session.getEffectiveUser().getEmail() || "").toLowerCase(); } catch (x) { /* unknown */ }
+    if (e && me && e === me) return { ok: false, error: "same_account" };
+    const f = DriveApp.getFileById(SpreadsheetApp.getActive().getId());
+    if (e && e !== was) {
+      try { f.addViewer(e); } catch (x) { return { ok: false, error: "share_failed", why: String(x && x.message || x).slice(0, 200) }; }
+    }
+    if (was && was !== e) { try { f.removeViewer(was); } catch (x) { /* already gone, or it can edit: left as it is */ } }
+    if (e) P.setProperty(BACKUP2, e); else P.deleteProperty(BACKUP2);
+  }
+  return backupInfo_();
+}
+/** A copy of the whole sheet in the backups folder; older ones beyond the newest 30 go to the Drive trash. */
 function backupNow() {
   const ss = SpreadsheetApp.getActive();
   const folder = hubSub_("BACKUP_FOLDER_ID");   // VODA Hub › Backups (the old "VODA Prime backups" moved in)
