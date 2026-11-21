@@ -1736,6 +1736,10 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .cash-list td.cash-old { color: var(--soon); font-weight: 700; }
 .cash-dlg .cash-list th.num, .cash-dlg .cash-list td.num { text-align: right; }
 dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
+/* the departments' tiles tinted as in Jobs: Restoration blue, Cleaning green, Repairs brown */
+.cash-t.r { --tint: var(--accent); } .cash-t.c { --tint: var(--clean); } .cash-t.p { --tint: var(--soon); }
+.cash-t.r, .cash-t.c, .cash-t.p { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
+.cash-t.r.cash-open-t:hover, .cash-t.c.cash-open-t:hover, .cash-t.p.cash-open-t:hover, .cash-t.r.cash-open-t:focus-visible, .cash-t.c.cash-open-t:focus-visible, .cash-t.p.cash-open-t:focus-visible { border-color: var(--tint); box-shadow: 0 0 0 1px var(--tint); }
 .cash-t.cash-open-t { position: relative; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
 .cash-t.cash-open-t:hover, .cash-t.cash-open-t:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); outline: none; }
 .cash-t .cash-go { position: absolute; top: .7rem; right: .8rem; font-style: normal; font-size: 1.2rem; line-height: 1; color: var(--muted); }
