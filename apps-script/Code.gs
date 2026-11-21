@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 121;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 122;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4114,19 +4114,22 @@ function cashSheet_(create) {
 function cashRows_(s) {
   const out = {};
   if (!s || s.getLastRow() < 2) return out;
+  const tz = Session.getScriptTimeZone();
   s.getRange(2, 1, s.getLastRow() - 1, CASH_COLS.length).getValues().forEach(function (r, i) {
     const id = String(r[0] || "");
     if (!id) return;
     let pays = [];
     try { pays = JSON.parse(String(r[8] || "[]")); } catch (e) { pays = []; }
-    out[id] = { row: i + 2, day: String(r[1] || ""), dep: String(r[2] || "o"), inv: String(r[3] || ""), client: String(r[4] || ""), c: Number(r[5]) || 0, owes: Number(r[6]) || 0,
+    // the job's day stays text, but a row past the ones made as text can come back as a date: read it as yyyy-MM-dd
+    out[id] = { row: i + 2, day: r[1] instanceof Date ? Utilities.formatDate(r[1], tz, "yyyy-MM-dd") : String(r[1] || ""), dep: String(r[2] || "o"), inv: String(r[3] || ""), client: String(r[4] || ""), c: Number(r[5]) || 0, owes: Number(r[6]) || 0,
       at: r[7] ? new Date(r[7]).getTime() || 0 : 0, pays: Array.isArray(pays) ? pays : [] };
   });
   return out;
 }
 /** Every job on the Revenue tab: { id: { day, dep, inv, client, c, owes } } (a job on several days: its first). */
-function cashJobs_() {
-  const rows = revRows_(revSheet_(false)), out = {};
+function cashJobs_(rows) {
+  rows = rows || revRows_(revSheet_(false));
+  const out = {};
   Object.keys(rows).sort().forEach(function (d) {
     let js = null;
     try { js = JSON.parse(rows[d][14] || "null"); } catch (e) { js = null; }
@@ -4207,15 +4210,58 @@ function cashRead_(req) {
   const ok = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
   const from = String(req.from || ""), to = String(req.to || "");
   if (!ok(from) || !ok(to) || to < from) return { ok: false, error: "bad_request" };
-  const have = cashRows_(cashSheet_(false)), jobs = cashJobs_(), items = [];
+  const jf = String(req.jf || ""), jt = String(req.jt || ""), cmp = ok(jf) && ok(jt) && jt >= jf;
+  const have = cashRows_(cashSheet_(false)), rows = revRows_(revSheet_(false)), jobs = cashJobs_(rows), items = [];
   let at = 0;
   Object.keys(have).forEach(function (id) {
-    const h = have[id];
+    const h = have[id], j = jobs[id] || h;   // the job as the Revenue tab has it now (its day, if it moved)
     if (h.at > at) at = h.at;
-    h.pays.forEach(function (p) { if (p[0] >= from && p[0] <= to) items.push([p[0], p[1], h.dep, h.day, h.inv, h.client, id]); });
+    h.pays.forEach(function (p) { if (p[0] >= from && p[0] <= to) items.push([p[0], p[1], j.dep, j.day, h.inv, h.client, id]); });
   });
   items.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : b[1] - a[1]; });
-  return { ok: true, items: items, left: cashToRead_(jobs, have, Date.now(), false).length, at: at ? new Date(at).toISOString() : "" };
+  const out = { ok: true, items: items, left: cashToRead_(jobs, have, Date.now(), false).length, at: at ? new Date(at).toISOString() : "" };
+  if (cmp) out.cmp = cashCmp_(rows, have, items, from, to, jf, jt);
+  return out;
+}
+/** Money in next to Collected, for the jobs dated jf..jt (the Revenue tab's days, counted as Collected counts them:
+ *  each visit's charge less what's still owed). From Money in (paid from..to): less what came in for jobs dated before
+ *  jf (older) and after jt (later) = what came in for these jobs (inside); plus what was paid for them before from and
+ *  after to = every payment for them (paid); less what's above a job's charge (above: tips, card fees) and what's paid
+ *  but still shown owed (stale: the day not read since), plus what Collected counts with no payment found (short) and
+ *  for jobs not read yet (unread) = Collected (col). diff: the jobs where the two differ,
+ *  [job id, job day, department, invoice #, client, charged ¢, collected ¢, payments found ¢ (-1: not read yet)]. */
+function cashCmp_(rows, have, items, from, to, jf, jt) {
+  const by = {};
+  Object.keys(rows).forEach(function (d) {
+    if (d < jf || d > jt) return;
+    let js = null;
+    try { js = JSON.parse(rows[d][14] || "null"); } catch (e) { js = null; }
+    if (!Array.isArray(js)) return;
+    js.forEach(function (x) {
+      const id = String(x[0] || "");
+      if (!id) return;
+      const c = Number(x[4]) || 0, o = Number(x[5]) || 0;
+      const b = by[id] || (by[id] = { day: d, dep: "rcp".indexOf(String(x[3] || "")) >= 0 && x[3] ? String(x[3]) : "o", inv: String(x[1] || ""), client: String(x[2] || ""), c: 0, col: 0 });
+      b.c += c; b.col += Math.max(0, Math.min(c, c - o));
+    });
+  });
+  const t = { jf: jf, jt: jt, jobs: 0, older: 0, later: 0, inside: 0, before: 0, after: 0, paid: 0, above: 0, stale: 0, short: 0, unread: 0, unreadN: 0, col: 0, diff: [] };
+  items.forEach(function (x) { if (by[x[6]]) return; if (x[3] && x[3] < jf) t.older += x[1]; else t.later += x[1]; });
+  Object.keys(by).forEach(function (id) {
+    const b = by[id], h = have[id];
+    t.jobs++; t.col += b.col;
+    if (!h) {
+      if (b.c > 0) { t.unreadN++; t.unread += b.col; if (b.col) t.diff.push([id, b.day, b.dep, b.inv, b.client, b.c, b.col, -1]); }
+      return;
+    }
+    let all = 0;
+    h.pays.forEach(function (p) { all += p[1]; if (p[0] < from) t.before += p[1]; else if (p[0] > to) t.after += p[1]; else t.inside += p[1]; });
+    t.paid += all;
+    const above = Math.max(0, all - b.c), stale = Math.max(0, Math.min(all, b.c) - b.col), short = Math.max(0, b.col - all);
+    t.above += above; t.stale += stale; t.short += short;
+    if (above || stale || short) t.diff.push([id, b.day, b.dep, b.inv, b.client, b.c, b.col, all]);
+  });
+  return t;
 }
 
 const UNSENT_CACHE = "unsent_v1", UNSENT_PAGES = 20, UNSENT_JOBS = 80, UNSENT_ALT = 300;

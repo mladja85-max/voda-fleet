@@ -1733,6 +1733,31 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .cash-list td.cash-old { color: var(--soon); font-weight: 700; }
 .cash-dlg .cash-list th.num, .cash-dlg .cash-list td.num { text-align: right; }
 dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
+.cash-parts { display: grid; gap: .15rem; margin-top: .35rem; }
+.cash-part { font-size: .78rem; font-weight: 600; color: var(--muted); }
+.cash-part.old { color: var(--soon); }
+button.cash-part.main { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: .35rem; font-size: .8rem; font-weight: 700; color: var(--accent, #1d4ed8); }
+button.cash-part.main:hover span:first-child, button.cash-part.main:focus-visible span:first-child { text-decoration: underline; }
+button.cash-part.main:focus-visible { outline: 2px solid var(--accent, #1d4ed8); outline-offset: 2px; border-radius: 4px; }
+dialog#dlg:has(.cash-cmp-dlg) { width: min(1120px, calc(100% - 24px)); }
+.cash-cmp-dlg { min-width: 0; } .cash-cmp-dlg > * { min-width: 0; max-width: 100%; }
+.cash-cmp { width: 100%; max-width: 640px; margin: .4rem 0 .6rem; }
+.cash-cmp th { font-weight: 500; text-transform: none; letter-spacing: 0; font-size: .9rem; }
+.cash-cmp td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cash-cmp tr.sub th, .cash-cmp tr.sub td, .cash-cmp tr.start th, .cash-cmp tr.start td { font-weight: 700; }
+.cash-cmp tr.sub th, .cash-cmp tr.sub td { border-top: 2px solid var(--line); }
+.cash-cmp tr.end th, .cash-cmp tr.end td { font-weight: 800; color: var(--accent, #1d4ed8); border-top: 2px solid var(--accent, #1d4ed8); background: color-mix(in srgb, var(--accent, #1d4ed8) 7%, transparent); }
+.cash-cmp-h { margin: .9rem 0 .3rem; font-size: .95rem; }
+.cash-why { font-size: .82rem; color: var(--muted); }
+#cashCmp th { white-space: normal; } #cashCmp tr:not(.sub):not(.start):not(.end) th { font-weight: 500; }
+#cashDiff .cash-m { display: none; }
+@media (max-width: 640px) {
+  #cashDiff .cash-x, #cashDiff .cash-p { display: none; }
+  #cashDiff .cash-m { display: block; font-size: .74rem; color: var(--muted); white-space: normal; font-weight: 500; text-align: left; }
+  #cashDiff .cash-m.why { color: var(--soon); }
+  #cashDiff th, #cashDiff td { padding-left: .3rem; padding-right: .3rem; } #cashDiff th.l, #cashDiff td.l { text-align: left; }
+  .cash-cmp th { font-size: .82rem; } #cashDiff { font-size: .82rem; }
+}
 .rev-cash-tile { cursor: pointer; background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: var(--radius); padding: 12px 16px; display: grid; gap: 2px; position: relative; }
 .rev-cash-tile small { font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .rev-cash-tile b { font-family: var(--font-display); font-size: 1.6rem; color: var(--accent); }
@@ -12525,21 +12550,24 @@ const REV_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates:
    The Google script reads each job's payments from Housecall Pro onto its Payments tab, in turns (the first time:
    every job, a few minutes); after that only what changed. ---- */
 const CASH_API = 121;                                    // the Google script version with Money in
-let cashDoc = null;                                      // { key: "from|to", items: [[day paid, ¢, dep, job day, inv #, client, job id]], left, at, t }
+const CASH_CMP_API = 122;                                // ... and with Money in next to Collected
+let cashDoc = null;                                      // { key: "from|to|jt", items: [[day paid, ¢, dep, job day, inv #, client, job id]], cmp, left, at, t }
 const cashSt = { loading: "", syncing: false, err: "", left: 0, force: false };
 const cashCan = () => canSee("revenue") && (!apiLevel || apiLevel >= CASH_API);
-/** The payments from..to, or null while they load (asked for here; read again after 3 minutes). */
-function cashFor(from, to) {
-  const key = `${from}|${to}`, fresh = cashDoc && cashDoc.key === key && Date.now() - cashDoc.t < 180000;
-  if (!fresh && cashSt.loading !== key && !offline) cashLoad(from, to);
+/** The payments from..to, or null while they load (asked for here; read again after 3 minutes). jt: the last day of the
+ *  jobs Collected counts (from..jt), to set Money in next to it; null: none (the period hasn't started for Collected). */
+function cashFor(from, to, jt) {
+  const key = `${from}|${to}|${jt || ""}`, fresh = cashDoc && cashDoc.key === key && Date.now() - cashDoc.t < 180000;
+  if (!fresh && cashSt.loading !== key && !offline) cashLoad(from, to, jt);
   return cashDoc && cashDoc.key === key ? cashDoc : null;
 }
-async function cashLoad(from, to) {
-  const key = `${from}|${to}`;
+async function cashLoad(from, to, jt) {
+  const key = `${from}|${to}|${jt || ""}`;
   cashSt.loading = key;
   try {
-    const out = await api("cashRead", { from, to });
-    cashDoc = { key, items: Array.isArray(out.items) ? out.items : [], left: Number(out.left) || 0, at: out.at || "", t: Date.now() };
+    const out = await api("cashRead", Object.assign({ from, to }, jt ? { jf: from, jt } : {}));
+    const cmp = out.cmp && typeof out.cmp === "object" && Array.isArray(out.cmp.diff) ? out.cmp : null;
+    cashDoc = { key, items: Array.isArray(out.items) ? out.items : [], cmp, left: Number(out.left) || 0, at: out.at || "", t: Date.now() };
     cashSt.left = cashDoc.left; cashSt.err = "";
     if (cashDoc.left && !cashSt.syncing) cashSync(false);
   } catch (e) { cashSt.err = revErrText(e); }
@@ -12581,10 +12609,65 @@ function cashDayDlg(items, title) {
       h("tfoot", null, h("tr", null, h("th", { class: "l", colspan: "5", text: "Total" }), h("td", { class: "num" }, h("b", { text: lbCash(tot / 100) })))))) : h("p", { class: "meta", text: "No payments came in." }),
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
 }
+/** Money in next to Collected for the jobs dated jf..jt: from Money in to Collected, line by line (each line's amount,
+ *  zero lines left out), then the jobs where the two differ and why. */
+function cashCmpDlg(c, from, to) {
+  const dep = k => (REV_DEPTS.find(([x]) => x === k) || [k, "Other"])[1];
+  const money = (n, sign) => `${sign && n ? (sign < 0 ? "−" : "+") : ""}${lbCash(Math.abs(n) / 100)}`;
+  const total = c.older + c.later + c.inside, jobs = revSpanText(c.jf, c.jt);
+  const walk = [
+    [`Money in, ${revSpanText(from, to)}`, total, 0, "start"],
+    [`For jobs dated before ${lbDayText(c.jf)}`, c.older, -1],
+    [`For jobs dated after ${lbDayText(c.jt)}`, c.later, -1],
+    [`For jobs dated ${jobs}`, c.inside, 0, "sub"],
+    [`Paid for them before ${lbDayText(from)}`, c.before, 1],
+    [`Paid for them after ${lbDayText(to)}`, c.after, 1],
+    ["Every payment for these jobs", c.paid, 0, "sub"],
+    ["Paid above the job's charge (tips, card fees)", c.above, -1],
+    ["Paid, but still shown owed (the day not read since)", c.stale, -1],
+    ["In Collected, but no payment found", c.short, 1],
+    [`Payments not read yet (${fmt(c.unreadN)} job${c.unreadN === 1 ? "" : "s"})`, c.unread, 1],
+    ["Collected (charged less still owed)", c.col, 0, "end"]].filter(w => w[3] || w[1]);
+  const why = x => {
+    if (x[7] < 0) return "Not read yet";
+    const out = [];
+    if (x[7] > x[5]) out.push("Paid more than charged");
+    if (Math.min(x[7], x[5]) > x[6]) out.push("Paid, still shown owed");
+    if (x[6] > x[7]) out.push(x[7] ? "Less paid than Collected shows" : "No payment found");
+    return out.join(" · ");
+  };
+  const gap = x => (x[7] < 0 ? -x[6] : x[7] - x[6]);
+  const list = c.diff.slice().sort((a, b) => (a[7] < 0) - (b[7] < 0) || Math.abs(gap(b)) - Math.abs(gap(a)));
+  const sumCol = list.reduce((n, x) => n + x[6], 0), sumPaid = list.reduce((n, x) => n + Math.max(0, x[7]), 0);
+  openDialog(h("div", { class: "rp-dlg cash-dlg cash-cmp-dlg" },
+    h("h3", { id: "dlgTitle", text: "Money in vs Collected" }),
+    h("p", { class: "meta", text: `Jobs dated ${jobs} · payments that came in ${revSpanText(from, to)}. Money in counts a payment on the day it came in; Collected counts it on the job's day.` }),
+    h("table", { class: "lb-table cash-cmp", id: "cashCmp" }, h("tbody", null, walk.map(([t, n, sign, cls]) =>
+      h("tr", { class: cls || "" }, h("th", { class: "l", text: t }), h("td", { class: "num", text: money(n, sign) }))))),
+    c.stale ? h("p", { class: "hint", text: "Paid, but still shown owed: Housecall Pro has the payment, but the app read that job's day before it came in. Read again in Jobs reads the days again; Accounts receivable goes down with it." }) : null,
+    h("h4", { class: "cash-cmp-h", text: list.length ? `Jobs where they differ (${fmt(list.length)})` : "Every job matches" }),
+    list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cash-list", id: "cashDiff" },
+      // a phone: the invoice, with the client, the job's day, Collected and why under it; Payments, Difference
+      h("thead", null, h("tr", null, ["Client", "Invoice", "Job's day", "Department", "Charged", "Collected", "Payments", "Difference", "Why"].map((t, i) =>
+        h("th", { class: (i >= 4 && i <= 7 ? "num" : "l") + (i === 3 || i === 4 ? " cash-x" : i === 0 || i === 2 || i === 5 || i === 8 ? " cash-p" : ""), text: t })))),
+      h("tbody", null, list.map(x => h("tr", { "data-job": x[0] },
+        h("td", { class: "l cash-p", text: x[4] || "–" }),
+        h("td", { class: "l" }, x[3] ? hcpLink("job", x[0], `#${x[3]}`) : "–", h("small", { class: "cash-m", text: `${x[4] || "–"} · ${lbDayText(x[1])}` }),
+          h("small", { class: "cash-m", text: `Collected ${lbCash(x[6] / 100)}` }), h("small", { class: "cash-m why", text: why(x) })),
+        h("td", { class: "l cash-p", text: lbDayText(x[1]) }), h("td", { class: "l cash-x" }, h("i", { class: "rev-dot " + x[2] }), dep(x[2])),
+        h("td", { class: "num cash-x", text: lbCash(x[5] / 100) }), h("td", { class: "num cash-p", text: lbCash(x[6] / 100) }),
+        h("td", { class: "num", text: x[7] < 0 ? "–" : lbCash(x[7] / 100) }), h("td", { class: "num", text: money(gap(x), 1) }),
+        h("td", { class: "l cash-why cash-p", text: why(x) })))),
+      h("tfoot", null, h("tr", null, h("td", { class: "cash-p" }), h("th", { class: "l", text: "Total" }), h("td", { class: "cash-p" }), h("td", { class: "cash-x" }), h("td", { class: "cash-x" }),
+        h("td", { class: "num cash-p", text: lbCash(sumCol / 100) }), h("td", { class: "num", text: lbCash(sumPaid / 100) }),
+        h("td", { class: "num" }, h("b", { text: money(sumPaid - sumCol, 1) })), h("td", { class: "cash-p" }))))) :
+      h("p", { class: "meta", text: "Every payment found for these jobs adds up to what Collected shows." }),
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
+}
 /** Money in for the period on screen: tiles, the table (each line's payments by department, how many, and what came
  *  in for jobs from before the period), and how it's counted. */
-function cashEl(per, r, today) {
-  const to = r.to > today ? today : r.to, doc = cashFor(r.from, to);
+function cashEl(per, r, today, jt) {
+  const to = r.to > today ? today : r.to, doc = cashFor(r.from, to, jt);
   const status = h("p", { class: "lb-sub rev-status" + (cashSt.syncing ? " busy" : ""), id: "cashStatus", role: "status" },
     h("span", { id: "cashSyncing", text: cashStatusText() }),
     !cashSt.syncing && doc ? `Payments from Housecall Pro${doc.at ? ` · read ${revReadText(doc.at)}` : ""} · each on the day it came in` : null,
@@ -12598,7 +12681,7 @@ function cashEl(per, r, today) {
   const span = revSpanText(r.from, to);
   const tiles = h("div", { class: "cash-tots", id: "cashTots" },
     h("div", { class: "cash-t all cash-tot-t" }, h("small", { text: `Money in · ${span}` }), h("b", { id: "cashTotal" }, revCash(all.t[0])),
-      h("span", { text: pays(all.t[1]) }), all.old ? h("span", { class: "old", text: `${lbMoney(Math.round(all.old / 100))} for jobs from before ${lbDayText(r.from)}` }) : null),
+      h("span", { text: pays(all.t[1]) }), ...cashSplitEl(doc.cmp, r.from, to, all.old)),
     shown.map(([k, name]) => h("div", { class: "cash-t " + k }, h("small", null, h("i", { class: "rev-dot " + k }), name), h("b", null, revCash(all[k][0])),
       h("span", { text: pays(all[k][1]) }))));
   const lines = revLines(per, r, to, today);
@@ -12614,12 +12697,25 @@ function cashEl(per, r, today) {
     x ? h("td", { class: "tot" + (x.t[0] ? "" : " zero") }, revCash(x.t[0]), x.t[1] ? h("small", null, pays(x.t[1]), x.old ? h("span", { class: "cash-oldn", text: ` · ${revShort(x.old)} older jobs` }) : null) : null) : h("td", { class: "tot", text: "–" }));
   const table = h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cash-table", id: "cashTable" },
     h("thead", null, head), h("tbody", null, lines.map(L => row(L, L.future ? null : sum(L.a, L.b)))), h("tfoot", null, row(null, all, true)))));
-  const how = howFold("cashHow", h("p", { class: "hint", text: `Money in: every payment on the day it came in, whatever the job's day: a balance from March paid on November 21 counts on November 21 (Jobs counts it in March, the job's day). Deposits count on the day they're paid; a failed or voided payment doesn't count. From Housecall Pro: each job's invoices and their payments, for the days read in Jobs (from ${lbDayText(LB_FIRST_DAY)}). A job still owing is read again after 20 hours; Read again reads them now. Tap a line for its payments.` }), "How it's counted");
+  const how = howFold("cashHow", h("p", { class: "hint", text: `Money in: every payment on the day it came in, whatever the job's day: a balance from March paid on November 21 counts on November 21 (Jobs counts it in March, the job's day). Deposits count on the day they're paid; a failed or voided payment doesn't count. From Housecall Pro: each job's invoices and their payments, for the days read in Jobs (from ${lbDayText(LB_FIRST_DAY)}). A job still owing is read again after 20 hours; Read again reads them now. Tap a line for its payments. The total splits in three: for the jobs dated in the period (the days Collected counts, to yesterday), for older jobs, and for jobs dated after (deposits, today's jobs). Tap the first to see it next to Collected, and the jobs where the two differ.` }), "How it's counted");
   return [status, tiles, table, how];
 }
+/** Money in in three parts (the total tile): for the jobs Collected counts (the period's, to yesterday), opening Money in
+ *  next to Collected; for older jobs; for later ones (deposits, and today's jobs). Without the comparison (an older
+ *  Google script, or a period Collected hasn't started): what came in for older jobs. */
+function cashSplitEl(c, from, to, old) {
+  const whole = n => lbMoney(Math.round(n / 100));
+  if (!c) return old ? [h("span", { class: "old", text: `${whole(old)} for jobs from before ${lbDayText(from)}` })] : [];
+  const open = () => cashCmpDlg(c, from, to);
+  return [h("div", { class: "cash-parts", id: "cashParts" },
+    h("button", { class: "cash-part main", id: "cashCmpBtn", type: "button", title: "Next to Collected: the jobs where they differ", onclick: open },
+      h("span", { text: `${whole(c.inside)} for jobs dated ${revSpanText(c.jf, c.jt)}` }), h("span", { class: "go", "aria-hidden": "true", text: "›" })),
+    c.older ? h("span", { class: "cash-part old", id: "cashOlder", text: `${whole(c.older)} for jobs dated before ${lbDayText(c.jf)}` }) : null,
+    c.later ? h("span", { class: "cash-part later", id: "cashLater", text: `${whole(c.later)} for jobs dated after ${lbDayText(c.jt)}` }) : null)];
+}
 /** The Money in tile under Accounts receivable (both views): the period's total and what came in for older jobs. */
-function cashTileEl(r, today) {
-  const to = r.to > today ? today : r.to, doc = cashFor(r.from, to);
+function cashTileEl(r, today, jt) {
+  const to = r.to > today ? today : r.to, doc = cashFor(r.from, to, jt);
   const tot = doc ? doc.items.reduce((n, x) => n + (x[0] >= r.from && x[0] <= to ? x[1] : 0), 0) : 0;
   const old = doc ? doc.items.reduce((n, x) => n + (x[0] >= r.from && x[0] <= to && x[3] && x[3] < r.from ? x[1] : 0), 0) : 0;
   const go = () => { revView.mode = "cash"; revSaveView(); renderRevenue(); scrollTo(0, 0); };
@@ -13047,7 +13143,7 @@ function renderRevenue() {
       }));
   }
   // Money in, under Accounts receivable (both views): tapped, the Money in view
-  if (cashCan() && aside) { const ct = cashTileEl(r, today); if (arCard && arCard.parentNode === aside) arCard.after(ct); else aside.prepend(ct); }
+  if (cashCan() && aside) { const ct = cashTileEl(r, today, r.from > last ? null : to); if (arCard && arCard.parentNode === aside) arCard.after(ct); else aside.prepend(ct); }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
   const goalDays = (per === "week" || per === "dates") && r.from <= last ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
@@ -13056,7 +13152,7 @@ function renderRevenue() {
   const gbox = goal || booked, slot = gbox ? revGoalSlot() : "";
   if (slot === "side") { if (aside) aside.prepend(gbox); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, gbox); }
   box.classList.toggle("goal3", slot === "wide");
-  const cashParts = cash ? cashEl(per, r, today) : null;
+  const cashParts = cash ? cashEl(per, r, today, r.from > last ? null : to) : null;
   box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, cash ? null : status, err, revPriceEl(), slot === "top" ? gbox : null, cash ? cashParts : r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, cash || r.from > today ? null : table, ...(cash ? [] : notes)].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [gbox] : []));
   if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
