@@ -1710,8 +1710,9 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 /* a wide screen (1840 and up, a 1920 monitor too): the goal in its own column, right of Accounts receivable, Money in and
    Average job, so they're beside the list (not under the goal) */
 @media (min-width: 1840px) {
-  /* the page (and the bar on top) as wide as the three columns, centered: a 1920 screen has the room */
-  body[data-tab="revenue"]:has(#revView.goal3) { --page-w: 1768px; }
+  /* the page (and the bar on top) as wide as the three columns, centered, on every tab: the logo and the tabs stay put
+     going from one tab to another (Operations alone being wider moved them ~100px each time) */
+  :root { --page-w: 1768px; }
   body[data-tab="revenue"] #revView.goal3 { max-width: none; width: 1768px; grid-template-columns: minmax(0, 1000px) 360px 360px; }
   #revView.goal3 > .goal.stick { position: sticky; top: calc(var(--top-h, 74px) + 12px); }   /* see stickFit */
 }
