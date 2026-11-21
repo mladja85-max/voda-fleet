@@ -7114,14 +7114,19 @@ function stopsWhy(s, who) {
   if (s.kind === "his") return ["ok", s.how === "street" ? `Same street as ${his} ${what} (another number)` : s.how === "near" ? `Next to ${his} ${what}` : `${his.charAt(0).toUpperCase() + his.slice(1)} ${what}`, ref];
   if (s.kind === "other") return ["warn", `${a.who || "Someone else"}'s ${what}, not ${who ? stopsFirst(who) + "'s" : "his"}`, ref];
   if (s.kind === "zip") return ["warn", `Same zip code as ${his} ${what}, another street`, [ref, a.addr].filter(Boolean).join(" · ")];
+  if (s.kind === "past") {   // no one's that day, but a VODA job or estimate at this address on another day
+    const more = (a.jobs || 0) + (a.ests || 0) > 1 ? [a.jobs ? `${a.jobs} VODA job${a.jobs === 1 ? "" : "s"}` : "", a.ests ? `${a.ests} estimate${a.ests === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ") + " here" : "";
+    return ["warn", `VODA ${what} here${isoDay(a.day) ? ` on ${fmtDay(a.day).replace(/, \d{4}$/, a.day.slice(0, 4) === todayIso().slice(0, 4) ? "" : "$&")}` : ""} (another day)`,
+      [`${a.kind === "est" ? "Estimate" : "Job"} #${a.n}`, a.client, /cancel/i.test(a.st) ? "canceled" : "", more].filter(Boolean).join(" · ")];
+  }
   if (s.kind === "shop") return ["muted", "Shop", ""];
   if (s.kind === "place") return ["muted", s.place || "Known place", "Never flagged"];
   return ["bad", who ? `Not on ${stopsFirst(who)}'s schedule` : "Not on anyone's schedule", ""];
 }
-const stopsFlagged = s => s.kind === "flag" || s.kind === "zip" || s.kind === "other";
+const stopsFlagged = s => s.kind === "flag" || s.kind === "zip" || s.kind === "other" || s.kind === "past";
 function stopsSum(stops, who) {
   const n = k => stops.filter(s => k.includes(s.kind));
-  const bad = n(["flag"]), look = n(["zip", "other"]), mins = bad.reduce((a, s) => a + s.min, 0);
+  const bad = n(["flag"]), look = n(["zip", "other", "past"]), mins = bad.reduce((a, s) => a + s.min, 0);
   const parts = [`${stops.length} stop${stops.length === 1 ? "" : "s"}`];
   const his = n(["his"]).length; if (his) parts.push(`${his} on ${who ? stopsFirst(who) + "'s" : "his"} schedule`);
   if (bad.length) parts.push(h("strong", { class: "stp-badtext", text: `${bad.length} to ask about (${stopsDur(mins)})` }));
@@ -7212,7 +7217,7 @@ function stopsDraw(id) {
     h("pre", { text: JSON.stringify(d.shape) })));
   if (d.left) out.push(h("p", { class: "meta", text: `${d.left} street${d.left === 1 ? "" : "s"} still to look up (Google allows so many at a time). Tap Read again in a minute.` }));
   (d.note || []).forEach(n => out.push(h("p", { class: "meta", text: n })));
-  out.push(h("p", { class: "hint", text: "Same street as one of his jobs or estimates that day (any house number), or right next to it, counts as that appointment. Stops of 5 minutes and longer, as One Step GPS records them." }));
+  out.push(h("p", { class: "hint", text: "Same street as one of his jobs or estimates that day (any house number), or right next to it, counts as that appointment. Someone else's job that day, or the exact address of a VODA job or estimate on another day, is worth a look. Stops of 5 minutes and longer, as One Step GPS records them." }));
   el.replaceChildren(...out);
 }
 function stopsForget(id) { for (const k of Object.keys(stopsCache)) if (k.startsWith(id + "|")) delete stopsCache[k]; }

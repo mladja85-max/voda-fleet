@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 127;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 128;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -2756,6 +2756,64 @@ function stopPrefs_() {
   return { person: parse("GPS_PERSON", {}), places: parse("GPS_PLACES", []).filter(function (x) { return x && isFinite(x.lat) && isFinite(x.lng); }) };
 }
 
+/** "Ft Belvoir" = "Fort Belvoir": a city to compare. */
+function stopCity_(c) {
+  return String(c || "").toLowerCase().replace(/^\s*ft\.?\s+/, "fort ").replace(/^\s*mt\.?\s+/, "mount ").replace(/^\s*st\.?\s+/, "saint ").replace(/[^a-z]/g, "");
+}
+/** A street address as house number | street name | city ("123 Main St, Apt 4, Fairfax" or Google's
+ *  "123 Main St, Fairfax, VA 22030"), or "" without a house number. */
+function stopExactKey_(addr) {
+  const parts = String(addr || "").replace(/, USA$/, "").split(/\s*,\s*/).filter(Boolean);
+  if (!parts.length) return "";
+  const k = stopAddrKey_(parts[0], "");
+  if (!k.n || !k.c) return "";
+  const st = parts.findIndex(function (x, i) { return i > 0 && /^[A-Z]{2}(\s+\d{5}(-\d{4})?)?$/.test(x); });
+  const city = st > 1 ? parts[st - 1] : st === -1 && parts.length > 1 ? parts[parts.length - 1] : "";
+  return k.n + "|" + k.c + "|" + stopCity_(city);
+}
+/** The stops still flagged (or only the zip of his job) at the address of any VODA job (the Past client jobs tab, every
+ *  year) or estimate (the Estimates tab), any day: "past", with the one closest to that day and how many there are. */
+function stopPast_(days, note) {
+  const want = {};
+  days.forEach(function (d) { d.stops.forEach(function (s) {
+    if (s.kind !== "flag" && s.kind !== "zip") return;
+    const key = stopExactKey_(s.a);
+    if (key) (want[key] = want[key] || []).push({ s: s, day: d.day });
+  }); });
+  if (!Object.keys(want).length) return;
+  const ss = SpreadsheetApp.getActive(), found = {};
+  const add = function (key, x) { if (want[key]) (found[key] = found[key] || []).push(x); };
+  const pj = ss.getSheetByName(PC_JOBS);
+  if (!pj || pj.getLastRow() < 2) note.push("Stops aren't checked against past VODA job addresses yet: Office › Past clients hasn't read Housecall Pro.");
+  else {
+    const tz = Session.getScriptTimeZone(), cust = {};
+    pj.getRange(2, 1, pj.getLastRow() - 1, 8).getValues().forEach(function (r) {
+      const key = stopExactKey_(r[7]);
+      if (key && want[key]) { add(key, { kind: "job", n: String(r[2] || ""), cid: String(r[1] || ""), day: repDay_(r[4], tz), st: String(r[3] || ""), addr: String(r[7] || "") }); cust[String(r[1])] = ""; }
+    });
+    const pc = ss.getSheetByName(PC_CUST);
+    if (Object.keys(cust).length && pc && pc.getLastRow() > 1) pc.getRange(2, 1, pc.getLastRow() - 1, 6).getValues().forEach(function (r) {
+      if (String(r[0]) in cust) cust[String(r[0])] = pcName_(r).name;
+    });
+    Object.keys(found).forEach(function (k) { found[k].forEach(function (x) { x.client = cust[x.cid] || ""; delete x.cid; }); });
+  }
+  const rows = estRows_(estSheet_(false));
+  Object.keys(rows).forEach(function (id) {
+    const r = rows[id], key = stopExactKey_(r[5]);
+    if (key && want[key]) add(key, { kind: "est", n: String(r[1] || ""), client: String(r[4] || ""), day: String(r[2] || ""), st: String(r[9] || ""), addr: String(r[5] || "") });
+  });
+  const gap = function (a, b) { return a && b ? Math.abs(new Date(a + "T12:00:00Z") - new Date(b + "T12:00:00Z")) / 864e5 : 1e9; };
+  Object.keys(found).forEach(function (key) {
+    const list = found[key];
+    want[key].forEach(function (w) {
+      const top = list.slice().sort(function (x, y) { return gap(x.day, w.day) - gap(y.day, w.day) || (y.day > x.day ? 1 : -1); })[0];
+      w.s.kind = "past";
+      w.s.appt = { kind: top.kind, n: top.n, client: top.client, addr: top.addr, day: top.day, st: top.st.replace(/_/g, " ").slice(0, 30),
+        jobs: list.filter(function (x) { return x.kind === "job"; }).length, ests: list.filter(function (x) { return x.kind === "est"; }).length };
+    });
+  });
+}
+
 /** Admin: a truck's stops on day..to (≤ 14 days), each laid next to the schedule of the person driving it.
  *  { truck, from, to, person, people, days: [{ day, stops: [...], missed: [...] }], places, note, left }. */
 function gpsStops_(req) {
@@ -2872,6 +2930,7 @@ function gpsStops_(req) {
       .map(function (x) { return { kind: x.kind, n: x.n, client: x.client, addr: x.addr, time: x.time, st: x.st }; });
     days.push({ day: d, stops: stops, appts: mine.length, missed: missed });
   }
+  stopPast_(days, note);
   if (to > today) note.push("Days after today have no stops yet.");
   const out = { ok: true, truck: String(t.id), unit: String(t.unit || ""), from: from, to: to, today: today, person: person, driver: String(t.driver || ""),
     people: Object.keys(people).sort(), places: prefs.places.map(function (p) { return { n: String(p.n || ""), a: String(p.a || ""), lat: p.lat, lng: p.lng }; }),
