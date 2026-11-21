@@ -1759,6 +1759,18 @@ dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
   #cashJobs .cash-gl { display: block; }
   #cashJobs th, #cashJobs td { padding-left: .3rem; padding-right: .3rem; } #cashJobs th.l, #cashJobs td.l { text-align: left; } #cashJobs { font-size: .82rem; }
 }
+/* Operations › Services */
+.srv-acts { justify-content: flex-end; margin: -4px 0 0; }
+.srv-table th { font-weight: 600; text-align: left; } .srv-table tr.zero td, .srv-table tr.zero th { color: var(--muted); font-weight: 400; }
+.srv-table th small { color: var(--muted); font-weight: 500; } .srv-table tr.srv-uns th, .srv-ntable tr.srv-uns th { color: var(--due); }
+.srv-att { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 2px 2px; font-size: .86rem; color: var(--muted); } .srv-att b { color: var(--ink); }
+.srv-days th { font-weight: 600; text-align: left; } .srv-days tr.zero td, .srv-days tr.zero th { color: var(--muted); font-weight: 400; }
+.srv-names { padding: 12px 14px; } .srv-names summary { cursor: pointer; } .srv-names .hint { margin: 8px 0; }
+.srv-ntable th { font-weight: 600; text-align: left; word-break: break-word; } .srv-pick { font: inherit; font-size: .86rem; padding: 5px 7px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100%; }
+.srv-guess { color: var(--soon); font-weight: 700; font-size: .74rem; } .srv-ntable tr.srv-uns .srv-guess { color: var(--due); }
+dialog#dlg:has(.srv-xl-dlg) { width: min(820px, calc(100% - 24px)); }
+.srv-xl th { text-align: left; font-weight: 600; } .srv-xl tr.srv-off td, .srv-xl tr.srv-off th { color: var(--due); font-weight: 700; } .srv-xl tr.srv-tot th, .srv-xl tr.srv-tot td { font-weight: 800; }
+@media (max-width: 640px) { .srv-ntable .srv-x { display: none; } .srv-ntable th, .srv-ntable td { padding-left: .3rem; padding-right: .3rem; } .srv-pick { width: 100%; } }
 .cash-parts { display: grid; gap: .15rem; margin-top: .35rem; }
 .cash-part { font-size: .78rem; font-weight: 600; color: var(--muted); }
 .cash-part.old { color: var(--soon); }
@@ -12814,6 +12826,284 @@ function cashTileEl(r, today, jt) {
     h("small", { text: `Money in · ${revSpanText(r.from, to)}` }), h("b", { text: doc ? lbMoney(Math.round(tot / 100)) : "…" }),
     h("span", { text: doc ? (old ? `${lbMoney(Math.round(old / 100))} for jobs from before ${lbDayText(r.from)}` : "each payment on the day it came in") : "Loading…" }), h("span", { class: "go", text: "›" }));
 }
+/* ---- Office › Total Services Revenue: each service's money, as in the TOTAL SERVICES REVENUE workbook (Carpet cleaning …
+   Special discount), from each job's service lines in Housecall Pro, on the job's day. Which column a service name
+   goes to: the service map (an admin picks it once; the app guesses the rest from the name, then the department). ---- */
+const SRV_API = 125;
+// [key, as in the workbook, short]: its 24 columns, in its order
+const SRV_COLS = [["carpet", "Carpet cleaning", "Carpet"], ["comcarpet", "Commercial carpet cleaning", "Com. carpet"], ["stretch", "Stretching", "Stretching"],
+  ["rugin", "In-House Rug", "In-house rug"], ["rugplant", "In-Plant Rug", "In-plant rug"], ["uph", "Upholstery cleaning", "Upholstery"], ["hfpolish", "H.F. cleaning & polish", "H.F. polish"],
+  ["hfsandless", "H.F. Sandless", "H.F. sandless"], ["vct", "VCT Floor", "VCT"], ["maid", "Maid Cleaning", "Maid"], ["tile", "Tile and grout", "Tile & grout"],
+  ["water", "Water damage", "Water"], ["mold", "Mold remediation", "Mold"], ["duct", "Air duct", "Air duct"], ["repair", "Repair", "Repair"],
+  ["maxcarpet", "Maxim carpet", "Maxim carpet"], ["maxrug", "Maxim rug", "Maxim rug"], ["maxuph", "Maxim upholstery", "Maxim uph."], ["sealer", "Sealer", "Sealer"],
+  ["spots", "Spots", "Spots"], ["deodor", "Deodorizing", "Deodorizing"], ["ccfee", "C.C. Fee", "Card fee"], ["disc", "Discounts", "Discounts"], ["sdisc", "Special Disc.", "Special disc."]];
+const SRV_LESS = new Set(["disc", "sdisc"]);                 // taken off the total (shown as what was taken off)
+const SRV_RANKED = SRV_COLS.slice(0, 21).map(c => c[0]);     // the workbook's MONTHLY POSITION: the services (not the card fee or discounts)
+const srvDept = k => (k === "water" || k === "mold" ? "r" : k === "repair" ? "p" : SRV_LESS.has(k) || k === "ccfee" ? "o" : "c");
+// a service name's column, from the name (the first that fits)
+const SRV_GUESS = [[/credit\s*card|card\s*(service\s*)?(fee|charge)|\bc\.?\s?c\.?\s*fee|processing fee|surcharge/, "ccfee"], [/special\s*disc/, "sdisc"],
+  [/disc(ount)?\b|coupon|promo|\bcredit\b|\boff\b|courtesy|waive/, "disc"],
+  [/maxim|protect|scotch|guard/, n => (/rug/.test(n) ? "maxrug" : /uphol|sofa|couch|chair|fabric|sectional|loveseat|ottoman|mattress/.test(n) ? "maxuph" : "maxcarpet")],
+  [/seal/, "sealer"], [/spot|stain/, "spots"], [/deodor|odor|disinfect|saniti|enzyme|urine|pet\s*treat/, "deodor"], [/stretch/, "stretch"],
+  [/rug/, n => (/plant|pick\s*-?\s*up|delivery|drop\s*-?\s*off|wash|soak|dust/.test(n) ? "rugplant" : "rugin")],
+  [/uphol|sofa|couch|loveseat|love seat|chair|ottoman|sectional|mattress|recliner|cushion|headboard/, "uph"], [/sandless/, "hfsandless"],
+  [/hard\s*wood|\bh\.?\s?f\.?\b|wood floor|polish|refinish|buff|screen\s*(and|&)\s*coat/, "hfpolish"], [/\bvct\b|strip|wax/, "vct"],
+  [/maid|house\s*clean|move\s*-?\s*(in|out)|janitor|deep clean/, "maid"], [/tile|grout|stone|marble|travertine|slate/, "tile"], [/duct|dryer vent/, "duct"],
+  [/mold|mould|remediat|antimicrobial|encapsul|hepa/, "mold"],
+  [/water|dry(ing|out)?\b|dehu|air mover|extract|flood|mitigat|moisture|demo(lition)?|content|pack\s*-?\s*out|equipment|monitor/, "water"],
+  [/repair|rebuild|install|drywall|paint|baseboard|cabinet|plumb|electric|carpentry|trim|replace/, "repair"],
+  [/carpet|room|hall|stair|steam|area|closet|basement|clean/, "carpet"]];
+function srvGuess(name, dep) {
+  const n = String(name || "").toLowerCase();
+  for (const [re, k] of SRV_GUESS) if (re.test(n)) return typeof k === "function" ? k(n) : k;
+  return dep === "r" ? "water" : dep === "p" ? "repair" : "";   // a Restoration job's: Water; a Repairs job's: Repair; else not sorted
+}
+let srvDoc = null;                                         // { key, items: [[job id, day, dep, inv #, type, ¢, lines | null]], map, left, at, t }
+const srvSt = { loading: "", syncing: false, err: "", left: 0 };
+const srvCan = () => canSee("revenue") && (!apiLevel || apiLevel >= SRV_API);
+/** The service lines from..to (n: how many of those days are read on Operations: more read, asked for again), or null
+ *  while they load (asked for here; again after 3 minutes). */
+function srvFor(from, to, n) {
+  const key = `${from}|${to}|${n}`, fresh = srvDoc && srvDoc.key === key && Date.now() - srvDoc.t < 180000;
+  if (!fresh && srvSt.loading !== key && !offline) srvLoad(from, to, key);
+  return srvDoc && srvDoc.key.startsWith(`${from}|${to}|`) ? srvDoc : null;
+}
+async function srvLoad(from, to, key) {
+  srvSt.loading = key;
+  try {
+    const out = await api("srvRead", { from, to });
+    srvDoc = { key, from, to, items: Array.isArray(out.items) ? out.items : [], map: out.map && typeof out.map === "object" ? out.map : {}, left: Number(out.left) || 0, at: out.at || "", t: Date.now() };
+    srvSt.left = srvDoc.left; srvSt.err = "";
+    if (srvDoc.left && !srvSt.syncing) srvSync(from, to, false);
+  } catch (e) { srvSt.err = revErrText(e); }
+  finally { if (srvSt.loading === key) srvSt.loading = ""; }
+  srvRedraw();
+}
+/** Reads the jobs' service lines from Housecall Pro in turns until they're all read (force: all again: Read again). */
+async function srvSync(from, to, force) {
+  if (srvSt.syncing) return;
+  srvSt.syncing = true; srvSt.err = ""; srvPaint();
+  try {
+    for (let n = 0, first = !!force; n < 400; n++) {
+      const out = await api("srvSync", { from, to, force: !!force }, 170000);
+      srvSt.left = Number(out.left) || 0; srvPaint();
+      if (out.done || (!out.read && !first)) break;
+      first = false;
+    }
+  } catch (e) { srvSt.err = revErrText(e); }
+  finally { srvSt.syncing = false; }
+  if (srvDoc) srvDoc.t = 0;
+  srvRedraw();
+}
+const srvStatusText = () => (srvSt.syncing ? `Reading the jobs' service lines from Housecall Pro…${srvSt.left ? ` ${fmt(srvSt.left)} job${srvSt.left === 1 ? "" : "s"} to go` : ""}` : "");
+function srvPaint() { const el = $("srvSyncing"); if (el) el.textContent = srvStatusText(); }
+/** A line's column: the service map's, else the guess; carpet cleaning on a Commercial job is Commercial carpet. */
+function srvKey(doc, name, dep, type) {
+  let k = doc.map[String(name).toLowerCase()] || srvGuess(name, dep);
+  if (k === "carpet" && /commercial/i.test(type || "")) k = "comcarpet";
+  return k;
+}
+/** The money from a to b: each column (¢; discounts as they are, below 0), each day, the card fee each day, the total,
+ *  each service name (its jobs, ¢, departments), the jobs not read yet, and what the jobs' totals have that their
+ *  lines don't (taxes, a discount on the job). */
+function srvSum(doc, a, b) {
+  const o = { col: Object.fromEntries(SRV_COLS.map(c => [c[0], 0]).concat([["unsorted", 0]])), days: {}, fee: {}, total: 0, names: new Map(), unread: 0, notIn: 0, notInN: 0, jobs: 0 };
+  for (const [id, day, dep, , type, c, lines] of doc.items) {
+    if (day < a || day > b) continue;
+    if (!Array.isArray(lines)) { if (c) o.unread++; continue; }
+    o.jobs++;
+    let sum = 0;
+    for (const [name, , cents] of lines) {
+      const low = String(name).toLowerCase(), key = srvKey(doc, name, dep, type);
+      sum += cents;
+      const nm = o.names.get(low) || { name, low, cents: 0, jobs: new Set(), deps: {} };
+      nm.cents += cents; nm.jobs.add(id); nm.deps[dep] = (nm.deps[dep] || 0) + Math.abs(cents); o.names.set(low, nm);
+      if (key === "skip") continue;
+      o.col[key || "unsorted"] += cents; o.total += cents;
+      o.days[day] = (o.days[day] || 0) + cents;
+      if (key === "ccfee") o.fee[day] = (o.fee[day] || 0) + cents;
+    }
+    if (c !== sum) { o.notIn += c - sum; o.notInN++; }
+  }
+  for (const nm of o.names.values()) { const dep = Object.entries(nm.deps).sort((x, y) => y[1] - x[1])[0]; nm.dep = dep ? dep[0] : ""; nm.saved = doc.map[nm.low] || ""; nm.guess = srvGuess(nm.name, nm.dep); }
+  return o;
+}
+const srvShown = (o, k) => (SRV_LESS.has(k) ? -o.col[k] : o.col[k]);   // a discount as what was taken off
+/** The workbook's numbers from the sums: Cleaning (all but Water, Mold and Repair: with the card fee, less the
+ *  discounts), Restoration (Water + Mold), Repairs; the Maxim (and Sealer) shares; each service's position. */
+function srvSplit(o) {
+  const r = o.col.water + o.col.mold, p = o.col.repair;
+  const share = (a, b) => (a + b > 0 ? Math.round(a / (a + b) * 100) : null);
+  const ranked = SRV_RANKED.slice().sort((x, y) => o.col[y] - o.col[x]), pos = {};
+  for (const k of SRV_RANKED) pos[k] = o.col[k] > 0 ? 1 + ranked.filter(x => o.col[x] > o.col[k]).length : null;
+  return { c: o.total - r - p, r, p, pos, fee: o.col.ccfee,
+    att: [["Maxim carpet", share(o.col.maxcarpet, o.col.carpet), "of carpet"], ["Maxim rug", o.col.rugin + o.col.rugplant > 0 ? Math.round(o.col.maxrug / (o.col.rugin + o.col.rugplant) * 100) : null, "of rugs"],
+      ["Maxim upholstery", share(o.col.maxuph, o.col.uph), "of upholstery"], ["Sealer", share(o.col.sealer, o.col.tile), "of tile & grout"]] };
+}
+const srvRedraw = () => { if (view.tab === "office" && ofView.tab === "srv" && !ofTypingNow()) renderOffice(); };
+const srvView = Object.assign({ per: "month", off: 0, from: "", to: "" }, store.get("voda.srvView") || {});
+/** Office › Total Services Revenue: Day, Week, Month, Year or Dates (‹ › go back), Read again, then the services. */
+function srvOfficeEl() {
+  if (apiLevel && apiLevel < SRV_API) return [h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
+    h("p", { class: "meta", text: "Total Services Revenue needs the newest Google script: paste the latest Code.gs, then Deploy › Manage deployments › pencil › New version › Deploy." }))];
+  const today = lbToday(), per = REV_PER[srvView.per] ? srvView.per : "month", off = Math.min(0, Number(srvView.off) || 0);
+  let r;
+  if (per === "dates") {
+    let from = lbOkDay(srvView.from, today) ? srvView.from : `${today.slice(0, 7)}-01`, to2 = lbOkDay(srvView.to, today) ? srvView.to : today;
+    if (to2 < from) [from, to2] = [to2, from];
+    r = { from, to: to2, label: revSpanText(from, to2) };
+  } else r = ofRange(per, off);
+  const to = r.to > today ? today : r.to, len = revLen(r.from, r.to);
+  const save = () => store.set("voda.srvView", { per: srvView.per, off: srvView.off, from: srvView.from, to: srvView.to });
+  const step = n => { if (per === "dates") { srvView.from = lbAddDays(r.from, n * len); srvView.to = lbAddDays(r.to, n * len); } else srvView.off = Math.min(0, off + n); save(); renderOffice(); };
+  const day = (v, k) => h("input", { type: "date", class: "srv-date", id: k === "from" ? "srvFrom" : "srvTo", value: v, max: today, "aria-label": k === "from" ? "From" : "To", "data-nodirty": "1",
+    onchange: e => { if (!lbOkDay(e.target.value, today)) return; srvView[k] = e.target.value; save(); renderOffice(); } });
+  const bar = h("div", { class: "lb-bar" },
+    lbSeg(Object.entries(REV_PER), per, k => { if (k === "dates" && per !== "dates") { srvView.from = r.from; srvView.to = to; } srvView.per = k; srvView.off = 0; save(); renderOffice(); }, "Period"),
+    per === "dates" ? h("div", { class: "of-step srv-dates" }, day(r.from, "from"), h("span", { text: "–" }), day(r.to, "to"))
+      : h("div", { class: "of-step" },
+        h("button", { class: "btn small", type: "button", id: "srvPrev", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        h("strong", { id: "srvLabel", text: r.label + (r.to >= today && r.from <= today && per !== "day" ? " (so far)" : "") }),
+        h("button", { class: "btn small", type: "button", id: "srvNext", "aria-label": "Later", disabled: off >= 0, onclick: () => step(1) }, "›")),
+    h("button", { class: "btn small", type: "button", id: "srvReadBtn", disabled: srvSt.syncing || r.from > today, title: "Read these days' service lines from Housecall Pro again", onclick: () => srvSync(r.from, to, true) }, "Read again"));
+  return [bar, ...srvEl(per, r, today)];
+}
+/** The services for the period on screen. */
+function srvEl(per, r, today) {
+  const to = r.to > today ? today : r.to;
+  if (r.from > today) return [h("div", { class: "panel lb-empty" }, h("p", { class: "meta", text: "These days haven't come yet." }))];
+  // the days must be read on Operations (with each job's type: Commercial carpet) before their jobs' lines can be
+  const have = revDaysFor(r.from, to);
+  if (have && !revSync.busy && !revSync.err) setTimeout(() => revEnsure([[r.from, to, true]], false, "cpm"), 0);
+  const nRead = have ? Object.keys(have).filter(d => d >= r.from && d <= to && Array.isArray(have[d][13])).length : 0;
+  const doc = have ? srvFor(r.from, to, nRead) : null;
+  const status = h("p", { class: "lb-sub rev-status" + (srvSt.syncing || revSync.busy ? " busy" : ""), id: "srvStatus", role: "status" },
+    h("span", { id: "srvSyncing", text: srvStatusText() || (revSync.busy ? `Reading the days from Housecall Pro… ${revSync.what || ""}` : "") }),
+    !srvSt.syncing && !revSync.busy && doc ? `Service lines from Housecall Pro${doc.at ? ` · read ${revReadText(doc.at)}` : ""} · each job's on its day` : null,
+    srvSt.err ? h("span", { class: "dlg-err", text: ` ${srvSt.err}` }) : null);
+  if (!doc) return [status, h("p", { class: "loading", id: "srvLoading", text: "Loading the service lines…" })];
+  const o = srvSum(doc, r.from, to), S = srvSplit(o), money = c => lbMoney(Math.round(c / 100));
+  const pct = c => (o.total ? `${(c / o.total * 100).toFixed(1)}%` : "–");
+  const tiles = h("div", { class: "cash-tots srv-tots", id: "srvTots" },
+    h("div", { class: "cash-t all" }, h("small", { text: `Services · ${revSpanText(r.from, to)}` }), h("b", { id: "srvTotal", text: money(o.total) }),
+      h("span", { text: `${fmt(o.jobs)} job${o.jobs === 1 ? "" : "s"} · ${money(o.total - S.fee)} after the card fee` })),
+    [["c", "Cleaning", S.c], ["r", "Restoration", S.r], ["p", "Repairs", S.p]].map(([k, name, v]) => h("div", { class: "cash-t " + k, "data-dep": k },
+      h("small", null, h("i", { class: "rev-dot " + k }), name), h("b", { text: money(v) }), h("span", { text: pct(v) }))));
+  const rows = SRV_COLS.map(([k, name, short]) => ({ k, name, short, v: srvShown(o, k) })).concat(o.col.unsorted ? [{ k: "unsorted", name: "Not sorted yet", short: "Not sorted", v: o.col.unsorted }] : []);
+  const table = h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-table", id: "srvTable" },
+    h("thead", null, h("tr", null, h("th", { text: "Service" }), h("th", { class: "num", text: "$" }), h("th", { class: "num" }, h("span", { class: "t-long", text: "% of total" }), h("span", { class: "t-short", text: "%" })),
+      h("th", { class: "num" }, h("span", { class: "t-long", text: "Position" }), h("span", { class: "t-short", text: "#" })))),
+    h("tbody", null, rows.map(x => h("tr", { "data-k": x.k, class: (x.v ? "" : "zero") + (x.k === "unsorted" ? " srv-uns" : "") },
+      h("th", null, h("i", { class: "rev-dot " + srvDept(x.k) }), h("span", { class: "t-long", text: x.name }), h("span", { class: "t-short", text: x.short }), SRV_LESS.has(x.k) ? h("small", { class: "t-long", text: " taken off" }) : null),
+      h("td", { class: "num", text: lbCash(x.v / 100) }), h("td", { class: "num", text: x.v ? pct(x.v) : "–" }),
+      h("td", { class: "num", text: S.pos[x.k] ? `#${S.pos[x.k]}` : "" })))),
+    h("tfoot", null, h("tr", null, h("th", { text: "Total" }), h("td", { class: "num" }, h("b", { text: lbCash(o.total / 100) })), h("td", { class: "num", text: "100%" }), h("td"))))),
+    h("p", { class: "srv-att", id: "srvAtt" }, S.att.map(([n, v, of]) => h("span", null, h("b", { text: `${n}: ${v === null ? "–" : `${v}%`}` }), ` ${of}`))));
+  // each day (a year: each month): the money, and without the card fee
+  const lines = [];
+  if (per === "year") for (let m = 1; m <= 12; m++) { const a = `${r.from.slice(0, 4)}-${String(m).padStart(2, "0")}-01`; if (a > to) break; const b = lbAddDays(`${m === 12 ? Number(a.slice(0, 4)) + 1 : a.slice(0, 4)}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`, -1);
+    let v = 0, f = 0; for (const [d, x] of Object.entries(o.days)) if (d >= a && d <= b) { v += x; f += o.fee[d] || 0; } lines.push([MONTHS[m - 1], v, f]); }
+  else for (let d = r.from; d <= to; d = lbAddDays(d, 1)) lines.push([lbDayText(d), o.days[d] || 0, o.fee[d] || 0]);
+  const days = h("div", { class: "panel" }, h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-days", id: "srvDays" },
+    h("thead", null, h("tr", null, h("th", { text: per === "year" ? "Month" : "Day" }), h("th", { class: "num", text: "$ per day" }), h("th", { class: "num" }, h("span", { class: "t-long", text: "Without the card fee" }), h("span", { class: "t-short", text: "No card fee" })))),
+    h("tbody", null, lines.map(([t, v, f]) => h("tr", { class: v ? "" : "zero" }, h("th", { text: t }), h("td", { class: "num", text: lbCash(v / 100) }), h("td", { class: "num", text: lbCash((v - f) / 100) })))))));
+  // the service names in these days and where each goes (an admin picks; a guess until then)
+  const names = [...o.names.values()].sort((a, b) => (!(a.saved || a.guess)) - (!(b.saved || b.guess)) || Math.abs(b.cents) - Math.abs(a.cents));
+  const admin = isAdmin(), picks = new Map();
+  const opts = [["", "Not sorted"], ...SRV_COLS.map(c => [c[0], c[1]]), ["skip", "Not counted"]];
+  const nameRows = names.map(nm => {
+    const cur = nm.saved || nm.guess || "";
+    const sel = admin ? h("select", { class: "srv-pick", "aria-label": `${nm.name}: goes to` }, opts.map(([v, t]) => h("option", { value: v, text: t }))) : null;
+    if (sel) { sel.value = cur; picks.set(nm.low, sel); }
+    return h("tr", { "data-name": nm.low, class: cur ? "" : "srv-uns" },
+      h("th", null, nm.name), h("td", { class: "num srv-x", text: fmt(nm.jobs.size) }), h("td", { class: "num", text: lbCash(nm.cents / 100) }),
+      h("td", null, sel || h("span", { text: (opts.find(x => x[0] === cur) || ["", "Not sorted"])[1] }), nm.saved ? null : h("small", { class: "srv-guess", text: cur ? " guess" : " pick one" })));
+  });
+  const save = admin ? h("button", { class: "btn small primary", type: "button", id: "srvSave", onclick: async ev => {
+    const b = ev.currentTarget, map = {};
+    for (const [low, sel] of picks) { const nm = o.names.get(low); if (sel.value !== (nm.saved || "")) map[nm.name] = sel.value; }
+    if (!Object.keys(map).length) { toast("Nothing changed"); return; }
+    b.disabled = true;
+    try { const out = await api("srvMapPut", { map }); srvDoc.map = out.map || srvDoc.map; toast(`Saved: ${Object.keys(map).length} name${Object.keys(map).length === 1 ? "" : "s"}`); srvRedraw(); }
+    catch (e) { toast(errText(e, "The service names")); } finally { b.disabled = false; }
+  } }, "Save the columns") : null;
+  const unsorted = names.filter(nm => !(nm.saved || nm.guess)).length, guessed = names.filter(nm => !nm.saved && nm.guess).length;
+  const namesBox = h("details", { class: "panel srv-names", id: "srvNames", open: unsorted || (admin && guessed) ? true : null },
+    h("summary", null, h("b", { text: `Service names from Housecall Pro (${fmt(names.length)})` }),
+      h("span", { class: "lb-sub", text: ` · ${unsorted ? `${fmt(unsorted)} to sort · ` : ""}${guessed ? `${fmt(guessed)} guessed` : "all picked"}` })),
+    h("p", { class: "hint", text: "Each name on the jobs' lines in these days, and the column it goes to. A guess (from the name, else the job's department) counts until it's picked; Save keeps the picks, guesses included, for every period. Carpet cleaning on a Commercial job counts as Commercial carpet." }),
+    names.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-ntable", id: "srvNameTable" },
+      h("thead", null, h("tr", null, h("th", { text: "Name in Housecall Pro" }), h("th", { class: "num srv-x", text: "Jobs" }), h("th", { class: "num", text: "$" }), h("th", { text: "Goes to" }))),
+      h("tbody", null, nameRows))) : h("p", { class: "lb-sub", text: "No service lines read in these days yet." }),
+    save ? h("div", { class: "rp-actions" }, save) : null);
+  const notes = [];
+  if (o.unread) notes.push(h("p", { class: "hint", id: "srvUnread", text: `${fmt(o.unread)} job${o.unread === 1 ? "" : "s"} still to read: the totals grow as they come in.` }));
+  if (o.notIn) notes.push(h("p", { class: "hint", id: "srvNotIn", text: `The jobs' totals differ from their lines by ${lbCash(o.notIn / 100)} on ${fmt(o.notInN)} job${o.notInN === 1 ? "" : "s"} (a discount or tax on the job, not on a line). Operations counts the jobs' totals; this counts the lines.` }));
+  const xlBtn = h("button", { class: "btn small", type: "button", id: "srvXlBtn", disabled: per !== "month" ? true : null, title: per !== "month" ? "Pick a month: your workbook has a tab per month" : "Compare this month with its tab in your workbook",
+    onclick: () => srvXlPick(o, r) }, "Check against my Excel");
+  const how = howFold("srvHow", h("p", { class: "hint", text: "Total Services Revenue: each job's lines in Housecall Pro (its services, the card fee, discounts), on the job's day, in the columns of the TOTAL SERVICES REVENUE workbook. Total: the services and the card fee less the discounts. Cleaning: all but Water, Mold and Repair (with the card fee, less the discounts), as in the workbook; Restoration: Water and Mold; Repairs: Repair. Position: the services by money (not the card fee or discounts). Check against my Excel reads the workbook on this device; the file isn't sent anywhere." }), "How it's counted");
+  return [status, tiles, h("div", { class: "rp-actions srv-acts" }, xlBtn), table, namesBox, days, ...notes, how];
+}
+/** The workbook's column for a header ("1) Carpet cleaning", "Carpet cl.", "Deodorizing", "Disinfecting"…), or "". */
+function srvXlKey(t) {
+  const n = String(t || "").toLowerCase().replace(/^\s*\d+\)\s*/, "").trim();
+  const R = [[/^carpet/, "carpet"], [/^commercial/, "comcarpet"], [/^stretch/, "stretch"], [/in-?\s?house rug/, "rugin"], [/in-?\s?plant rug/, "rugplant"], [/^uphol/, "uph"],
+    [/sandless/, "hfsandless"], [/polish|^h\.?f\.? cl/, "hfpolish"], [/vct/, "vct"], [/maid/, "maid"], [/tile/, "tile"], [/water/, "water"], [/mold/, "mold"], [/duct/, "duct"],
+    [/^repair/, "repair"], [/maxim carpet/, "maxcarpet"], [/maxim rug/, "maxrug"], [/maxim uph/, "maxuph"], [/sealer/, "sealer"], [/^spots?/, "spots"], [/deodor|disinfect/, "deodor"],
+    [/c\.?\s?c\.? fee|card fee/, "ccfee"], [/special disc/, "sdisc"], [/^discount/, "disc"]];
+  for (const [re, k] of R) if (re.test(n)) return k;
+  return "";
+}
+/** Check against my Excel: picks the workbook, reads this month's tab (on this device) and compares it with these
+ *  numbers, column by column and day by day. */
+function srvXlPick(o, r) {
+  const tab = `${new Date(Number(r.from.slice(0, 4)), Number(r.from.slice(5, 7)) - 1, 1).toLocaleString("en-US", { month: "long" })} ${r.from.slice(0, 4)}`;
+  const input = h("input", { type: "file", accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", hidden: true });
+  input.addEventListener("change", async () => {
+    const f = input.files && input.files[0];
+    input.remove();
+    if (!f) return;
+    let tabs;
+    try { tabs = await lbReadXlsx(await f.arrayBuffer(), n => n.trim().toLowerCase() === tab.toLowerCase()); }
+    catch (e) { toast("Couldn't read that file: is it an .xlsx?"); return; }
+    if (!tabs || !tabs.length) { toast(`No tab named “${tab}” in that file.`); return; }
+    srvXlDlg(o, r, tab, tabs[0].rows);
+  });
+  document.body.append(input);
+  input.click();
+}
+function srvXlDlg(o, r, tab, rows) {
+  // the workbook's columns: the headers in its 2nd row (B on), the month's totals in the row named "$ TOTAL", each day in the rows numbered 1–31
+  const head = rows[1] || [], cols = [];
+  head.forEach((t, i) => { const k = i ? srvXlKey(t) : ""; if (k && !cols.some(c => c.k === k)) cols.push({ k, i }); });
+  const totRow = rows.find(x => x && /^\s*\$\s*total\s*$/i.test(String(x[0] || ""))) || [];
+  const num = v => (typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) : 0);
+  const xl = {}; for (const c of cols) xl[c.k] = num(totRow[c.i]);
+  const xlTotal = cols.reduce((s, c) => s + (SRV_LESS.has(c.k) ? -xl[c.k] : xl[c.k]), 0);
+  const dayXl = {};
+  for (let i = 2; i < Math.min(rows.length, 40); i++) { const x = rows[i] || [], dn = Number(x[0]); if (!Number.isInteger(dn) || dn < 1 || dn > 31) continue;
+    dayXl[`${r.from.slice(0, 7)}-${String(dn).padStart(2, "0")}`] = cols.reduce((s, c) => s + (SRV_LESS.has(c.k) ? -num(x[c.i]) : num(x[c.i])), 0); }
+  const diffRow = (name, a, b, cls) => { const d = b - a; return h("tr", { class: (Math.abs(d) >= 100 ? "srv-off" : "") + (cls ? " " + cls : "") },
+    h("th", { text: name }), h("td", { class: "num", text: lbCash(a / 100) }), h("td", { class: "num", text: lbCash(b / 100) }), h("td", { class: "num", text: d ? `${d > 0 ? "+" : "−"}${lbCash(Math.abs(d) / 100)}` : "✓" })); };
+  const srvRows = SRV_COLS.filter(([k]) => xl[k] || o.col[k]).map(([k, name]) => diffRow(name, xl[k] || 0, srvShown(o, k)));
+  if (o.col.unsorted) srvRows.push(diffRow("Not sorted yet (in the app)", 0, o.col.unsorted, "srv-uns"));
+  const off = Object.keys(dayXl).concat(Object.keys(o.days)).filter((d, i, a) => a.indexOf(d) === i && d >= r.from && d <= r.to).sort()
+    .filter(d => Math.abs((o.days[d] || 0) - (dayXl[d] || 0)) >= 100);
+  const nOff = SRV_COLS.filter(([k]) => Math.abs((xl[k] || 0) - srvShown(o, k)) >= 100).length;
+  openDialog(h("div", { class: "rp-dlg srv-xl-dlg" },
+    h("h3", { id: "dlgTitle", text: `Your Excel vs Housecall Pro · ${tab}` }),
+    h("p", { class: "meta", id: "srvXlSum", text: `${nOff ? `${fmt(nOff)} column${nOff === 1 ? " differs" : "s differ"} by a dollar or more` : "Every column matches (to the dollar)"} · total ${lbCash(xlTotal / 100)} in the Excel, ${lbCash(o.total / 100)} here. Read from the file on this device: it isn't sent anywhere.` }),
+    !cols.length ? h("p", { class: "dlg-err", text: `No columns found in “${tab}”'s second row.` }) : null,
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-xl", id: "srvXlTable" },
+      h("thead", null, h("tr", null, ["Column", "Your Excel", "Housecall Pro", "Difference"].map((t, i) => h("th", { class: i ? "num" : "", text: t })))),
+      h("tbody", null, srvRows), h("tfoot", null, diffRow("Total", xlTotal, o.total, "srv-tot")))),
+    o.unread ? h("p", { class: "hint", text: `${fmt(o.unread)} job${o.unread === 1 ? "" : "s"} not read yet: check again when they're in.` }) : null,
+    h("h4", { text: off.length ? `Days that differ (${fmt(off.length)})` : "Every day matches (to the dollar)" }),
+    off.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-xl", id: "srvXlDays" },
+      h("thead", null, h("tr", null, ["Day", "Your Excel", "Housecall Pro", "Difference"].map((t, i) => h("th", { class: i ? "num" : "", text: t })))),
+      h("tbody", null, off.map(d => diffRow(lbDayText(d), dayXl[d] || 0, o.days[d] || 0))))) : null,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
+}
 const REV_CMP_YEARS = 5;                                // compare with up to 5 years before
 // a day's numbers: [Restoration $, jobs, Cleaning $, jobs, Repairs $, jobs, Other $, jobs, visits, read at (ms), other job types]
 const REV_DEPTS = [["r", "Restoration", "Rest."], ["c", "Cleaning", "Clean."], ["p", "Repairs", "Repairs"], ["o", "Other", "Other"]];
@@ -12861,7 +13151,7 @@ new MutationObserver(stickSoon).observe(document.body, { childList: true, subtre
 addEventListener("resize", stickSoon);
 function revRedraw() {
   if (view.tab === "revenue") renderRevenue(); else if (view.tab === "marketing") renderMarketing();
-  else if (view.tab === "office" && (ofView.tab === "cpm" || ofView.tab === "rp") && !ofTypingNow()) renderOffice();
+  else if (view.tab === "office" && (ofView.tab === "cpm" || ofView.tab === "rp" || ofView.tab === "srv") && !ofTypingNow()) renderOffice();
   if (cpmJobsRedraw && dlg.open) cpmJobsRedraw();
   if (mktJobsRedraw && dlg.open) mktJobsRedraw();
   if (estRepRedraw && dlg.open) estRepRedraw();
@@ -17560,7 +17850,7 @@ let ofLoading = false, ofErr = "", ofOld = false;
 let ofPending = {}, ofSaving = false, ofSaveTimer = null, ofSaveState = "", ofSaveErr = "";
 const ofView = Object.assign({ tab: "today", per: "week", off: 0, who: "", day: "" }, store.get(K_OF_VIEW) || {});
 const ofSaveView = () => store.set(K_OF_VIEW, { tab: ofView.tab, per: ofView.per, who: ofView.who });
-const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", trc: "Tech Report Cards", est: "Estimates", kpi: "KPI", cpm: "Clients Per Month", rp: "Referral Partners" };
+const OF_TABS = { today: "Office Calls", score: "Office Scorecard", pc: "Past clients", trc: "Tech Report Cards", est: "Estimates", kpi: "KPI", srv: "Total Services Revenue", cpm: "Clients Per Month", rp: "Referral Partners" };
 const OF_EST_API = 95;                                   // the Google script version with Office › Estimates (Cleaning's)
 const OF_EST_FU_API = 99;                                // ... and who follows them up, with the call marks
 const OF_PER = { day: "Day", week: "Week", month: "Month", year: "Year" };
@@ -17665,7 +17955,7 @@ function ofTabsEl(cur) {
   const list = [];
   for (const [k, t] of Object.entries(OF_TABS)) {
     if (k === "rp") continue;   // after Marketing
-    const ok = k === "kpi" ? kpiCan() : k === "trc" ? trcCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());   // Tech Report Cards: after Past clients
+    const ok = k === "kpi" ? kpiCan() : k === "trc" ? trcCan() : k === "srv" ? of && srvCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());   // Tech Report Cards: after Past clients; Total Services Revenue: after Attendance
     if (ok) list.push([k, t]);
     if (k === "kpi" && atInOf()) list.push(["at", "Attendance"]);
   }
@@ -17743,22 +18033,22 @@ function renderOffice() {
     return;
   }
   const cfg = ofCfg(), admin = isAdmin();
-  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()) && (k !== "trc" || trcCan()));
+  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()) && (k !== "trc" || trcCan()) && (k !== "srv" || srvCan()));
   if (!shown.some(([k]) => k === ofView.tab)) ofView.tab = "today";
   const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm", rp = ofView.tab === "rp", trc = ofView.tab === "trc";   // People and Load from Excel: the KPI's on its tab; Clients Per Month and Referral Partners: their Excels
   const tabs = ofTabsEl(ofView.tab);
-  const top = ofTopEl(tabs, admin ? [
+  const top = ofTopEl(tabs, admin && ofView.tab !== "srv" ? [
       cpm ? null : trc ? h("button", { class: "btn", type: "button", id: "trcWhoBtn", onclick: () => openTrcWho() }, "Who calls")
         : rp ? h("button", { class: "btn", type: "button", id: "rpPartnersBtn", disabled: !rpData, onclick: () => rpPartnersDlg(rpShownMonth()) }, "Partners")
         : h("button", { class: "btn", type: "button", id: "ofPeopleBtn", onclick: () => kpi ? openKpiPeople() : openOfPeople() }, "People"),
       h("button", { class: "btn", type: "button", id: "ofExcelBtn", onclick: () => kpi ? openKpiExcel() : cpm ? openCpmExcel() : rp ? openRpExcel() : trc ? openTrcExcel() : openOfExcel() }, "Load from Excel")] : null);
-  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && !kpi && !cpm && !rp && !trc) {
+  if (!cfg.people.length && ofView.tab !== "pc" && ofView.tab !== "est" && ofView.tab !== "srv" && !kpi && !cpm && !rp && !trc) {
     box.replaceChildren(top, tabs, h("div", { class: "panel lb-empty" }, h("h2", { text: "No office people yet" }),
       h("p", { class: "meta", text: admin ? "Tap People to add each office person, her numbers and her login, or Load from Excel to bring in 14. OFFICE SCORECARDS." : "An admin hasn't set up the office scorecards yet." })),
       ofErr ? h("p", { class: "dlg-err", text: ofErr }) : "");
     return;
   }
-  const body = ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : cpm ? cpmEl() : rp ? rpEl() : trc ? trcEl() : ofTodayEl();
+  const body = ofView.tab === "srv" ? srvOfficeEl() : ofView.tab === "score" ? ofScoreEl() : ofView.tab === "pc" ? pcEl() : ofView.tab === "est" ? ofEstEl() : kpi ? kpiEl() : cpm ? cpmEl() : rp ? rpEl() : trc ? trcEl() : ofTodayEl();
   ofTuck([top, tabs, ...body]);
   box.replaceChildren(...[top, tabs, ...body, ofErr ? h("p", { class: "dlg-err", text: ofErr }) : null].filter(Boolean));
   if (ofView.tab === "today") ofShowSave();
