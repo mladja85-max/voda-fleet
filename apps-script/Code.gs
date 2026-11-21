@@ -150,7 +150,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 117;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 118;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -270,6 +270,7 @@ function doPost(e) {
     req.by = user.name;   // every change is stamped with the signed-in person, whatever the app sends
     switch (req.action) {
       case "me":
+        if (user.role === "admin") { try { hubTidyOnce_(); } catch (e) { /* the folders move in on their next use */ } }
         return json_({ ok: true, user: publicUser_(user), settings: canChangeSettings_(user), owner: settingsOwner_() });
       case "changePasscode":
         return json_(withLock_(function () { return changePasscode_(req); }));
@@ -1159,13 +1160,70 @@ function svcDelete_(req) {
 /* ---- Receipts: a truck's service receipt (a PDF or a photo) read by Google's own text reading (the file is turned into
    a Google Doc for a moment, its text taken, the Doc thrown away), kept in a private Drive folder and linked to its
    service record. The app fills the service from the text; someone checks it and saves. ---- */
-const RCPT_FOLDER = "VODA Hub receipts", RCPT_MAX = 10 * 1024 * 1024;
-function rcptFolder_() {
-  const P = PropertiesService.getScriptProperties(), id = P.getProperty("RCPT_FOLDER_ID");
+const RCPT_MAX = 10 * 1024 * 1024;
+function rcptFolder_() { return hubSub_("RCPT_FOLDER_ID"); }   // VODA Hub › Receipts
+
+/* ---- Drive: everything the app keeps sits in one private folder, "VODA Hub": Receipts, Contractor invoices and
+   Backups inside it. A folder made before it (in My Drive, under its old name) is moved in and renamed once: the same
+   folder, so its files and the app's links to them stay. One the owner moves out on purpose stays where he put it. ---- */
+const HUB_FOLDER = "VODA Hub";
+// each folder: its Script Property (its id) → [its old name in My Drive, its name inside VODA Hub]
+const HUB_SUBS = { RCPT_FOLDER_ID: ["VODA Hub receipts", "Receipts"], CP_FOLDER_ID: ["VODA Hub - Contractor invoices", "Contractor invoices"], BACKUP_FOLDER_ID: ["VODA Prime backups", "Backups"] };
+function hubFolder_() {
+  const P = PropertiesService.getScriptProperties(), id = P.getProperty("HUB_FOLDER_ID");
   if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* made again below */ } }
-  const f = DriveApp.createFolder(RCPT_FOLDER);
-  P.setProperty("RCPT_FOLDER_ID", f.getId());
+  const f = DriveApp.createFolder(HUB_FOLDER);
+  P.setProperty("HUB_FOLDER_ID", f.getId());
   return f;
+}
+/** The app's folder kept in Script Property `prop`, or the one with its old name (backups: found by name before), or null. */
+function hubFind_(prop) {
+  const P = PropertiesService.getScriptProperties(), id = P.getProperty(prop);
+  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* gone: by name below */ } }
+  const it = DriveApp.getFoldersByName(HUB_SUBS[prop][0]);
+  while (it.hasNext()) { const f = it.next(); if (!f.isTrashed()) return f; }
+  return null;
+}
+/** Into VODA Hub with its new name, once (its id noted as moved: not again, even if he moves it out later). */
+function hubMoveIn_(prop, f) {
+  const P = PropertiesService.getScriptProperties();
+  P.setProperty(prop, f.getId());
+  if (P.getProperty(prop + "_IN") === f.getId()) return f;
+  try {
+    const hub = hubFolder_(), it = f.getParents();
+    let inside = false;
+    while (it.hasNext()) if (it.next().getId() === hub.getId()) inside = true;
+    if (!inside) f.moveTo(hub);
+    if (f.getName() === HUB_SUBS[prop][0]) f.setName(HUB_SUBS[prop][1]);
+    P.setProperty(prop + "_IN", f.getId());
+  } catch (e) { /* stays where it is (it still works); tried again next time */ }
+  return f;
+}
+/** The app's folder for `prop` inside VODA Hub: the one it has (moved in once), else made there. */
+function hubSub_(prop) {
+  const f = hubFind_(prop);
+  if (f) return hubMoveIn_(prop, f);
+  const made = hubFolder_().createFolder(HUB_SUBS[prop][1]), P = PropertiesService.getScriptProperties();
+  P.setProperty(prop, made.getId()); P.setProperty(prop + "_IN", made.getId());
+  return made;
+}
+/** Once, when an admin opens the app: the folders made before VODA Hub moved into it now (not when each is next used). */
+function hubTidyOnce_() {
+  const P = PropertiesService.getScriptProperties();
+  if (P.getProperty("HUB_TIDY") === "1") return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return;   // busy (a long read): the next time the app opens
+  try {
+    if (P.getProperty("HUB_TIDY") === "1") return;
+    Object.keys(HUB_SUBS).forEach(function (prop) { const f = hubFind_(prop); if (f) hubMoveIn_(prop, f); });   // none made yet: nothing made now
+    P.setProperty("HUB_TIDY", "1");
+  } finally { lock.releaseLock(); }
+}
+/** Run once from the editor, if wanted: the same, now. */
+function hubTidy() {
+  PropertiesService.getScriptProperties().deleteProperty("HUB_TIDY");
+  hubTidyOnce_();
+  Logger.log('The app\'s Drive folders are inside "' + HUB_FOLDER + '": ' + Object.keys(HUB_SUBS).map(function (k) { return HUB_SUBS[k][1]; }).join(", ") + ".");
 }
 /** A receipt this script put in that folder, or null: nothing else in the Drive can be opened through the app. */
 function rcptFileOk_(id) {
@@ -7021,7 +7079,6 @@ const CP_PARTY_SHEET = "Payroll emails";
 const CP_PARTY_COLS = ["Name", "Email", "Kind"];
 const CP_KINDS = ["accounting", "vendor"];
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
-const CP_FOLDER = "VODA Hub - Contractor invoices";
 const CP_VENDOR = "Monumental Flooring";
 const CP_COMPANY = "VODA Cleaning & Restoration";
 const CP_EMAIL = /^[^\s@,;<>"']+@[^\s@,;<>"']+\.[A-Za-z]{2,}$/;
@@ -7109,13 +7166,7 @@ function cpEmails_(v) {
   return { list: out };
 }
 /** The private Drive folder for the invoices' PDFs (made the first time). */
-function cpFolder_() {
-  const P = PropertiesService.getScriptProperties(), id = P.getProperty("CP_FOLDER_ID");
-  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* made again below */ } }
-  const f = DriveApp.createFolder(CP_FOLDER);
-  P.setProperty("CP_FOLDER_ID", f.getId());
-  return f;
-}
+function cpFolder_() { return hubSub_("CP_FOLDER_ID"); }   // VODA Hub › Contractor invoices
 /** A file this script put in that folder, or null: nothing else in the Drive can be read or emailed through the app. */
 function cpFileOk_(id) {
   if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(id || ""))) return null;
@@ -8008,14 +8059,13 @@ function payPut_(req) {
 
 /* ---------------- weekly backup ---------------- */
 
-const BACKUP_FOLDER = "VODA Prime backups";
 const BACKUP_KEEP = 12;
 
 /** Run once: a full copy of this sheet every Sunday around 2 AM, newest 12 kept. Makes the first one now. */
 function backupSetup() {
   backupSchedule_();
   const name = backupNow();
-  Logger.log('Weekly backup is on: every Sunday around 2 AM into the Drive folder "' + BACKUP_FOLDER + '" (newest ' + BACKUP_KEEP + ' kept). First backup made: ' + name);
+  Logger.log('Weekly backup is on: every Sunday around 2 AM into the Drive folder "' + HUB_FOLDER + ' › ' + HUB_SUBS.BACKUP_FOLDER_ID[1] + '" (newest ' + BACKUP_KEEP + ' kept). First backup made: ' + name);
 }
 function backupStop() {
   let n = 0;
@@ -8029,8 +8079,7 @@ function backupSchedule_() {
 /** A copy of the whole sheet in the backups folder; older ones beyond the newest 12 go to the Drive trash. */
 function backupNow() {
   const ss = SpreadsheetApp.getActive();
-  const it = DriveApp.getFoldersByName(BACKUP_FOLDER);
-  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  const folder = hubSub_("BACKUP_FOLDER_ID");   // VODA Hub › Backups (the old "VODA Prime backups" moved in)
   const prefix = ss.getName() + " backup ";
   const name = prefix + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
   DriveApp.getFileById(ss.getId()).makeCopy(name, folder);
