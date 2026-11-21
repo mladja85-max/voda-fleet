@@ -1741,9 +1741,14 @@ dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
 #cashJobs .cash-m { display: none; } #cashJobs th.l, #cashJobs td.l { text-align: left; }
 #cashJobs td.cash-paid { white-space: normal; } #cashJobs td.cash-paid small { color: var(--muted); }
 #cashJobs td.cash-old { color: var(--soon); font-weight: 600; }
+#cashJobs tr.cash-grp td { border-top: 2px solid var(--line); background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--accent); font-size: .86rem; }
+#cashJobs tr.cash-grp.old td { background: color-mix(in srgb, var(--soon) 10%, transparent); color: var(--soon); }
+#cashJobs tr.cash-grp.later td, #cashJobs tr.cash-grp.none td { background: color-mix(in srgb, var(--muted) 8%, transparent); color: var(--muted); }
+#cashJobs tr.cash-grp td.cash-p b { white-space: nowrap; } #cashJobs .cash-gl { display: none; }
 @media (max-width: 640px) {
   #cashJobs .cash-p { display: none; }
   #cashJobs .cash-m { display: block; font-size: .74rem; color: var(--muted); white-space: normal; font-weight: 500; text-align: left; } #cashJobs .cash-m.old { color: var(--soon); }
+  #cashJobs .cash-gl { display: block; }
   #cashJobs th, #cashJobs td { padding-left: .3rem; padding-right: .3rem; } #cashJobs th.l, #cashJobs td.l { text-align: left; } #cashJobs { font-size: .82rem; }
 }
 .cash-parts { display: grid; gap: .15rem; margin-top: .35rem; }
@@ -12622,34 +12627,49 @@ function cashDayDlg(items, title) {
       h("tfoot", null, h("tr", null, h("th", { class: "l", colspan: "5", text: "Total" }), h("td", { class: "num" }, h("b", { text: lbCash(tot / 100) })))))) : h("p", { class: "meta", text: "No payments came in." }),
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
 }
-/** The jobs that brought the money in (a department's tile, or the total): one line per job, the most first: the
- *  client, the invoice (opens in Housecall Pro), the job's day (orange: from before the period), when its payments came
- *  in, and how much; the department too when there's more than one. A phone: the client and the job's day under the
- *  invoice. */
-function cashJobsDlg(items, title, from) {
+/** The jobs that brought the money in (a department's tile, or the total): one line per job, by the job's day, the
+ *  oldest first, in groups with their totals: each older month (jobs from before the period), then the period's jobs,
+ *  then jobs dated after it (deposits); in a day, the most first. Each line: the client, the invoice (opens in
+ *  Housecall Pro), the job's day (orange: from before the period), when its payments came in, how much; the department
+ *  too when there's more than one. A phone: the client and the job's day under the invoice. */
+function cashJobsDlg(items, title, from, to) {
   const dep = k => (REV_DEPTS.find(([x]) => x === k) || [k, "Other"])[1];
   const by = new Map();
   for (const x of items) {
     const j = by.get(x[6]) || { id: x[6], day: x[3], dep: ["r", "c", "p"].includes(x[2]) ? x[2] : "o", inv: x[4], client: x[5], amt: 0, pays: [] };
     j.amt += x[1]; j.pays.push(x[0]); by.set(x[6], j);
   }
-  const list = [...by.values()].sort((a, b) => b.amt - a.amt || (a.client || "").localeCompare(b.client || ""));
+  const list = [...by.values()].sort((a, b) => (!a.day) - (!b.day) || (a.day < b.day ? -1 : a.day > b.day ? 1 : 0) || b.amt - a.amt || (a.client || "").localeCompare(b.client || ""));
   const tot = list.reduce((n, j) => n + j.amt, 0), many = new Set(list.map(j => j.dep)).size > 1;
+  // the groups, in the list's order: each older month, the period, after it (and jobs with no day, last)
+  const monthName = d => new Date(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, 1).toLocaleString("en-US", { month: "long" }) + " " + d.slice(0, 4);
+  const groups = [];
+  for (const j of list) {
+    const [key, label, cls] = !j.day ? ["none", "No job day", ""]
+      : j.day < from ? [j.day.slice(0, 7), monthName(j.day) + (j.day.slice(0, 7) === from.slice(0, 7) ? ` · before ${lbDayText(from).replace(/^\w+, /, "")}` : ""), "old"]
+      : !to || j.day <= to ? ["now", `Jobs dated ${revSpanText(from, to || from)}`, "now"] : ["later", `Jobs dated after ${lbDayText(to).replace(/^\w+, /, "")}`, "later"];
+    let g = groups[groups.length - 1];
+    if (!g || g.key !== key) groups.push(g = { key, label, cls, jobs: [] });
+    g.jobs.push(j);
+  }
   const paid = j => { const d = [...new Set(j.pays)].sort().map(v => lbDayText(v).replace(/^\w+, /, "")); return d.length > 3 ? `${d.slice(0, 3).join(", ")} +${d.length - 3}` : d.join(", "); };
   const old = j => j.day && j.day < from;
   const heads = ["Client", "Invoice", "Job's day", ...(many ? ["Department"] : []), "Paid", "Amount"];
   openDialog(h("div", { class: "rp-dlg cash-dlg cash-jobs-dlg" },
     h("h3", { id: "dlgTitle", text: `Money in · ${title}` }),
-    h("p", { class: "meta", text: `${fmt(list.length)} job${list.length === 1 ? "" : "s"} · ${fmt(items.length)} payment${items.length === 1 ? "" : "s"} · ${lbCash(tot / 100)} · the most first${list.some(old) ? ` · orange: a job from before ${lbDayText(from)}` : ""}` }),
+    h("p", { class: "meta", text: `${fmt(list.length)} job${list.length === 1 ? "" : "s"} · ${fmt(items.length)} payment${items.length === 1 ? "" : "s"} · ${lbCash(tot / 100)} · by the job's day, the oldest first${list.some(old) ? ` · orange: a job from before ${lbDayText(from)}` : ""}` }),
     list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cash-list", id: "cashJobs" },
       h("thead", null, h("tr", null, heads.map((t, i) => h("th", { class: (i === heads.length - 1 ? "num" : "l") + (t === "Client" || t === "Job's day" || t === "Department" ? " cash-p" : ""), text: t })))),
-      h("tbody", null, list.map(j => h("tr", { "data-job": j.id, class: old(j) ? "cash-oldj" : "" },
+      h("tbody", null, groups.flatMap(g => [groups.length > 1 ? h("tr", { class: "cash-grp " + g.cls, "data-grp": g.key },
+          h("td", { class: "l cash-p" }, h("b", { text: g.label })), h("td", { class: "l" }, h("b", { class: "cash-gl", text: g.label })), h("td", { class: "cash-p" }), many ? h("td", { class: "cash-p" }) : null,
+          h("td", { class: "l", text: `${fmt(g.jobs.length)} job${g.jobs.length === 1 ? "" : "s"}` }), h("td", { class: "num" }, h("b", { text: lbCash(g.jobs.reduce((n, j) => n + j.amt, 0) / 100) }))) : null,
+        ...g.jobs.map(j => h("tr", { "data-job": j.id, "data-day": j.day || "", class: old(j) ? "cash-oldj" : "" },
         h("td", { class: "l cash-p", text: j.client || "–" }),
         h("td", { class: "l" }, j.inv ? hcpLink("job", j.id, `#${j.inv}`) : "–", h("small", { class: "cash-m" + (old(j) ? " old" : ""), text: `${j.client || "–"} · ${j.day ? lbDayText(j.day) : "–"}` })),
         h("td", { class: "l cash-p" + (old(j) ? " cash-old" : ""), text: j.day ? lbDayText(j.day) : "–" }),
         many ? h("td", { class: "l cash-p" }, h("i", { class: "rev-dot " + j.dep }), dep(j.dep)) : null,
         h("td", { class: "l cash-paid" }, paid(j), j.pays.length > 1 ? h("small", { text: ` · ${j.pays.length} payments` }) : null),
-        h("td", { class: "num", text: lbCash(j.amt / 100) })))),
+        h("td", { class: "num", text: lbCash(j.amt / 100) })))]).filter(Boolean)),
       h("tfoot", null, h("tr", null, h("td", { class: "cash-p" }), h("th", { class: "l", text: "Total" }), h("td", { class: "cash-p" }), many ? h("td", { class: "cash-p" }) : null, h("td"),
         h("td", { class: "num" }, h("b", { text: lbCash(tot / 100) }))))))
       : h("p", { class: "meta", text: "No payments came in." }),
@@ -12727,10 +12747,10 @@ function cashEl(per, r, today, jt) {
   const span = revSpanText(r.from, to);
   const tiles = h("div", { class: "cash-tots", id: "cashTots" },
     h("div", { class: "cash-t all cash-tot-t" }, h("small", { text: `Money in · ${span}` }),
-      h("b", Object.assign({ id: "cashTotal" }, all.t[1] ? { class: "cash-open-b", role: "button", tabindex: "0", title: "The jobs that paid", onclick: () => cashJobsDlg(all.items, span, r.from),
-        onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cashJobsDlg(all.items, span, r.from); } } } : {}), revCash(all.t[0])),
+      h("b", Object.assign({ id: "cashTotal" }, all.t[1] ? { class: "cash-open-b", role: "button", tabindex: "0", title: "The jobs that paid", onclick: () => cashJobsDlg(all.items, span, r.from, to),
+        onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cashJobsDlg(all.items, span, r.from, to); } } } : {}), revCash(all.t[0])),
       h("span", { text: pays(all.t[1]) }), ...cashSplitEl(doc.cmp, r.from, to, all.old)),
-    shown.map(([k, name]) => { const its = () => all.items.filter(x => (["r", "c", "p"].includes(x[2]) ? x[2] : "o") === k), go = () => cashJobsDlg(its(), `${name} · ${span}`, r.from);
+    shown.map(([k, name]) => { const its = () => all.items.filter(x => (["r", "c", "p"].includes(x[2]) ? x[2] : "o") === k), go = () => cashJobsDlg(its(), `${name} · ${span}`, r.from, to);
       return h("div", Object.assign({ class: "cash-t " + k + (all[k][1] ? " cash-open-t" : ""), "data-dep": k }, all[k][1] ? { role: "button", tabindex: "0", title: `${name}: the jobs that paid`, onclick: go,
           onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } } : {}),   // (not on to what opens: the same key would press it)
         h("small", null, h("i", { class: "rev-dot " + k }), name), h("b", null, revCash(all[k][0])),
