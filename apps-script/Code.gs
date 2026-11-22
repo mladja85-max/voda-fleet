@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 128;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 129;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -6022,7 +6022,7 @@ const PC_JOB_COLS = ["Job id", "Customer id", "Invoice #", "Status", "Day", "Cre
 const PC_CUST_COLS = ["Customer id", "Name", "Phone", "Other phone", "Tags", "Company", "Do not service", "Changed", "Referred by"];
 const PC_CALL_COLS = ["At", "Day", "Customer id", "Group", "Last service", "Result", "Who", "Call back on", "Note"];
 const PC_GROUPS = [6, 12, 18, 24, 36], PC_BACK_MONTHS = 42, PC_PAGES = 15, PC_READ_PAGES = 5, PC_STALE = 15 * 60e3, PC_MISSED_MAX = 200;
-const PC_ASSIGN = "PC_ASSIGN";   // who calls each group: { "6": [user ids], ... }; a group nobody has is everyone's
+const PC_ASSIGN = "PC_ASSIGN";   // who calls each group: { "6": [user ids], ... }; a group nobody has: Admins only
 const PC_SCHEMA = "PC_SCHEMA", PC_V = "3";   // 2: the jobs' tags; 3: every year since the first and each job's amount (Commercial clients) (read all again once)
 const PC_FROM = "2010-01-01";   // the first read (and all again) goes back to here: every job there is (the lists use the last 42 months)
 const PC_DONE = "PC_BACKFILL_DONE", PC_AT = "PC_SYNC_AT", PC_START = "PC_START", PC_CUR = "PC_CURSOR", PC_SORTS = "PC_SORTS", PC_BUSY = "PC_BUSY";
@@ -6322,11 +6322,11 @@ function pcAssign_() {
   PC_GROUPS.forEach(function (g) { const ids = Array.isArray(a[g]) ? a[g].map(String).filter(Boolean) : []; if (ids.length) out[g] = ids; });
   return out;
 }
-/** The groups someone sees: Admins and Office (any day) all of them; anyone else the ones they're picked for and the
- *  ones nobody is picked for. */
+/** The groups someone sees: Admins and Office (any day) all of them; anyone else only the ones they're picked for
+ *  (none picked: no Past clients tab). */
 function pcMine_(user, A) {
   if (ofEditor_(user)) return PC_GROUPS.slice();
-  return PC_GROUPS.filter(function (g) { return !A[g] || A[g].indexOf(String(user.id)) !== -1; });
+  return PC_GROUPS.filter(function (g) { return !!A[g] && A[g].indexOf(String(user.id)) !== -1; });
 }
 /** For Admins: each group's people, with their names ({ 6: [{ id, name }] }). */
 function pcAssignNames_(A) {
@@ -6373,7 +6373,7 @@ function pcRead_(req, user) {
   }
   const start = P.getProperty(PC_START) || today;
   const K = pcKnown_(tz), by = K.by, cust = K.cust, marks = K.marks;
-  // the groups this person calls (Admins pick who calls which; a group nobody has is everyone's)
+  // the groups this person calls (Admins pick who calls which; a group nobody has: Admins and Office (any day) only)
   const A = pcAssign_(), mine = pcMine_(user, A), who = { mine: mine, assign: admin ? pcAssignNames_(A) : undefined };
   const only = function (G) { Object.keys(G).forEach(function (g) { if (mine.indexOf(Number(g)) === -1) delete G[g]; }); return G; };
   const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")); };
@@ -8603,7 +8603,8 @@ function ofRead_(user, year) {
   if (!pcAuto) { try { withTabLock_(function () { pcAuto = pcAutoFrom_(true); if (pcAuto) ofPcSync_(pcAuto); }); } catch (e) { pcAuto = pcAutoFrom_(false); } }
   const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_(),
     estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined, pcAuto: pcAuto,
-    trcOk: trcOk_(user), trcWho: user.role === "admin" ? trcWho_() : undefined };
+    trcOk: trcOk_(user), trcWho: user.role === "admin" ? trcWho_() : undefined,
+    pcMine: pcMine_(user, pcAssign_()) };   // her Past clients groups: none, no Past clients tab
   lbRows_(ofSheet_(false)).forEach(function (r) {
     if (r.key === "config") out.config = lbParse_(r.json);
     else if (lbYm_(r.key) && r.key.indexOf(y + "-") === 0) out.months[r.key] = lbParse_(r.json);

@@ -18237,7 +18237,7 @@ function ofTabsEl(cur) {
   const list = [];
   for (const [k, t] of Object.entries(OF_TABS)) {
     if (k === "rp") continue;   // after Marketing
-    const ok = k === "kpi" ? kpiCan() : k === "trc" ? trcCan() : k === "srv" ? of && srvCan() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());   // Tech Report Cards: after Past clients; Total Services Revenue: after Attendance
+    const ok = k === "kpi" ? kpiCan() : k === "trc" ? trcCan() : k === "srv" ? of && srvCan() : k === "pc" ? of && pcTabOn() : of && (k !== "est" || estOk) && (k !== "cpm" || cpmCan());   // Tech Report Cards: after Past clients; Total Services Revenue: after Attendance
     if (ok) list.push([k, t]);
     if (k === "kpi" && atInOf()) list.push(["at", "Attendance"]);
   }
@@ -18315,7 +18315,7 @@ function renderOffice() {
     return;
   }
   const cfg = ofCfg(), admin = isAdmin();
-  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()) && (k !== "trc" || trcCan()) && (k !== "srv" || srvCan()));
+  const shown = Object.entries(OF_TABS).filter(([k]) => (k !== "est" || ((!apiLevel || apiLevel >= OF_EST_API) && ofData.estOk !== false)) && (k !== "kpi" || kpiCan()) && (k !== "cpm" || cpmCan()) && (k !== "rp" || rpCan()) && (k !== "trc" || trcCan()) && (k !== "srv" || srvCan()) && (k !== "pc" || pcTabOn()));
   if (!shown.some(([k]) => k === ofView.tab)) ofView.tab = "today";
   const kpi = ofView.tab === "kpi", cpm = ofView.tab === "cpm", rp = ofView.tab === "rp", trc = ofView.tab === "trc";   // People and Load from Excel: the KPI's on its tab; Clients Per Month and Referral Partners: their Excels
   const tabs = ofTabsEl(ofView.tab);
@@ -19872,10 +19872,12 @@ const PC_GROUPS = [6, 12, 18, 24, 36];
 const PC_ASSIGN_API = 91;                                // the Google script version where Admins pick who calls each group
 /** The groups this person sees (the ones she's picked for and nobody's; Admins and Office (any day): all). */
 const pcShown = () => (pcData && Array.isArray(pcData.mine) ? PC_GROUPS.filter(g => pcData.mine.includes(g)) : PC_GROUPS);
+/** Past clients is a tab only for someone with a group to call (every group picked for others: no tab). */
+const pcTabOn = () => { const m = pcData && Array.isArray(pcData.mine) ? pcData.mine : ofData && Array.isArray(ofData.pcMine) ? ofData.pcMine : null; return !m || m.length > 0; };
 /** The group open on screen: the one picked, or her first. */
 const pcGroupOn = () => { const sh = pcShown(); return sh.includes(pcView.g) ? pcView.g : sh[0]; };
-/** For Admins, on each group: who calls it ("Everyone" when nobody is picked). */
-const pcWhoEl = g => (pcData && pcData.assign ? h("small", { class: "pc-who", text: (pcData.assign[g] || []).map(x => x.name).join(" · ") || "Everyone" }) : null);
+/** For Admins, on each group: who calls it ("Admins only" when nobody is picked). */
+const pcWhoEl = g => (pcData && pcData.assign ? h("small", { class: "pc-who", text: (pcData.assign[g] || []).map(x => x.name).join(" · ") || "Admins only" }) : null);
 /** Nothing to call: every group is someone else's. */
 const pcNoneEl = () => h("div", { class: "panel", id: "pcNone" }, h("h2", { text: "No past-client groups for you" }),
   h("p", { class: "meta", text: "Each group is picked for someone else. Ask Mike to pick one for you." }));
@@ -19953,7 +19955,7 @@ setInterval(() => {
   if (performance.now() - pcPolledAt >= 30000) pcPoll();
 }, 5000);
 
-/** Admins: who calls each group (one or more CSRs; a group nobody is picked for is everyone's). */
+/** Admins: who calls each group (one or more CSRs; a group nobody is picked for: Admins only). */
 async function openPcAssign() {
   const err = h("p", { class: "dlg-err", role: "alert" }), box = h("div", { class: "pc-asg", id: "pcAsgList" }, h("p", { class: "loading", text: "Loading the CSRs…" }));
   const now = {};
@@ -19968,7 +19970,7 @@ async function openPcAssign() {
     } catch (e) { err.textContent = errText(e, "Nothing"); save.disabled = false; save.textContent = "Save"; }
   } }, "Save");
   openDialog(h("h3", { id: "dlgTitle", text: "Who calls which group" }),
-    howFold("pcAssignHow", h("p", { class: "meta", text: "Tap the CSRs for each group (one or more). Each one then sees only her groups, and the ones nobody is picked for. You, the other admins and Office (any day) see them all." }), "How it works"),
+    howFold("pcAssignHow", h("p", { class: "meta", text: "Tap the CSRs for each group (one or more). Each one sees only her groups; someone with none has no Past clients tab. You, the other admins and Office (any day) see them all, a group nobody is picked for too." }), "How it works"),
     box, err,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Cancel" }), save)));
   try {
@@ -19981,7 +19983,7 @@ async function openPcAssign() {
     if (!people.length) { box.replaceChildren(h("p", { class: "meta", text: "No CSRs yet. Make someone a CSR in Settings › Users and invites." })); return; }
     box.replaceChildren(...PC_GROUPS.map(g => {
       const hint = h("small", { class: "meta" });
-      const show = () => { hint.textContent = now[g].length ? "" : "Nobody picked: everyone sees it"; };
+      const show = () => { hint.textContent = now[g].length ? "" : "Nobody picked: only admins see it"; };
       show();
       return h("div", { class: "pc-asg-g", "data-g": String(g) }, h("b", { text: `${g} months` }),
         h("div", { class: "acc" }, people.map(u => h("button", { class: "chip-btn sm", type: "button", "data-u": u.id, "aria-pressed": String(now[g].includes(u.id)), onclick: ev => {
@@ -20824,7 +20826,7 @@ function comEl() {
   if ((!comDoc || Date.now() - comDoc.t > 10 * 60e3) && !comLoading && !comErr) setTimeout(comLoad, 0);
   if (comErr) return box(h("p", { class: "dlg-err" }, comErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { comErr = ""; comLoad(); } }, "Try again")));
   if (!comDoc) return box(h("p", { class: "loading", text: "Loading the commercial clients…" }));
-  const goPc = h("button", { class: "btn small", type: "button", onclick: () => { ofView.tab = "pc"; if (typeof ofSaveView === "function") ofSaveView(); renderOffice(); } }, "Open Past clients");
+  const goPc = !pcTabOn() ? null : h("button", { class: "btn small", type: "button", onclick: () => { ofView.tab = "pc"; if (typeof ofSaveView === "function") ofSaveView(); renderOffice(); } }, "Open Past clients");
   if (!comDoc.ready) return box(h("p", { class: "meta", text: "Housecall Pro hasn't been read yet: an Admin reads it once on Office › Past clients (it reads every year there)." }), goPc);
   const reread = comDoc.reread ? h("div", { class: "com-reread", id: "comReread" }, h("p", { class: "meta", text: "One more step: read Housecall Pro all again once (Past clients), so this list has every year (not only the last 3½) and what each client spent." }),
     comDoc.admin && typeof pcBackfill === "function" ? h("button", { class: "btn primary small", type: "button", id: "comRereadGo", onclick: async () => { try { await pcBackfill(true); } finally { comDoc = null; renderOffice(); } } }, "Read all again now") : goPc) : null;
