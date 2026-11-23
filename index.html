@@ -13365,7 +13365,8 @@ function srvEl(per, r, today) {
     if (!Object.keys(map).length) { toast("Nothing changed"); return; }
     b.disabled = true;
     try { const out = await api("srvMapPut", { map }); srvDoc.map = out.map || srvDoc.map; toast(`Saved: ${Object.keys(map).length} name${Object.keys(map).length === 1 ? "" : "s"}`); srvRedraw(); }
-    catch (e) { toast(errText(e, "The service names")); } finally { b.disabled = false; }
+    catch (e) { toast(e && e.error && !["network", "offline"].includes(e.error) && errText(e) === errText({}) ? `The columns weren't saved (${e.error}). Try again.` : errText(e, "The service names")); }
+    finally { b.disabled = false; }
   } }, "Save the columns") : null;
   const unsorted = names.filter(nm => !(nm.saved || nm.guess)).length, guessed = names.filter(nm => !nm.saved && nm.guess).length;
   const namesBox = h("details", { class: "panel srv-names", id: "srvNames", open: unsorted || (admin && guessed) ? true : null },
