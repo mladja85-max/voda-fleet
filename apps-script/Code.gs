@@ -1215,7 +1215,8 @@ function rcptFolder_() { return hubSub_("RCPT_FOLDER_ID"); }   // VODA Hub › R
    folder, so its files and the app's links to them stay. One the owner moves out on purpose stays where he put it. ---- */
 const HUB_FOLDER = "VODA Hub";
 // each folder: its Script Property (its id) → [its old name in My Drive, its name inside VODA Hub]
-const HUB_SUBS = { RCPT_FOLDER_ID: ["VODA Hub receipts", "Receipts"], CP_FOLDER_ID: ["VODA Hub - Contractor invoices", "Contractor invoices"], BACKUP_FOLDER_ID: ["VODA Prime backups", "Backups"] };
+const HUB_SUBS = { RCPT_FOLDER_ID: ["VODA Hub receipts", "Receipts"], CP_FOLDER_ID: ["VODA Hub - Contractor invoices", "Contractor invoices"], BACKUP_FOLDER_ID: ["VODA Prime backups", "Backups"],
+  RB_FOLDER_ID: ["VODA Hub - Rebuild estimates", "Rebuild estimates"] };
 function hubFolder_() {
   const P = PropertiesService.getScriptProperties(), id = P.getProperty("HUB_FOLDER_ID");
   if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* made again below */ } }
@@ -7064,9 +7065,16 @@ function kpiImport_(req) {
    REBUILD_CALENDAR_FROM (yyyy-MM-dd; set to the day it's turned on). Turn it on once from the editor: Run >
    rebuildCalendarSetup (Google asks for the calendar permission; then every 15 minutes it reads what changed in Housecall
    Pro and books). No longer approved: its event's title gets "CANCELED - " in front (the vendor may have renamed it);
-   approved again: taken off. The "Rebuild calendar" tab keeps each one booked. ---- */
+   approved again: taken off. The "Rebuild calendar" tab keeps each one booked.
+   The estimate's PDF on the event: of the PDFs on the estimate in Housecall Pro, the one with the approved amount in it
+   (its text read by Google, as a receipt's is), copied into VODA Hub › Rebuild estimates, shared view-only with the
+   vendor's Google account (Script Property REBUILD_VENDOR_EMAIL; no "shared with you" email; never anyone with the link)
+   and attached to the event. Looked for when it's booked, then with the notes once an hour for a month (a PDF added
+   later), until one is on it. Several with that amount: the one whose biggest amount it is (its total), then the
+   newest. Each PDF read once. ---- */
 const RB_SHEET = "Rebuild calendar";
-const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title", "Notes added", "Notes checked at"];
+const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title", "Notes added", "Notes checked at", "PDF", "PDFs read"];
+const RB_PDF_PER_RUN = 5, RB_PDF_MAX = 25 * 1024 * 1024, RB_PDF_ON = "attached: ";   // PDFs read a run (Google reads each one: seconds)
 const RB_NOTES_EVERY = 60 * 60e3, RB_NOTES_DAYS = 30, RB_NOTES_PER_RUN = 20;   // new Private notes: each estimate looked at once an hour, for a month, 20 a run
 const RB_TITLE = "APPROVED - NEED TO SCHEDULE - ", RB_CANCEL = "CANCELED - ", RB_HOUR = 6, RB_NAME = "VODA rebuilds";
 function rbSheet_() {
@@ -7082,11 +7090,13 @@ function rbRead_(s) {
   if (s.getLastRow() < 2) return out;
   s.getRange(2, 1, s.getLastRow() - 1, RB_COLS.length).getValues().forEach(function (r, i) {
     const id = String(r[0] || "").trim();
-    let keys = [];
+    let keys = [], read = [];
     try { keys = JSON.parse(String(r[8] || "[]")); } catch (e) { keys = []; }
+    try { read = JSON.parse(String(r[11] || "[]")); } catch (e) { read = []; }
     const at = r[9] instanceof Date ? r[9].getTime() : Date.parse(String(r[9] || "")) || 0;
     const day = r[3] instanceof Date ? Utilities.formatDate(r[3], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(r[3] || "");
-    if (id) out[id] = { row: i + 2, rec: { event: String(r[4] || ""), status: String(r[6] || ""), day: day, keys: Array.isArray(keys) ? keys.map(String) : [], checked: at } };
+    if (id) out[id] = { row: i + 2, rec: { event: String(r[4] || ""), status: String(r[6] || ""), day: day, keys: Array.isArray(keys) ? keys.map(String) : [], checked: at,
+      pdf: String(r[10] || ""), read: Array.isArray(read) ? read.map(String) : [] } };
   });
   return out;
 }
@@ -7149,7 +7159,8 @@ function rebuildBook_() {
       const start = Utilities.parseDate(day + " " + String(RB_HOUR).padStart(2, "0") + ":00", tz, "yyyy-MM-dd HH:mm");
       const ev = cal.createEvent(title, start, new Date(start.getTime() + 3600e3), { location: addr, description: desc });
       try { ev.setColor(CalendarApp.EventColor.RED); } catch (e) { /* the color is a nicety */ }
-      appendRows_(s, RB_COLS.length, [[eid, String(r[1]), String(r[4] || ""), day, ev.getId(), now, "booked", title, JSON.stringify(notes.map(function (n) { return n.k; })), now]]);
+      const pdf = rbPdf_(eid, amt, ev.getId(), [], out, id);
+      appendRows_(s, RB_COLS.length, [[eid, String(r[1]), String(r[4] || ""), day, ev.getId(), now, "booked", title, JSON.stringify(notes.map(function (n) { return n.k; })), now, pdf.status, JSON.stringify(pdf.read)]]);
       out.booked++;
       return;
     }
@@ -7161,7 +7172,7 @@ function rebuildBook_() {
     } else if (x.rec.status === "canceled" && approved) {
       if (ev && ev.getTitle().indexOf(RB_CANCEL) === 0) ev.setTitle(ev.getTitle().slice(RB_CANCEL.length));
       s.getRange(x.row, 7).setValues([["booked"]]); out.back++;
-    } else if (x.rec.status === "booked" && approved) rbNotesLater_(x, r, eid, ev, s, out, today);
+    } else if (x.rec.status === "booked" && approved) rbNotesLater_(x, r, eid, ev, s, out, today, id);
   });
   return out;
 }
@@ -7169,7 +7180,7 @@ function rebuildBook_() {
  *  kept, those too): once an hour for a month after it was approved, Housecall Pro is asked for the estimate; each new
  *  note goes in above the amounts (at the end if they were taken out). Only adds: anything typed on the calendar stays;
  *  a note already in the description isn't added again. */
-function rbNotesLater_(x, r, eid, ev, s, out, today) {
+function rbNotesLater_(x, r, eid, ev, s, out, today, calId) {
   if (!ev || (out.checked || 0) >= RB_NOTES_PER_RUN || Date.now() - x.rec.checked < RB_NOTES_EVERY) return;
   const dayMs = Date.parse(x.rec.day + "T12:00:00Z");
   if (dayMs && Date.parse(today + "T12:00:00Z") - dayMs > RB_NOTES_DAYS * 864e5) return;
@@ -7192,6 +7203,100 @@ function rbNotesLater_(x, r, eid, ev, s, out, today) {
   if (addr && typeof ev.getLocation === "function" && ev.getLocation() === String(r[5] || "")) ev.setLocation(addr);
   s.getRange(x.row, 9, 1, 2).setValues([[JSON.stringify(keys), now]]);
   if (add.length) out.notes = (out.notes || 0) + add.length;
+  // its PDF, when none is on it yet (one added in Housecall Pro since)
+  if (x.rec.pdf.indexOf(RB_PDF_ON) !== 0) {
+    const pdf = rbPdf_(eid, Number(r[13]) || Number(r[12]) || 0, ev.getId(), x.rec.read, out, calId);
+    s.getRange(x.row, 11, 1, 2).setValues([[pdf.status, JSON.stringify(pdf.read)]]);
+  }
+}
+/** "11,636.44" written anywhere in the text (with or without its commas): the amount in cents. */
+function rbHasAmount_(text, cents) {
+  const whole = String(Math.floor(cents / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",?"), part = String(cents % 100).padStart(2, "0");
+  return new RegExp("(^|[^\\d.,])" + whole + "\\." + part + "(?!\\d)").test(String(text || ""));
+}
+/** The biggest amount (with cents) in the text, in cents: an estimate's total. */
+function rbTopAmount_(text) {
+  let top = 0;
+  (String(text || "").match(/\d{1,3}(?:,\d{3})+\.\d{2}(?!\d)|\d+\.\d{2}(?!\d)/g) || []).forEach(function (m) { top = Math.max(top, Math.round(Number(m.replace(/,/g, "")) * 100)); });
+  return top;
+}
+/** The estimate's attachments in Housecall Pro (its own and its options'): [{ id, file_name, url, file_type, at }]. */
+function rbAttachments_(eid) {
+  let g = hcpGet_("/estimates/" + encodeURIComponent(eid), { "expand[]": "attachments" });
+  if (g.error && g.error !== "no_key") g = hcpGet_("/estimates/" + encodeURIComponent(eid), {});
+  if (g.error) return { error: g.error };
+  const e = g.data ? (g.data.estimate || g.data) : {}, all = [].concat(Array.isArray(e.attachments) ? e.attachments : []), seen = {};
+  (Array.isArray(e.options) ? e.options : []).forEach(function (o) { if (o && Array.isArray(o.attachments)) Array.prototype.push.apply(all, o.attachments); });
+  return { list: all.filter(function (a) {
+    const k = String((a && (a.id || a.url)) || "");
+    if (!k || seen[k] || !a.url) return false;
+    seen[k] = true; return true;
+  }).map(function (a) { return { id: String(a.id || a.url), name: String(a.file_name || "Estimate.pdf"), url: String(a.url), type: String(a.file_type || ""), at: String(a.created_at || a.updated_at || "") }; }) };
+}
+/** One attachment's bytes: its link as Housecall Pro gives it (a signed link), else with the Housecall Pro key. */
+function rbDownload_(url) {
+  let res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+  if (res.getResponseCode() >= 300 && /^https:\/\/[^/]*housecallpro\.com\//i.test(url) && hcpKey_()) res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { Authorization: "Token " + hcpKey_() } });
+  return res.getResponseCode() < 300 ? res.getBlob() : null;
+}
+/** Google's own calls (Drive sharing, the calendar's attachments) as this account. */
+function rbGoogle_(method, url, body) {
+  const o = { method: method, muteHttpExceptions: true, headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() } };
+  if (body) { o.contentType = "application/json"; o.payload = JSON.stringify(body); }
+  const res = UrlFetchApp.fetch(url, o);
+  let data = null;
+  try { data = JSON.parse(res.getContentText() || "null"); } catch (e) { data = null; }
+  return { code: res.getResponseCode(), data: data };
+}
+/** The estimate's PDF with the approved amount on its calendar event: { status (for the tab), read (the PDFs read that
+ *  didn't have it, not read again) }. */
+function rbPdf_(eid, amt, evId, read, out, calId) {
+  read = (read || []).slice();
+  const cents = Math.round((Number(amt) || 0) * 100), P = PropertiesService.getScriptProperties();
+  const emails = String(P.getProperty("REBUILD_VENDOR_EMAIL") || "").split(/[\s,;]+/).filter(function (m) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); });
+  if (!emails.length) return { status: "waiting: add Script Property REBUILD_VENDOR_EMAIL (the vendor's Google account)", read: read };
+  if (!cents || !evId || !calId) return { status: "", read: read };
+  const got = rbAttachments_(eid);
+  if (got.error) return { status: "Housecall Pro: " + got.error, read: read };
+  const pdfs = got.list.filter(function (a) { return /pdf/i.test(a.type) || /\.pdf$/i.test(a.name); });
+  if (!pdfs.length) return { status: "no PDF on the estimate yet", read: read };
+  const hits = [];
+  let left = false, err = "";
+  pdfs.forEach(function (a) {
+    if (read.indexOf(a.id) !== -1) return;
+    if ((out.pdfReads || 0) >= RB_PDF_PER_RUN) { left = true; return; }
+    out.pdfReads = (out.pdfReads || 0) + 1;
+    try {
+      const blob = rbDownload_(a.url);
+      if (!blob) { err = "couldn't download " + a.name; return; }
+      const bytes = blob.getBytes();
+      if (rcptKind_(bytes) !== "application/pdf" || bytes.length > RB_PDF_MAX) { read.push(a.id); return; }
+      const text = rcptOcr_(Utilities.newBlob(bytes, "application/pdf", a.name));
+      if (rbHasAmount_(text, cents)) hits.push({ a: a, bytes: bytes, top: rbTopAmount_(text) === cents });
+      else read.push(a.id);
+    } catch (e) { err = "couldn't read " + a.name; }
+  });
+  const money = rbMoney_(cents / 100);
+  if (!hits.length) return { status: left ? "more PDFs to read" : err ? "error: " + err : "no PDF with " + money + " yet (" + read.length + " read)", read: read };
+  hits.sort(function (p, q) { return (q.top - p.top) || String(q.a.at).localeCompare(String(p.a.at)); });
+  const best = hits[0].a, file = hubSub_("RB_FOLDER_ID").createFile(Utilities.newBlob(hits[0].bytes, "application/pdf", best.name));
+  const drop = function (why) { try { file.setTrashed(true); } catch (e) { /* gone */ } return { status: "error: " + why, read: read }; };
+  // view-only for the vendor's account, without Drive's "shared with you" email
+  for (let i = 0; i < emails.length; i++) {
+    const sh = rbGoogle_("post", "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(file.getId()) + "/permissions?sendNotificationEmail=false&fields=id",
+      { type: "user", role: "reader", emailAddress: emails[i] });
+    if (sh.code >= 300) return drop("couldn't share the PDF (" + sh.code + ")");
+  }
+  // on the event, after any attachments already on it
+  const evUrl = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/events/" + encodeURIComponent(String(evId).replace(/@google\.com$/, ""));
+  const cur = rbGoogle_("get", evUrl + "?fields=attachments");
+  if (cur.code >= 300) return drop("couldn't open the event (" + cur.code + ")");
+  const list = (cur.data && Array.isArray(cur.data.attachments) ? cur.data.attachments : []).map(function (x) { return { fileUrl: x.fileUrl, title: x.title, mimeType: x.mimeType }; });
+  list.push({ fileUrl: "https://drive.google.com/file/d/" + file.getId() + "/view?usp=drivesdk", title: best.name, mimeType: "application/pdf" });
+  const put = rbGoogle_("patch", evUrl + "?supportsAttachments=true&fields=id", { attachments: list.slice(-25) });
+  if (put.code >= 300) return drop("couldn't attach it to the event (" + put.code + ")");
+  out.pdfs = (out.pdfs || 0) + 1;
+  return { status: RB_PDF_ON + best.name, read: read };
 }
 /** Every 15 minutes (rebuildCalendarSetup turns it on): what changed in Housecall Pro, then the calendar. */
 function rebuildCalendarTick() {
