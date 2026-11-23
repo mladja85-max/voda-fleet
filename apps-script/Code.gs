@@ -4769,7 +4769,9 @@ function cashCmp_(rows, have, items, from, to, jf, jt) {
    service map (an admin picks it once; the app guesses the rest). ---- */
 const SRV_SHEET = "Service lines";
 const SRV_COLS = ["Job id", "Job day", "Department", "Invoice #", "Job type", "Charged (cents)", "Read at", "Lines"];
-const SRV_MAP = "SRV_MAP";   // Script Property: { "service name, lower case": column key }
+const SRV_MAP = "SRV_MAP";   // (before the tab) Script Property: { "service name, lower case": column key }
+// each service name's column, on its own tab (a Script Property holds 9 KB: a year's names didn't fit)
+const SRV_MAP_SHEET = "Service columns", SRV_MAP_COLS = ["Name in Housecall Pro", "Column"];
 const SRV_KEYS = ["carpet", "comcarpet", "stretch", "rugin", "rugplant", "uph", "hfpolish", "hfsandless", "vct", "maid", "tile", "water", "mold", "duct", "repair",
   "maxcarpet", "maxrug", "maxuph", "sealer", "spots", "deodor", "ccfee", "disc", "sdisc", "skip"];
 function srvSheet_(create) {
@@ -4883,7 +4885,16 @@ function srvRead_(req) {
   return { ok: true, items: items, left: left, map: srvMap_(), at: at ? new Date(at).toISOString() : "" };
 }
 function srvMap_() {
-  let m = {};
+  const s = SpreadsheetApp.getActive().getSheetByName(SRV_MAP_SHEET);
+  if (s) {
+    const m = {};
+    if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, 2).getValues().forEach(function (r) {
+      const n = String(r[0] || "").replace(/^'/, "").replace(/\s+/g, " ").trim().toLowerCase(), k = String(r[1] || "").trim();
+      if (n && SRV_KEYS.indexOf(k) !== -1) m[n] = k;
+    });
+    return m;
+  }
+  let m = {};   // not moved to the tab yet: the Script Property
   try { m = JSON.parse(PropertiesService.getScriptProperties().getProperty(SRV_MAP) || "{}") || {}; } catch (e) { m = {}; }
   return m && typeof m === "object" ? m : {};
 }
@@ -4896,9 +4907,14 @@ function srvMapPut_(req) {
     if (!name) return;
     if (!k) delete m[name]; else if (SRV_KEYS.indexOf(k) !== -1) m[name] = k;
   });
-  const text = JSON.stringify(m);
-  if (text.length > 8800) return { ok: false, error: "too_big" };
-  PropertiesService.getScriptProperties().setProperty(SRV_MAP, text);
+  // the whole list on the tab, A to Z (a name that starts like a formula kept as text); the old Script Property goes
+  const names = Object.keys(m).sort(), s = pcSheet_(SRV_MAP_SHEET, SRV_MAP_COLS);
+  if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, 2).clearContent();
+  if (names.length) {
+    if (s.getMaxRows() < names.length + 1) s.insertRowsAfter(s.getMaxRows(), names.length + 1 - s.getMaxRows() + 50);
+    s.getRange(2, 1, names.length, 2).setNumberFormat("@").setValues(names.map(function (n) { return [/^[=+\-@]/.test(n) ? "'" + n : n, m[n]]; }));
+  }
+  PropertiesService.getScriptProperties().deleteProperty(SRV_MAP);
   return { ok: true, map: m };
 }
 
