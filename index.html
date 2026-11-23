@@ -3200,6 +3200,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .er-pick .er-sel, .er-pick .er-typed { width: 100%; }
 .er-many .er-add, .er-many .er-typed { width: 100%; box-sizing: border-box; }
 .er-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-size: .86rem; font-weight: 600; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.cp-find { width: 100%; box-sizing: border-box; font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 4px 0 8px; }
 .er-tile { all: unset; cursor: pointer; font-size: .74rem; font-weight: 700; padding: 2px 7px; margin-left: -6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
 .er-tile[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .er-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -15065,7 +15066,7 @@ function openRepJob(id) {
       })()),
     (j.mon || []).length ? h("div", { class: "rp-invs", id: "repJobInvs" }, h("h4", { text: "Invoices from Monumental" }), j.mon.map(v => h("div", { class: "rp-line", "data-n": v.n },
       h("span", { text: [`#${v.n}`, v.d ? repShortDay(v.d) : "", v.k].filter(Boolean).join(" · ") }),
-      h("b", null, lbCash(v.a / 100), " ", v.paid || j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: v.b && v.paid ? `Paid · ${v.b}` : "Paid" })
+      h("b", null, lbCash(v.a / 100), " ", v.paid || j.t.mPaidAt ? h("span", { class: "rp-tag ok", text: v.b && v.paid ? `Paid · ${v.b}${cpRefOf(v.b, v.ref) ? ` · ${cpRefOf(v.b, v.ref)}` : ""}` : "Paid" })
         : v.b ? h("span", { class: "rp-tag sent", text: `Sent to accounting · ${v.b}` }) : h("span", { class: "rp-tag dep", text: "To pay" }), " ",
         v.b && !v.paid ? null : h("button", { class: "btn small", type: "button", title: "Remove this invoice from the job", "aria-label": `Remove invoice ${v.n}`, onclick: async ev => {
           const b = ev.currentTarget; b.disabled = true;
@@ -15118,7 +15119,8 @@ const repMonToPay = j => (j.t && j.t.mPaidAt ? 0 : (j.mon || []).reduce((n, i) =
 /** ... of it, what's sent to accounting and waiting there (cents). */
 const repMonSent = j => (j.t && j.t.mPaidAt ? 0 : (j.mon || []).reduce((n, i) => n + (i.b && !i.paid ? Number(i.a) || 0 : 0), 0));
 /** The batches a job's invoices were paid in (paid) or sent in: "MON-2026-11-13". */
-const repMonBatches = (j, paid) => [...new Set((j.mon || []).filter(i => i.b && !!i.paid === !!paid).map(i => i.b))].join(", ");
+const repMonBatches = (j, paid) => [...new Set((j.mon || []).filter(i => i.b && !!i.paid === !!paid).map(i => i.b))]
+  .map(id => { const r = paid ? cpRefOf(id, ((j.mon || []).find(i => i.b === id) || {}).ref) : ""; return r ? `${id} (${r})` : id; }).join(", ");
 /** A Monumental invoice from its PDF's lines: { n, d, items: [{ name, addr, desc, a }], a (cents) } or null. The layout is
  *  their Google Sheets invoice: "Invoice <number>", the date, then Activity / Description / Qty / Amount rows. */
 function repMonParse(pages) {
@@ -15438,6 +15440,12 @@ const CP_BEFORE_JOBS_API = 79;                            // ... and the jobs th
 /** A batch of invoices paid before the app: paid, with no paid day. */
 const cpBefore = b => b.status === "paid" && !b.paidOn;
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
+/** How a batch was paid, with its number: "Check #1420", "ACH trace #88812", "Cash"; "" when neither is known. */
+const CP_REF_WORD = { Check: "Check #", ACH: "ACH trace #", Wire: "Wire confirmation #", Zelle: "Zelle confirmation #", Card: "Card confirmation #" };
+const cpPayRef = (how, ref) => (ref ? (CP_REF_WORD[how] ? CP_REF_WORD[how] + ref : `${how ? `${how} · ` : ""}Ref #${ref}`) : how || "");
+const cpBatchOf = id => ((cpData && cpData.batches) || []).find(b => b.id === id) || null;
+/** A paid invoice's payment ("Check #1420"), from its batch (else the number kept on the invoice). */
+const cpRefOf = (bId, ref) => { const b = bId && cpBatchOf(bId); return b && b.status === "paid" ? cpPayRef(b.how, b.ref) : ref ? `Ref #${ref}` : ""; };
 const CP_VENDOR = "Monumental Flooring";
 let cpData = null, cpLoading = false, cpErr = "", cpOld = false, cpFilter = "all", cpLoadP = null;
 function cpForget() { cpData = null; cpErr = ""; }
@@ -15476,7 +15484,7 @@ const cpVendorName = () => (((cpData && cpData.parties) || []).find(p => p.kind 
 /** A batch's status, as a tag. */
 function cpTag(b, short) {
   if (cpBefore(b)) return h("span", { class: "rp-tag ok", text: short ? "Paid before" : "Paid before VODA Hub" });
-  if (b.status === "paid") return h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(b.paidOn)}${short ? "" : ` · sent to ${cpShort(b.vendor)}`}` });
+  if (b.status === "paid") return h("span", { class: "rp-tag ok", text: `Paid ${repShortDay(b.paidOn)}${b.ref ? (short ? ` · #${b.ref}` : ` · ${cpPayRef(b.how, b.ref)}`) : ""}${short ? "" : ` · sent to ${cpShort(b.vendor)}`}` });
   if (b.status === "canceled") return h("span", { class: "rp-tag", text: "Canceled" });
   return h("span", { class: "rp-tag dep", text: short ? "Waiting" : "Waiting for accounting" });
 }
@@ -15502,7 +15510,7 @@ function cpTaken(n, jobs, a) {
   return reused;
 }
 const cpPaidWhen = t => (lbIsDay(t.on) ? ` on ${cpDay(t.on)}` : t.on === "before" || /-PAID-BEFORE\b/.test(t.b || "") ? " before VODA Hub" : "");
-const cpTakenText = t => (t.why === "paid" ? `Already paid${cpPaidWhen(t)}${t.b ? ` (batch ${t.b}${t.ref ? `, ref ${t.ref}` : ""})` : ""}. It can't be sent again.`
+const cpTakenText = t => (t.why === "paid" ? `Already paid${cpPaidWhen(t)}${t.b ? ` (batch ${t.b}${cpRefOf(t.b, t.ref) ? `, ${cpRefOf(t.b, t.ref)}` : ""})` : ""}. It can't be sent again.`
   : t.why === "reused" ? `Invoice #${t.n ? ` ${t.n}` : ""} is already on another invoice of ${cpCents(t.a)}, ${t.st === "paid" ? `paid${cpPaidWhen(t)}` : "waiting for accounting"}${t.b ? ` (batch ${t.b})` : ""}. ${t.st !== "paid" ? "Wait until that batch is paid." : isAdmin() ? "If this is a different invoice, tick “It's another invoice” to send it." : "If it's a different invoice, an admin can send it."}`
   : t.why === "waiting" ? `Already sent to accounting${t.on ? ` on ${cpDay(t.on)}` : ""}${t.b ? ` (batch ${t.b})` : ""}. It can't be sent twice.`
   : t.why === "job_paid" ? `This job is already marked paid to Monumental${t.on ? ` on ${cpDay(t.on)}` : ""}. Clear that date on the job first if it's still owed.`
@@ -15530,13 +15538,13 @@ function cpToPicker(kind, vendor, idp) {
 }
 /** Opens a PDF of a batch (an invoice, or the pay stub when f is empty). */
 async function cpOpenDoc(id, f, b) {
-  const w = window.open("", "_blank");   // opened on the tap, so it isn't blocked
+  const w = f ? window.open("", "_blank") : null;   // an invoice: opened on the tap, so it isn't blocked; the pay stub: downloaded with its name
   if (b) b.disabled = true;
   try {
     const o = await api("cpDoc", { id, f: f || "" });
     const bytes = Uint8Array.from(atob(o.data), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     if (w) w.location.href = url;
-    else { const a = h("a", { href: url, download: o.name }); document.body.append(a); a.click(); a.remove(); }
+    else { const a = h("a", { href: url, download: o.name }); document.body.append(a); a.click(); a.remove(); if (!f) toast(`Downloaded: ${o.name}`); }
     setTimeout(() => URL.revokeObjectURL(url), 120000);
   } catch (e) { if (w) w.close(); toast(e && e.error === "no_pdf" ? "That PDF isn't in the Drive folder any more." : errText(e, "The file")); }
   if (b) b.disabled = false;
@@ -15565,6 +15573,7 @@ function cpFilterTo(k) {
   if (now && top != null) { const d = now.getBoundingClientRect().top - top; if (Math.abs(d) > 1) window.scrollBy(0, d); }
 }
 let cpAll = false;   // the column beside Repairs Payroll: every batch, not just the newest
+let cpQ = "";        // the search over the batches (a check #, a batch, an invoice #, a client or an address)
 /** The batches: the totals, All / Waiting / Paid, and the list (compact: the column beside Repairs Payroll). */
 function cpBlock(compact) {
   if (cpOld || (apiLevel && apiLevel < CP_API)) return [h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
@@ -15576,7 +15585,9 @@ function cpBlock(compact) {
   }
   const all = cpData.batches, waiting = all.filter(b => b.status === "waiting"), paid = all.filter(b => b.status === "paid");
   const year = String(revThisYear()), paidYear = paid.filter(b => String(b.paidOn).startsWith(year)), before = paid.filter(cpBefore);
-  const list = cpFilter === "waiting" ? waiting : cpFilter === "paid" ? paid : all, MAX = 8;
+  const q = String(cpQ || "").trim().toLowerCase().replace(/^#/, "");
+  const hit = b => !q || [b.id, b.ref, cpPayRef(b.how, b.ref), b.vendor, ...b.items.flatMap(i => [i.n, i.client, i.addr])].some(v => String(v || "").toLowerCase().includes(q));
+  const list = (cpFilter === "waiting" ? waiting : cpFilter === "paid" ? paid : all).filter(hit), MAX = 8;
   const shown = compact && !cpAll ? list.slice(0, MAX) : list;
   const seg = h("div", { class: "seg", role: "group", "aria-label": "Show", id: "cpFilter" }, [["all", "All"], ["waiting", "Waiting"], ["paid", "Paid"]].map(([k, t]) =>
     h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(cpFilter === k), onclick: () => cpFilterTo(k) }, t)));
@@ -15595,12 +15606,14 @@ function cpBlock(compact) {
   const body = shown.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cp-table", id: "cpTable" },
     h("thead", null, h("tr", null, h("th", { text: "Batch" }), h("th", { class: "l pc", text: "Vendor" }), h("th", { class: "l pc", text: "Sent to accounting" }), h("th", { class: "pc", text: "Invoices" }), h("th", { text: "Amount" }), h("th", { class: "st pc", text: "Status" }))),
     h("tbody", null, shown.map(row))))
-    : h("p", { class: "meta cp-empty", id: "cpEmpty", text: all.length ? "None here." : canSee("repairs") ? "Nothing sent to accounting yet. Send Monumental's invoices with + Monumental invoice (PDF)." : "Nothing sent to accounting yet." });
+    : h("p", { class: "meta cp-empty", id: "cpEmpty", text: q ? `No batch with “${cpQ.trim()}”.` : all.length ? "None here." : canSee("repairs") ? "Nothing sent to accounting yet. Send Monumental's invoices with + Monumental invoice (PDF)." : "Nothing sent to accounting yet." });
   const more = shown.length < list.length ? h("button", { class: "btn small", type: "button", id: "cpMore", onclick: () => { cpAll = true; cpRedraw(); } }, `Show all ${fmt(list.length)}`) : null;
   return [tiles, h("section", { class: "panel cp-panel", id: "cpPanel" },
     h("div", { class: "cp-head" }, compact ? null : h("h3", { text: "Contractor payroll" }), seg,
       isAdmin() && (!apiLevel || apiLevel >= CP_BEFORE_API) ? h("button", { class: "btn small", type: "button", id: "cpBeforeBtn", title: "Monumental's invoices paid before the app: marked paid so they can't be paid twice", onclick: () => openCpBeforeLoad() }, "Load paid invoices") : null),
     h("p", { class: "meta", text: compact ? "Batches sent to accounting. Tap one to open it." : "Every batch sent to accounting: what's waiting and what's paid. Tap one to open it." }),
+    h("input", { type: "search", id: "cpFind", class: "cp-find", "data-nodirty": "1", placeholder: "Check #, batch, invoice #, client or address", "aria-label": "Find a batch", value: cpQ,
+      oninput: e => { cpQ = e.target.value; const at = e.target.selectionStart; cpRedraw(); const f = $("cpFind"); if (f) { f.focus(); try { f.setSelectionRange(at, at); } catch (x) { /* not a text box */ } } } }),
     body, more)];
 }
 /* ---- invoices paid before the app (Admins): Monumental's PDFs read here and recorded as paid, with no paid date, so none
@@ -15885,7 +15898,7 @@ function openCpBatch(id) {
     openDialog(h("div", { class: "rp-dlg cp-dlg" },
       h("h3", { id: "dlgTitle", text: `Batch ${b.id} · ${b.vendor}` }), steps,
       b.status === "paid" ? h("div", { class: "cp-paidbox", id: "cpPaidBox" },
-        h("b", { text: `Paid ${C(b.paid)} on ${cpDay(b.paidOn)}${b.how ? ` · ${b.how}` : ""}${b.ref ? ` · Ref ${b.ref}` : ""}` }),
+        h("b", { id: "cpPaidLine", text: `Paid ${C(b.paid)} on ${cpDay(b.paidOn)}${cpPayRef(b.how, b.ref) ? ` · ${cpPayRef(b.how, b.ref)}` : ""}` }),
         h("span", { text: [b.last4 ? `From the account ending ${b.last4}` : "", `Approved by ${b.appBy}`].filter(Boolean).join(" · ") }),
         h("span", { text: `Pay stub emailed to ${b.vTo}${b.vAt ? ` on ${cpDay(cpAtDay(b.vAt))}` : ""}` }),
         b.out ? h("span", { text: `Left out (went back to not sent): ${b.out}` }) : null)

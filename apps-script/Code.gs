@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 131;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 132;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -7983,6 +7983,9 @@ const CP_PARTY_SHEET = "Payroll emails";
 const CP_PARTY_COLS = ["Name", "Email", "Kind"];
 const CP_KINDS = ["accounting", "vendor"];
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
+/** How it was paid, with its number: "Check #1420", "ACH trace #88812", "Cash" ("" when neither is known). */
+const CP_REF_WORD = { Check: "Check #", ACH: "ACH trace #", Wire: "Wire confirmation #", Zelle: "Zelle confirmation #", Card: "Card confirmation #" };
+function cpPayRef_(how, ref) { return ref ? (CP_REF_WORD[how] ? CP_REF_WORD[how] + ref : (how ? how + " · " : "") + "Ref #" + ref) : String(how || ""); }
 const CP_VENDOR = "Monumental Flooring";
 const CP_COMPANY = "VODA Cleaning & Restoration";
 const CP_EMAIL = /^[^\s@,;<>"']+@[^\s@,;<>"']+\.[A-Za-z]{2,}$/;
@@ -8120,7 +8123,7 @@ function cpStubHtml_(b) {
     '<td style="padding-bottom:10px;text-align:right"><div style="font-size:20px;font-weight:bold">' + cpEsc_(b.id) + '</div><div style="font-size:11px;color:#5b6474">Batch</div></td></tr></table>' +
     '<table style="border-collapse:collapse;margin:14px 0"><tr>' + meta("Paid to", b.vendor) + meta("Sent to accounting", cpDay_(cpAtDay_(b.at))) + meta("Approved by", paid ? b.appBy : "Waiting for approval") + meta("Invoices", String(b.items.length)) + "</tr></table>" +
     '<table style="width:100%;border-collapse:collapse;border:2px solid ' + (paid ? "#1d7a3e" : "#a15c07") + ';margin-bottom:14px"><tr><td style="padding:8px 10px;font-weight:bold;font-size:13px;color:' + (paid ? "#17602f" : "#7a4a0c") + '">' +
-      (paid ? "PAID " + cpEsc_(cpDay_(b.paidOn)) + (b.how ? " · " + cpEsc_(b.how) : "") + (b.ref ? " · Ref " + cpEsc_(b.ref) : "") : "WAITING FOR APPROVAL") +
+      (paid ? "PAID " + cpEsc_(cpDay_(b.paidOn)) + (cpPayRef_(b.how, b.ref) ? " · " + cpEsc_(cpPayRef_(b.how, b.ref)) : "") : "WAITING FOR APPROVAL") +
       '</td><td style="padding:8px 10px;font-weight:bold;font-size:13px;text-align:right;color:' + (paid ? "#17602f" : "#7a4a0c") + '">' + cpMoney_(total) + "</td></tr></table>" +
     '<table style="width:100%;border-collapse:collapse"><tr><th style="' + th + '">Invoice</th><th style="' + th + '">Client</th><th style="' + th + '">Job address</th><th style="' + th + '">Job date</th><th style="' + th + ';text-align:right">Amount</th></tr>' +
     b.items.map(function (i) {
@@ -8132,8 +8135,14 @@ function cpStubHtml_(b) {
     '<p style="font-size:10px;color:#5b6474;border-top:1px solid #dfe3ea;padding-top:8px;margin-top:18px">Questions about this payment? Reply to ' +
       (cpReplyTo_() ? '<b style="color:#111827">' + cpEsc_(cpReplyTo_()) + "</b>" : "the email it came with") + ".</p></body></html>";
 }
+/** The pay stub's file name: "VODA Cleaning & Restoration - Payroll to Monumental Flooring - Nov 14, 2026.pdf" (the day it
+ *  was paid; waiting: the day it was sent to accounting). */
+function cpStubName_(b) {
+  const day = b.status === "paid" ? cpDay_(b.paidOn) : cpDay_(cpAtDay_(b.at));
+  return (CP_COMPANY + " - Payroll to " + b.vendor + (b.status === "paid" ? "" : " (for approval)") + (day ? " - " + day : "")).replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 150) + ".pdf";
+}
 function cpStubPdf_(b) {
-  return Utilities.newBlob(cpStubHtml_(b), "text/html", "stub.html").getAs("application/pdf").setName("Pay stub " + b.id + ".pdf");
+  return Utilities.newBlob(cpStubHtml_(b), "text/html", "stub.html").getAs("application/pdf").setName(cpStubName_(b));
 }
 /** The invoices as a table in an email (fresh: the invoice #s just added, marked "new"). */
 function cpMailTable_(b, paid, fresh) {
@@ -8179,7 +8188,7 @@ function cpMailAccountingAdded_(b, added, to, files) {
 /** The email to the contractor: what was paid, with the pay stub. */
 function cpMailVendor_(b, to) {
   const subject = "VODA payment · " + cpPlural_(b.items.length, "invoice") + " · " + cpMoney_(b.paid);
-  const how = (b.how ? " by " + b.how : "") + (b.ref ? ", reference " + b.ref : "");
+  const how = b.ref ? " by " + (b.how === "Check" ? "check #" + b.ref : cpPayRef_(b.how, b.ref)) : b.how ? " by " + b.how : "";
   const lines = ["Hi " + cpShort_(b.vendor) + " team,", "", "We paid " + cpPlural_(b.items.length, "invoice") + " on " + cpDay_(b.paidOn) + how + ". Total " + cpMoney_(b.paid) + ". The pay stub is attached.", ""]
     .concat(b.items.map(function (i) { return i.n + " · " + i.client + " · " + i.addr + " · " + cpMoney_(i.pay); }), ["", "Questions about this payment? Reply to " + (cpReplyTo_() || "this email") + ".", "", "Thank you,", CP_COMPANY]);
   const html = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.5"><p>Hi ' + cpEsc_(cpShort_(b.vendor)) + " team,</p><p>We paid <b>" + cpPlural_(b.items.length, "invoice") +
