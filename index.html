@@ -6873,6 +6873,9 @@ function openDetails(id, tab) {
   if (!drawer.open) { try { drawer.showModal(); } catch (e) { drawer.setAttribute("open", ""); } }
   if (!historyCache[id]) loadHistory(id);
   if (!svcCache[id]) loadServices(id);
+  // Stops: read in the background as the truck opens (it takes One Step, Housecall Pro and Google a few seconds), so the
+  // tab is ready when it's tapped; a truck opened and closed right away isn't read
+  if (stopsTabOn(t) && apiLevel >= STOPS_API) setTimeout(() => { if (drawer.open && openId === id) stopsShown(id); }, 700);
 }
 
 function detailField(labelText, id, value, mode, truckId, locked) {
@@ -7164,7 +7167,7 @@ function stopsDraw(id) {
     if (v === "__type__") { stopsView.typing = true; stopsDraw(id); const i = $("stpWhoIn"); if (i) i.focus(); return; }
     stopsView.typing = false; stopsPerson(id, v === "__driver__" ? null : v);
   } },
-    h("option", { value: "__driver__", text: d && d.driver ? `${d.driver} (drives it)` : "The truck's driver (none set)" }),
+    h("option", { value: "__driver__", text: !d ? "Loading…" : d.driver ? `${d.driver} (drives it)` : "The truck's driver (none set)" }),
     people.map(p => h("option", { value: p, text: p })),
     h("option", { value: "__type__", text: "Type a name…" }));
   sel.value = stopsView.typing ? "__type__" : d && d.person && d.person !== d.driver ? d.person : "__driver__";
