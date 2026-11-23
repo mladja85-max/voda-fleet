@@ -7068,7 +7068,8 @@ function kpiImport_(req) {
    approved again: taken off. The "Rebuild calendar" tab keeps each one booked.
    The estimate's PDF on the event: of the PDFs on the estimate in Housecall Pro, the one with the approved amount in it
    (its text read by Google, as a receipt's is), copied into VODA Hub › Rebuild estimates, shared view-only with the
-   vendor's Google account (Script Property REBUILD_VENDOR_EMAIL; no "shared with you" email; never anyone with the link)
+   vendor's Google account (whoever the rebuild calendar is shared with, read from the calendar's sharing; Script
+   Property REBUILD_VENDOR_EMAIL instead, if it's there; no "shared with you" email; never anyone with the link)
    and attached to the event. Looked for when it's booked, then with the notes once an hour for a month (a PDF added
    later), until one is on it. Several with that amount: the one whose biggest amount it is (its total), then the
    newest. Each PDF read once. ---- */
@@ -7248,14 +7249,34 @@ function rbGoogle_(method, url, body) {
   try { data = JSON.parse(res.getContentText() || "null"); } catch (e) { data = null; }
   return { code: res.getResponseCode(), data: data };
 }
+/** Who the PDFs are shared with: Script Property REBUILD_VENDOR_EMAIL if it's there, else the people the rebuild calendar
+ *  is shared with (people and groups who see its events, not this account and not the calendar itself): { list } or
+ *  { error }. Once a run. */
+function rbVendors_(calId, out, P) {
+  if (out.vendors) return out.vendors;
+  const ok = function (m) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); };
+  const set = String(P.getProperty("REBUILD_VENDOR_EMAIL") || "").split(/[\s,;]+/).filter(ok);
+  if (set.length) return (out.vendors = { list: set });
+  const g = rbGoogle_("get", "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/acl?maxResults=100");
+  if (g.code >= 300) return (out.vendors = { error: "couldn't see who the rebuild calendar is shared with (" + g.code + ")" });
+  let me = "";
+  try { me = String(Session.getEffectiveUser().getEmail() || "").toLowerCase(); } catch (e) { me = ""; }
+  const list = [];
+  ((g.data && g.data.items) || []).forEach(function (a) {
+    const sc = (a && a.scope) || {}, v = String(sc.value || "").toLowerCase();
+    if ((sc.type === "user" || sc.type === "group") && /^(reader|writer|owner)$/.test(String(a.role || "")) && ok(v) && v !== me && !/calendar\.google\.com$/.test(v) && list.indexOf(v) === -1) list.push(v);
+  });
+  return (out.vendors = list.length ? { list: list } : { error: "the rebuild calendar isn't shared with anyone yet" });
+}
 /** The estimate's PDF with the approved amount on its calendar event: { status (for the tab), read (the PDFs read that
  *  didn't have it, not read again) }. */
 function rbPdf_(eid, amt, evId, read, out, calId) {
   read = (read || []).slice();
   const cents = Math.round((Number(amt) || 0) * 100), P = PropertiesService.getScriptProperties();
-  const emails = String(P.getProperty("REBUILD_VENDOR_EMAIL") || "").split(/[\s,;]+/).filter(function (m) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); });
-  if (!emails.length) return { status: "waiting: add Script Property REBUILD_VENDOR_EMAIL (the vendor's Google account)", read: read };
   if (!cents || !evId || !calId) return { status: "", read: read };
+  const who = rbVendors_(calId, out, P);
+  if (who.error) return { status: "waiting: " + who.error, read: read };
+  const emails = who.list;
   const got = rbAttachments_(eid);
   if (got.error) return { status: "Housecall Pro: " + got.error, read: read };
   const pdfs = got.list.filter(function (a) { return /pdf/i.test(a.type) || /\.pdf$/i.test(a.name); });
@@ -7892,6 +7913,22 @@ function repSame_(r, job) {
   if (job.outstanding_balance !== undefined && job.outstanding_balance !== null && repCents_(r[10]) !== Math.round(Number(job.outstanding_balance) || 0)) return false;
   return String(r[2] || "") === String(job.invoice_number || "") && String(r[7] || "") === String(job.work_status || "");
 }
+/** When each span of days was last read (for a minute: two phones opening it at once), all in one Script Property
+ *  (REP_READ). It was one Script Property a span (REP_READ_<from>_<to>), which filled the Script Properties page past
+ *  the 50 it lets anyone add to by hand: those are taken away here. */
+function repReads_(props) {
+  let m = {};
+  try { m = JSON.parse(props.getProperty("REP_READ") || "{}") || {}; } catch (e) { m = {}; }
+  return m;
+}
+function repReadNow_(props, key) {
+  const now = Date.now(), m = repReads_(props), keep = {};
+  Object.keys(m).forEach(function (k) { if (now - (Number(m[k]) || 0) < REV_FRESH_MS) keep[k] = m[k]; });
+  keep[key] = now;
+  props.setProperty("REP_READ", JSON.stringify(keep));
+  const all = props.getProperties();
+  Object.keys(all).forEach(function (k) { if (k.indexOf("REP_READ_") === 0) props.deleteProperty(k); });
+}
 /** Reads from..to (up to 31 days) from Housecall Pro again: the repair jobs scheduled on those days and their invoices.
  *  What's typed in the app stays. A job that isn't there any more is dropped, or kept (and marked) when something was
  *  typed for it. Days read in the last minute aren't asked again unless Read again was pressed. */
@@ -7904,7 +7941,7 @@ function repSync_(req) {
   const pick = function (rows) { return Object.keys(rows).filter(function (id) { const d = rows[id][1]; return d >= from && d <= to; }).map(function (id) { return repOut_(rows[id]); }); };
   const have = repRows_(repSheet_(false)), now = Date.now();
   const inRange = Object.keys(have).filter(function (id) { return have[id][1] >= from && have[id][1] <= to && !have[id][13]; });
-  const props = PropertiesService.getScriptProperties(), seenKey = "REP_READ_" + from + "_" + to, seen = Number(props.getProperty(seenKey)) || 0;
+  const props = PropertiesService.getScriptProperties(), seenKey = from + "_" + to, seen = Number(repReads_(props)[seenKey]) || 0;
   if (!req.force && now - seen < REV_FRESH_MS && inRange.every(function (id) { return now - (Date.parse(have[id][12]) || 0) < REV_FRESH_MS; })) return { ok: true, jobs: pick(have), fresh: true };
   const got = hcpJobsIn_(from, to);
   if (got.error) return { ok: false, error: got.error, status: got.status || 0 };
@@ -7971,7 +8008,7 @@ function repSync_(req) {
     });
     if (s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, REP_COLS.length).clearContent();
     repWrite_(s, rows);
-    props.setProperty(seenKey, String(Date.now()));
+    repReadNow_(props, seenKey);
     return { ok: true, jobs: pick(rows) };
   });
 }
