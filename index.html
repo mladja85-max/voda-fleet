@@ -3063,6 +3063,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-tiles2 { display: grid; gap: 10px; }
 .est-row1 { display: grid; grid-template-columns: minmax(0, 1.25fr) repeat(var(--c, 3), minmax(0, 1fr)); gap: 10px; }
 .est-row2 { display: grid; grid-template-columns: repeat(var(--c, 5), minmax(0, 1fr)); gap: 10px; }
+.est-row2.many { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }   /* more than 8 tiles: a second line, not squeezed */
 .est-sublbl { margin: 6px 0 -2px; font-size: .74rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); }
 .est-person small { color: var(--ink); } .est-pd { color: var(--muted); font-weight: 600; }
 .est-tile small .est-for, .est-subwho { color: var(--accent); font-weight: 800; }   /* a supervisor picked: his on the kinds' tiles */
@@ -3199,6 +3200,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .er-pick .er-sel, .er-pick .er-typed { width: 100%; }
 .er-many .er-add, .er-many .er-typed { width: 100%; box-sizing: border-box; }
 .er-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-size: .86rem; font-weight: 600; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.er-tile { all: unset; cursor: pointer; font-size: .74rem; font-weight: 700; padding: 2px 7px; margin-left: -6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.er-tile[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.er-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .er-x { all: unset; cursor: pointer; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); font-size: 1rem; line-height: 1; }
 .er-x:hover, .er-x:focus-visible { background: color-mix(in srgb, var(--due) 14%, transparent); color: var(--due); }
 .er { display: grid; gap: 10px; }
@@ -17244,7 +17248,7 @@ const estNameHit = (emp, t) => { const a = String(emp).toLowerCase().trim(), b =
 function estCrew() {
   const out = [], seen = new Set(), reps = (estData && estData.reports) || {};
   for (const d of ["r", "c", "p"]) { const rep = reps[d];
-    if (rep && rep.lead) for (const n of rep.team || []) if (n && !seen.has(n)) { seen.add(n); out.push([n, d]); } }
+    if (rep && rep.lead) for (const n of rep.team || []) if (n && !seen.has(n) && (rep.tiles || []).includes(n)) { seen.add(n); out.push([n, d]); } }
   return out;
 }
 function estOwners(e) {
@@ -17514,13 +17518,13 @@ function renderEstimates() {
     row1.some(([k]) => k === "r") ? [h("p", { class: "est-sublbl", id: "estSubLbl" }, h("i", { class: "est-dot w" }), "Restoration", leadOf("r") ? h("span", { class: "est-pd", text: ` · ${leadOf("r")}` }) : null,
       whoPicked ? h("span", { class: "est-subwho", text: ` · showing ${whoPicked}'s` }) : null),
       // water damage, mold, the supervisors, then the ones not sorted
-      h("div", { class: "est-row2", id: "estRestRow", style: `--c:${subN}` }, row2.filter(([k]) => k !== "u").map(kindTile), crew.map(crewTile),
+      h("div", { class: "est-row2" + (subN > 8 ? " many" : ""), id: "estRestRow", style: `--c:${subN}` }, row2.filter(([k]) => k !== "u").map(kindTile), crew.map(crewTile),
         row2.filter(([k]) => k === "u").map(kindTile))] : null);
   const how = howFold("estHow", h("p", { class: "lb-sub est-how" }, "Each estimate counts on the day it was scheduled for in Housecall Pro (its visit), or the day it was made if it has no schedule. Approval rate: estimates approved (by the client or the office) out of every estimate in these days, canceled ones left out; open ones count until they're decided. Dollars: what was approved out of what was estimated (an estimate with options counts its largest, or the one approved). Water damage, Mold or Fire/Smoke: the estimate's tag in Housecall Pro (two kinds of tag: not sorted). In charge: of the people assigned to it in Housecall Pro, the highest role in Employees (Supervisor, Estimator, tech 3, 2, 1, Assistant). A department's tile: all of its estimates (Restoration's are water damage, mold and the ones not sorted), with its In charge from Reports. A supervisor's tile: someone under With in Reports, with the estimates he's assigned to in Housecall Pro (the department's In charge has the rest); tap one to see only his, then Water damage, Mold or Fire/Smoke for only his of that kind (those tiles show his numbers while he's picked). Tap tiles to pick any mix. Freddy's Visits: Job type Freddy Visit (or the tag) in no department: visits, not estimates, so they're counted (done, to come) and left out of every rate and of All estimates."), "How it's counted");
   // the people (whoever sees them all): a tile each, under the groups; without names in Reports, a word on where to set them
   const inGrp = allOn ? list : listAll.filter(e => sel.some(k => inKey(grpOf.get(e), k)));
   const onlyVisits = sel.length === 1 && sel[0] === "v";   // Freddy's visits alone: no estimate statuses
-  const people = all && !crew.length && isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Add people under With in Reports (Restoration's supervisors, say) to get a tile for each of them here." }) : null;
+  const people = all && !crew.length && isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Tick Tile next to a person under With in Reports (Restoration's supervisors, say) to get a tile for them here." }) : null;
   // the list: filters (status, person, search), then the estimates, newest first
   const ownerNames = all ? [...new Set(inGrp.flatMap(e => ownersOf.get(e)).concat(whoPicked || []))] : [];   // the people of the groups picked (and the one picked)
   const who = whoPicked || (all && ownerNames.includes(estView.who) ? estView.who : "");
@@ -17750,6 +17754,7 @@ function estRowEl(e, today) {
    before; what the open estimates are likely to bring (their age: how often, in the past, estimates still open at that
    age were approved later); the ones to follow up; by person. Printable. ---- */
 const EST_REP_API = 60;                                 // the Google script that keeps who's in charge of each report
+const EST_TILE_API = 131;                               // ... and who of With has a tile on Estimates
 const EST_PDF_API = 124;                                // ... and that makes a report's PDF to download
 const EST_REP_DEPTS = [["p", "Repairs"], ["c", "Cleaning"], ["r", "Restoration"]];
 const EST_REP_PER = { week: "Week", month: "Month", year: "Year" };
@@ -17832,9 +17837,11 @@ function estPickOne(people, cur, label) {
   wrap.append(sel);
   return { el: wrap, get: () => (typed ? typed.value : sel.value).trim() };
 }
-/** The people with him (With): each a chip with ×, and a dropdown to add one (or type one). { el, get } */
-function estPickMany(people, cur, label) {
+/** The people with him (With): each a chip with ×, and a dropdown to add one (or type one). With tiles (a list): each
+ *  chip has a Tile switch too (a tile for that person on Estimates). { el, get, tiles } */
+function estPickMany(people, cur, label, tiles) {
   const chosen = [...new Set((cur || []).filter(Boolean))];
+  const tiled = new Set((tiles || []).filter(n => chosen.includes(n)));
   const wrap = h("span", { class: "er-many", role: "group", "aria-label": label, "data-nodirty": "1" });
   const draw = () => {
     const add = h("select", { class: "er-sel er-add", "aria-label": `${label}: add a person` },
@@ -17853,11 +17860,15 @@ function estPickMany(people, cur, label) {
       draw(); const nx = wrap.querySelector(".er-add"); if (nx) nx.focus();
     });
     // the dropdown on the line with In charge; the people picked under it
-    wrap.replaceChildren(add, chosen.length ? h("span", { class: "er-chips" }, chosen.map((n, i) => h("span", { class: "er-chip" }, h("span", { text: n }),
-      h("button", { type: "button", class: "er-x", "aria-label": `Take ${n} off`, title: "Take off", text: "×", onclick: () => { chosen.splice(i, 1); draw(); } })))) : null);
+    wrap.replaceChildren(...[add, chosen.length ? h("span", { class: "er-chips" }, chosen.map((n, i) => h("span", { class: "er-chip" + (tiled.has(n) ? " tiled" : "") },
+      tiles ? h("button", { type: "button", class: "er-tile", "aria-pressed": String(tiled.has(n)), "aria-label": `${n}: a tile on Estimates`,
+        title: tiled.has(n) ? "Has a tile on Estimates. Tap to take it off (stays in the report)." : "No tile on Estimates (still in the report). Tap to give one.",
+        text: tiled.has(n) ? "✓ Tile" : "Tile", onclick: () => { if (tiled.has(n)) tiled.delete(n); else tiled.add(n); draw(); } }) : null,
+      h("span", { text: n }),
+      h("button", { type: "button", class: "er-x", "aria-label": `Take ${n} off`, title: "Take off", text: "×", onclick: () => { tiled.delete(n); chosen.splice(i, 1); draw(); } })))) : null].filter(Boolean));
   };
   draw();
-  return { el: wrap, get: () => chosen.slice() };
+  return { el: wrap, get: () => chosen.slice(), tiles: () => chosen.filter(n => tiled.has(n)) };
 }
 /** Estimates › Reports: the departments (and who's in charge of each); an admin picks the names. */
 async function estReportsDlg() {
@@ -17870,11 +17881,11 @@ async function estReportsDlg() {
   const row = ([d, name]) => {
     const o = estRepOwner(d);
     const lead = estPickOne(people, o.lead || "", `${name}: in charge`);
-    const team = estPickMany(people, o.team || [], `${name}: with`);
+    const team = estPickMany(people, o.team || [], `${name}: with`, !apiLevel || apiLevel >= EST_TILE_API ? o.tiles || [] : null);
     const save = h("button", { class: "btn small", type: "button", onclick: async () => {
       if (apiLevel && apiLevel < EST_REP_API) { toast("Update the Google script first (paste the latest Code.gs, then Deploy › Manage deployments › New version)."); return; }
       save.disabled = true;
-      try { const out = await api("estReportsPut", { dept: d, lead: lead.get(), team: team.get() }); estData.reports = out.reports || {}; store.set(K_EST, estData); toast(`${name}: saved`); estReportsDlg(); }
+      try { const out = await api("estReportsPut", Object.assign({ dept: d, lead: lead.get(), team: team.get() }, !apiLevel || apiLevel >= EST_TILE_API ? { tiles: team.tiles() } : {})); estData.reports = out.reports || {}; store.set(K_EST, estData); toast(`${name}: saved`); renderEstimates(); estReportsDlg(); }
       catch (e) { toast(errText(e, "Nothing")); } finally { save.disabled = false; }
     } }, "Save");
     return h("div", { class: "er-dept", "data-d": d },
@@ -17885,7 +17896,7 @@ async function estReportsDlg() {
       isAdmin() ? h("div", { class: "er-edit" }, h("label", null, h("span", { text: "In charge" }), lead.el), h("div", { class: "er-with" }, h("span", { text: "With" }), team.el), save) : null);
   };
   openDialog(h("h3", { id: "dlgTitle", text: "Reports" }),
-    howFold("erDlgHow", h("p", { class: "hint", text: "A department's estimates for the meeting: a week, a month or a year; what was created, approved and produced, the goal, what the open estimates are likely to bring, and who to follow up. The names also decide By person in charge on Estimates: each one under With gets the estimates he's assigned to in Housecall Pro; In charge gets the rest." }), "How it works"),
+    howFold("erDlgHow", h("p", { class: "hint", text: "A department's estimates for the meeting: a week, a month or a year; what was created, approved and produced, the goal, what the open estimates are likely to bring, and who to follow up. The names also decide By person in charge on Estimates: each one under With gets the estimates he's assigned to in Housecall Pro; In charge gets the rest. Everyone under With is in the report; tick Tile on the ones who should also have a tile on the Estimates screen." }), "How it works"),
     h("div", { class: "er-list" }, EST_REP_DEPTS.map(row)),
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: closeDialog, text: "Close" }))));
 }
