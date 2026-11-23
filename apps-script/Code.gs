@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 129;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 130;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -7221,6 +7221,12 @@ const PRICE_PAGES = 10, PRICE_AT = "PRICE_SCAN_AT", PRICE_ERR = "PRICE_SCAN_ERR"
 // change on that day or before it is the crew's sale on the day or the office's estimate before the job, kept as the
 // amount without a warning; a change on any later day (yesterday's invoice edited this morning) is a price change to
 // check. (Until API 122 it was 24 hours after the job, which let the next morning's edits through.)
+// A finished job's change after it was finished is a price change too, even that day (an invoice edited minutes after
+// "Job finished"). Housecall Pro says only when the job last changed, not when its amount did, so: after it was finished
+// = the app saw the amount after the job was finished, or the job's last change is more than PRICE_DONE_GRACE after it
+// was finished and isn't a payment taken then (paid after finishing: the amount may well be the crew's sale before).
+const PRICE_DONE_GRACE = 2 * 60e3, PRICE_PAY_NEAR = 3 * 60e3, PRICE_PAY_READS = 30;
+const priceDoneMs_ = job => Date.parse((job && job.work_timestamps && job.work_timestamps.completed_at) || "") || 0;
 /** The job's last day, yyyy-MM-dd in the script's time zone: its start, end or when it was finished, whichever is
  *  latest; "" when it has none of them. */
 function priceLastDay_(job, tz) {
@@ -7264,7 +7270,24 @@ function priceScan_() {
     for (let i = 0; i < list.length; i++) { if ((Date.parse(list[i].updated_at) || 0) < since) { older = true; break; } got.push(list[i]); }
     if (older || !list.length || page >= (Number(r.data && r.data.total_pages) || 1)) break;
   }
-  const out = withLock_(function () { return priceCompare_(got, now); });
+  // finished jobs whose last change came after they were finished, on their day: when each was paid (a payment then
+  // explains the change), read before the lock
+  const tz = Session.getScriptTimeZone(), paid = {};
+  const late = got.filter(function (j) {
+    const done = priceDoneMs_(j), upd = Date.parse(j.updated_at || "") || 0, lastDay = priceLastDay_(j, tz);
+    return j && j.id && done && upd > done + PRICE_DONE_GRACE && lastDay && Utilities.formatDate(new Date(upd), tz, "yyyy-MM-dd") <= lastDay;
+  }).filter(function (j, i, a) { return a.findIndex(function (x) { return x.id === j.id; }) === i; }).slice(0, PRICE_PAY_READS);
+  if (late.length) hcpGetAll_(late.map(function (j) { return { path: "/jobs/" + encodeURIComponent(j.id) + "/invoices" }; })).forEach(function (r, k) {
+    const d = (r && r.data) || {}, list = Array.isArray(d) ? d : Array.isArray(d.invoices) ? d.invoices : Array.isArray(d.data) ? d.data : null;
+    if (!list) return;   // not read: as if paid then (no warning on a guess)
+    const at = [];
+    list.forEach(function (i) {
+      (Array.isArray(i && i.payments) ? i.payments : []).forEach(function (p) { const t = Date.parse((p && (p.paid_at || p.created_at || p.date)) || ""); if (t) at.push(t); });
+      const t = Date.parse((i && i.paid_at) || ""); if (t) at.push(t);
+    });
+    paid[String(late[k].id)] = at;
+  });
+  const out = withLock_(function () { return priceCompare_(got, now, paid); });
   // the jobs put on the schedule (Office Scorecard's booked jobs): never in the way of the price changes
   try { out.booked = bkStep_(got, now); P.setProperty(BK_ERR, ""); }
   catch (e) { out.booked = null; P.setProperty(BK_ERR, String((e && e.message) || e).slice(0, 200)); }
@@ -7272,7 +7295,7 @@ function priceScan_() {
 }
 /** Each job changed: its amount against the last one seen; a difference is a warning (one open warning a job: a later
  *  change updates it). Then what was seen is kept, and the day of a changed job is read again on Revenue. */
-function priceCompare_(jobs, now) {
+function priceCompare_(jobs, now, paid) {
   const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), at = new Date(now).toISOString();
   const ws = priceSheet_(WATCH_SHEET, WATCH_COLS), wrows = ws.getLastRow() > 1 ? ws.getRange(2, 1, ws.getLastRow() - 1, WATCH_COLS.length).getValues() : [];
   const watch = {};
@@ -7302,7 +7325,11 @@ function priceCompare_(jobs, now) {
     else { const v = revOf(id); if (v) { was = v[0]; wasAt = v[2]; } }
     // changed on the job's day or before it (a sale on the day, the estimate before): the amount it is now, no warning
     const lastDay = priceLastDay_(job, tz), changedDay = Utilities.formatDate(new Date(Date.parse(job.updated_at || "") || now), tz, "yyyy-MM-dd");
-    if (was !== null && was !== cents && lastDay && changedDay <= lastDay && openOf[id] === undefined) {   // (no date at all: as before)
+    // ... unless it was changed after the job was finished (see PRICE_DONE_GRACE)
+    const done = priceDoneMs_(job), upd = Date.parse(job.updated_at || "") || 0, pays = paid && paid[id];
+    const afterDone = !!done && ((w && (Date.parse(w.at) || 0) > done) ||
+      (upd > done + PRICE_DONE_GRACE && Array.isArray(pays) && !pays.some(function (t) { return Math.abs(t - upd) <= PRICE_PAY_NEAR; })));
+    if (was !== null && was !== cents && lastDay && changedDay <= lastDay && openOf[id] === undefined && !afterDone) {   // (no date at all: as before)
       const st0 = new Date((job.schedule && job.schedule.scheduled_start) || "");
       if (!isNaN(st0.getTime())) stale[Utilities.formatDate(st0, tz, "yyyy-MM-dd")] = true;   // its day's totals read again
     } else if (was !== null && was !== cents) {
