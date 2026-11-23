@@ -1831,7 +1831,7 @@ dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
 .srv-guess { color: var(--soon); font-weight: 700; font-size: .74rem; } .srv-ntable tr.srv-uns .srv-guess { color: var(--due); }
 dialog#dlg:has(.srv-xl-dlg) { width: min(820px, calc(100% - 24px)); }
 dialog#dlg:has(.srv-cmp-dlg) { width: min(980px, calc(100% - 24px)); }
-.srv-cmp th { font-weight: 500; max-width: 360px; } .srv-cmp td.srv-step { font-weight: 700; }
+.srv-cmp th { font-weight: 500; max-width: 360px; white-space: normal; } .srv-cmp td.srv-step { font-weight: 700; }
 .srv-cfold { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--surface); }
 .srv-cfold > summary { cursor: pointer; } .srv-cfold .hint { margin: 6px 0; }
 .srv-cmpl th { font-weight: 600; white-space: nowrap; } .srv-cn { color: var(--muted); }
@@ -13220,12 +13220,17 @@ async function srvSync(from, to, force) {
 }
 const srvStatusText = () => (srvSt.syncing ? `Reading the jobs' service lines from Housecall Pro…${srvSt.left ? ` ${fmt(srvSt.left)} job${srvSt.left === 1 ? "" : "s"} to go` : ""}` : "");
 function srvPaint() { const el = $("srvSyncing"); if (el) el.textContent = srvStatusText(); }
-/** A line's column: the service map's, else the guess; carpet cleaning on a Commercial job is Commercial carpet. */
-function srvKey(doc, name, dep, type) {
+/** A line's column: the service map's, else the guess; carpet cleaning on a Commercial job is Commercial carpet; a line
+ *  Housecall Pro marks as a discount (its kind) is a discount, whatever its name (unless set to Not counted). */
+function srvKey(doc, name, dep, type, kind) {
   let k = doc.map[String(name).toLowerCase()] || srvGuess(name, dep);
+  if (k !== "skip" && k !== "disc" && k !== "sdisc" && /discount/i.test(kind || "")) k = "disc";
   if (k === "carpet" && /commercial/i.test(type || "")) k = "comcarpet";
   return k;
 }
+/** A line's money in its column: a discount is always taken off (Housecall Pro sends its discount lines as positive
+ *  amounts; counted as they came, every discount was added instead). */
+const srvAmt = (k, cents) => (SRV_LESS.has(k) ? -Math.abs(cents) : cents);
 /** The money from a to b: each column (¢; discounts as they are, below 0), each day, the card fee each day, the total,
  *  each service name (its jobs, ¢, departments), the jobs not read yet, and what the jobs' totals have that their
  *  lines don't (taxes, a discount on the job). */
@@ -13236,8 +13241,8 @@ function srvSum(doc, a, b) {
     if (!Array.isArray(lines)) { if (c) o.unread++; continue; }
     o.jobs++;
     let sum = 0;
-    for (const [name, , cents] of lines) {
-      const low = String(name).toLowerCase(), key = srvKey(doc, name, dep, type);
+    for (const [name, kind, raw] of lines) {
+      const low = String(name).toLowerCase(), key = srvKey(doc, name, dep, type, kind), cents = key === "skip" ? raw : srvAmt(key, raw);
       sum += cents;
       const nm = o.names.get(low) || { name, low, cents: 0, jobs: new Set(), deps: {} };
       nm.cents += cents; nm.jobs.add(id); nm.deps[dep] = (nm.deps[dep] || 0) + Math.abs(cents); o.names.set(low, nm);
@@ -13387,8 +13392,8 @@ function srvCompare(doc, a, b, today) {
     if (!Array.isArray(lines)) { if (d !== "o" && c) { x.unread[d] += c; x.unreadN[d]++; } continue; }   // ($0: nothing to read)
     const by = z(), names = { r: [], c: [], p: [] };
     let sum = 0;
-    for (const [name, , cents] of lines) {
-      const ld = srvLineDep(srvKey(doc, name, dep, type));
+    for (const [name, kind, raw] of lines) {
+      const key = srvKey(doc, name, dep, type, kind), ld = srvLineDep(key), cents = srvAmt(key, raw);
       if (!ld) continue;
       by[ld] += cents; sum += cents;
       if (ld !== d) names[ld].push([name, cents]);
@@ -13417,7 +13422,7 @@ function srvCmpDlg(doc, r, to, today) {
   const steps = [
     ["ops", "Operations: each job's total, in its Job type's department", d => x.ops[d], true],
     ["unread", "Jobs whose lines aren't read yet", d => -x.unread[d]],
-    ["diff", "The jobs' lines don't add up to their totals (a tax or a discount on the job, a line not counted)", d => x.diff[d]],
+    ["diff", "Lines vs each job's total (a tax or a discount on the job itself)", d => x.diff[d]],
     ["out", "Lines counted in another department", d => -outOf(d)],
     ["in", "Lines from another department's jobs", d => inTo(d)],
     ["other", "Jobs of no department (Other job types: not on Operations' tiles)", d => x.other[d]],
