@@ -3200,6 +3200,11 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .er-pick .er-sel, .er-pick .er-typed { width: 100%; }
 .er-many .er-add, .er-many .er-typed { width: 100%; box-sizing: border-box; }
 .er-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-size: .86rem; font-weight: 600; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.u-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .u-title h3 { margin: 0; }
+.u-rename { display: inline-flex; align-items: center; gap: 5px; }
+.u-name { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; }
+.u-name input { flex: 1 1 220px; min-width: 0; font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.u-name .hint { flex-basis: 100%; margin: 0; }
 .cp-find { width: 100%; box-sizing: border-box; font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 4px 0 8px; }
 .er-tile { all: unset; cursor: pointer; font-size: .74rem; font-weight: 700; padding: 2px 7px; margin-left: -6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
 .er-tile[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -8856,7 +8861,8 @@ async function openUsers() {
   const call = async (action, data, okMsg) => {
     err.textContent = "";
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(true); return out; }
-    catch (e) { err.textContent = e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
+    catch (e) { err.textContent = e && e.error === "name_taken" ? "Someone else already has that name. Add a last name or an initial." : e && e.error === "bad_name" ? "Type a name (up to 40 letters)."
+      : e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
       : e && e.error === "not_allowed" && !["setPayroll", "setPriceCheck"].includes(action) ? "Only the owner of Settings and the people he picks can change that." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
       : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
@@ -8919,12 +8925,30 @@ async function openUsers() {
         h("small", { class: "user-meta", text: u.status === "invited" ? `Invite not used yet (until ${fmtWhen(u.inviteUntil)})` : u.status === "disabled" ? "Turned off" : `Last sign-in: ${fmtAt(u.lastLogin)}` })),
       h("span", { class: "ul-go", "aria-hidden": "true", text: "›" }));
   };
+  let naming = "";   // the person whose name is being changed (its box open)
   /** A person's window: Job (sets what a job sees, after a yes), then what they see by area, then the buttons. */
   const openOne = id => {
     const u = users.find(x => x.id === id);
     if (!u) return;
     const me = session && u.id === session.id;
     const isOwner = !!owner && u.id === owner, hasSt = Array.isArray(u.access) && u.access.includes("settings");
+    // the name (what the app and the pay stubs show): changed by anyone who changes Settings; the owner's only by himself
+    const canName = can && apiLevel >= USER_NAME_API && (!isOwner || me);
+    const nameBox = naming === u.id ? (() => {
+      const box = h("input", { type: "text", id: "uName", maxlength: "40", value: u.name, "aria-label": "Their name", "data-nodirty": "1",
+        onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); $("uNameSave").click(); } if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); naming = ""; openOne(u.id); } } });
+      setTimeout(() => { if (box.isConnected) { box.focus(); box.select(); } }, 0);
+      return h("div", { class: "u-name", id: "uNameEdit" }, box,
+        h("button", { class: "btn small primary", type: "button", id: "uNameSave", onclick: async ev => {
+          const nm = box.value.trim().replace(/\s+/g, " ");
+          if (!nm || nm === u.name) { naming = ""; openOne(u.id); return; }
+          const b = ev.currentTarget; b.disabled = true;
+          const was = u.name, out = await call("saveUser", { id: u.id, name: nm }, `${was} is now ${nm}`);
+          if (out) { naming = ""; if (me) session.name = nm; dlgNoPush = true; try { openOne(u.id); } finally { dlgNoPush = false; } } else b.disabled = false;   // the same window, its new name
+        } }, "Save"),
+        h("button", { class: "btn small ghost", type: "button", onclick: () => { naming = ""; openOne(u.id); } }, "Cancel"),
+        h("p", { class: "hint", text: "Their sign-in name, passcode and what they see stay the same. Past records keep the name they had; Approved by on the pay stubs takes the new one." }));
+    })() : null;
     const off = !can || me || isOwner;
     const st = apiLevel < ST_API || !owner || u.status === "invited" ? null
       : isOwner ? h("span", { class: "tag st-owner", text: "Owns Settings" })
@@ -8983,7 +9007,10 @@ async function openUsers() {
            h("button", { class: "btn small ghost" + (u.status === "active" ? " danger" : ""), type: "button", text: u.status === "active" ? "Turn off" : "Turn on",
              onclick: () => quick(u, { status: u.status === "active" ? "disabled" : "active" }, u.status === "active" ? `${u.name} can't sign in now` : `${u.name} can sign in again`) })]);
     openDialog(
-      h("h3", { id: "dlgTitle", text: u.name }),
+      h("div", { class: "u-title" }, h("h3", { id: "dlgTitle", text: u.name }),
+        canName && naming !== u.id ? h("button", { class: "btn small u-rename", type: "button", id: "uRename", title: "Change the name", "aria-label": `Change ${u.name}'s name`,
+          onclick: () => { naming = u.id; openOne(u.id); } }, pencilIcon(), h("span", { text: "Name" })) : null),
+      nameBox,
       h("div", { class: "user-edit", id: "uEdit", "data-id": u.id, "data-user": u.username || u.name, "data-nodirty": "" },
         h("div", { class: "user-top" }, u.username ? h("span", { class: "user-meta", text: "@" + u.username }) : null, me ? h("span", { class: "tag", text: "You" }) : null,
           u.status === "disabled" ? h("span", { class: "pill", text: "Off" }) : null, st,
@@ -9021,7 +9048,8 @@ async function openUsers() {
       const pcs = u => u.status === "active" && Array.isArray(u.access) && u.access.includes("pricecheck");
       pcAny = users.some(pcs); pcMe = users.some(u => session && u.id === session.id && pcs(u));
       listBox.replaceChildren(...users.map(row));
-      if (oneOpen && users.some(u => u.id === one.dataset.id)) openOne(one.dataset.id);
+      // the person's window drawn again in place (a new name is a new title, not a new window)
+      if (oneOpen && users.some(u => u.id === one.dataset.id)) { dlgNoPush = true; try { openOne(one.dataset.id); } finally { dlgNoPush = false; } }
     }
   };
   let drawn = false;
@@ -15440,6 +15468,7 @@ const CP_BEFORE_JOBS_API = 79;                            // ... and the jobs th
 /** A batch of invoices paid before the app: paid, with no paid day. */
 const cpBefore = b => b.status === "paid" && !b.paidOn;
 const CP_HOW = ["ACH", "Check", "Zelle", "Wire", "Cash", "Card", "Other"];
+const USER_NAME_API = 133;                              // the Google script that changes a person's name (Settings)
 /** How a batch was paid, with its number: "Check #1420", "ACH trace #88812", "Cash"; "" when neither is known. */
 const CP_REF_WORD = { Check: "Check #", ACH: "ACH trace #", Wire: "Wire confirmation #", Zelle: "Zelle confirmation #", Card: "Card confirmation #" };
 const cpPayRef = (how, ref) => (ref ? (CP_REF_WORD[how] ? CP_REF_WORD[how] + ref : `${how ? `${how} · ` : ""}Ref #${ref}`) : how || "");

@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 132;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 133;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -933,6 +933,18 @@ function saveUser_(req) {
   const all = readUsers_(s);
   const x = all.filter(function (y) { return y.u.id === String(req.id || ""); })[0];
   if (!x) return { ok: false, error: "gone" };
+  // a new name ({ id, name }): anyone's (one's own too), but the owner of Settings' only by himself; the sign-in name,
+  // passcode and what they see stay; past records keep the name they had, but Approved by on Contractor payroll's
+  // batches (a pay stub's) follows it
+  if (req.name !== undefined) {
+    const nm = String(req.name || "").trim().replace(/\s+/g, " ");
+    if (!nm || nm.length > 40) return { ok: false, error: "bad_name" };
+    if (x.u.id === settingsOwner_() && req.user.id !== x.u.id) return { ok: false, error: "owner" };
+    if (all.some(function (y) { return y.u.id !== x.u.id && y.u.status !== "disabled" && String(y.u.name || "").toLowerCase() === nm.toLowerCase(); })) return { ok: false, error: "name_taken" };
+    const old = String(x.u.name || "");
+    if (nm !== old) { x.u.name = nm; writeUser_(s, x.rowIndex, x.u); cpRenameApprover_(old, nm); }
+    return { ok: true, user: publicUser_(x.u) };
+  }
   if (x.u.id === req.user.id) return { ok: false, error: "self" };
   if (x.u.id === settingsOwner_()) return { ok: false, error: "owner" };
   if (req.remove) {
@@ -8025,6 +8037,16 @@ function cpAll_(s) {
 function cpRow_(b) {
   return [b.id, b.vendor, b.status, b.at, b.by, b.to, JSON.stringify(b.items), b.items.length, b.total / 100, b.paid / 100, b.paidOn || "", b.how || "", b.ref || "",
     b.last4 || "", b.appBy || "", b.appAt || "", b.vTo || "", b.vAt || "", b.cxBy || "", b.cxAt || "", b.out || ""];
+}
+/** A person renamed in Settings: Approved by on the batches (what the pay stub says) follows the new name. */
+function cpRenameApprover_(old, nm) {
+  const s = SpreadsheetApp.getActive().getSheetByName(CP_SHEET), was = String(old || "").trim().toLowerCase();
+  if (!s || s.getLastRow() < 2 || !was) return 0;
+  const col = CP_COLS.indexOf("Approved by") + 1, r = s.getRange(2, col, s.getLastRow() - 1, 1), v = r.getValues();
+  let n = 0;
+  v.forEach(function (x) { if (String(x[0] || "").trim().toLowerCase() === was) { x[0] = nm; n++; } });
+  if (n) r.setValues(v);
+  return n;
 }
 function cpPut_(s, row, b) {
   s.getRange(row, 1, 1, 1).setNumberFormat("@");
