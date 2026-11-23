@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 130;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 131;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -5948,8 +5948,10 @@ function estReports_() {
   ["r", "c", "p"].forEach(function (d) {
     const x = v && v[d] && typeof v[d] === "object" ? v[d] : {};
     const name = function (n) { return String(n || "").replace(/[^\p{L}\p{N} .'-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40); };
-    const team = (Array.isArray(x.team) ? x.team : []).map(name).filter(function (n, i, a) { return n && a.indexOf(n) === i; }).slice(0, 8);
-    if (name(x.lead) || team.length) out[d] = { lead: name(x.lead), team: team };
+    const team = (Array.isArray(x.team) ? x.team : []).map(name).filter(function (n, i, a) { return n && a.indexOf(n) === i; }).slice(0, 40);
+    // the ones with a tile on Estimates (everyone under With is in the report either way)
+    const tiles = (Array.isArray(x.tiles) ? x.tiles : []).map(name).filter(function (n, i, a) { return n && a.indexOf(n) === i && team.indexOf(n) !== -1; });
+    if (name(x.lead) || team.length) out[d] = { lead: name(x.lead), team: team, tiles: tiles };
   });
   return out;
 }
@@ -5958,7 +5960,10 @@ function estReportsPut_(req) {
   let v = {};
   try { v = JSON.parse(P.getProperty("EST_REPORTS") || "{}"); } catch (e) { v = {}; }
   if (["r", "c", "p"].indexOf(String(req.dept)) === -1) return { ok: false, error: "bad_request" };
-  v[req.dept] = { lead: String(req.lead || ""), team: Array.isArray(req.team) ? req.team.map(String) : [] };
+  const was = v[req.dept] && typeof v[req.dept] === "object" ? v[req.dept] : {};
+  v[req.dept] = { lead: String(req.lead || ""), team: Array.isArray(req.team) ? req.team.map(String).slice(0, 40) : [],
+    tiles: Array.isArray(req.tiles) ? req.tiles.map(String).slice(0, 40) : Array.isArray(was.tiles) ? was.tiles : [] };   // an older app sends no tiles: kept
+  if (JSON.stringify(v).length > 8800) return { ok: false, error: "too_big" };
   P.setProperty("EST_REPORTS", JSON.stringify(v));
   return { ok: true, reports: estReports_() };
 }
