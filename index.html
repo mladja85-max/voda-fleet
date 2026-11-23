@@ -1830,6 +1830,11 @@ dialog#dlg:has(.cash-dlg) { width: min(900px, calc(100% - 24px)); }
 .srv-ntable th { font-weight: 600; text-align: left; word-break: break-word; } .srv-pick { font: inherit; font-size: .86rem; padding: 5px 7px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100%; }
 .srv-guess { color: var(--soon); font-weight: 700; font-size: .74rem; } .srv-ntable tr.srv-uns .srv-guess { color: var(--due); }
 dialog#dlg:has(.srv-xl-dlg) { width: min(820px, calc(100% - 24px)); }
+dialog#dlg:has(.srv-cmp-dlg) { width: min(980px, calc(100% - 24px)); }
+.srv-cmp th { font-weight: 500; max-width: 360px; } .srv-cmp td.srv-step { font-weight: 700; }
+.srv-cfold { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--surface); }
+.srv-cfold > summary { cursor: pointer; } .srv-cfold .hint { margin: 6px 0; }
+.srv-cmpl th { font-weight: 600; white-space: nowrap; } .srv-cn { color: var(--muted); }
 .srv-xl th { text-align: left; font-weight: 600; } .srv-xl tr.srv-off td, .srv-xl tr.srv-off th { color: var(--due); font-weight: 700; } .srv-xl tr.srv-tot th, .srv-xl tr.srv-tot td { font-weight: 800; }
 @media (max-width: 640px) { .srv-ntable .srv-x { display: none; } .srv-ntable th, .srv-ntable td { padding-left: .3rem; padding-right: .3rem; } .srv-pick { width: 100%; } }
 .cash-parts { display: grid; gap: .15rem; margin-top: .35rem; }
@@ -13360,7 +13365,113 @@ function srvEl(per, r, today) {
   const xlBtn = h("button", { class: "btn small", type: "button", id: "srvXlBtn", disabled: per !== "month" ? true : null, title: per !== "month" ? "Pick a month: your workbook has a tab per month" : "Compare this month with its tab in your workbook",
     onclick: () => srvXlPick(o, r) }, "Check against my Excel");
   const how = howFold("srvHow", h("p", { class: "hint", text: "Total Services Revenue: each job's lines in Housecall Pro (its services, the card fee, discounts), on the job's day, in the columns of the TOTAL SERVICES REVENUE workbook. Total: the services and the card fee less the discounts. Cleaning: all but Water, Mold and Repair (with the card fee, less the discounts), as in the workbook; Restoration: Water and Mold; Repairs: Repair. Position: the services by money (not the card fee or discounts). Check against my Excel reads the workbook on this device; the file isn't sent anywhere." }), "How it's counted");
-  return [status, tiles, h("div", { class: "rp-actions srv-acts" }, xlBtn), table, namesBox, days, ...notes, how];
+  const cmpBtn = h("button", { class: "btn small", type: "button", id: "srvCmpBtn", title: "Why these numbers differ from Operations, step by step, with the jobs behind each", onclick: () => srvCmpDlg(doc, r, to, today) }, "Compare with Operations");
+  return [status, tiles, h("div", { class: "rp-actions srv-acts" }, cmpBtn, xlBtn), table, namesBox, days, ...notes, how];
+}
+/* ---- Compare with Operations: from Operations' numbers (each job's whole total, in its Job type's department) to
+   these (each line, in its service's column), department by department: the jobs not read yet, what the lines don't
+   add up to (a tax or a discount on the job, a line not counted), the lines counted in another department, and the jobs
+   of no department (Other job types: not on Operations' tiles). Then the jobs behind each, biggest first. ---- */
+const SRV_DEPS = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"]];
+/** A line's department here: Water and Mold Restoration, Repair Repairs, the rest Cleaning (as the workbook); "" not counted. */
+const srvLineDep = k => (k === "skip" ? "" : k === "water" || k === "mold" ? "r" : k === "repair" ? "p" : "c");
+/** The steps and the jobs behind them, for the days a..b. */
+function srvCompare(doc, a, b, today) {
+  const z = () => ({ r: 0, c: 0, p: 0 });
+  const x = { ops: z(), unread: z(), unreadN: z(), diff: z(), out: { r: z(), c: z(), p: z() }, other: z(), tsr: z(), today: z(), todayN: 0,
+    diffJobs: [], moved: [], others: [] };
+  for (const [id, day, dep, inv, type, c, lines] of doc.items) {
+    if (day < a || day > b) continue;
+    const d = "rcp".includes(dep) && dep ? dep : "o";
+    if (d !== "o") { x.ops[d] += c; if (day === today) { x.today[d] += c; x.todayN++; } }
+    if (!Array.isArray(lines)) { if (d !== "o" && c) { x.unread[d] += c; x.unreadN[d]++; } continue; }   // ($0: nothing to read)
+    const by = z(), names = { r: [], c: [], p: [] };
+    let sum = 0;
+    for (const [name, , cents] of lines) {
+      const ld = srvLineDep(srvKey(doc, name, dep, type));
+      if (!ld) continue;
+      by[ld] += cents; sum += cents;
+      if (ld !== d) names[ld].push([name, cents]);
+    }
+    for (const k of "rcp") x.tsr[k] += by[k];
+    if (d === "o") {
+      if (sum) x.others.push({ id, day, inv, type, sum, by });
+      for (const k of "rcp") x.other[k] += by[k];
+      continue;
+    }
+    if (sum !== c) { x.diff[d] += sum - c; x.diffJobs.push({ id, day, inv, d, c, sum, gap: sum - c }); }
+    let moved = 0;
+    for (const k of "rcp") if (k !== d && by[k]) { x.out[d][k] += by[k]; moved += Math.abs(by[k]); }
+    if (moved) x.moved.push({ id, day, inv, d, c, by, names, moved });
+  }
+  x.diffJobs.sort((p, q) => Math.abs(q.gap) - Math.abs(p.gap));
+  x.moved.sort((p, q) => q.moved - p.moved);
+  x.others.sort((p, q) => Math.abs(q.sum) - Math.abs(p.sum));
+  return x;
+}
+function srvCmpDlg(doc, r, to, today) {
+  const x = srvCompare(doc, r.from, to, today), S = srvSplit(srvSum(doc, r.from, to));
+  const $c = v => lbCash(v / 100), sgn = v => (v > 0 ? "+" : v < 0 ? "−" : "") + lbCash(Math.abs(v) / 100);
+  const sum3 = o => o.r + o.c + o.p;
+  const outOf = d => x.out[d].r + x.out[d].c + x.out[d].p, inTo = d => x.out.r[d] + x.out.c[d] + x.out.p[d];
+  const steps = [
+    ["ops", "Operations: each job's total, in its Job type's department", d => x.ops[d], true],
+    ["unread", "Jobs whose lines aren't read yet", d => -x.unread[d]],
+    ["diff", "The jobs' lines don't add up to their totals (a tax or a discount on the job, a line not counted)", d => x.diff[d]],
+    ["out", "Lines counted in another department", d => -outOf(d)],
+    ["in", "Lines from another department's jobs", d => inTo(d)],
+    ["other", "Jobs of no department (Other job types: not on Operations' tiles)", d => x.other[d]],
+    ["tsr", "Total Services Revenue", d => (d === "r" ? S.r : d === "c" ? S.c : S.p), true]];
+  const check = SRV_DEPS.every(([d]) => steps.slice(0, 6).reduce((n, s) => n + s[2](d), 0) === steps[6][2](d));
+  const tbl = h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-xl srv-cmp", id: "srvCmpTable" },
+    h("thead", null, h("tr", null, h("th", { text: "" }), SRV_DEPS.map(([d, n]) => h("th", { class: "num" }, h("i", { class: "rev-dot " + d }), n)), h("th", { class: "num", text: "Total" }))),
+    h("tbody", null, steps.map(([k, label, f, bold]) => {
+      const vs = SRV_DEPS.map(([d]) => f(d)), tot = vs.reduce((n, v) => n + v, 0);
+      if (!bold && !vs.some(Boolean)) return null;
+      return h("tr", { "data-step": k, class: bold ? "srv-tot" : "" }, h("th", { text: label }),
+        vs.map(v => h("td", { class: "num" + (!bold && v ? " srv-step" : "") }, bold ? h("b", { text: $c(v) }) : v ? sgn(v) : "–")),
+        h("td", { class: "num" }, bold ? h("b", { text: $c(tot) }) : tot ? sgn(tot) : "–"));
+    }))));
+  const big = (sum, n, what) => `${fmt(n)} ${what}${n === 1 ? "" : "s"} · ${sgn(sum)}`;
+  const job = j => h("span", { class: "srv-cj" }, hcpLink("job", j.id, `#${j.inv || "—"}`), h("small", { text: ` · ${lbDayText(j.day)}` }));
+  const depName = d => (SRV_DEPS.find(y => y[0] === d) || [, "Other"])[1];
+  const MAX = 40;
+  const fold = (id, title, n, body) => (n ? h("details", { class: "srv-cfold", id }, h("summary", null, h("b", { text: title })), body) : null);
+  const diffSum = x.diffJobs.reduce((n, j) => n + j.gap, 0);
+  const diffEl = fold("srvCmpDiff", `Lines vs the job's total: ${big(diffSum, x.diffJobs.length, "job")}`, x.diffJobs.length,
+    h("div", null, h("p", { class: "hint", text: "Each job whose lines add up to more or less than its total in Housecall Pro. Lines short of the total: a tax or a fee on the job itself. Lines over it: a discount on the job, not on a line. Biggest first." }),
+      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-cmpl" },
+        h("thead", null, h("tr", null, h("th", { text: "Job" }), h("th", { text: "Department" }), h("th", { class: "num", text: "Job's total" }), h("th", { class: "num", text: "Its lines" }), h("th", { class: "num", text: "Difference" }))),
+        h("tbody", null, x.diffJobs.slice(0, MAX).map(j => h("tr", null, h("th", null, job(j)), h("td", { text: depName(j.d) }), h("td", { class: "num", text: $c(j.c) }), h("td", { class: "num", text: $c(j.sum) }), h("td", { class: "num", text: sgn(j.gap) })))))),
+      x.diffJobs.length > MAX ? h("p", { class: "lb-sub", text: `and ${fmt(x.diffJobs.length - MAX)} more` }) : null));
+  const movedSum = x.moved.reduce((n, j) => n + j.moved, 0);
+  const movedEl = fold("srvCmpMoved", `Lines counted in another department: ${fmt(x.moved.length)} job${x.moved.length === 1 ? "" : "s"} · ${$c(movedSum)}`, x.moved.length,
+    h("div", null, h("p", { class: "hint", text: "Jobs with lines that count in another department here: on a Restoration job, cleaning or deodorizing count as Cleaning and rebuild work as Repairs; a card fee or a discount always counts in Cleaning. Biggest first; the names are Housecall Pro's lines." }),
+      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-cmpl" },
+        h("thead", null, h("tr", null, h("th", { text: "Job" }), h("th", { text: "Its department" }), h("th", { text: "Counted in" }), h("th", { class: "num", text: "$" }))),
+        h("tbody", null, x.moved.slice(0, MAX).flatMap(j => "rcp".split("").filter(k => k !== j.d && j.by[k]).map((k, i) => h("tr", null,
+          h("th", null, i ? null : job(j)), h("td", { text: i ? "" : depName(j.d) }),
+          h("td", null, h("i", { class: "rev-dot " + k }), depName(k), h("small", { class: "srv-cn", text: ` · ${j.names[k].sort((p, q) => Math.abs(q[1]) - Math.abs(p[1])).slice(0, 3).map(nm => nm[0]).join(", ")}${j.names[k].length > 3 ? "…" : ""}` })),
+          h("td", { class: "num", text: sgn(j.by[k]) }))))))),
+      x.moved.length > MAX ? h("p", { class: "lb-sub", text: `and ${fmt(x.moved.length - MAX)} more` }) : null));
+  const otherSum = x.others.reduce((n, j) => n + j.sum, 0);
+  const otherEl = fold("srvCmpOther", `Jobs of no department: ${big(otherSum, x.others.length, "job")}`, x.others.length,
+    h("div", null, h("p", { class: "hint", text: "Jobs whose Job type isn't a department's (Other on Operations): counted here, by their lines; not on Operations' Restoration, Cleaning or Repairs tiles. Giving each a Job type in Housecall Pro puts it in its department on Operations." }),
+      h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-cmpl" },
+        h("thead", null, h("tr", null, h("th", { text: "Job" }), h("th", { text: "Job type" }), h("th", { class: "num", text: "$" }))),
+        h("tbody", null, x.others.slice(0, MAX).map(j => h("tr", null, h("th", null, job(j)), h("td", { text: j.type || "(no job type)" }), h("td", { class: "num", text: $c(j.sum) })))))),
+      x.others.length > MAX ? h("p", { class: "lb-sub", text: `and ${fmt(x.others.length - MAX)} more` }) : null));
+  const unreadN = x.unreadN.r + x.unreadN.c + x.unreadN.p;
+  const unreadEl = unreadN ? h("p", { class: "hint", id: "srvCmpUnread", text: `${fmt(unreadN)} job${unreadN === 1 ? "" : "s"} (${$c(sum3(x.unread))}) still to read here: Read again reads their lines.` }) : null;
+  const todayEl = to >= today && sum3(x.today) ? h("p", { class: "hint", id: "srvCmpToday",
+    text: `These are the same days on both sides, today included. Operations' own Year, Month and Week count to yesterday, so its screen shows ${$c(sum3(x.today))} less (today's ${fmt(x.todayN)} visit${x.todayN === 1 ? "" : "s"}) until tomorrow.` }) : null;
+  openDialog(h("div", { class: "rp-dlg srv-xl-dlg srv-cmp-dlg" },
+    h("h3", { id: "dlgTitle", text: "Compare with Operations" }),
+    h("p", { class: "lb-sub", text: `${revSpanText(r.from, to)} · Operations counts each job's whole total in the department of its Job type; Total Services Revenue counts each line in its service's column.` }),
+    todayEl, tbl,
+    check ? null : h("p", { class: "dlg-err", text: "These steps don't add up to Total Services Revenue: tell Claude (a screenshot of this window)." }),
+    unreadEl, diffEl, movedEl, otherEl,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn primary", type: "button", onclick: () => closeDialog() }, "Close")))));
 }
 /** The workbook's column for a header ("1) Carpet cleaning", "Carpet cl.", "Deodorizing", "Disinfecting"…), or "". */
 function srvXlKey(t) {
