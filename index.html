@@ -17488,9 +17488,19 @@ function renderEstimates() {
   };
   const ownersOf = new Map(all ? list.map(e => [e, estOwners(e)]) : []);
   const crew = all ? estCrew() : [], whoPicked = all && crew.some(([n]) => n === estView.who) ? estView.who : "";
+  const ownOf = e => ownersOf.get(e) || [];
+  // a tile's person on an estimate: his by Reports; outside Restoration also when Housecall Pro has him on it (assigned or
+  // in charge), so a supervisor who helped on a cleaning or repairs estimate shows on it
+  const crewHas = (e, name) => ownOf(e).includes(name) || (!R_SUB.includes(grpOf.get(e)) && grpOf.get(e) !== "v" &&
+    [e.inc, ...String(e.emps || "").split(",")].some(x => x && estNameHit(String(x).trim(), name)));
+  // Restoration's own row (water damage, mold, fire/smoke, not sorted, its supervisors): with All estimates, Restoration
+  // or one of its own tiles picked; another department picked: only the supervisors on its estimates
+  const restOn = allOn || sel.includes("r") || sel.some(k => R_SUB.includes(k));
+  const selList = restOn ? list : list.filter(e => sel.some(k => inKey(grpOf.get(e), k)));
+  const crewHere = restOn ? crew : crew.filter(([n]) => n === estView.who || selList.some(e => crewHas(e, n)));
   const leadOf = d => (all && estData && estData.reports && estData.reports[d] && estData.reports[d].lead) || "";
   // a person picked: water damage, mold, fire/smoke and not sorted are his (his name on them)
-  const mine = whoPicked ? list.filter(e => ownersOf.get(e).includes(whoPicked)) : list, whoFirst = whoPicked.split(" ")[0];
+  const mine = whoPicked ? list.filter(e => ownOf(e).includes(whoPicked)) : list, whoFirst = whoPicked.split(" ")[0];
   const tile = (k, name, items, forWho) => {
     const s = estStats(items), on = k === "all" ? allOn && !whoPicked : sel.includes(k), lead = ["r", "c", "p"].includes(k) ? leadOf(k) : "";
     return h("div", { class: "est-tile" + (k === "all" ? " est-all" : "") + (on && k !== "all" ? " picked" : ""), "data-g": k, "data-for": forWho || null, role: "button", tabindex: "0", "aria-pressed": String(on),
@@ -17504,8 +17514,8 @@ function renderEstimates() {
   const kindTile = ([k, name]) => tile(k, name, mine.filter(e => grpOf.get(e) === k), whoPicked);
   // a person's tile (Reports' names): his estimates in these days; a tap shows only his and clears the groups
   const crewTile = ([name, d]) => {
-    const s = estStats(list.filter(e => ownersOf.get(e).includes(name))), on = whoPicked === name, dn = (EST_REP_DEPTS.find(x => x[0] === d) || [, ""])[1];
-    const pick = () => { estView.who = on ? "" : name; estView.grps = sel.filter(k => R_SUB.includes(k)); redraw(); };
+    const s = estStats(restOn ? list.filter(e => ownOf(e).includes(name)) : selList.filter(e => crewHas(e, name))), on = whoPicked === name, dn = (EST_REP_DEPTS.find(x => x[0] === d) || [, ""])[1];
+    const pick = () => { estView.who = on ? "" : name; estView.grps = restOn ? sel.filter(k => R_SUB.includes(k)) : sel; redraw(); };   // another department's: stays on it
     return h("div", { class: "est-tile est-person" + (on ? " picked" : ""), "data-who": name, "data-d": d, role: "button", tabindex: "0", "aria-pressed": String(on),
       title: on ? "Show everyone's" : `Show ${name}'s only`, onclick: pick, onkeydown: e => { if (e.key === "Enter") pick(); } },
       on ? h("span", { class: "est-check", "aria-hidden": "true", text: "✓" }) : null,
@@ -17513,9 +17523,13 @@ function renderEstimates() {
       ...estTileBody(s));
   };
   const subN = row2.length + crew.length;
+  const selNames = row1.filter(([k]) => sel.includes(k)).map(([, n]) => n).join(" and ");
   const tiles = h("div", { class: "est-tiles2", id: "estTiles" },
     h("div", { class: "est-row1", style: `--c:${row1.length}` }, tile("all", "All estimates", list), row1.map(([k, name]) => tile(k, name, k === "v" ? visits : list.filter(e => inKey(grpOf.get(e), k))))),
-    row1.some(([k]) => k === "r") ? [h("p", { class: "est-sublbl", id: "estSubLbl" }, h("i", { class: "est-dot w" }), "Restoration", leadOf("r") ? h("span", { class: "est-pd", text: ` · ${leadOf("r")}` }) : null,
+    row1.some(([k]) => k === "r") && !restOn && crewHere.length ? [h("p", { class: "est-sublbl", id: "estSubLbl" }, h("i", { class: "est-dot w" }), "Restoration supervisors",
+      h("span", { class: "est-pd", text: ` · on ${selNames}` }), whoPicked ? h("span", { class: "est-subwho", text: ` · showing ${whoPicked}'s` }) : null),
+      h("div", { class: "est-row2", id: "estRestRow", style: `--c:${Math.max(crewHere.length, 4)}` }, crewHere.map(crewTile))] : null,
+    row1.some(([k]) => k === "r") && restOn ? [h("p", { class: "est-sublbl", id: "estSubLbl" }, h("i", { class: "est-dot w" }), "Restoration", leadOf("r") ? h("span", { class: "est-pd", text: ` · ${leadOf("r")}` }) : null,
       whoPicked ? h("span", { class: "est-subwho", text: ` · showing ${whoPicked}'s` }) : null),
       // water damage, mold, the supervisors, then the ones not sorted
       h("div", { class: "est-row2" + (subN > 8 ? " many" : ""), id: "estRestRow", style: `--c:${subN}` }, row2.filter(([k]) => k !== "u").map(kindTile), crew.map(crewTile),
@@ -17526,11 +17540,11 @@ function renderEstimates() {
   const onlyVisits = sel.length === 1 && sel[0] === "v";   // Freddy's visits alone: no estimate statuses
   const people = all && !crew.length && isAdmin() ? h("p", { class: "lb-sub", id: "estCrewHint", text: "Tick Tile next to a person under With in Reports (Restoration's supervisors, say) to get a tile for them here." }) : null;
   // the list: filters (status, person, search), then the estimates, newest first
-  const ownerNames = all ? [...new Set(inGrp.flatMap(e => ownersOf.get(e)).concat(whoPicked || []))] : [];   // the people of the groups picked (and the one picked)
+  const ownerNames = all ? [...new Set(inGrp.flatMap(e => ownOf(e)).concat(whoPicked || []))] : [];   // the people of the groups picked (and the one picked)
   const who = whoPicked || (all && ownerNames.includes(estView.who) ? estView.who : "");
   const q = String(estView.q || "").trim().toLowerCase();
   const stOk = e => onlyVisits || estView.st === "all" || (estView.st === "notsent" ? estNotSent(e) : e.st === estView.st);
-  const whoOk = e => !who || ownersOf.get(e).includes(who);
+  const whoOk = e => !who || (whoPicked && !restOn ? crewHas(e, who) : ownOf(e).includes(who));
   const qOk = e => !q || [e.client, e.n, e.addr, e.type, e.emps, e.inc, e.lead, e.tags].some(v => String(v || "").toLowerCase().includes(q));
   const base = inGrp.filter(e => whoOk(e) && qOk(e));
   const shown = base.filter(stOk).sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : Number(b.n) - Number(a.n) || (b.n > a.n ? 1 : -1)));
