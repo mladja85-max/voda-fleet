@@ -13178,6 +13178,7 @@ const SRV_GUESS = [[/credit\s*card|card\s*(service\s*)?(fee|charge)|\bc\.?\s?c\.
   [/carpet|room|hall|stair|steam|area|closet|basement|clean/, "carpet"]];
 function srvGuess(name, dep) {
   const n = String(name || "").toLowerCase();
+  if (!n.trim() || n === "(no name)") return "disc";   // a line with no name: the discount Housecall Pro puts under a job's subtotal
   for (const [re, k] of SRV_GUESS) if (re.test(n)) return typeof k === "function" ? k(n) : k;
   return dep === "r" ? "water" : dep === "p" ? "repair" : "";   // a Restoration job's: Water; a Repairs job's: Repair; else not sorted
 }
@@ -13231,6 +13232,17 @@ function srvKey(doc, name, dep, type, kind) {
 /** A line's money in its column: a discount is always taken off (Housecall Pro sends its discount lines as positive
  *  amounts; counted as they came, every discount was added instead). */
 const srvAmt = (k, cents) => (SRV_LESS.has(k) ? -Math.abs(cents) : cents);
+/** A job's lines: each one's column and money (¢). A discount given as a percent on the whole job (25% off)
+ *  comes from Housecall Pro as the percent (25 → $25.00), not the money: when the job's total only works out with it
+ *  read as a percent of the other lines, it's what was taken off (the rest less the job's total). */
+function srvJobLines(doc, lines, dep, type, c) {
+  const out = lines.map(([name, kind, raw]) => { const key = srvKey(doc, name, dep, type, kind); return { name, key, cents: key === "skip" ? raw : srvAmt(key, raw) }; });
+  const less = out.filter(l => SRV_LESS.has(l.key));
+  if (less.length !== 1) return out;
+  const pct = -less[0].cents, rest = out.reduce((n, l) => n + (l === less[0] ? 0 : l.cents), 0);
+  if (pct > 0 && pct <= 10000 && rest - pct !== c && rest > c && Math.abs(rest - Math.round(rest * pct / 10000) - c) <= 1) { less[0].cents = c - rest; less[0].pct = pct / 100; }
+  return out;
+}
 /** The money from a to b: each column (¢; discounts as they are, below 0), each day, the card fee each day, the total,
  *  each service name (its jobs, ¢, departments), the jobs not read yet, and what the jobs' totals have that their
  *  lines don't (taxes, a discount on the job). */
@@ -13241,8 +13253,8 @@ function srvSum(doc, a, b) {
     if (!Array.isArray(lines)) { if (c) o.unread++; continue; }
     o.jobs++;
     let sum = 0;
-    for (const [name, kind, raw] of lines) {
-      const low = String(name).toLowerCase(), key = srvKey(doc, name, dep, type, kind), cents = key === "skip" ? raw : srvAmt(key, raw);
+    for (const { name, key, cents } of srvJobLines(doc, lines, dep, type, c)) {
+      const low = String(name).toLowerCase();
       sum += cents;
       const nm = o.names.get(low) || { name, low, cents: 0, jobs: new Set(), deps: {} };
       nm.cents += cents; nm.jobs.add(id); nm.deps[dep] = (nm.deps[dep] || 0) + Math.abs(cents); o.names.set(low, nm);
@@ -13392,8 +13404,8 @@ function srvCompare(doc, a, b, today) {
     if (!Array.isArray(lines)) { if (d !== "o" && c) { x.unread[d] += c; x.unreadN[d]++; } continue; }   // ($0: nothing to read)
     const by = z(), names = { r: [], c: [], p: [] };
     let sum = 0;
-    for (const [name, kind, raw] of lines) {
-      const key = srvKey(doc, name, dep, type, kind), ld = srvLineDep(key), cents = srvAmt(key, raw);
+    for (const { name, key, cents } of srvJobLines(doc, lines, dep, type, c)) {
+      const ld = srvLineDep(key);
       if (!ld) continue;
       by[ld] += cents; sum += cents;
       if (ld !== d) names[ld].push([name, cents]);
