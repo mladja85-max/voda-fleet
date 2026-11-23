@@ -13178,6 +13178,7 @@ const SRV_GUESS = [[/credit\s*card|card\s*(service\s*)?(fee|charge)|\bc\.?\s?c\.
   [/carpet|room|hall|stair|steam|area|closet|basement|clean/, "carpet"]];
 function srvGuess(name, dep) {
   const n = String(name || "").toLowerCase();
+  if (!n.trim() || n === "(no name)") return "disc";   // a line with no name: the discount Housecall Pro puts under a job's subtotal
   for (const [re, k] of SRV_GUESS) if (re.test(n)) return typeof k === "function" ? k(n) : k;
   return dep === "r" ? "water" : dep === "p" ? "repair" : "";   // a Restoration job's: Water; a Repairs job's: Repair; else not sorted
 }
