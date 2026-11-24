@@ -21019,7 +21019,7 @@ function ofRange(per, off) {
    serviced, the change ---- */
 const OF_BK_API = 107;                                   // the Google script version that keeps the booked jobs
 const OF_BK_XL_API = 108;                                // the version that saves Booked jobs from the Excel
-const OF_BK_HOW = { tag: "Tag in Housecall Pro", pc: "Past clients call", est: "Estimate call", admin: "Picked by an admin", out: "Not office" };
+const OF_BK_HOW = { tag: "Tag in Housecall Pro", pc: "Past clients call", est: "Estimate call", admin: "Picked by an admin", out: "Office" };
 const OF_BK_PICK_API = 143;                              // ... and keeps the Admins' picks (Who booked each job)
 const ofBk = { docs: {}, loading: {}, err: "", old: false, after: 0, open: "" };
 /** Those days' booked jobs (kept 5 minutes; Update reads them again); null the first time, while they load. */
@@ -21056,7 +21056,7 @@ function ofBkSum(jobs) {
 function ofBkRowEl(j, showDay, showWho) {
   const diff = j.st === "d" && j.bc > 0 && j.fc != null ? j.fc - j.bc : null;
   const st = j.st === "x" ? "Canceled" : j.st === "d" ? "Serviced" : "Not serviced yet";
-  const how = j.how === "admin" ? `Picked by ${j.pickBy || "an admin"}${showWho ? `: ${j.name}` : ""}` : j.how === "out" ? `Not office (${j.pickBy || "an admin"})`
+  const how = j.how === "admin" ? `Picked by ${j.pickBy || "an admin"}${showWho ? `: ${j.name}` : ""}` : j.how === "out" ? `Office (${j.pickBy || "an admin"})`
     : j.how ? `${OF_BK_HOW[j.how] || j.how}${showWho ? `: ${j.name}` : ""}` : "Not credited to anyone";
   return h("li", { class: "of-bk-row", "data-inv": j.inv, "data-st": j.st },
     h("b", { class: "of-bk-inv", text: `#${j.inv}` }),
@@ -21094,7 +21094,7 @@ function ofBkBoxes(p, bk, per, months, from, to) {
 }
 /* ---- Who booked each job (Admins only, under everyone): every job on the schedule for the days on screen (canceled
    ones left out), its number a link to it in Housecall Pro (its Activity feed says who made it), and one tap: the office
-   person who booked it, or Not office. A pick goes over a tag or a Booked mark; tapped again, taken back. The ones nobody
+   person who booked it, or Office (booked by the office, not a CSR on People). A pick goes over a tag or a Booked mark; tapped again, taken back. The ones nobody
    is credited for are marked, with a count, and can be shown alone. ---- */
 const ofBkPickSaving = new Set();
 let ofBkOnlyNone = false;
@@ -21116,7 +21116,7 @@ function ofBkWhoEl(bk, per, cfg) {
   if (!all.length) return h("div", { class: "of-bkw", id: "ofBkWho" }, h("h4", { text: "Who booked each job" }), h("p", { class: "meta", text: "No jobs on the schedule then." }));
   const row = j => {
     const busy = ofBkPickSaving.has(j.key), mine = j.how === "admin" || j.how === "out";
-    const now = j.how === "out" ? `Not office · ${j.pickBy || "an admin"}` : j.by ? (j.how === "admin" ? `${j.by} · picked by ${j.pickBy || "an admin"}` : `${j.by} · ${OF_BK_HOW[j.how] || j.how}`)
+    const now = j.how === "out" ? `Office · ${j.pickBy || "an admin"}` : j.by ? (j.how === "admin" ? `${j.by} · picked by ${j.pickBy || "an admin"}` : `${j.by} · ${OF_BK_HOW[j.how] || j.how}`)
       : j.name ? `${j.name} (not on People) · ${OF_BK_HOW[j.how] || j.how}` : "Not credited";
     const btn = (who, text) => {
       const on = who === "-" ? j.how === "out" : j.by === who;
@@ -21127,7 +21127,7 @@ function ofBkWhoEl(bk, per, cfg) {
       h("span", { class: "of-bkw-job" }, hcpLink("job", j.jid, `#${j.inv}`), per !== "day" ? h("small", { text: lbDayText(j.day) }) : null),
       h("span", { class: "of-bkw-client" }, h("b", { text: j.client || "(no name)" }), h("small", { text: `${j.bc == null ? "Booked $ not known" : ofBkMoney(j.bc)} · booked ${j.bday ? lbDayText(j.bday) : "?"}` })),
       h("span", { class: "of-bkw-now", text: busy ? "Saving…" : now }),
-      h("span", { class: "of-bkw-pick", role: "group", "aria-label": `Who booked #${j.inv}` }, names.map(n => btn(n, n)), btn("-", "Not office")));
+      h("span", { class: "of-bkw-pick", role: "group", "aria-label": `Who booked #${j.inv}` }, names.map(n => btn(n, n)), btn("-", "Office")));
   };
   return h("div", { class: "of-bkw", id: "ofBkWho" },
     h("div", { class: "of-bkw-head" }, h("h4", { text: "Who booked each job" }),
@@ -21143,7 +21143,7 @@ function ofBkFootEl(bk, per, cfg) {
   if (ofBk.old) return h("p", { class: "meta", id: "ofBkOld", text: "Booked jobs: the Google script needs its new version (Deploy › Manage deployments › New version)." });
   if (ofBk.err) return h("p", { class: "dlg-err", id: "ofBkErr", text: ofBk.err });
   if (!bk || bk.failed) return null;
-  const none = bk.jobs.filter(j => !j.by && j.how !== "out" && j.st !== "x");   // Not office (an admin's pick) and canceled: no one to credit
+  const none = bk.jobs.filter(j => !j.by && j.how !== "out" && j.st !== "x");   // Office (an admin's pick) and canceled: no one to credit
   const names = cfg.people.map(x => x.name).slice(0, 3);
   const out = [];
   if (bk.err && bk.connected) out.push(h("p", { class: "dlg-err", text: `The hourly check of Housecall Pro didn't run: ${HCP_ERRORS[bk.err] || bk.err}` }));
