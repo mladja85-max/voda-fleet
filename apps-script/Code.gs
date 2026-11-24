@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 142;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 143;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -485,6 +485,9 @@ function doPost(e) {
       case "ofBooked":
         if (!ofEditor_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(ofBooked_(req));
+      case "bkPick":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return bkPick_(req, user); }));
       case "estimates":
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(estRead_(req.year, user));
@@ -8049,7 +8052,7 @@ function bkGroups_(rows, tz, fromMs) {
     const inv = String(r[1] || "").trim(), base = inv.replace(/-\d+$/, "");
     if (!base) return;
     const st = String(r[BK.st] || "");
-    (by[base] || (by[base] = [])).push({ inv: inv, first: hcpFirstVisit_({ invoice_number: inv }), bday: pcDay_(r[BK.day], tz), sday: pcDay_(r[BK.svc], tz), bc: bkNum_(r[BK.bc]),
+    (by[base] || (by[base] = [])).push({ inv: inv, jid: String(r[0] || ""), first: hcpFirstVisit_({ invoice_number: inv }), bday: pcDay_(r[BK.day], tz), sday: pcDay_(r[BK.svc], tz), bc: bkNum_(r[BK.bc]),
       tag: String(r[BK.tag] || ""), cust: String(r[BK.cust] || ""), client: String(r[BK.client] || ""), ests: String(r[BK.est] || "").split(",").filter(Boolean),
       now: bkNum_(r[BK.now]) || 0, can: /cancel/i.test(st), done: /complete/i.test(st), fee: bkNum_(r[BK.fee]) || 0,
       pre: (Date.parse(bkIso_(r[2])) || 0) < fromMs, seen: pcDay_(r[3] instanceof Date ? r[3] : new Date(String(r[3] || "")), tz) });
@@ -8065,17 +8068,22 @@ function bkGroups_(rows, tz, fromMs) {
     const tagged = [first].concat(booking).filter(function (v) { return v.tag; })[0];
     const ests = [];
     vs.forEach(function (v) { v.ests.forEach(function (e) { if (ests.indexOf(e) === -1) ests.push(e); }); });
-    out.push({ inv: first.inv, day: first.sday, bday: first.bday, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
+    out.push({ key: base, jid: first.jid, inv: first.inv, day: first.sday, bday: first.bday, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
       tag: tagged ? tagged.tag : "", cust: first.cust, client: first.client, ests: ests, pre: first.pre, seen: first.pre ? first.seen : "" });
   });
   return out;
 }
-/** Who booked each one: its tag, else a Booked mark in the app (the last mark on an estimate or a past client), near the
- *  day it was booked. */
+/** Who booked each one: an Admin's pick (Office Scorecard › Who booked each job: a person, or Not office), else its tag,
+ *  else a Booked mark in the app (the last mark on an estimate or a past client), near the day it was booked. */
 function bkCredit_(groups, tz) {
   const norm = function (v) { return String(v || "").toLowerCase().replace(/\s+/g, " ").trim(); };
   const gap = function (a, b) { return Math.abs(Date.parse(a + "T12:00:00Z") - Date.parse(b + "T12:00:00Z")) / 864e5; };
-  groups.forEach(function (g) { if (g.tag) { g.name = g.tag; g.how = "tag"; } });
+  const picks = bkPicks_();
+  groups.forEach(function (g) {
+    const k = picks[g.key];
+    if (k && k.who) { g.name = k.who === "-" ? "" : k.who; g.how = k.who === "-" ? "out" : "admin"; g.pickBy = k.by; g.pickAt = k.at; }
+    else if (g.tag) { g.name = g.tag; g.how = "tag"; }
+  });
   const pick = function (list, day) {   // the one booked closest to the mark
     return list.filter(function (g) { return !g.how && gap(g.bday, day) <= BK_MARK_DAYS; }).sort(function (a, b) { return gap(a.bday, day) - gap(b.bday, day); })[0];
   };
@@ -8119,15 +8127,20 @@ function ofBooked_(req) {
   const since = String(P.getProperty(BK_FROM) || "");
   // credited across every booking (a mark goes to the job closest to it), then the days asked
   const groups = bkCredit_(bkGroups_(bkRows_(), tz, Date.parse(since) || 0), tz).filter(function (g) { return g.day >= from && g.day <= to; });
+  return { ok: true, from: from, to: to, since: since ? pcDay_(new Date(since), tz) : "", scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err,
+    bkErr: String(P.getProperty(BK_ERR) || ""), trigger: trigger, connected: !!hcpKey_(), jobs: bkJobsOut_(groups) };
+}
+/** The booked jobs as the app gets them, each with the office person it's credited to (by). */
+function bkJobsOut_(groups) {
   // the name on a tag or a mark → the office person: a mark's login (the person it's linked to in People), else the name
   let cfg = { people: [] };
   lbRows_(ofSheet_(false)).forEach(function (r) { if (r.key === "config") cfg = ofConfig_(lbParse_(r.json)); });
   const norm = function (v) { return String(v || "").toLowerCase().replace(/\s+/g, " ").trim(); };
-  const users = groups.some(function (g) { return g.how && g.how !== "tag"; }) ? readUsers_(usersSheet_()) : [];
+  const users = groups.some(function (g) { return g.how === "pc" || g.how === "est"; }) ? readUsers_(usersSheet_()) : [];
   const person = function (name, how) {
     const n = norm(name);
     if (!n) return "";
-    if (how !== "tag") {
+    if (how === "pc" || how === "est") {   // a mark: the login that made it (an Admin's pick and a tag: the name)
       const u = users.filter(function (x) { return norm(x.u.name) === n; })[0], p = u ? cfg.people.filter(function (y) { return y.user && y.user === u.u.id; })[0] : null;
       if (p) return p.name;
     }
@@ -8136,12 +8149,43 @@ function ofBooked_(req) {
     const f = n.split(" ")[0], firsts = cfg.people.filter(function (y) { return norm(y.name).split(" ")[0] === f; });
     return firsts.length === 1 ? firsts[0].name : "";
   };
-  const jobs = groups.map(function (g) {
-    return { inv: g.inv, day: g.day, bday: g.bday, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n,
+  return groups.map(function (g) {
+    const j = { key: g.key, jid: g.jid, inv: g.inv, day: g.day, bday: g.bday, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n,
       seen: g.seen || "" };
+    if (g.pickBy) { j.pickBy = g.pickBy; j.pickAt = g.pickAt; }
+    return j;
   }).sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : a.inv < b.inv ? 1 : -1; });
-  return { ok: true, from: from, to: to, since: since ? pcDay_(new Date(since), tz) : "", scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err,
-    bkErr: String(P.getProperty(BK_ERR) || ""), trigger: trigger, connected: !!hcpKey_(), jobs: jobs };
+}
+/* ---- Office Scorecard › Who booked each job (Admins only): the jobs on the schedule for the days on screen, each one's
+   person picked by an Admin (one of the office, or Not office), over its tag or Booked mark; a pick taken back: its tag
+   or mark again. One row a pick on the "Booked by" tab (the last one of each job counts). ---- */
+const BK_PICKS = "Booked by", BK_PICK_COLS = ["At", "Job #", "Job id", "Booked by", "Picked by"];
+/** { job #, without its visit ("1234"): { who: a person, "-" (Not office) or "" (taken back), by, at } } */
+function bkPicks_() {
+  const out = {};
+  pcRows_(BK_PICKS, BK_PICK_COLS.length).forEach(function (r) {
+    const k = String(r[1] || "").trim();
+    if (k) out[k] = { who: String(r[3] || ""), by: String(r[4] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "") };
+  });
+  return out;
+}
+/** An Admin picks who booked a job ({ key: its number, who: a person on the office's People, "-" Not office, or "" to
+ *  take the pick back }): the job as it's credited now. */
+function bkPick_(req, user) {
+  const key = String(req.key || "").trim(), who = String(req.who == null ? "" : req.who).trim();
+  if (!/^[A-Za-z0-9]{1,20}$/.test(key)) return { ok: false, error: "bad_request" };
+  let cfg = { people: [] };
+  lbRows_(ofSheet_(false)).forEach(function (r) { if (r.key === "config") cfg = ofConfig_(lbParse_(r.json)); });
+  const p = who && who !== "-" ? cfg.people.filter(function (x) { return x.name.toLowerCase() === who.toLowerCase(); })[0] : null;
+  if (who && who !== "-" && !p) return { ok: false, error: "bad_value" };
+  const tz = Session.getScriptTimeZone(), since = String(PropertiesService.getScriptProperties().getProperty(BK_FROM) || "");
+  const g0 = bkGroups_(bkRows_(), tz, Date.parse(since) || 0).filter(function (g) { return g.key === key; })[0];
+  if (!g0) return { ok: false, error: "not_found" };
+  const s = pcSheet_(BK_PICKS, BK_PICK_COLS), first = Math.max(2, s.getLastRow() + 1), at = tmNow_().toISOString();
+  if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
+  s.getRange(first, 1, 1, BK_PICK_COLS.length).setNumberFormat("@").setValues([[at, key, g0.jid, p ? p.name : who, String(user.name || "Admin").slice(0, 60)]]);
+  const g = bkCredit_(bkGroups_(bkRows_(), tz, Date.parse(since) || 0), tz).filter(function (x) { return x.key === key; });
+  return { ok: true, job: bkJobsOut_(g)[0] || null };
 }
 
 /* ---- Company goal (Operations): each year's goal for each department and each month's Super, Minimum and Bonus goals,
