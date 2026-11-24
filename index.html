@@ -930,6 +930,17 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .ec-who .ec-lastnote { display: block; margin-top: 2px; padding: 4px 8px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--surface-2); color: var(--ink); font-size: .8rem; white-space: normal; overflow-wrap: anywhere; }
 .ec-who .ec-notes, .est-notes { justify-self: start; font-size: .76rem; font-weight: 700; margin-top: 2px; }
 .est-st .est-notes { display: block; font-size: .76rem; }
+/* the list: when the client was last contacted, and "… left a note", beside the client (its empty space) */
+.est-cl.has-info { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+.est-cl-t { display: grid; min-width: 120px; flex: 1 1 140px; }
+.est-contact { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 4px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); }
+.est-contact.none { padding: 2px 8px; background: transparent; border-style: dashed; } .est-contact.none small { color: var(--muted); font-size: .74rem; font-style: italic; }
+.est-ct-l { display: grid; } .est-cl .est-ct-l b { font-size: .78rem; font-weight: 700; } .est-cl .est-ct-l small { font-size: .72rem; white-space: normal; }
+.est-contact.slow { border-color: color-mix(in srgb, var(--soon) 55%, var(--line)); background: var(--soon-bg); } .est-contact.slow .est-ct-l b { color: var(--soon); }
+.est-contact.late { border-color: color-mix(in srgb, var(--due) 55%, var(--line)); background: var(--due-bg); } .est-contact.late .est-ct-l b { color: var(--due); }
+.est-ct-note { all: unset; cursor: pointer; font-size: .74rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.est-ct-note:hover, .est-ct-note:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+@media (min-width: 1101px) { .est-cl.has-info { flex-wrap: nowrap; } .est-contact { flex: 0 1 auto; } }
 .pc-chip.pc-em { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .ec-form textarea, .ec-dlg textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: .86rem; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 9px; resize: vertical; }
 .ec-dlg { display: grid; gap: 8px; } .en-kinds { flex-wrap: wrap; width: fit-content; max-width: 100%; } .en-h { margin: 10px 0 0; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
@@ -18205,6 +18216,21 @@ function estCallFormEl(e) {
     h("div", { class: "ec-btns" }, h("button", { class: "btn small primary", type: "button", id: "ecSave", onclick: save }, "Save"),
       h("button", { class: "btn small ghost", type: "button", onclick: () => { estCallForm = null; renderEstimates(); } }, "Cancel")));
 }
+/** The list's open estimates (Restoration, Repairs, Other; Cleaning's are the office's) say when the client was last
+ *  contacted, beside the client: the day, how it went, how long ago and who; and "… left a note" (its note in the tip;
+ *  a tap: Notes). Never: "Not contacted yet". Over a week: amber; over 2 weeks: red. */
+const estContactOk = e => view.tab === "estimates" && estNotesOn() && e.st === "open" && !["c", "v"].includes(estGroup(e));
+function estContactEl(e) {
+  const ms = estCallMarks(e), last = ms[ms.length - 1];
+  if (!last) return h("span", { class: "est-contact none" }, h("small", { text: "Not contacted yet" }));
+  const ago = estDayGap(last.d, lbToday()), agoT = ago <= 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`;
+  const noted = ms.slice().reverse().find(m => m.n), who = noted && noted.w ? noted.w.split(/\s+/)[0] : "";
+  return h("span", { class: "est-contact" + (ago > 14 ? " late" : ago > 7 ? " slow" : ""), "data-day": last.d },
+    h("span", { class: "est-ct-l" }, h("b", { text: `Last contacted ${lbDayText(last.d)}` }),
+      h("small", { text: `${estCallText(last)} · ${agoT}${last.w ? ` · ${last.w}` : ""}` })),
+    noted ? h("button", { class: "est-ct-note", type: "button", title: `${estCallText(noted)} · ${lbDayText(noted.d)}: “${noted.n}”`,
+      onclick: ev => { ev.preventDefault(); ev.stopPropagation(); estNotesDlg(e); } }, `${who || "Someone"} left a note`) : null);
+}
 /** An estimate's calls, emails and notes, the newest first: how it went, the day, who, a day to call again, the note. */
 function estHistEl(e, id) {
   const ms = estCallMarks(e).slice().reverse();
@@ -18393,7 +18419,8 @@ function estRowEl(e, today) {
     return h("div", { class: "est-row", "data-id": e.id, "data-g": estGroup(e), "data-st": e.st },
       h("span", { class: "est-day", text: estDayShort(e.day, today) }),
       h("span", { class: "est-no" }, hcpLink("est", estOptId(e), `#${e.n}`)),
-      h("span", { class: "est-cl" }, h("b", { text: e.client || "No name" }),
+      estContactOk(e) ? h("span", { class: "est-cl has-info" }, h("span", { class: "est-cl-t" }, h("b", { text: e.client || "No name" }), h("small", { text: e.addr })), estContactEl(e))
+        : h("span", { class: "est-cl" }, h("b", { text: e.client || "No name" }),
         h("small", { text: e.addr })),
       // water or mold: the estimate's tag in Housecall Pro (locked); no tag: says so
       h("span", { class: "est-grp", title: e.tags ? `Tags in Housecall Pro: ${e.tags}` : estGroup(e) === "u" ? "No Water, Mold or Fire/Smoke tag on this estimate in Housecall Pro (or more than one)" : "" },
