@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 134;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 135;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -247,7 +247,9 @@ function reqProp_(k) {
   return v === undefined || v === null || v === "" ? null : String(v);
 }
 
+let REQ_T0_ = 0;   // when this request reached doPost (its answer says how long the script worked on it: Speed)
 function doPost(e) {
+  REQ_T0_ = Date.now();
   EST_SENT_ = null;
   let req;
   try {
@@ -270,6 +272,10 @@ function doPost(e) {
     req.user = user;
     req.by = user.name;   // every change is stamped with the signed-in person, whatever the app sends
     switch (req.action) {
+      case "speedPut":
+        return json_(withTabLock_(function () { return speedPut_(req); }));
+      case "speedRead":
+        return json_(speedRead_(req));
       case "me":
         if (user.role === "admin") {
           try { hubTidyOnce_(); } catch (e) { /* the folders move in on their next use */ }
@@ -723,7 +729,7 @@ const USER_CACHE_SEC = 300;
 const USER_COLS = ["id", "username", "name", "role", "status", "salt", "hash", "ver", "inviteHash", "inviteUntil", "created", "lastLogin", "access"];
 const ROLES = ["admin", "tech", "csr"];   // csr: a Non-admin in the office (sees what's ticked, like a Non-admin)
 const ADMIN_ACTIONS = ["hcpTest", "estProbe", "deleteTruck", "saveService", "deleteService", "users", "invite", "saveUser", "resetUser", "setPayroll", "setPriceCheck", "setShop", "gpsStops", "gpsStopsSet",
-  "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist", "backupInfo", "backupSet"];
+  "supplyStatus", "saveChecklist", "deleteChecklist", "mergeChecklist", "backupInfo", "backupSet", "speedRead"];
 const TRUCK_ACTIONS = ["saveTruck", "tmSkip", "history", "services"];   // technicians need Trucks ticked for these
 const SESSION_DAYS = 90;     // stays signed in on a phone this long
 const INVITE_DAYS = 14;      // an invite or reset code works this long
@@ -1741,8 +1747,76 @@ function withTabLock_(fn) {
   lock.waitLock(20000);
   try { return fn(); } finally { lock.releaseLock(); }
 }
+/* ---- Speed: each device times its requests (from sending one to its answer being in; the script's own part comes in
+   every answer as _ms) and sends them every 10 minutes: one row a request on the Speed tab, two weeks kept. Admins see
+   the slowest (Settings › Speed). Only request names, times and sizes: nothing about clients. ---- */
+const SPEED_SHEET = "Speed", SPEED_COLS = ["When", "Person", "Device", "Request", "Total ms", "Script ms", "Size KB", "OK"];
+const SPEED_DAYS = 14, SPEED_PUT_MAX = 500;
+function speedSheet_(create) {
+  const s = SpreadsheetApp.getActive().getSheetByName(SPEED_SHEET);
+  return s || (create ? pcSheet_(SPEED_SHEET, SPEED_COLS) : null);
+}
+/** A device's requests since it last sent them: rows [age ms (how long ago, by its own clock), request, total ms, script
+ *  ms (-1: none), bytes, ok]. When: the script's clock less the age (a phone's clock may be off). */
+function speedPut_(req) {
+  const rows = Array.isArray(req.rows) ? req.rows.slice(-SPEED_PUT_MAX) : [], now = Date.now(), out = [];
+  const dev = /^(phone|tablet|computer)$/.test(String(req.device || "")) ? String(req.device) : "other";
+  const num = function (v, max) { const n = Math.round(Number(v)); return isFinite(n) && n >= 0 ? Math.min(n, max) : -1; };
+  rows.forEach(function (r) {
+    if (!Array.isArray(r)) return;
+    const age = num(r[0], SPEED_DAYS * 864e5), a = String(r[1] || "").replace(/[^A-Za-z0-9()_ -]/g, "").slice(0, 40), t = num(r[2], 600000);
+    if (age < 0 || !a || t < 0) return;
+    const sv = num(r[3], 600000), b = num(r[4], 50 * 1024 * 1024);
+    out.push([new Date(now - age), String(req.by || "").slice(0, 60), dev, a, t, sv < 0 ? "" : sv, b < 0 ? "" : Math.round(b / 102.4) / 10, r[5] ? 1 : 0]);
+  });
+  if (!out.length) return { ok: true, saved: 0 };
+  out.sort(function (x, y) { return x[0] - y[0]; });
+  const s = speedSheet_(true);
+  appendRows_(s, SPEED_COLS.length, out);
+  // two weeks kept: the older rows (the oldest are on top) taken off, once in a while
+  const cache = CacheService.getScriptCache();
+  if (!cache.get("SPEED_TRIM") && s.getLastRow() > 1) {
+    cache.put("SPEED_TRIM", "1", 3600);
+    const cut = now - SPEED_DAYS * 864e5, when = s.getRange(2, 1, s.getLastRow() - 1, 1).getValues();
+    let old = 0;
+    while (old < when.length && speedTime_(when[old][0]) < cut) old++;
+    if (old) s.deleteRows(2, old);
+  }
+  return { ok: true, saved: out.length };
+}
+function speedTime_(v) { return v instanceof Date ? v.getTime() : Date.parse(String(v || "")) || 0; }
+/** p (0-1) of a list of numbers: the value that many of them are under. */
+function speedPct_(list, p) {
+  if (!list.length) return null;
+  const a = list.slice().sort(function (x, y) { return x - y; });
+  return a[Math.min(a.length - 1, Math.floor(p * a.length))];
+}
+/** Admins: the last `days` days (1, 7 or 14), on every device: each request's count, typical (half are faster), slow
+ *  (1 in 10 slower) and slowest time, the script's typical part, the typical size, the failed ones; each person and
+ *  device; the 15 slowest requests. */
+function speedRead_(req) {
+  const days = [1, 7, 14].indexOf(Number(req.days)) !== -1 ? Number(req.days) : 7, cut = Date.now() - days * 864e5;
+  const s = speedSheet_(false), rows = s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, SPEED_COLS.length).getValues() : [];
+  const by = {}, who = {}, all = [], slow = [];
+  rows.forEach(function (r) {
+    const at = speedTime_(r[0]);
+    if (at < cut || !r[3]) return;
+    const t = Number(r[4]) || 0, sv = r[5] === "" ? null : Number(r[5]), kb = r[6] === "" ? null : Number(r[6]), a = String(r[3]), k = String(r[1]) + "|" + String(r[2]);
+    const x = by[a] || (by[a] = { t: [], s: [], kb: [], f: 0 });
+    x.t.push(t); if (sv !== null) x.s.push(sv); if (kb !== null) x.kb.push(kb); if (!Number(r[7])) x.f++;
+    (who[k] || (who[k] = [])).push(t);
+    all.push(t);
+    slow.push([at, String(r[1]), String(r[2]), a, t, sv]);
+  });
+  slow.sort(function (p, q) { return q[4] - p[4]; });
+  return { ok: true, days: days,
+    total: { n: all.length, p50: speedPct_(all, 0.5), p90: speedPct_(all, 0.9), devices: Object.keys(who).length },
+    actions: Object.keys(by).map(function (a) { const x = by[a]; return { a: a, n: x.t.length, p50: speedPct_(x.t, 0.5), p90: speedPct_(x.t, 0.9), max: speedPct_(x.t, 1), s50: speedPct_(x.s, 0.5), kb: speedPct_(x.kb, 0.5), f: x.f }; }),
+    people: Object.keys(who).map(function (k) { const p = k.split("|"); return { who: p[0], device: p[1], n: who[k].length, p50: speedPct_(who[k], 0.5), p90: speedPct_(who[k], 0.9) }; }),
+    slowest: slow.slice(0, 15).map(function (x) { return { at: new Date(x[0]).toISOString(), who: x[1], device: x[2], a: x[3], t: x[4], s: x[5] }; }) };
+}
 function json_(obj) {
-  if (obj && typeof obj === "object") obj.api = API_VERSION;
+  if (obj && typeof obj === "object") { obj.api = API_VERSION; if (REQ_T0_) obj._ms = Date.now() - REQ_T0_; }
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 

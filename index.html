@@ -1423,6 +1423,18 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .rp-line.sub { color: var(--muted); font-size: .82rem; } .rp-line.mon b { color: var(--soon); } .rp-line.vd b { color: var(--ok); } .rp-line.owe b { color: var(--due); }
 .rp-line.tot { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 2px; }
 .rp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+dialog#dlg:has(.spd-dlg) { width: min(860px, calc(100% - 24px)); }   /* every column on a computer */
+.spd-dlg, .spd-box, .spd-box > * { min-width: 0; }                      /* a phone: the tables slide, not the page */
+.spd-box .lb-scroll { max-width: 100%; overflow-x: auto; }
+.spd-dlg .seg { margin: 4px 0 8px; }
+.spd-sum { margin: 6px 0 10px; }
+.spd-table th, .spd-table td { white-space: nowrap; }
+.spd-table tbody th { white-space: normal; min-width: 180px; font-weight: 600; }
+.spd-table td.spd-slow { color: var(--due); font-weight: 700; }
+.spd-table td.spd-mid { color: #b36b00; font-weight: 700; }
+.spd-f { color: var(--due); font-weight: 400; }
+.spd-fold { margin: 10px 0; }
+.spd-fold > summary { cursor: pointer; padding: 6px 0; }
 .bk-dlg h4 { margin: 10px 0 4px; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .bk-st { margin: 0 0 6px; } .bk-st b.ok { color: var(--ok); } .bk-st b.due { color: var(--due); }
 .bk-row { display: flex; gap: 8px; flex-wrap: wrap; } .bk-row input { flex: 1 1 220px; min-width: 0; }
@@ -6029,6 +6041,8 @@ async function apiOnce(action, data, ms) {
   if (!navigator.onLine) throw { error: "offline" };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms || 30000);
+  const t0 = performance.now();
+  let out, size = 0;
   try {
     const res = await fetch(API_URL, {
       method: "POST",
@@ -6036,15 +6050,45 @@ async function apiOnce(action, data, ms) {
       body: JSON.stringify(Object.assign({ action, token: session ? session.token : "" }, data || {})),
       signal: ctrl.signal
     });
-    let out;
-    try { out = await res.json(); } catch (e) { throw { error: "network" }; }
+    try { const text = await res.text(); size = text.length; out = JSON.parse(text); } catch (e) { throw { error: "network" }; }
     if (!out || !out.ok) throw out || { error: "network" };
     return out;
   } catch (e) {
     if (e && e.error) throw e;
     throw { error: "network" };
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    speedNote(action, performance.now() - t0, out && typeof out._ms === "number" ? out._ms : null, size, !!(out && out.ok));
+  }
 }
+/* ---- Speed: every request this device sends is timed (from sending it to its answer being in; the Google script's own
+   part comes back in the answer), kept here (the newest 400) and sent to the sheet every 10 minutes, so an admin sees
+   the slowest on everyone's devices (Settings › Speed). Only request names, times and sizes. ---- */
+const K_SPEED = "voda.speed", SPEED_KEEP = 400, SPEED_EVERY = 10 * 60e3, SPEED_API = 135;
+const speedLog = (() => { const v = store.get(K_SPEED); return v && Array.isArray(v.list) ? v : { list: [], sent: 0 }; })();
+let speedSaveT = 0, speedSending = false, speedOpened = false;
+function speedNote(action, ms, server, bytes, ok) {
+  if (action === "speedPut" || action === "speedRead") return;
+  speedLog.list.push([Date.now(), String(action || ""), Math.round(ms), server == null ? -1 : Math.round(server), bytes || 0, ok ? 1 : 0]);
+  if (speedLog.list.length > SPEED_KEEP) speedLog.list.splice(0, speedLog.list.length - SPEED_KEEP);
+  clearTimeout(speedSaveT); speedSaveT = setTimeout(() => store.set(K_SPEED, speedLog), 2000);
+}
+const speedDevice = () => (isTouch() ? (Math.min(screen.width, screen.height) >= 700 ? "tablet" : "phone") : "computer");
+/** What's new since the last send, to the sheet (how long ago each was, by this device's clock: the script dates them). */
+async function speedSend() {
+  if (speedSending || !session || offline || (apiLevel && apiLevel < SPEED_API) || !apiLevel) return;
+  const fresh = speedLog.list.filter(x => x[0] > speedLog.sent).slice(-500);
+  if (!fresh.length) return;
+  speedSending = true;
+  try {
+    const now = Date.now();
+    await api("speedPut", { device: speedDevice(), rows: fresh.map(([at, a, t, sv, b, ok]) => [Math.max(0, now - at), a, t, sv, b, ok]) });
+    speedLog.sent = fresh[fresh.length - 1][0]; store.set(K_SPEED, speedLog);
+  } catch (e) { /* the next time */ }
+  finally { speedSending = false; }
+}
+setInterval(speedSend, SPEED_EVERY);
+setTimeout(speedSend, 45000);   // soon after the app opens too (what this device timed before)
 const MOVED_TEXT = "VODA Hub is moving to its new home. Close the app and open it again in a few minutes. Anything you entered stays on this phone and is sent after that.";
 function errText(e, what) {
   const code = e && e.error;
@@ -6091,6 +6135,7 @@ async function refresh(quiet) {
     lastSync = new Date();
     offline = false;
     loaded = true;
+    if (!speedOpened) { speedOpened = true; speedNote("(app open)", performance.now(), null, 0, true); }   // from opening it to its first answer
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     noteApi(out);
     noteSupplies(out.supplies);
@@ -8635,7 +8680,8 @@ const ST_ICONS = {
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
   save: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
-  plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>' };
+  plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+  speed: '<path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>' };
 const stIcon = k => { const s = h("span", { class: "st-ic", "aria-hidden": "true" }); s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ST_ICONS[k]}</svg>`; return s; };
 /** One line of Settings: an icon, what it is, a few words on what's inside, and › when it opens something. */
 const stRow = (id, icon, title, sub, onclick, cls) => h("button", { class: "st-row" + (cls ? " " + cls : ""), type: "button", id, onclick },
@@ -8821,7 +8867,8 @@ function openSettings() {
       stRow("st-backup", "save", "Backups", "Every night at 2 AM, and a second Google account", () => openBackups())) : null,
     isAdmin() && apiLevel >= HCP_API ? h("p", { class: "st-grp", text: "Connections" }) : null,
     isAdmin() && apiLevel >= HCP_API ? h("div", { class: "st-list", id: "st-conn" },
-      stRow("st-hcp", "plug", "Housecall Pro", "Check the connection and each job type's totals", () => openHcpTest())) : null,
+      stRow("st-hcp", "plug", "Housecall Pro", "Check the connection and each job type's totals", () => openHcpTest()),
+      apiLevel >= SPEED_API ? stRow("st-speed", "speed", "Speed", "How long each screen waits for the Google script, on everyone's devices", () => openSpeed()) : null) : null,
     h("p", { class: "st-grp", text: "Your account" }),
     h("div", { class: "st-list" },
       stRow("st-passrow", "key", "Change passcode", "", openPass),
@@ -16259,6 +16306,90 @@ function backupNow() {
   return name;
 }
 `;
+/** What each request is, in the app's words (else its own name). */
+const SPEED_NAMES = { "(app open)": "Opening the app (until its first answer)", list: "Trucks and checklists (every refresh)", me: "Who's signed in",
+  leaderboard: "Leaderboard", lbPut: "Leaderboard: a save", jobLog: "Job log", payRead: "Payroll", payPut: "Payroll: a save",
+  revenue: "Operations", revSync: "Operations: reading Housecall Pro", revBooked: "Operations: future revenue", cashRead: "Operations: money in", cashSync: "Money in: reading Housecall Pro",
+  unsentRead: "Invoices not sent", priceList: "Price changes", priceScan: "Price changes: checking Housecall Pro", priceHistory: "Price changes: history", priceCheck: "Price changes: a check",
+  goals: "Company goal", goalsPut: "Company goal: a save", estimates: "Estimates", estSync: "Estimates: reading Housecall Pro", estReportsPut: "Estimates: report picks", estReportPdf: "Estimates: report PDF",
+  office: "Office calls", ofPut: "Office calls: a save", ofBooked: "Office Scorecard: booked jobs", ofEstimates: "Office › Estimates", ofEstMark: "Office › Estimates: a mark",
+  pcRead: "Past clients", pcSync: "Past clients: reading Housecall Pro", pcMark: "Past clients: a mark", pcMarks: "Past clients: marks", pcDayMarks: "Past clients: the day's marks",
+  kpiRead: "KPI", kpiPut: "KPI: a save", attendance: "Attendance", atPut: "Attendance: a save", trcDay: "Tech Report Cards", trcReport: "Tech Report Cards: report", trcMark: "Tech Report Cards: a mark",
+  srvRead: "Total Services Revenue", srvSync: "Total Services Revenue: reading Housecall Pro", srvMapPut: "Total Services Revenue: save the columns",
+  cpmRead: "Clients Per Month", marketing: "Marketing", mktPut: "Marketing: a save", rpRead: "Referral Partners",
+  repairs: "Repairs", repSync: "Repairs: reading Housecall Pro", repPut: "Repairs: a save", cpRead: "Contractor Payroll", cpSend: "Contractor Payroll: send", cpPay: "Contractor Payroll: paid",
+  supplies: "Warehouse", supplyReport: "Warehouse: a report", history: "Truck history", services: "Truck services", saveTruck: "Truck: a save", tmSkip: "Truck: skip", gpsStops: "Truck stops",
+  receiptRead: "Receipt reading", receiptFile: "Receipt file", users: "Users", saveUser: "Users: a save", invite: "Users: an invite", resetUser: "Users: a new passcode",
+  changePasscode: "Passcode change", settingsOwner: "Settings' owner", setPayroll: "Payroll access", hcpTest: "Housecall Pro check", estProbe: "For Claude: an estimate",
+  backupInfo: "Backups", backupSet: "Backups: a change", tmMail: "TM hrs email", setShop: "The shop's place", gpsStopsSet: "Truck stops: a setting", saveService: "Truck: a service",
+  deleteService: "Truck: a service taken off", deleteTruck: "Truck taken off", supplyStatus: "Warehouse: status", saveChecklist: "Warehouse: a checklist", lbRename: "Leaderboard: a rename",
+  comClients: "Commercial clients", pcAssign: "Past clients: who calls which", kpiPeople: "KPI: people", kpiImport: "KPI: import", estCall: "Estimates: a call", estCallDays: "Estimates: call days",
+  ofEstWho: "Office › Estimates: who", trcWho: "Tech Report Cards: who", trcImport: "Tech Report Cards: import", rpRule: "Referral Partners: a rule", rpSent: "Referral Partners: sent",
+  rpImport: "Referral Partners: import", cpmImport: "Clients Per Month: import", mktMove: "Marketing: a move", mktImport: "Marketing: import", repMonInv: "Repairs: Monumental invoices",
+  repClearPaid: "Repairs: paid ones cleared", repImport: "Repairs: import", cpParties: "Payroll emails", cpFile: "Contractor Payroll: an invoice file", cpCancel: "Contractor Payroll: cancel",
+  cpResend: "Contractor Payroll: send again", cpDelete: "Contractor Payroll: taken off", cpBefore: "Contractor Payroll: before", cpBeforeJobs: "Contractor Payroll: earlier jobs", cpDoc: "Contractor Payroll: a pay stub" };
+const speedName = a => SPEED_NAMES[a] || a;
+const speedSec = ms => (ms == null ? "–" : ms < 1000 ? `${(ms / 1000).toFixed(2)} s` : `${(ms / 1000).toFixed(1)} s`);
+const speedPct = (list, p) => { if (!list.length) return null; const a = list.slice().sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(p * a.length))]; };
+/** This device's own requests in the last `days` days, as the Google script sums everyone's. */
+function speedLocal(days) {
+  const cut = Date.now() - days * 864e5, by = {};
+  for (const [at, a, t, sv, b, ok] of speedLog.list) {
+    if (at < cut || a === "speedPut") continue;
+    const x = by[a] || (by[a] = { t: [], s: [], kb: [], f: 0 });
+    x.t.push(t); if (sv >= 0) x.s.push(sv); x.kb.push(b / 1024); if (!ok) x.f++;
+  }
+  return Object.entries(by).map(([a, x]) => ({ a, n: x.t.length, p50: speedPct(x.t, 0.5), p90: speedPct(x.t, 0.9), max: speedPct(x.t, 1), s50: speedPct(x.s, 0.5), kb: speedPct(x.kb, 0.5), f: x.f }));
+}
+/** Settings › Speed (admins): how long each screen waits for the Google script, on everyone's devices. */
+async function openSpeed() {
+  if (apiLevel && apiLevel < SPEED_API) { toast("Update the Google script first: paste the latest Code.gs, then Deploy › Manage deployments › New version."); return; }
+  let days = Number(store.get("voda.speedDays")) || 7, cur = null;
+  const box = h("div", { class: "spd-box", id: "spdBox" }, h("p", { class: "lb-sub", text: "Loading…" }));
+  const slowCls = x => (x.p50 >= 3000 || x.p90 >= 8000 ? " spd-slow" : x.p50 >= 1500 || x.p90 >= 4000 ? " spd-mid" : "");
+  const actTable = (list, id) => h("div", { class: "lb-scroll" }, h("table", { class: "lb-table spd-table", id },
+    h("thead", null, h("tr", null, h("th", { text: "Screen or request" }), h("th", { class: "num", text: "Times" }), h("th", { class: "num", text: "Typical" }), h("th", { class: "num", text: "Slow (1 in 10)" }),
+      h("th", { class: "num", text: "Slowest" }), h("th", { class: "num", text: "Script's part" }), h("th", { class: "num", text: "Size" }))),
+    h("tbody", null, list.sort((p, q) => (q.p90 || 0) - (p.p90 || 0)).map(x => h("tr", { "data-a": x.a, class: slowCls(x).trim() },
+      h("th", null, speedName(x.a), x.f ? h("small", { class: "spd-f", text: ` · ${fmt(x.f)} failed` }) : null),
+      h("td", { class: "num", text: fmt(x.n) }), h("td", { class: "num" + slowCls(x), text: speedSec(x.p50) }), h("td", { class: "num", text: speedSec(x.p90) }),
+      h("td", { class: "num", text: speedSec(x.max) }), h("td", { class: "num", text: x.a === "(app open)" ? "–" : speedSec(x.s50) }), h("td", { class: "num", text: x.kb == null ? "–" : `${x.kb < 10 ? x.kb.toFixed(1) : Math.round(x.kb)} KB` }))))));
+  const draw = () => {
+    const seg = h("div", { class: "seg", role: "group", "aria-label": "Days" }, [[1, "Today"], [7, "7 days"], [14, "14 days"]].map(([d, t]) =>
+      h("button", { class: "seg-btn" + (d === days ? " on" : ""), type: "button", "data-d": String(d), "aria-pressed": String(d === days), text: t, onclick: () => { days = d; store.set("voda.speedDays", d); load(); } })));
+    if (!cur) { box.replaceChildren(seg, h("p", { class: "lb-sub", text: "Loading…" })); return; }
+    const T = cur.total || {}, mine = speedLocal(days);
+    box.replaceChildren(seg,
+      h("p", { class: "spd-sum", id: "spdSum" }, T.n ? [h("b", { text: `${fmt(T.n)} requests` }), ` on ${fmt(T.devices)} device${T.devices === 1 ? "" : "s"} · typical ${speedSec(T.p50)} · slow (1 in 10) ${speedSec(T.p90)}`]
+        : "Nothing sent yet: each device sends what it timed every 10 minutes while the app is open."),
+      cur.actions.length ? h("h4", { text: "Each screen and request" }) : null,
+      cur.actions.length ? actTable(cur.actions, "spdActions") : null,
+      cur.people.length ? h("h4", { text: "Each person and device" }) : null,
+      cur.people.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table spd-table", id: "spdPeople" },
+        h("thead", null, h("tr", null, h("th", { text: "Person" }), h("th", { text: "Device" }), h("th", { class: "num", text: "Times" }), h("th", { class: "num", text: "Typical" }), h("th", { class: "num", text: "Slow (1 in 10)" }))),
+        h("tbody", null, cur.people.sort((p, q) => (q.p90 || 0) - (p.p90 || 0)).map(x => h("tr", null, h("th", { text: x.who || "—" }), h("td", { text: x.device }),
+          h("td", { class: "num", text: fmt(x.n) }), h("td", { class: "num", text: speedSec(x.p50) }), h("td", { class: "num", text: speedSec(x.p90) })))))) : null,
+      cur.slowest.length ? h("details", { class: "spd-fold", id: "spdSlowest" }, h("summary", null, h("b", { text: `The ${fmt(cur.slowest.length)} slowest requests` })),
+        h("div", { class: "lb-scroll" }, h("table", { class: "lb-table spd-table" },
+          h("thead", null, h("tr", null, h("th", { text: "When" }), h("th", { text: "Who" }), h("th", { text: "Screen or request" }), h("th", { class: "num", text: "Took" }), h("th", { class: "num", text: "Script's part" }))),
+          h("tbody", null, cur.slowest.map(x => { const d = new Date(x.at); return h("tr", null, h("td", { text: `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` }),
+            h("td", { text: `${x.who} · ${x.device}` }), h("th", { text: speedName(x.a) }), h("td", { class: "num", text: speedSec(x.t) }), h("td", { class: "num", text: speedSec(x.s) })); }))))) : null,
+      h("details", { class: "spd-fold", id: "spdMine" }, h("summary", null, h("b", { text: "This device only (sent or not)" })),
+        mine.length ? actTable(mine, "spdMineTable") : h("p", { class: "lb-sub", text: "Nothing timed on this device in these days." })),
+      howFold("spdHow", h("p", { class: "hint", text: "Each request: from the moment the app sends it to the moment its answer is in. Typical: half of them are faster. Slow: 1 in 10 is slower. Script's part: the Google script's own work (reading the Sheet, asking Housecall Pro); the rest is Google starting the script and the internet. Each device sends what it timed every 10 minutes while the app is open; two weeks are kept on the Speed tab. Only the names of the screens, the times and the sizes: nothing about clients." })));
+  };
+  const load = async () => {
+    cur = null; draw();
+    await speedSend();
+    try { cur = await api("speedRead", { days }); } catch (e) { box.replaceChildren(h("p", { class: "dlg-err", text: errText(e, "Speed") })); return; }
+    draw();
+  };
+  openDialog(h("div", { class: "rp-dlg bk-dlg spd-dlg" },
+    h("h3", { id: "dlgTitle", text: "Speed" }),
+    h("p", { class: "hint", text: "How long each screen waits for the Google script, on everyone's devices. The slowest first." }), box,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
+  load();
+}
 async function openBackups(back) {
   if (apiLevel && apiLevel < BACKUP_API) { toast("Update the Google script first: paste the latest Code.gs, then Deploy › Manage deployments › New version."); return; }
   let cur;
