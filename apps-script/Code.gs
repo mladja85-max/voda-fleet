@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 136;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 137;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -303,7 +303,7 @@ function doPost(e) {
         let gps = null;
         if (seesTrucks) { try { gps = gpsForApp_(trucks); } catch (e) { gps = null; } }   // GPS details never stop the list from loading
         let supplies = null;
-        try { supplies = suppliesForApp_(false, user); } catch (e) { supplies = null; }   // nor do the checklists
+        try { supplies = supCached_(user); } catch (e) { supplies = null; }   // nor do the checklists
         return json_({ ok: true, trucks: trucks, gps: gps, supplies: supplies, me: Object.assign(publicUser_(user), { owner: settingsOwner_() }), serverTime: new Date().toISOString() });
       }
       case "saveTruck":
@@ -344,15 +344,15 @@ function doPost(e) {
       case "supplies":
         return json_({ ok: true, supplies: suppliesForApp_(false, user) });
       case "supplyReport":
-        return json_(withLock_(function () { return supplyReport_(req); }));
+        supTouch_(); return json_(withLock_(function () { return supplyReport_(req); }));
       case "supplyStatus":
-        return json_(withLock_(function () { return supplyStatus_(req); }));
+        supTouch_(); return json_(withLock_(function () { return supplyStatus_(req); }));
       case "saveChecklist":
-        return json_(withLock_(function () { return saveChecklist_(req); }));
+        supTouch_(); return json_(withLock_(function () { return saveChecklist_(req); }));
       case "deleteChecklist":
-        return json_(withLock_(function () { return deleteChecklist_(req); }));
+        supTouch_(); return json_(withLock_(function () { return deleteChecklist_(req); }));
       case "mergeChecklist":
-        return json_(withLock_(function () { return mergeChecklist_(req); }));
+        supTouch_(); return json_(withLock_(function () { return mergeChecklist_(req); }));
       case "leaderboard":
         if (!canLb_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(lbRead_(user, req.year, req.since));
@@ -3300,6 +3300,22 @@ function supVer_() {
 function supBump_() {
   const v = new Date().toISOString();
   PropertiesService.getScriptProperties().setProperty("SUPPLIES_VER", v);
+  supTouch_();
+  return v;
+}
+/* The checklists come with every refresh of the app (the trucks list): built from four tabs each time, they're kept 5
+   minutes for each person, until any checklist is changed or reported in the app (supTouch_: kept ones aren't used
+   again). The Warehouse's own read is always fresh; a change typed in the Sheet by hand shows within 5 minutes. */
+function supTouch_() {
+  try { CacheService.getScriptCache().put("sup_stamp", String(Date.now()) + Math.random().toString(36).slice(2, 6), 21600); } catch (e) { /* the 5 minutes then */ }
+}
+function supCached_(user) {
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  const stamp = cache ? cache.get("sup_stamp") || "0" : "0", who = JSON.stringify([user.id, user.role, user.access || ""]);
+  if (cache) { try { const c = JSON.parse(cache.get("sup_" + user.id) || "null"); if (c && c.stamp === stamp && c.who === who) return c.v; } catch (e) { /* built again */ } }
+  const v = suppliesForApp_(false, user);
+  if (cache) { try { cache.put("sup_" + user.id, JSON.stringify({ stamp: stamp, who: who, v: v }), 300); } catch (e) { /* too big to keep: built each time */ } }
   return v;
 }
 
@@ -4655,6 +4671,15 @@ function revSheet_(create) {
   return s;
 }
 /** Every day on the tab: { "2026-11-02": [day, r$, r jobs, c$, c jobs, p$, p jobs, o$, o jobs, visits, read at, other types] }. */
+/** The Revenue tab's days with only their Jobs column (in its place, [14]): what Money in and Invoices not sent need,
+ *  without reading every day's Sources, Unpaid and Clients too. */
+function revJobCol_() {
+  const s = revSheet_(false), out = {};
+  if (!s || s.getLastRow() < 2) return out;
+  const n = s.getLastRow() - 1, days = s.getRange(2, 1, n, 1).getValues(), jobs = s.getRange(2, REV_COLS.indexOf("Jobs") + 1, n, 1).getValues();
+  days.forEach(function (r, i) { const d = revDayKey_(r[0]); if (!d) return; const row = []; row[14] = String(jobs[i][0] || ""); out[d] = row; });
+  return out;
+}
 /** A day on the Revenue tab ("2026-11-02", or a date the sheet made of it), or "". */
 function revDayKey_(v) {
   const day = v instanceof Date ? Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd") : String(v || "").trim();
@@ -4724,7 +4749,7 @@ function cashRows_(s) {
 }
 /** Every job on the Revenue tab: { id: { day, dep, inv, client, c, owes } } (a job on several days: its first). */
 function cashJobs_(rows) {
-  rows = rows || revRows_(revSheet_(false));
+  rows = rows || revJobCol_();
   const out = {};
   Object.keys(rows).sort().forEach(function (d) {
     let js = null;
@@ -4807,7 +4832,7 @@ function cashRead_(req) {
   const from = String(req.from || ""), to = String(req.to || "");
   if (!ok(from) || !ok(to) || to < from) return { ok: false, error: "bad_request" };
   const jf = String(req.jf || ""), jt = String(req.jt || ""), cmp = ok(jf) && ok(jt) && jt >= jf;
-  const have = cashRows_(cashSheet_(false)), rows = revRows_(revSheet_(false)), jobs = cashJobs_(rows), items = [];
+  const have = cashRows_(cashSheet_(false)), rows = revJobCol_(), jobs = cashJobs_(rows), items = [];
   let at = 0;
   Object.keys(have).forEach(function (id) {
     const h = have[id], j = jobs[id] || h;   // the job as the Revenue tab has it now (its day, if it moved)
@@ -5024,7 +5049,7 @@ function srvMapPut_(req) {
 const UNSENT_CACHE = "unsent_v1", UNSENT_PAGES = 20, UNSENT_JOBS = 80, UNSENT_ALT = 300;
 /** The Revenue tab's jobs (every day read), by job id and by job #: the latest visit of each. */
 function unsentJobs_() {
-  const rows = revRows_(revSheet_(false)), byId = {}, byInv = {};
+  const rows = revJobCol_(), byId = {}, byInv = {};
   Object.keys(rows).sort().forEach(function (d) {
     let js = null;
     try { js = JSON.parse(rows[d][14] || "null"); } catch (e) { js = null; }
@@ -6135,11 +6160,17 @@ function estSync_(req, user) {
   // approving or sending an option in Housecall Pro doesn't always move the estimate's "changed" time, so a quick read
   // can miss it: on its last step, the estimates still open of the last EST_RECHECK_DAYS days are read again one by one
   // (the newest every time, the rest in turn), and the ones that changed are kept with the rest
-  let rechecked = 0;
-  if (!backfill && !next) {
+  let rechecked = 0, had = null, hadAt = null, w0 = null;
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  // (that check reads up to 60 estimates one by one, about 9 seconds: at most every 10 minutes, the 15-minute timer's
+  // run included, not each time Estimates is opened)
+  if (!backfill && !next && (!cache || req.recheck === true || !cache.get("EST_RECHECKED"))) {
+    if (cache) { try { cache.put("EST_RECHECKED", "1", 600); w0 = cache.get("EST_W"); } catch (e) { /* every time then */ } }
     const seen = {};
     got.forEach(function (e) { if (e && e.id) seen[String(e.id)] = true; });
-    const cut = dayOf(now - EST_RECHECK_DAYS * 864e5), had = estRows_(estSheet_(false));
+    const cut = dayOf(now - EST_RECHECK_DAYS * 864e5);
+    hadAt = {}; had = estRows_(estSheet_(false), hadAt);
     const all = Object.keys(had).map(function (id) { return had[id]; })
       .filter(function (r) { return String(r[9] || "open") === "open" && String(r[2]) >= cut && !seen[String(r[0])]; })
       .sort(function (a, b) { return String(a[2]) < String(b[2]) ? 1 : String(a[2]) > String(b[2]) ? -1 : String(a[0]) < String(b[0]) ? 1 : -1; });
@@ -6162,7 +6193,8 @@ function estSync_(req, user) {
   return withLock_(function () {
     // only what changed is written: an estimate already on the tab in its own row, a new one added at the bottom; many
     // changed (Read all) or the first read finished: the whole tab, newest first
-    const s = estSheet_(true), rowAt = {}, rows = estRows_(s, rowAt), at = new Date(now).toISOString(), W = EST_COLS.length;
+    // the tab as read for the check, unless something was written to it since (then read again)
+    const s = estSheet_(true), reuse = had && cache && cache.get("EST_W") === w0, rowAt = reuse ? hadAt : {}, rows = reuse ? had : estRows_(s, rowAt), at = new Date(now).toISOString(), W = EST_COLS.length;
     const upd = {}, add = {};
     let changed = 0;
     got.forEach(function (e) {
@@ -6193,6 +6225,7 @@ function estSync_(req, user) {
       }
     }
     s.getRange(1, 1, 1, W).setValues([EST_COLS]).setFontWeight("bold");
+    if (cache && changed) { try { cache.put("EST_W", String(now) + Math.random().toString(36).slice(2, 6), 21600); } catch (e) { /* read again next time */ } }
     estSentKeep_(rows, at);   // once read as sent, it stays sent (a client's rating afterwards changes Housecall Pro's status)
     if (!next) { if (backfill) { P.setProperty(EST_DONE, "yes"); P.setProperty(EST_SCHEMA, EST_V); } P.setProperty(EST_AT, String(now)); }
     return { ok: true, backfill: backfill, next: next, by: by, read: got.length, changed: changed, rechecked: rechecked, readAt: Number(P.getProperty(EST_AT)) || 0, done: P.getProperty(EST_DONE) === "yes" && P.getProperty(EST_SCHEMA) === EST_V };
