@@ -2337,13 +2337,6 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
 .wh-tabs .vbadge { margin-left: 6px; font-size: .7rem; padding: 0 6px; min-width: 18px; }
 .vbadge.tm { background: var(--due); color: #fff; }   /* trucks that missed the TM hrs check */
 .vbadge.doc-badge { margin-left: 6px; } .vbadge.doc-badge.x { background: var(--due); color: #fff; }   /* Documents: expired (red) or expiring soon */
-.doc-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--soon); background: var(--soon-bg); color: var(--ink); font-size: .9rem; }
-.doc-notice[hidden] { display: none; }
-.doc-notice.x { border-color: var(--due); background: color-mix(in srgb, var(--due) 9%, var(--surface)); }
-.doc-notice-i { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--soon); color: #fff; font-weight: 800; flex: none; }
-.doc-notice.x .doc-notice-i { background: var(--due); }
-.doc-notice-t { flex: 1 1 220px; }
-.doc-notice-x { font-size: 1.1rem; line-height: 1; padding-inline: 10px; }
 .doc-view { display: grid; gap: 12px; max-width: 1100px; margin: 0 auto; }
 .doc-spaces { justify-self: start; } .doc-spaces .doc-n { font-style: normal; margin-left: 6px; font-size: .72rem; padding: 0 6px; border-radius: 999px; }
 .doc-spaces .doc-n.x { background: var(--due); color: #fff; } .doc-spaces .doc-n.soon { background: var(--soon-bg); color: var(--soon); }
@@ -3427,7 +3420,6 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
     </div>
   </div>
   <div class="banner" id="banner" role="status"></div>
-  <div class="doc-notice" id="docNotice" role="status" hidden></div>
   <section class="gate" id="gate" hidden></section>
 
   <div id="app" hidden>
@@ -23258,12 +23250,12 @@ $("installDismiss").addEventListener("click", () => { store.set(K_INSTALL, true)
 
 /* ---------- Documents (Admins only): the company's and the people's certificates and licenses, each with its file (kept
    in the Google account's Drive, VODA Hub › Documentation) and the day it expires. The app warns Admins: a count on the
-   Documents tab and a notice when it opens, from each one's own days before (60 unless set) until it's renewed (a new
+   Documents tab (no notice at the top of the app), from each one's own days before (60 unless set) until it's renewed (a new
    expiry date), and once expired. Add several: many files at once, the details from each one's name ("Title - Holder -
    exp 2027-02-28.pdf"), checked before saving. ---------- */
 const DOC_API = 146;                                    // the Google script with Documents
 const DOC_MAX = 10 * 1024 * 1024;
-const K_DOC_SUM = "voda.docSum", K_DOC_SEEN = "voda.docSeen";
+const K_DOC_SUM = "voda.docSum";
 let docData = null, docErr = "", docLoading = false, docSum = store.get(K_DOC_SUM) || null;
 const docView = Object.assign({ f: "all", q: "", sp: "company" }, store.get("voda.docView") || {});
 const docSaveView = () => store.set("voda.docView", { f: docView.f, q: docView.q, sp: docView.sp });
@@ -23328,25 +23320,15 @@ function noteDocs(sum) {
   store.set(K_DOC_SUM, docSum);
   renderDocBadge();
 }
-/** The Documents tab's count, and the notice under the bar at the top (until closed: then again the next day, or when
- *  the count changes). */
+/** The Documents tab's count (expired: red; expiring soon), on a PC and a phone alike: no notice at the top of the app,
+ *  it's on the tab. */
 function renderDocBadge() {
-  const b = $("docBadge"), note = $("docNotice");
-  if (!b || !note) return;
+  const b = $("docBadge");
+  if (!b) return;
   const can = !!session && docCan(), c = can ? docCounts() : { expired: 0, soon: 0 }, n = c.expired + c.soon;
   b.hidden = !n; b.textContent = String(n); b.classList.toggle("x", c.expired > 0);
   b.title = n ? [c.expired ? `${c.expired} expired` : "", c.soon ? `${c.soon} expiring soon` : ""].filter(Boolean).join(", ") : "";
   $("viewDocuments").setAttribute("aria-label", n ? `Documents, ${b.title}` : "Documents");
-  const key = `${docToday()}|${c.expired}|${c.soon}`, seen = store.get(K_DOC_SEEN);
-  const show = n > 0 && seen !== key && view.tab !== "documents";
-  note.hidden = !show;
-  if (!show) { note.replaceChildren(); return; }
-  note.className = "doc-notice" + (c.expired ? " x" : "");
-  note.replaceChildren(
-    h("span", { class: "doc-notice-i", "aria-hidden": "true", text: "!" }),
-    h("span", { class: "doc-notice-t" }, h("b", { text: "Documents: " }), [c.expired ? `${c.expired} expired` : "", c.soon ? `${c.soon} expiring soon` : ""].filter(Boolean).join(" · "), ". Renew them on time."),
-    h("button", { class: "btn small", type: "button", id: "docNoticeOpen", onclick: () => { docView.f = c.expired ? "x" : "soon"; docSaveView(); setTab("documents"); } }, "Open Documents"),
-    h("button", { class: "btn small ghost doc-notice-x", type: "button", "aria-label": "Close until tomorrow", title: "Close until tomorrow", onclick: () => { store.set(K_DOC_SEEN, key); renderDocBadge(); } }, "×"));
 }
 async function docLoad() {
   if (docLoading || !session || !docCan()) return;
