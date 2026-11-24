@@ -927,6 +927,16 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .est-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
 .est-calls { order: -1; gap: 6px; }
 .ec-who .ec-last { display: block; font-size: .74rem; color: var(--muted); font-style: italic; }
+.ec-who .ec-lastnote { display: block; margin-top: 2px; padding: 4px 8px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--surface-2); color: var(--ink); font-size: .8rem; white-space: normal; overflow-wrap: anywhere; }
+.ec-who .ec-notes, .est-notes { justify-self: start; font-size: .76rem; font-weight: 700; margin-top: 2px; }
+.est-st .est-notes { display: block; font-size: .76rem; }
+.pc-chip.pc-em { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.ec-form textarea, .ec-dlg textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: .86rem; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 9px; resize: vertical; }
+.ec-dlg { display: grid; gap: 8px; } .en-kinds { flex-wrap: wrap; width: fit-content; max-width: 100%; } .en-h { margin: 10px 0 0; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.ec-hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 46vh; overflow: auto; }
+.ec-hist li { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: grid; gap: 3px; }
+.ec-h-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; } .ec-h-top .pc-chip { font-size: .74rem; padding: 1px 8px; } .ec-h-top small { color: var(--muted); font-size: .76rem; }
+.ec-h-note { margin: 0; font-size: .86rem; white-space: pre-wrap; overflow-wrap: anywhere; } .ec-hist-none { margin: 0; color: var(--muted); font-size: .84rem; }
 .ec-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .ec-head h3 { margin: 0; } .ec-head h3 small { font-weight: 600; color: var(--muted); font-size: .8rem; }
 .ec-count { margin-left: auto; font-size: .82rem; font-weight: 700; color: var(--muted); }
@@ -18130,7 +18140,10 @@ function renderEstimates() {
    Freddy's visits aren't estimates. Beside the list on a wide screen, above it otherwise. ---- */
 const EST_CALLS_API = 105;                                // the Google script version with calls on estimates
 const EST_CALL_DAYS_DEF = [1, 2, 3, 7, 14];
-const EST_CALL_TEXT = { nr: "No answer", vm: "Voicemail", sw: "Spoke with", cb: "Call back", booked: "Booked", dnc: "Don't call again" };
+const EST_CALL_TEXT = { nr: "No answer", vm: "Voicemail", sw: "Spoke with", em: "Emailed", cb: "Call back", booked: "Booked", dnc: "Don't call again" };
+const EST_NOTES_API = 150;                                // ... with Emailed and a note on any call (up to 500 letters)
+const estNotesOn = () => !!apiLevel && apiLevel >= EST_NOTES_API;
+const estNoteMax = () => (estNotesOn() ? 500 : 140);
 const EST_CALL_WHO = [["client", "Client"], ["pm", "Property manager"], ["adjuster", "Adjuster"], ["other", "Someone else"]];
 const EST_CALL_SOON = [[1, "Tomorrow"], [3, "In 3 days"], [7, "In a week"], [14, "In 2 weeks"], [30, "In a month"]];
 const K_EST_CALLS_FOLD = "voda.estCallsFold";
@@ -18171,11 +18184,11 @@ const estCallText = m => m.r === "sw" ? `Spoke with ${((EST_CALL_WHO.find(w => w
   : m.r === "cb" && m.cb ? `Call back ${lbDayText(m.cb)}` : EST_CALL_TEXT[m.r] || m.r;
 /** Spoke with… / Call back…: who (Spoke with), a day to call again (Call back: needed), a note. */
 function estCallFormEl(e) {
-  const f = estCallForm, today = lbToday(), isSw = f.r === "sw";
-  const day = h("input", { type: "date", id: "ecDay", min: lbAddDays(today, 1), max: lbAddDays(today, 366), value: f.cb || "", "aria-label": isSw ? "Call again on" : "Call back on",
+  const f = estCallForm, today = lbToday(), isSw = f.r === "sw", isEm = f.r === "em";
+  const day = h("input", { type: "date", id: "ecDay", min: lbAddDays(today, 1), max: lbAddDays(today, 366), value: f.cb || "", "aria-label": isSw ? "Call again on" : isEm ? "Follow up on" : "Call back on",
     onchange: ev => { f.cb = ev.target.value; f.err = ""; renderEstimates(); } });
-  const note = h("input", { type: "text", id: "ecNote", maxlength: "140", value: f.note || "", placeholder: isSw ? "What they said" : "What to call about", "aria-label": "Note", "data-nodirty": "",
-    oninput: ev => { f.note = ev.target.value; } });
+  const note = h("textarea", { id: "ecNote", rows: "2", maxlength: String(estNoteMax()), placeholder: isSw ? "What they said" : isEm ? "What you emailed" : "What to call about", "aria-label": "Note", "data-nodirty": "",
+    oninput: ev => { f.note = ev.target.value; } }, f.note || "");
   const save = () => {
     if (isSw && !f.sw) { f.err = "Pick who you spoke with."; renderEstimates(); return; }
     if (!isSw && !f.cb) { f.err = "Pick the day to call back."; renderEstimates(); return; }
@@ -18184,13 +18197,67 @@ function estCallFormEl(e) {
   return h("div", { class: "ec-form", id: "ecForm" },
     isSw ? h("div", { class: "ec-chips", role: "radiogroup", "aria-label": "Spoke with" }, EST_CALL_WHO.map(([k, t]) => h("button", { class: "ec-chip" + (f.sw === k ? " on" : ""), type: "button", role: "radio",
       "aria-checked": String(f.sw === k), "data-sw": k, onclick: () => { f.sw = k; f.err = ""; renderEstimates(); } }, t))) : null,
-    h("span", { class: "ec-lbl", text: isSw ? "Call again (if they asked)" : "Call back" }),
+    h("span", { class: "ec-lbl", text: isSw ? "Call again (if they asked)" : isEm ? "Follow up (optional)" : "Call back" }),
     h("div", { class: "ec-chips" }, EST_CALL_SOON.map(([n, t]) => h("button", { class: "ec-chip" + (f.cb === lbAddDays(today, n) ? " on" : ""), type: "button", "data-n": n,
-      onclick: () => { const d = lbAddDays(today, n); f.cb = f.cb === d && isSw ? "" : d; f.err = ""; renderEstimates(); } }, t)), day),
+      onclick: () => { const d = lbAddDays(today, n); f.cb = f.cb === d && (isSw || isEm) ? "" : d; f.err = ""; renderEstimates(); } }, t)), day),
     note,
     f.err ? h("p", { class: "dlg-err", id: "ecErr", text: f.err }) : null,
     h("div", { class: "ec-btns" }, h("button", { class: "btn small primary", type: "button", id: "ecSave", onclick: save }, "Save"),
       h("button", { class: "btn small ghost", type: "button", onclick: () => { estCallForm = null; renderEstimates(); } }, "Cancel")));
+}
+/** An estimate's calls, emails and notes, the newest first: how it went, the day, who, a day to call again, the note. */
+function estHistEl(e, id) {
+  const ms = estCallMarks(e).slice().reverse();
+  if (!ms.length) return h("p", { class: "ec-hist-none", id, text: "Nothing yet: no calls, emails or notes." });
+  const again = m => (m.cb && m.r !== "cb" ? ` · ${m.r === "em" ? "follow up" : "call again"} ${lbDayText(m.cb)}` : "");
+  return h("ol", { class: "ec-hist", id }, ms.map(m => h("li", { "data-r": m.r },
+    h("div", { class: "ec-h-top" }, h("span", { class: `pc-chip pc-${m.r}`, text: estCallText(m) }),
+      h("small", { text: `${lbDayText(m.d)}${m.w ? ` · ${m.w}` : ""}${again(m)}` })),
+    m.n ? h("p", { class: "ec-h-note", text: m.n }) : null)));
+}
+/** An estimate's notes (from Today's calls or the list): every call and email so far, the newest first, and a new one:
+ *  Spoke with (who), Emailed, Voicemail, No answer or Call back, with a note and (Spoke with, Emailed: if wanted; Call
+ *  back: needed) a day to call again. Until it's approved: open estimates only. */
+function estNotesDlg(e) {
+  const today = lbToday(), f = { r: "sw", sw: "", cb: "", note: "", err: "", busy: false };
+  const KINDS = [["sw", "Spoke with"], ["em", "Emailed"], ["vm", "Voicemail"], ["nr", "No answer"], ["cb", "Call back"]];
+  const body = h("div", { class: "ec-dlg", id: "estNotes" });
+  const draw = () => {
+    const dayOn = f.r === "sw" || f.r === "em" || f.r === "cb";
+    const note = h("textarea", { id: "enNote", rows: "3", maxlength: String(estNoteMax()), "aria-label": "Note",
+      placeholder: f.r === "sw" ? "What they said" : f.r === "em" ? "What you emailed" : f.r === "cb" ? "What to call about" : "A note (optional)", oninput: ev => { f.note = ev.target.value; } }, f.note);
+    body.replaceChildren(...[
+      h("div", { class: "seg en-kinds", role: "radiogroup", "aria-label": "What happened" }, KINDS.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "radio", "data-r": k,
+        "aria-checked": String(f.r === k), "aria-selected": String(f.r === k), onclick: () => { f.r = k; f.err = ""; if (k !== "sw") f.sw = ""; if (!["sw", "em", "cb"].includes(k)) f.cb = ""; draw(); } }, t))),
+      f.r === "sw" ? h("div", { class: "ec-chips", role: "radiogroup", "aria-label": "Spoke with" }, EST_CALL_WHO.map(([k, t]) => h("button", { class: "ec-chip" + (f.sw === k ? " on" : ""), type: "button", role: "radio",
+        "aria-checked": String(f.sw === k), "data-sw": k, onclick: () => { f.sw = k; f.err = ""; draw(); } }, t))) : null,
+      dayOn ? h("span", { class: "ec-lbl", text: f.r === "sw" ? "Call again (if they asked)" : f.r === "em" ? "Follow up (optional)" : "Call back" }) : null,
+      dayOn ? h("div", { class: "ec-chips" }, EST_CALL_SOON.map(([n, t]) => h("button", { class: "ec-chip" + (f.cb === lbAddDays(today, n) ? " on" : ""), type: "button", "data-n": n,
+          onclick: () => { const d = lbAddDays(today, n); f.cb = f.cb === d && f.r !== "cb" ? "" : d; f.err = ""; draw(); } }, t)),
+        h("input", { type: "date", id: "enDay", min: lbAddDays(today, 1), max: lbAddDays(today, 366), value: f.cb, "aria-label": "Day", onchange: ev => { f.cb = ev.target.value; f.err = ""; draw(); } })) : null,
+      note,
+      f.err ? h("p", { class: "dlg-err", id: "enErr", text: f.err }) : null,
+      h("div", { class: "ec-btns" }, h("button", { class: "btn small primary", type: "button", id: "enSave", disabled: f.busy, onclick: save }, f.busy ? "Saving…" : "Save")),
+      h("h4", { class: "en-h", text: "Every call, email and note" }),
+      estHistEl(e, "enHist")].filter(Boolean));
+  };
+  const save = async () => {
+    if (f.r === "sw" && !f.sw) { f.err = "Pick who you spoke with."; draw(); return; }
+    if (f.r === "cb" && !f.cb) { f.err = "Pick the day to call back."; draw(); return; }
+    f.busy = true; f.err = ""; draw();
+    try {
+      const out = await api("estCall", Object.assign({ id: e.id, r: f.r, note: String(f.note).trim() }, f.cb ? { cb: f.cb } : {}, f.r === "sw" ? { sw: f.sw } : {}));
+      e.calls = out.calls || [];
+      if (estData) store.set(K_EST, estData);
+      Object.assign(f, { sw: "", cb: "", note: "", busy: false });
+      dlgDirty = false; draw(); toast("Saved"); renderEstimates();
+    } catch (err) { f.busy = false; f.err = errText(err, "The note"); draw(); }
+  };
+  openDialog(h("h3", { id: "dlgTitle", text: `Notes · ${e.client || "No name"}` }),
+    h("p", { class: "hint" }, hcpLink("est", estOptId(e), `#${e.n}`), ` · ${lbMoney(estValue(e) / 100)} · ${e.inc || "Nobody assigned"}`),
+    body,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", id: "enClose", onclick: () => closeDialog() }, "Close"))));
+  draw();
 }
 /** One call's row: the client (Call next on the first not called yet), #, amount, who's on it (everyone's), why today;
  *  today's call (and Change), or the call's buttons, as on Past clients (words): No answer, Voicemail, Spoke with…,
@@ -18199,8 +18266,9 @@ function estCallRowEl(c, next, showWho) {
   const e = c.e, m = c.done, sure = estCallSure === e.id, form = estCallForm && estCallForm.id === e.id ? estCallForm : null;
   const why = c.due.kind === "cb" ? (c.due.day < lbToday() ? `call back from ${lbDayText(c.due.day)}` : "call back today") : "";
   // its last call before today (what happened and when): each day starts fresh, the record stays
-  const lastCall = c.last && c.due.kind !== "cb" ? `last: ${estCallText(c.last)} ${lbDayText(c.last.d)}` : !c.last ? "not called yet" : "";
-  const lastNote = c.due.kind === "cb" && c.last && c.last.n ? `“${c.last.n}”` : "";
+  const lastCall = c.last ? `last: ${c.due.kind === "cb" ? "asked to call back" : estCallText(c.last)} · ${lbDayText(c.last.d)}${c.last.w ? ` · ${c.last.w}` : ""}` : c.done ? "" : "not called yet";
+  const nMarks = estCallMarks(e).length;
+  const lastNote = "";   // (the last call's note: on its own line, below)
   const right = m ? h("span", { class: "ec-done" }, h("span", { class: `pc-chip pc-${m.r}`, text: estCallText(m), title: m.n || null }),
       m.saving ? h("small", { text: "saving…" }) : h("button", { class: "linkish ec-change", type: "button", title: "Take back today's call", onclick: () => estCallSave(e, "clear") }, "Change")) : null;
   const btn = (k, name, onclick, on) => h("button", { class: "btn small" + (on ? " primary" : ""), type: "button", "data-r": k, onclick }, name);
@@ -18210,6 +18278,7 @@ function estCallRowEl(c, next, showWho) {
     btn("nr", "No answer", () => estCallSave(e, "nr")),
     btn("vm", "Voicemail", () => estCallSave(e, "vm")),
     btn("sw", "Spoke with…", () => pick("sw"), form && form.r === "sw"),
+    estNotesOn() ? btn("em", "Emailed…", () => pick("em"), form && form.r === "em") : null,
     btn("cb", "Call back…", () => pick("cb"), form && form.r === "cb"),
     btn("booked", "Booked", () => estCallSave(e, "booked")),
     h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": "dnc",
@@ -18222,7 +18291,10 @@ function estCallRowEl(c, next, showWho) {
         h("small", null, hcpLink("est", estOptId(e), `#${e.n}`), ` · ${lbMoney(estValue(e) / 100)}`, e.day ? h("span", { class: "ec-day", text: ` · ${lbDayText(e.day)}` }) : null,
           showWho ? ` · ${e.inc || "Nobody assigned"}` : "", c.tries ? ` · try ${c.tries + 1}` : "", why ? h("span", { class: "ec-why", text: ` · ${why}` }) : null,
           lastNote ? h("span", { class: "ec-said", text: ` · ${lastNote}` }) : null),
-        lastCall ? h("small", { class: "ec-last", text: lastCall }) : null),
+        lastCall ? h("small", { class: "ec-last", text: lastCall }) : null,
+        // what was said or sent last time (the note), and every call and note so far
+        c.last && c.last.n ? h("small", { class: "ec-lastnote", text: `“${c.last.n}”` }) : null,
+        estNotesOn() ? h("button", { class: "linkish ec-notes", type: "button", "data-id": e.id, onclick: () => estNotesDlg(e) }, nMarks ? `Notes · ${nMarks}` : "Add a note") : null),
       right),
     btns, form ? estCallFormEl(e) : null);
 }
@@ -18307,9 +18379,14 @@ function estRowEl(e, today) {
     const sure = estSentSure === e.id, mark = ns && isAdmin() && apiLevel >= EST_SENT_API && !estSentSaving.has(e.id)
       ? h("button", { class: "linkish est-marksent" + (sure ? " sure" : ""), type: "button", "data-id": e.id, title: "It was sent: Housecall Pro's activity shows it, but the app can't read that",
           onclick: ev => { ev.preventDefault(); ev.stopPropagation(); if (sure) estMarkSent(e); else estSentAsk(e.id); } }, sure ? "Sure? Tap again" : "Mark sent") : null;
+    // every call, email and note on it so far (until it's approved): Restoration, Repairs, Other (Cleaning's: the office's)
+    const nm = estCallMarks(e), lastM = nm[nm.length - 1];
+    const notes = estNotesOn() && estGroup(e) !== "c" && view.tab === "estimates" ? h("button", { class: "linkish est-notes", type: "button", "data-id": e.id,
+      title: lastM ? `Last: ${estCallText(lastM)} · ${lbDayText(lastM.d)}${lastM.n ? ` · “${lastM.n}”` : ""}` : "Write down a call, an email or a note",
+      onclick: ev => { ev.preventDefault(); ev.stopPropagation(); estNotesDlg(e); } }, nm.length ? `Notes · ${nm.length}` : "Add a note") : null;
     return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title }, h("b", { text: "Open" }),
       h("small", null, ns ? h("i", { class: "est-ns", text: estSentSaving.has(e.id) ? "marking sent… · " : "not sent · " }) : sb ? h("i", { class: "est-sent", text: "sent · " })
-        : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days), mark);
+        : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days), mark, notes);
   };
   const row = e => {
     const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);
