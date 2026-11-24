@@ -18114,7 +18114,10 @@ function renderEstimates() {
       : h("p", { class: "lb-sub", id: "estNone", text: list.length ? "No estimates match." : all ? "No estimates in these days."
         : `None in these days where you're in charge in Housecall Pro. They're matched by name: your name in the app (${doc.me || "?"}) has to be your name in Housecall Pro, or its first name.` }),
     more > 0 ? h("button", { class: "btn small", type: "button", id: "estMore", onclick: () => { estShown += 100; renderEstimates(); } }, `Show ${Math.min(100, more)} more (${fmt(more)} left)`) : null);
-  const calls = estCallsEl(today, all, who);
+  // Today's calls: the person picked; else one department's tile picked (Restoration or Repairs): its In charge's calls,
+  // as a person's tile does (Cleaning's calls are the office's)
+  const deptPicked = !who && sel.length === 1 && ["r", "p"].includes(sel[0]) ? sel[0] : "";
+  const calls = estCallsEl(today, all, who || (deptPicked ? leadOf(deptPicked) : ""));
   const main = [...head, tiles, people, how, listBox].filter(Boolean);
   box.replaceChildren(...(calls ? [h("div", { class: "est-main" }, ...main), calls] : main));
 }
