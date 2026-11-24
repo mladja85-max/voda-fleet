@@ -3148,6 +3148,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
 .est-st { display: grid; } .est-st b { font-size: .84rem; } .est-st small { color: var(--muted); font-size: .74rem; white-space: nowrap; }
 .est-st.ok b { color: var(--ok); } .est-st.no b { color: var(--due); } .est-st.cx b { color: var(--muted); text-decoration: line-through; }
 .est-st .est-sent { color: var(--ok); font-style: normal; }
+.est-st .est-marksent { justify-self: start; font-size: .74rem; padding: 2px 0; } .est-st .est-marksent.sure { color: var(--due); font-weight: 700; }
 .est-st.op b { color: var(--soon); } .est-st.op.slow small { color: var(--soon); font-weight: 600; } .est-st.op.late small { color: var(--due); font-weight: 700; }
 .est-in { min-width: 0; display: grid; } .est-in .muted { color: var(--muted); font-style: italic; }
 .est-in b, .est-in small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .est-in small { color: var(--muted); font-size: .74rem; }
@@ -16342,7 +16343,7 @@ const SPEED_NAMES = { "(app open)": "Opening the app (until its first answer)", 
   repairs: "Repairs", repSync: "Repairs: reading Housecall Pro", repPut: "Repairs: a save", cpRead: "Contractor Payroll", cpSend: "Contractor Payroll: send", cpPay: "Contractor Payroll: paid",
   supplies: "Warehouse", supplyReport: "Warehouse: a report", history: "Truck history", services: "Truck services", saveTruck: "Truck: a save", tmSkip: "Truck: skip", gpsStops: "Truck stops",
   receiptRead: "Receipt reading", receiptFile: "Receipt file", users: "Users", saveUser: "Users: a save", invite: "Users: an invite", resetUser: "Users: a new passcode",
-  changePasscode: "Passcode change", settingsOwner: "Settings' owner", setPayroll: "Payroll access", hcpTest: "Housecall Pro check", estProbe: "For Claude: an estimate",
+  changePasscode: "Passcode change", settingsOwner: "Settings' owner", setPayroll: "Payroll access", hcpTest: "Housecall Pro check", estProbe: "For Claude: an estimate", estMarkSent: "Mark sent",
   backupInfo: "Backups", backupSet: "Backups: a change", tmMail: "TM hrs email", setShop: "The shop's place", gpsStopsSet: "Truck stops: a setting", saveService: "Truck: a service",
   deleteService: "Truck: a service taken off", deleteTruck: "Truck taken off", supplyStatus: "Warehouse: status", saveChecklist: "Warehouse: a checklist", lbRename: "Leaderboard: a rename",
   comClients: "Commercial clients", pcAssign: "Past clients: who calls which", kpiPeople: "KPI: people", kpiImport: "KPI: import", estCall: "Estimates: a call", estCallDays: "Estimates: call days",
@@ -17981,7 +17982,8 @@ const estDayGap = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.pars
 /** An estimate's calls as they stand (a clear takes back the one before it). */
 const estCallMarks = e => { const ms = []; (e.calls || []).forEach(m => { if (m.r) ms.push(m); else ms.pop(); }); return ms; };
 /** The day it was sent: the first day the app read it as sent, or (sent before the app kept that) its own day. */
-const estSentDay = (e, from) => { const s = e.sentBy && e.sentBy.at ? lbDayKey(new Date(e.sentBy.at)) : ""; return s && from && s > from ? s : e.day; };
+// marked sent by an Admin: sent on a day the app doesn't know, so its scheduled day (like one sent before the app kept "sent")
+const estSentDay = (e, from) => { const s = e.sentBy && e.sentBy.at && e.sentBy.how !== "marked" ? lbDayKey(new Date(e.sentBy.at)) : ""; return s && from && s > from ? s : e.day; };
 /** Is it a call for today? { e, due: { kind: "cb" | "day", day, n }, sent, age, done (today's call), last, tries }, or null. */
 function estCallDue(e, today, days, from) {
   if (e.st !== "open" || estNotSent(e) || ["c", "v"].includes(estGroup(e))) return null;
@@ -18105,8 +18107,33 @@ function estCallsEl(today, all, who) {
       howFold("estCallsHow", h("p", { class: "lb-sub" }, `Each estimate's people in Housecall Pro call the client ${days.join(", ")} days after it's sent (one sent before ${from ? lbDayText(from) : "the app kept it"} counts from its scheduled day), until they speak with someone and set no day to call again, it's booked, or Don't call again. A call day that's missed stays on the list ${EST_CALL_GRACE} more days. A call back comes back on its day. The order: call backs first, then the newest sent to the oldest. Cleaning estimates are the office's (Office › Estimates).`))]);
 }
 
+/* ---- Admins: Mark sent, on an open estimate the app reads as not sent (sent before the app kept "sent", and Housecall
+   Pro's status shows something else now): kept on the Estimate sent tab with who marked it; sent from then on. ---- */
+const EST_SENT_API = 141;
+let estSentSure = "", estSentSureT = 0;
+const estSentSaving = new Set();
+const estSentRedraw = () => { if (view.tab === "office") renderOffice(); else if (view.tab === "estimates") renderEstimates(); };
+function estSentAsk(id) {
+  estSentSure = id; clearTimeout(estSentSureT);
+  estSentSureT = setTimeout(() => { estSentSure = ""; estSentRedraw(); }, 5000);
+  estSentRedraw();
+}
+/** The estimate (every copy the app keeps: Estimates' years, Office › Estimates' years) marked sent. */
+async function estMarkSent(e) {
+  estSentSure = ""; clearTimeout(estSentSureT); estSentSaving.add(e.id); estSentRedraw();
+  try {
+    const out = await api("estMarkSent", { id: e.id });
+    const each = list => (list || []).forEach(x => { if (x.id === e.id) { x.sentBy = out.sentBy; x.sent = true; } });
+    each([e]); each(estData && estData.estimates); Object.values(estOther || {}).forEach(d => each(d && d.estimates)); Object.values(ofEstDocs || {}).forEach(d => each(d && d.estimates));
+    if (estData) store.set(K_EST, estData);
+    toast(`#${e.n} marked sent`);
+  } catch (x) {
+    toast(x && x.error === "not_open" ? "It isn't open any more: read again." : x && x.error === "not_found" ? "That estimate isn't on the app's list yet: read again." : "It wasn't marked. " + errText(x, "The mark"));
+  }
+  estSentSaving.delete(e.id); estSentRedraw();
+}
 /** An estimate's row (Estimates and Office › Estimates): day, #, client and address, group, amount, status (approved
- *  or declined by whom and when; open: not sent or its stage, and for how long), who's in charge. */
+ *  or declined by whom and when; open: not sent or its stage, and for how long; Admins: Mark sent), who's in charge. */
 function estRowEl(e, today) {
   const grpName = e => { const g = estGroup(e); return g === "u" ? "Restoration" : EST_GROUPS.find(x => x[0] === g)[1]; };
   const visit = estGroup(e) === "v";   // Freddy's visits: a visit (done, or to come), not an estimate
@@ -18124,10 +18151,15 @@ function estRowEl(e, today) {
     const age = estAge(e.day, today);
     const ns = estNotSent(e), days = age === 0 ? [h("span", { class: "est-since", text: "since " }), "today"] : `${age} day${age === 1 ? "" : "s"}`, sb = e.st === "open" ? e.sentBy : null;
     const when = sb && sb.at ? lbDayText(lbDayKey(new Date(sb.at))) : "";
-    const title = sb ? `Read as sent ${when}` + (e.hcpSt ? ` · In Housecall Pro now: ${e.hcpSt}` : "") : e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "";
+    const title = sb ? (sb.how === "marked" ? `Marked sent by ${sb.by || "an Admin"} ${when}` : `Read as sent ${when}`) + (e.hcpSt ? ` · In Housecall Pro now: ${e.hcpSt}` : "")
+      : e.hcpSt ? `In Housecall Pro: ${e.hcpSt}` : "";
+    // Admins: one the app reads as not sent (sent before the app kept "sent"), marked sent: a second tap
+    const sure = estSentSure === e.id, mark = ns && isAdmin() && apiLevel >= EST_SENT_API && !estSentSaving.has(e.id)
+      ? h("button", { class: "linkish est-marksent" + (sure ? " sure" : ""), type: "button", "data-id": e.id, title: "It was sent: Housecall Pro's activity shows it, but the app can't read that",
+          onclick: ev => { ev.preventDefault(); ev.stopPropagation(); if (sure) estMarkSent(e); else estSentAsk(e.id); } }, sure ? "Sure? Tap again" : "Mark sent") : null;
     return h("span", { class: "est-st op" + (age > 30 ? " late" : age > 14 ? " slow" : ""), title }, h("b", { text: "Open" }),
-      h("small", null, ns ? h("i", { class: "est-ns", text: "not sent · " }) : sb ? h("i", { class: "est-sent", text: "sent · " })
-        : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days));
+      h("small", null, ns ? h("i", { class: "est-ns", text: estSentSaving.has(e.id) ? "marking sent… · " : "not sent · " }) : sb ? h("i", { class: "est-sent", text: "sent · " })
+        : estStage(e) ? h("i", { class: "est-stage", text: `${estStage(e)} · ` }) : null, days), mark);
   };
   const row = e => {
     const opts = Array.isArray(e.opts) ? e.opts : [], others = String(e.emps || "").split(", ").filter(n => n && n !== e.inc);
