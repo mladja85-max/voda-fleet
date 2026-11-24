@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 143;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 144;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -7928,8 +7928,8 @@ function priceWatchSetup() {
    jobs on the schedule from that day on. One row a visit on the Bookings tab; a job's visits ("1234-2") are one job. ---- */
 const BK_SHEET = "Bookings";
 const BK_COLS = ["Job id", "Job #", "Created at", "First seen", "Booked day", "Booked at", "Booked $", "Service day", "Tagged by", "Customer id", "Client",
-  "From estimate", "Now $", "Job status", "Done at", "Last seen", "Card fee $", "Fee read at $", "Tags"];
-const BK = { day: 4, at: 5, bc: 6, svc: 7, tag: 8, cust: 9, client: 10, est: 11, now: 12, st: 13, done: 14, seen: 15, fee: 16, feeAt: 17, tags: 18 };
+  "From estimate", "Now $", "Job status", "Done at", "Last seen", "Card fee $", "Fee read at $", "Tags", "Job type"];
+const BK = { day: 4, at: 5, bc: 6, svc: 7, tag: 8, cust: 9, client: 10, est: 11, now: 12, st: 13, done: 14, seen: 15, fee: 16, feeAt: 17, tags: 18, type: 19 };
 const BK_FROM = "BK_FROM", BK_ERR = "BK_ERR", BK_AHEAD = "BK_AHEAD_DAY";
 const BK_AHEAD_DAYS = 93;  // once a day: the jobs on the schedule for today and the next 3 months
 const BK_FEE_MAX = 25;     // serviced jobs' card fees read a check (their line items); the rest at the next one
@@ -8003,6 +8003,7 @@ function bkStep_(jobs, now) {
 function bkKeep_(jobs, now, fee) {
   const tz = Session.getScriptTimeZone(), at = new Date(now).toISOString();
   const s = priceSheet_(BK_SHEET, BK_COLS);
+  if (typeof s.getLastColumn === "function" && s.getLastColumn() < BK_COLS.length) s.getRange(1, 1, 1, BK_COLS.length).setValues([BK_COLS]).setFontWeight("bold");   // a column added since (Job type)
   const rows = s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, BK_COLS.length).getValues() : [];
   const at_ = {};
   rows.forEach(function (r, i) { if (r[0]) at_[String(r[0])] = i; });
@@ -8032,6 +8033,7 @@ function bkKeep_(jobs, now, fee) {
     const tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return String((t && typeof t === "object" ? t.name : t) || "").trim(); }).filter(Boolean);
     r[1] = String(job.invoice_number || ""); r[BK.svc] = bkSvcDay_(job, tz); r[BK.tag] = bkTagWho_(job.tags);
     r[BK.cust] = String((job.customer && job.customer.id) || job.customer_id || ""); r[BK.client] = hcpClient_(job); r[BK.est] = ests.join(",").slice(0, 400);
+    r[BK.type] = hcpJobType_(job).slice(0, 80);
     r[BK.now] = cents / 100; r[BK.st] = st; r[BK.done] = String(wt.completed_at || ""); r[BK.seen] = at;
     if (Object.prototype.hasOwnProperty.call(fee, id)) { r[BK.fee] = fee[id] / 100; r[BK.feeAt] = cents / 100; }
     r[BK.tags] = tags.join(", ").slice(0, 300);
@@ -8052,7 +8054,7 @@ function bkGroups_(rows, tz, fromMs) {
     const inv = String(r[1] || "").trim(), base = inv.replace(/-\d+$/, "");
     if (!base) return;
     const st = String(r[BK.st] || "");
-    (by[base] || (by[base] = [])).push({ inv: inv, jid: String(r[0] || ""), first: hcpFirstVisit_({ invoice_number: inv }), bday: pcDay_(r[BK.day], tz), sday: pcDay_(r[BK.svc], tz), bc: bkNum_(r[BK.bc]),
+    (by[base] || (by[base] = [])).push({ inv: inv, jid: String(r[0] || ""), type: String(r[BK.type] || ""), first: hcpFirstVisit_({ invoice_number: inv }), bday: pcDay_(r[BK.day], tz), sday: pcDay_(r[BK.svc], tz), bc: bkNum_(r[BK.bc]),
       tag: String(r[BK.tag] || ""), cust: String(r[BK.cust] || ""), client: String(r[BK.client] || ""), ests: String(r[BK.est] || "").split(",").filter(Boolean),
       now: bkNum_(r[BK.now]) || 0, can: /cancel/i.test(st), done: /complete/i.test(st), fee: bkNum_(r[BK.fee]) || 0,
       pre: (Date.parse(bkIso_(r[2])) || 0) < fromMs, seen: pcDay_(r[3] instanceof Date ? r[3] : new Date(String(r[3] || "")), tz) });
@@ -8068,7 +8070,8 @@ function bkGroups_(rows, tz, fromMs) {
     const tagged = [first].concat(booking).filter(function (v) { return v.tag; })[0];
     const ests = [];
     vs.forEach(function (v) { v.ests.forEach(function (e) { if (ests.indexOf(e) === -1) ests.push(e); }); });
-    out.push({ key: base, jid: first.jid, inv: first.inv, day: first.sday, bday: first.bday, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
+    const typed = [first].concat(vs).filter(function (v) { return v.type; })[0];
+    out.push({ key: base, jid: first.jid, type: typed ? typed.type : "", inv: first.inv, day: first.sday, bday: first.bday, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
       tag: tagged ? tagged.tag : "", cust: first.cust, client: first.client, ests: ests, pre: first.pre, seen: first.pre ? first.seen : "" });
   });
   return out;
@@ -8149,8 +8152,15 @@ function bkJobsOut_(groups) {
     const f = n.split(" ")[0], firsts = cfg.people.filter(function (y) { return norm(y.name).split(" ")[0] === f; });
     return firsts.length === 1 ? firsts[0].name : "";
   };
+  let pcType = null;   // jobs kept before the Job type column: their type from the Past client jobs tab
+  const typeOf = function (g) {
+    if (g.type) return g.type;
+    if (!pcType) { pcType = {}; pcRows_(PC_JOBS, PC_JOB_COLS.length).forEach(function (r) { if (r[0] && r[6]) pcType[String(r[0])] = String(r[6]); if (r[2] && r[6]) pcType["#" + String(r[2])] = String(r[6]); }); }
+    return pcType[g.jid] || pcType["#" + g.inv] || "";
+  };
   return groups.map(function (g) {
-    const j = { key: g.key, jid: g.jid, inv: g.inv, day: g.day, bday: g.bday, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n,
+    const type = typeOf(g);
+    const j = { key: g.key, jid: g.jid, type: type, dep: type ? revDept_(type) : "", inv: g.inv, day: g.day, bday: g.bday, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n,
       seen: g.seen || "" };
     if (g.pickBy) { j.pickBy = g.pickBy; j.pickAt = g.pickAt; }
     return j;

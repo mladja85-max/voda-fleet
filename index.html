@@ -1248,7 +1248,12 @@ button.lb-box.of-bk:focus-visible .of-val { outline: 2px solid var(--accent); ou
 .of-bkw-row { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) minmax(9em, 14em) auto; gap: 4px 12px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: .86rem; }
 .of-bkw-row.none { border-color: var(--due); background: color-mix(in srgb, var(--due) 6%, transparent); }
 .of-bkw-job { display: grid; } .of-bkw-job a { font-weight: 700; } .of-bkw-job small { color: var(--muted); font-size: .74rem; }
-.of-bkw-client { display: grid; min-width: 0; } .of-bkw-client b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.of-bkw-client { display: grid; min-width: 0; } .of-bkw-cl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.of-bkw-cl b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.of-bk-dep { flex: none; display: inline-flex; align-items: center; font-size: .74rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.of-bk-dep .rev-dot { width: 8px; height: 8px; margin-right: 4px; vertical-align: 0; }
+.of-bk-dep.r { color: var(--accent); } .of-bk-dep.c { color: var(--clean); } .of-bk-dep.p { color: var(--soon); }
+.of-bk-client .of-bk-dep { margin-left: 8px; }
 .of-bkw-client small { color: var(--muted); font-size: .76rem; }
 .of-bkw-now { color: var(--muted); font-size: .78rem; } .of-bkw-row.none .of-bkw-now { color: var(--due); font-weight: 700; }
 .of-bkw-pick { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
@@ -21061,7 +21066,7 @@ function ofBkRowEl(j, showDay, showWho) {
   return h("li", { class: "of-bk-row", "data-inv": j.inv, "data-st": j.st },
     h("b", { class: "of-bk-inv", text: `#${j.inv}` }),
     showDay ? h("span", { class: "of-bk-day", text: lbDayText(j.day) }) : null,
-    h("span", { class: "of-bk-client", text: j.client || "" }),
+    h("span", { class: "of-bk-client" }, j.client || "", ofBkDep(j)),
     h("span", { class: "of-bk-amt", text: j.bc == null ? "Booked $ not known" : `${ofBkMoney(j.bc)}${j.fc != null ? ` → ${ofBkMoney(j.fc)}` : ""}` }),
     h("span", { class: "of-bk-diff" + (diff > 0 ? " up" : diff < 0 ? " down" : ""), text: diff == null ? "" : ofBkDiff(diff) }),
     h("small", { class: "of-bk-st", text: `Booked ${j.bday ? lbDayText(j.bday) : "?"}${j.seen ? ` (amount as of ${lbDayText(j.seen)})` : ""} · ${st}${j.n > 1 ? ` · ${j.n} visits` : ""} · ${how}` }));
@@ -21097,6 +21102,8 @@ function ofBkBoxes(p, bk, per, months, from, to) {
    person who booked it, or Office (booked by the office, not a CSR on People). A pick goes over a tag or a Booked mark; tapped again, taken back. The ones nobody
    is credited for are marked, with a count, and can be shown alone. ---- */
 const ofBkPickSaving = new Set();
+/** A booked job's department (its Job type in Housecall Pro): a dot and the name, or nothing when it isn't known. */
+const ofBkDep = j => { const d = REV_DEPTS.find(x => x[0] === j.dep); return d ? h("span", { class: `of-bk-dep ${d[0]}`, title: j.type || d[1], "data-dep": d[0] }, h("i", { class: `rev-dot ${d[0]}` }), d[1]) : null; };
 let ofBkOnlyNone = false;
 async function ofBkPick(j, who) {
   ofBkPickSaving.add(j.key); renderOffice();
@@ -21125,7 +21132,7 @@ function ofBkWhoEl(bk, per, cfg) {
     };
     return h("li", { class: "of-bkw-row" + (!j.by && j.how !== "out" ? " none" : ""), "data-key": j.key },
       h("span", { class: "of-bkw-job" }, hcpLink("job", j.jid, `#${j.inv}`), per !== "day" ? h("small", { text: lbDayText(j.day) }) : null),
-      h("span", { class: "of-bkw-client" }, h("b", { text: j.client || "(no name)" }), h("small", { text: `${j.bc == null ? "Booked $ not known" : ofBkMoney(j.bc)} · booked ${j.bday ? lbDayText(j.bday) : "?"}` })),
+      h("span", { class: "of-bkw-client" }, h("span", { class: "of-bkw-cl" }, h("b", { text: j.client || "(no name)" }), ofBkDep(j)), h("small", { text: `${j.bc == null ? "Booked $ not known" : ofBkMoney(j.bc)} · booked ${j.bday ? lbDayText(j.bday) : "?"}` })),
       h("span", { class: "of-bkw-now", text: busy ? "Saving…" : now }),
       h("span", { class: "of-bkw-pick", role: "group", "aria-label": `Who booked #${j.inv}` }, names.map(n => btn(n, n)), btn("-", "Office")));
   };
