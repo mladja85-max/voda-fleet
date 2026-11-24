@@ -402,6 +402,9 @@ details.paperwork summary, details.how summary { cursor: pointer; font-weight: 7
 .of-est-fu { min-width: 0; }
 .of-est-fu .pc-chip { font-size: .78rem; padding: 2px 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .of-est-who, .of-est-said { font-size: .72rem; color: var(--muted); max-width: 100%; line-height: 1.35; }
+.of-est-last { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; flex: 1 1 100%; min-width: 0; }
+.of-est-lastl { font-size: .72rem; font-weight: 600; color: var(--muted); }
+.of-est-last .pc-chip { opacity: .85; }
 .of-est-said { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .of-est-said { font-style: italic; }
 .of-est-who .linkish, .of-est-who .pc-lock { font-size: .72rem; }
@@ -16331,7 +16334,7 @@ const SPEED_NAMES = { "(app open)": "Opening the app (until its first answer)", 
   revenue: "Operations", revSync: "Operations: reading Housecall Pro", revBooked: "Operations: future revenue", cashRead: "Operations: money in", cashSync: "Money in: reading Housecall Pro",
   unsentRead: "Invoices not sent", priceList: "Price changes", priceScan: "Price changes: checking Housecall Pro", priceHistory: "Price changes: history", priceCheck: "Price changes: a check",
   goals: "Company goal", goalsPut: "Company goal: a save", estimates: "Estimates", estSync: "Estimates: reading Housecall Pro", estReportsPut: "Estimates: report picks", estReportPdf: "Estimates: report PDF",
-  office: "Office calls", ofPut: "Office calls: a save", ofBooked: "Office Scorecard: booked jobs", ofEstimates: "Office › Estimates", ofEstMark: "Office › Estimates: a mark",
+  office: "Office calls", ofPut: "Office calls: a save", ofBooked: "Office Scorecard: booked jobs", ofEstimates: "Office › Estimates", ofEstMark: "Office › Estimates: a mark", ofEstDayMarks: "Office › Estimates: the day's marks",
   pcRead: "Past clients", pcSync: "Past clients: reading Housecall Pro", pcMark: "Past clients: a mark", pcMarks: "Past clients: marks", pcDayMarks: "Past clients: the day's marks",
   kpiRead: "KPI", kpiPut: "KPI: a save", attendance: "Attendance", atPut: "Attendance: a save", trcDay: "Tech Report Cards", trcReport: "Tech Report Cards: report", trcMark: "Tech Report Cards: a mark",
   srvRead: "Total Services Revenue", srvSync: "Total Services Revenue: reading Housecall Pro", srvMapPut: "Total Services Revenue: save the columns",
@@ -18554,7 +18557,8 @@ const ofThisYear = () => clockNow().getFullYear();
  *  another time zone made "today" tomorrow by 5 PM). CSRs type today's numbers until OF_UNTIL (6 PM). */
 const OF_TZ = "America/New_York", OF_UNTIL = 18, OF_UNTIL_TEXT = "6 PM";
 const ofNyParts = d => Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: OF_TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(d).map(x => [x.type, x.value]));
-const ofToday = () => { const p = ofNyParts(clockNow()); return `${p.year}-${p.month}-${p.day}`; };
+const ofNyDay = d => { const p = ofNyParts(d); return `${p.year}-${p.month}-${p.day}`; };   // a moment's day in New York
+const ofToday = () => ofNyDay(clockNow());
 const ofLate = () => Number(ofNyParts(clockNow()).hour) >= OF_UNTIL;
 async function ofLoad(year) {
   if (!session || !ofCan()) return;
@@ -18569,6 +18573,7 @@ async function ofLoad(year) {
       ofData = { config: out.config || { people: [] }, months, year: y, admin: !!out.admin, me: out.me || "", at: new Date().toISOString(),
         estOk: out.estOk !== false, estWho: Array.isArray(out.estWho) ? out.estWho : [],   // who follows up Office › Estimates
         pcAuto: lbIsDay(out.pcAuto) ? out.pcAuto : "",   // from this day: Past clients' numbers counted, not typed
+        estAuto: lbIsDay(out.estAuto) ? out.estAuto : "",   // ... and Office › Estimates' (Cleaning estimate follow-ups)
         trcOk: out.trcOk === true, trcWho: Array.isArray(out.trcWho) ? out.trcWho : [] };   // Tech Report Cards: may she, and (admins) who
       store.set(K_OF, ofData);
     } else ofYears[y] = { months: out.months || {} };
@@ -20782,6 +20787,34 @@ function ofPcIds(p) {
   return { c: c ? c.id : "", b: b ? b.id : "" };
 }
 const ofPcAuto = (p, fid, day) => !!(ofData && ofData.pcAuto && day >= ofData.pcAuto && p && p.user && fid && Object.values(ofPcIds(p)).includes(fid));
+/** Office › Estimates' two numbers on a CSR's day ("Cleaning estimate follow-ups" and "Booked from estimates"): from the
+ *  day it started (ofData.estAuto), counted from the estimates she marked there that day, not typed. */
+function ofEstIds(p) {
+  const vis = (p.fields || []).filter(f => !f.hide);
+  const c = vis.find(f => f.kind === "out" && /^(cleaning )?estimates? follow/i.test(f.label)), b = vis.find(f => /^booked from (cleaning )?estimates?\b/i.test(f.label));
+  return { c: c ? c.id : "", b: b ? b.id : "" };
+}
+const ofEstAuto = (p, fid, day) => !!(ofData && ofData.estAuto && day >= ofData.estAuto && p && p.user && fid && Object.values(ofEstIds(p)).includes(fid));
+/** The estimates counted in her Cleaning estimate follow-ups that day: each one's number, client, the mark and when. */
+const OF_EST_LIST_API = 140;
+async function ofEstListDlg(p, day) {
+  const box = h("div", { class: "cpm-jobs", id: "ofEstList2" }, h("p", { class: "loading", text: "Loading…" }));
+  openDialog(h("h3", { id: "dlgTitle", text: `Estimates · ${p.name} · ${lbDayText(day)}` }),
+    h("p", { class: "hint", text: "The estimates she marked on Office › Estimates this day: what her Cleaning estimate follow-ups count (an estimate marked twice counts once; one taken back doesn't count)." }),
+    box, h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
+  let out;
+  try { out = await api("ofEstDayMarks", { day, uid: p.user }); }
+  catch (e) { box.replaceChildren(h("p", { class: "dlg-err", text: e && e.error === "bad_request" && (Number(e.api) || 0) < OF_EST_LIST_API ? "This list needs the Google script's new version (Deploy › Manage deployments › New version)." : errText(e, "The list") })); return; }
+  const list = out.list || [], booked = list.filter(x => x.r === "booked").length;
+  box.replaceChildren(...[
+    h("p", { class: "meta", id: "ofEstListSum" }, h("b", { text: `${fmt(list.length)} estimate${list.length === 1 ? "" : "s"} called · ${fmt(booked)} booked` })),
+    list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table cpm-jobs-table", id: "ofEstListTable" },
+      h("thead", null, h("tr", null, ["Marked", "#", "Client", "Mark"].map(t => h("th", { text: t })))),
+      h("tbody", null, list.map(x => h("tr", { "data-id": x.id },
+        h("td", { text: x.at ? fmtTime(new Date(x.at)) : "" }), h("td", { text: x.n ? `#${x.n}` : "" }), h("td", { class: "cpm-j-client", text: x.client || "(not read yet)" }),
+        h("td", { text: PC_MARK_TEXT[x.r] || x.r }))))))
+      : h("p", { class: "meta", text: "No estimates marked that day." })]);
+}
 /** The clients counted in her Past clients number that day: each one's group, the day they came up on the list (that
  *  day's, an earlier one, a later one), the mark and when. */
 const OF_PC_LIST_API = 117;
@@ -20853,16 +20886,19 @@ function ofTodayEl() {
   const goal = cfg.goal, work = ofWorkDay(day);
   const locked = !editor && (day !== today || late);   // another day, or today after 6 PM: only Admins and Office (any day) change it
   const box = (f, i, row) => {
-    const auto = ofPcAuto(p, f.id, day);   // Past clients' numbers: counted from her marks, not typed
+    const pcA = ofPcAuto(p, f.id, day), estA = !pcA && ofEstAuto(p, f.id, day), auto = pcA || estA;   // counted from her marks, not typed
     const mine = (f.kind !== "admin" || editor) && !locked && !auto;
     const kid = f.of && i > 0 && (row[i - 1].id === f.of || row[i - 1].of === f.of);   // beside its calls (phone: same line)
     return h("label", { class: "lb-box" + (mine ? "" : " ro") + (kid ? " kid" : "") + (auto ? " auto" : ""), "data-k": f.id,
-      title: auto ? "Counted from Past clients: the clients marked there this day (Booked: the ones marked Booked)" : null }, h("span", { text: ofFieldName(f) }),
+      title: pcA ? "Counted from Past clients: the clients marked there this day (Booked: the ones marked Booked)"
+        : estA ? "Counted from Office › Estimates: the estimates marked there this day (Booked: the ones marked Booked)" : null }, h("span", { text: ofFieldName(f) }),
       h("div", { class: "of-in" },   // the % booked sits inside the box, on the right
         h("input", { type: "text", inputmode: "numeric", autocomplete: "off", value: ofNum(e[f.id]) == null ? (auto ? "0" : "") : String(e[f.id]), "data-f": f.id, readonly: !mine, "aria-readonly": String(!mine),
           onchange: () => ofFlush(), oninput: ev => ofTypedBox(day, p, ev.target) }),
-        f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : auto ? h("button", { class: "of-auto", type: "button", id: "ofPcSee", title: "The clients counted",
-          onclick: ev => { ev.preventDefault(); ev.stopPropagation(); ofPcListDlg(p, day); } }, "from Past clients ›") : null));
+        f.of ? h("small", { class: "of-ratio", "data-of": f.id }) : pcA ? h("button", { class: "of-auto", type: "button", id: "ofPcSee", title: "The clients counted",
+          onclick: ev => { ev.preventDefault(); ev.stopPropagation(); ofPcListDlg(p, day); } }, "from Past clients ›")
+          : estA ? h("button", { class: "of-auto", type: "button", id: "ofEstSee", title: "The estimates counted",
+          onclick: ev => { ev.preventDefault(); ev.stopPropagation(); ofEstListDlg(p, day); } }, "from Estimates ›") : null));
   };
   const shown = ofShown(p, e);   // a past-only number shows only on a day that has one
   // the rows: Outbound calls, Inbound calls, then Admins only (not shown to the office people: admins type them)
@@ -21276,13 +21312,15 @@ function comEl() {
     howFold("comHow", h("p", { class: "hint", text: "Commercial: a Commercial job type, or a commercial / property manager tag in Housecall Pro. Listed: a job done before this year, and none done since January 1 or booked. The last year with us first, then the most years, then the most spent. Left off: do not call (a tag, Housecall Pro's do not service, or marked on Past clients) and moved away. From what Past clients reads from Housecall Pro (what changed, every 15 minutes while it's open)." }), "How it's picked"));
 }
 /* ---- Office › Estimates follow-up: the call marks on each estimate, as on Past clients (Not now, Voicemail, Booked,
-   Call back…, Don't call again). The open ones get the buttons; a decided one keeps its mark. Who follows them up:
-   Admins pick (nobody picked: everyone with Office). ---- */
+   Call back…, Don't call again). The open ones get the buttons; a mark shows the day it's made, then each new day (New
+   York's) the buttons come back with the last call above them. Booked and Don't call again stay (they end it; an admin
+   can change them); a call back stays until its day. Who follows them up: Admins pick (nobody picked: everyone with
+   Office). ---- */
 let ofEstSure = "", ofEstSureTimer = 0, ofEstCbOpen = "", ofEstMore = "";   // ofEstMore: a phone: the estimate whose ⋯ is open
 const ofEstCbState = {};
 /** An estimate's row with its follow-up under it: an open one's five buttons in words, as on Past clients (Not now,
- *  Voicemail, Booked, Call back…, Don't call again: a second tap), or its mark (who, when, Change); a decided one keeps
- *  its mark. Call back… opens its picker under the row. */
+ *  Voicemail, Booked, Call back…, Don't call again: a second tap), with its last call above them; or today's mark (who,
+ *  when, Change), Booked / Don't call again, a call back not due yet. Call back… opens its picker under the row. */
 function ofEstRowEl(e, today) {
   const row = estRowEl(e, today);
   row.classList.add("of-est-row");
@@ -21290,12 +21328,23 @@ function ofEstRowEl(e, today) {
   const inB = row.querySelector(".est-in > b"), full = inB ? inB.textContent.trim() : "", parts = full.split(/\s+/);
   if (parts.length > 1) { inB.replaceChildren(h("span", { class: "est-inf", text: full }), h("span", { class: "est-ins", text: `${parts[0]} ${parts[parts.length - 1][0]}.` })); inB.title = full; }
   if (apiLevel && apiLevel < OF_EST_FU_API) return row;
-  const m = e.m && e.m.r ? e.m : null, open = e.st === "open";
+  const m0 = e.m && e.m.r ? e.m : null, open = e.st === "open", ny = ofToday();
+  const mDay = m0 ? m0.day || (m0.at ? ofNyDay(new Date(m0.at)) : ny) : "";
+  // shown: today's mark, one that ends it (Booked, Don't call again) or a call back not due yet; else a new day's buttons
+  const keep = m0 && (!open || mDay >= ny || m0.r === "booked" || m0.r === "dnc" || (m0.r === "cb" && m0.cb && m0.cb > ny));
+  const m = keep ? m0 : null, last = !m && open ? m0 || (e.lc && e.lc.r ? e.lc : null) : null;   // the last call, above the buttons
   const sure = ofEstSure === e.id;
-  const due = m && m.r === "cb" && m.cb && m.cb <= today;
+  const due = m && m.r === "cb" && m.cb && m.cb <= ny;
   const fu = h("div", { class: "of-est-fu" });
+  if (last) {
+    const cbDue = last.r === "cb" && last.cb && last.cb <= ny;
+    fu.append(h("div", { class: "of-est-last" }, h("span", { class: "of-est-lastl", text: cbDue ? "Call back due ·" : "Last call ·" }),
+      h("span", { class: `pc-chip pc-${last.r}`, title: last.note || null, text: last.r === "cb" && last.cb ? `Call back ${lbDayText(last.cb)}` : PC_MARK_TEXT[last.r] || last.r }),
+      last.r === "cb" && last.note ? h("small", { class: "of-est-said", title: last.note, text: `“${last.note}”` }) : null,
+      h("small", { class: "of-est-who", text: [last.who, pcWhen(last.at)].filter(Boolean).join(" · ") })));
+  }
   if (m) {
-    const change = m.saving ? null : open && (pcMarkOpen(m) || m.r === "cb")
+    const change = m.saving ? null : open && (isAdmin() || mDay >= ny || m.r === "cb")
       ? h("button", { class: "linkish", type: "button", "data-act": "clear", onclick: () => ofEstMark(e, "clear") }, m.r === "cb" ? "Called back" : "Change")
       : open ? h("span", { class: "pc-lock", title: "Marked on an earlier day: it stays as it is (an admin can change it)", text: "Locked" }) : null;
     fu.append(...[h("span", { class: `pc-chip pc-${m.r}` + (due ? " due" : ""), title: m.note || null,
@@ -21304,7 +21353,7 @@ function ofEstRowEl(e, today) {
       h("small", { class: "of-est-who" }, [m.who, m.saving ? "saving…" : pcWhen(m.at)].filter(Boolean).join(" · "), change ? " · " : null, change)].filter(Boolean));
   } else if (open) {
     // the same buttons as Past clients: words; Don't call again asks once more. A phone: Not now, Voicemail, Booked and
-    // ⋯ (Call back… and Don't call again under it)
+    // ⋯ (Call back… and Don't call again under it). A new day: again, under the last call
     const more = ofEstMore === e.id || ofEstCbOpen === e.id || sure;
     fu.append(h("div", { class: "pc-acts of-est-btns" + (more ? " more" : ""), role: "group", "aria-label": "Mark the call" }, PC_MARKS.map(([k, t]) => k === "dnc"
       ? h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": k, onclick: () => (sure ? ofEstMark(e, k) : ofEstAskSure(e.id)) }, sure ? "Sure? Tap again" : t)
@@ -21325,12 +21374,17 @@ function ofEstAskSure(id) {
  *  was when it couldn't be saved. */
 async function ofEstMark(e, res, cb) {
   ofEstSure = ""; clearTimeout(ofEstSureTimer); ofEstCbOpen = ""; ofEstMore = "";
-  const was = e.m;
-  e.m = res === "clear" ? null : Object.assign({ r: res, who: session ? session.name || "" : "", at: new Date().toISOString(), saving: true }, cb || {});
+  const was = e.m, wasLc = e.lc, ny = ofToday();
+  if (was && was.r && (was.day || (was.at ? ofNyDay(new Date(was.at)) : ny)) < ny) e.lc = was;   // a new day's call: the earlier one stays as the last call
+  e.m = res === "clear" ? null : Object.assign({ r: res, who: session ? session.name || "" : "", at: new Date().toISOString(), day: ny, saving: true }, cb || {});
   renderOffice();
-  try { const out = await api("ofEstMark", Object.assign({ id: e.id, r: res }, cb || {})); e.m = out.m && out.m.r ? out.m : null; }
+  try {
+    const out = await api("ofEstMark", Object.assign({ id: e.id, r: res }, cb || {}));
+    e.m = out.m && out.m.r ? out.m : null;
+    ofPcPatch(out.of);   // her Cleaning estimate follow-ups on Office Calls, counted again
+  }
   catch (x) {
-    e.m = x && x.error === "locked" && x.m ? x.m : was;
+    e.m = x && x.error === "locked" && x.m ? x.m : was; e.lc = wasLc;
     toast(x && x.error === "locked" ? "That one was marked on an earlier day: it stays as it is. An admin can change it."
       : x && x.error === "not_allowed" ? "The estimates are picked for someone else now: it wasn't marked."
       : x && x.error === "offline" ? "No connection: it wasn't marked. Try again when you're back online." : "It wasn't marked. " + errText(x, "The mark"));
