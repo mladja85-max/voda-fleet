@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 140;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 141;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -416,6 +416,9 @@ function doPost(e) {
       case "atPut":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return atPut_(req); }));
+      case "estMarkSent":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(withTabLock_(function () { return estMarkSent_(req, user); }));
       case "estProbe":
         return json_(estProbe_(req));
       case "hcpTest":
@@ -5881,17 +5884,18 @@ function estOut_(r, lead) {
    that happened to them: "sent" when it's sent, but "complete rated" once the client rates the visit afterwards, so a
    sent estimate went back to Not sent. The first time the app reads one as sent (still open), it's written on the
    "Estimate sent" tab, and it stays sent whatever Housecall Pro says later. One sent before this (and since rated):
-   sending it again from Housecall Pro makes it sent here. ---- */
-const EST_SENT_TAB = "Estimate sent", EST_SENT_COLS = ["At", "Estimate id", "Number", "Status then"];
+   sending it again from Housecall Pro makes it sent here, or an Admin marks it sent in the app (Marked by). ---- */
+const EST_SENT_TAB = "Estimate sent", EST_SENT_COLS = ["At", "Estimate id", "Number", "Status then", "Marked by"];
 let EST_SENT_ = null;
-/** { id: when the app first read it as sent }, read once a request. */
+/** { id: { at: when the app first read it as sent (or it was marked), by: the Admin who marked it, else "" } }, read
+ *  once a request. */
 function estSentMap_() {
   if (EST_SENT_) return EST_SENT_;
   const out = {};
   let first = "";
   pcRows_(EST_SENT_TAB, EST_SENT_COLS.length).forEach(function (r) {
     const id = String(r[1] || ""), at = r[0] instanceof Date ? r[0].toISOString() : String(r[0] || "");
-    if (id && !out[id]) out[id] = at;
+    if (id && !out[id]) out[id] = { at: at, by: String(r[4] || "") };
     if (at && (!first || at < first)) first = at;
   });
   EST_SENT_FROM_ = first ? Utilities.formatDate(new Date(first), Session.getScriptTimeZone(), "yyyy-MM-dd") : "";
@@ -5900,17 +5904,33 @@ function estSentMap_() {
 let EST_SENT_FROM_ = "";
 /** The day the app started keeping "sent" (the estimates read as sent that day were sent before it, on their own day). */
 function estSentFrom_() { estSentMap_(); return EST_SENT_FROM_; }
-/** Read as sent before: { how: "seen", at } (the first time), or null. */
+/** Read as sent before: { how: "seen", at } (the first time), { how: "marked", at, by } (an Admin), or null. */
 function estSentBy_(r) {
-  const at = estSentMap_()[String(r[0])];
-  return at ? { how: "seen", at: at } : null;
+  const x = estSentMap_()[String(r[0])];
+  return !x ? null : x.by ? { how: "marked", at: x.at, by: x.by } : { how: "seen", at: x.at };
+}
+/** Admins: an open estimate the app reads as not sent, marked sent (sent before the app kept "sent", and Housecall Pro
+ *  shows something else now): on the Estimate sent tab with who marked it; sent from then on. { sentBy } */
+function estMarkSent_(req, user) {
+  const id = String(req.id || "");
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) return { ok: false, error: "bad_request" };
+  const r = estRows_(estSheet_(false))[id];
+  if (!r) return { ok: false, error: "not_found" };
+  if (String(r[9] || "open") !== "open") return { ok: false, error: "not_open" };
+  const was = estSentBy_(r);
+  if (was) return { ok: true, sentBy: was };   // sent already (two Admins at once): as it is
+  const at = tmNow_().toISOString(), s = pcSheet_(EST_SENT_TAB, EST_SENT_COLS), first = Math.max(2, s.getLastRow() + 1);
+  if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 100);
+  s.getRange(first, 1, 1, EST_SENT_COLS.length).setNumberFormat("@").setValues([[at, id, String(r[1] || ""), String(r[27] || "").slice(0, 80), String(user.name || "Admin").slice(0, 60)]]);
+  EST_SENT_ = null;
+  return { ok: true, sentBy: { how: "marked", at: at, by: String(user.name || "Admin").slice(0, 60) } };
 }
 /** Every open estimate read as sent now that isn't on the tab yet goes on it (rows: the Estimates tab, by id). */
 function estSentKeep_(rows, at) {
   const M = estSentMap_(), add = [];
   Object.keys(rows).forEach(function (id) {
     const r = rows[id];
-    if (!M[id] && String(r[9] || "open") === "open" && estSentSt_(r[27])) add.push([at, id, String(r[1] || ""), String(r[27] || "").slice(0, 80)]);
+    if (!M[id] && String(r[9] || "open") === "open" && estSentSt_(r[27])) add.push([at, id, String(r[1] || ""), String(r[27] || "").slice(0, 80), ""]);
   });
   if (!add.length) return 0;
   const s = pcSheet_(EST_SENT_TAB, EST_SENT_COLS), first = Math.max(2, s.getLastRow() + 1);
