@@ -2303,6 +2303,52 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
   .wh-tabs .seg-btn { justify-content: center; padding: 8px 4px; font-size: .9rem; } }
 .wh-tabs .vbadge { margin-left: 6px; font-size: .7rem; padding: 0 6px; min-width: 18px; }
 .vbadge.tm { background: var(--due); color: #fff; }   /* trucks that missed the TM hrs check */
+.vbadge.doc-badge { margin-left: 6px; } .vbadge.doc-badge.x { background: var(--due); color: #fff; }   /* Documents: expired (red) or expiring soon */
+.doc-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--soon); background: var(--soon-bg); color: var(--ink); font-size: .9rem; }
+.doc-notice[hidden] { display: none; }
+.doc-notice.x { border-color: var(--due); background: color-mix(in srgb, var(--due) 9%, var(--surface)); }
+.doc-notice-i { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--soon); color: #fff; font-weight: 800; flex: none; }
+.doc-notice.x .doc-notice-i { background: var(--due); }
+.doc-notice-t { flex: 1 1 220px; }
+.doc-notice-x { font-size: 1.1rem; line-height: 1; padding-inline: 10px; }
+.doc-view { display: grid; gap: 12px; max-width: 1100px; margin: 0 auto; }
+.doc-panel { display: grid; gap: 12px; }
+.doc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; } .doc-head h2 { margin: 0; }
+.doc-head-acts { display: flex; gap: 8px; margin-left: auto; }
+.doc-panel > .meta { margin: 0; }
+.doc-seg { flex-wrap: wrap; } .doc-seg .doc-n { font-style: normal; margin-left: 6px; font-size: .74rem; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.doc-seg .doc-n.x { background: var(--due); color: #fff; } .doc-seg .doc-n.soon { background: var(--soon-bg); color: var(--soon); }
+#docFind { width: 100%; font: inherit; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.doc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.doc-row { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 9em auto; gap: 6px 14px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.doc-row.x { border-color: var(--due); background: color-mix(in srgb, var(--due) 6%, var(--surface)); }
+.doc-row.soon { border-color: var(--soon); }
+.doc-st { justify-self: start; font-size: .76rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; background: var(--surface-2); color: var(--muted); }
+.doc-st.x { background: var(--due); color: #fff; } .doc-st.soon { background: var(--soon-bg); color: var(--soon); } .doc-st.ok { background: var(--ok-bg, #e5f5ec); color: var(--ok); }
+.doc-main { display: grid; gap: 2px; min-width: 0; } .doc-title { overflow-wrap: anywhere; }
+.doc-main small { color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+.doc-kind { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 6px; background: var(--surface-2); }
+.doc-notes { font-style: italic; }
+.doc-exp { display: grid; gap: 1px; text-align: right; } .doc-exp b { font-size: .88rem; white-space: nowrap; } .doc-exp small { color: var(--muted); font-size: .74rem; }
+.doc-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.doc-chk { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: .85rem; color: var(--ink); }
+.doc-chk input { width: auto; }
+.doc-many { display: grid; gap: 8px; }
+.doc-many-row { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.doc-many-row.done { opacity: .6; } .doc-many-row.bad { border-color: var(--due); }
+.doc-many-file { color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; } .doc-many-row.bad .doc-many-file { color: var(--due); font-weight: 600; }
+.doc-many-in { display: grid; grid-template-columns: minmax(0, 1fr) 8.5em 9.5em auto; gap: 6px; align-items: center; }
+.doc-many-in > input:first-child { grid-column: 1 / -1; }   /* the title on its own line */
+.doc-many-in input, .doc-many-in select { width: 100%; min-width: 0; font: inherit; font-size: .86rem; color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.doc-many-in .doc-chk input { width: auto; }
+@media (max-width: 760px) {
+  .doc-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .doc-row .doc-main { grid-column: 1 / -1; order: 2; }
+  .doc-row .doc-exp { order: 1; }
+  .doc-row .doc-acts { grid-column: 1 / -1; order: 3; justify-content: stretch; } .doc-row .doc-acts .btn { flex: 1 1 0; justify-content: center; }
+  .doc-many-in { grid-template-columns: 1fr 1fr; }
+  .doc-head-acts { margin-left: 0; width: 100%; } .doc-head-acts .btn { flex: 1 1 0; justify-content: center; }
+}
 .vbadge.tm:not([hidden]) + .vbadge { margin-left: 4px; }
 .t-short { display: none; }
 /* a phone: the tabs fill the width side by side (short names), and the title row is the same height on every tab,
@@ -3335,6 +3381,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
     </div>
   </div>
   <div class="banner" id="banner" role="status"></div>
+  <div class="doc-notice" id="docNotice" role="status" hidden></div>
   <section class="gate" id="gate" hidden></section>
 
   <div id="app" hidden>
@@ -3362,6 +3409,9 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
       </button>
       <button type="button" class="view-btn" id="viewRepairs" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Repairs Payroll
+      </button>
+      <button type="button" class="view-btn" id="viewDocuments" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14.5l2 2 4-4.5"/></svg>Documents<span class="vbadge doc-badge" id="docBadge" hidden></span>
       </button>
       <button type="button" class="view-btn" id="viewWarehouse" aria-pressed="false" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V9l9-5 9 5v12"/><path d="M7 21v-8h10v8"/><path d="M7 17h10"/></svg>Warehouse<span class="vbadge tm" id="tmBadge" hidden></span><span class="vbadge" id="supBadge" hidden></span>
@@ -3424,6 +3474,7 @@ dialog#dlg .dlg-foot.lb-emp-foot { position: sticky; bottom: 0; z-index: 3; back
     <section class="lb rev" id="repView" aria-label="Repairs Payroll" hidden></section>
     <section class="lb rev cp" id="cpView" aria-label="Contractor Payroll" hidden></section>
     <section class="lb rev mkt" id="mktView" aria-label="Marketing" hidden></section>
+    <section class="doc-view" id="docView" aria-label="Documents" hidden></section>
     <section class="panel" id="noAccess" hidden>
       <h2>Nothing here yet</h2>
       <p class="meta">An admin hasn't given you Trucks, a checklist or the Leaderboard yet. Ask them to tick what you should see (Settings &gt; Users and invites), then tap refresh.</p>
@@ -6165,6 +6216,7 @@ async function refresh(quiet) {
   if ((view.tab === "contractors" || (view.tab === "repairs" && canSee("contractors"))) && loaded && !dlg.open && !cpLoading) cpLoad();
   if (view.tab === "attendance" && loaded && !dlg.open && !atLoading) atLoad();
   if (view.tab === "estimates" && loaded && !dlg.open) estAuto();
+  if (view.tab === "documents" && loaded && !dlg.open) docLoad();
   try {
     const out = await api("list");
     let roleChanged = false;
@@ -6186,6 +6238,7 @@ async function refresh(quiet) {
     store.set(K_CACHE, { at: lastSync.toISOString(), trucks });
     noteApi(out);
     noteSupplies(out.supplies);
+    noteDocs(out.docs);   // Admins: documents expired or expiring soon
     if (roleChanged) { lbForget(); applyRole(); }   // what this person may see changed (and so the leaderboard numbers they get)
     if (view.tab === "leaderboard" && !dlg.open && !lbShowState && !lbTyping() && (!lbData || !lbFresh)) lbLoad();   // the first time, once it's known who this is
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
@@ -9455,6 +9508,7 @@ function allowedTabs() {
   if (canSee("repairs")) out.push("repairs");   // Repairs Payroll
   // Contractor Payroll: beside Repairs Payroll for whoever sees that; its own page for anyone else (the accounting manager)
   if (canSee("contractors") && !canSee("repairs") && (!apiLevel || apiLevel >= CP_API)) out.push("contractors");
+  if (docCan()) out.push("documents");   // Documents: Admins only
   return out;
 }
 /** Whoever sees the Leaderboard and Repairs Payroll gets Repairs Payroll in the Leaderboard's row (Performance ·
@@ -9584,7 +9638,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 /* Trucks or Checklists: only what this person may see */
 function setTab(tab, sub) {
-  view.tab = ["supplies", "leaderboard", "office", "attendance", "revenue", "estimates", "repairs", "marketing", "contractors"].includes(tab) ? tab : "trucks";
+  view.tab = ["supplies", "leaderboard", "office", "attendance", "revenue", "estimates", "repairs", "marketing", "contractors", "documents"].includes(tab) ? tab : "trucks";
   if (view.tab === "leaderboard" || view.tab === "repairs" || view.tab === "contractors") view.lbSide = view.tab;
   if (view.tab === "trucks" || view.tab === "supplies") view.whSide = view.tab;
   if (view.tab === "office" || view.tab === "attendance" || view.tab === "marketing") view.ofSide = view.tab;   // Office's tab opens where you were
@@ -9600,8 +9654,8 @@ function applyTab() {
   if (!tabs.includes(view.tab)) view.tab = tabs[0] || "none";
   const sup = view.tab === "supplies", trk = view.tab === "trucks", lb = view.tab === "leaderboard", of = view.tab === "office", rv = view.tab === "revenue", rp = view.tab === "repairs", mk = view.tab === "marketing", cp = view.tab === "contractors";
   document.body.dataset.tab = view.tab;   // phones: the Trucks top bar needs the room the time takes
-  const es = view.tab === "estimates", at = view.tab === "attendance";
-  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : at ? "#attendance" : rv ? "#revenue" : es ? "#estimates" : rp ? "#repairs" : mk ? "#marketing" : cp ? "#contractors" : "";
+  const es = view.tab === "estimates", at = view.tab === "attendance", dc = view.tab === "documents";
+  const hash = sup ? "#supplies" : lb ? "#leaderboard" : of ? "#office" : at ? "#attendance" : rv ? "#revenue" : es ? "#estimates" : rp ? "#repairs" : mk ? "#marketing" : cp ? "#contractors" : dc ? "#documents" : "";
   if (location.hash !== hash) {
     try { history.replaceState(null, "", hash || location.pathname + location.search); } catch (e) { /* only the address bar */ }
   }
@@ -9621,6 +9675,7 @@ function applyTab() {
   $("viewRepairs").hidden = !nav.includes("repairs");
   $("viewMarketing").hidden = !nav.includes("marketing");
   $("viewContractors").hidden = !nav.includes("contractors");
+  $("viewDocuments").hidden = !nav.includes("documents");
   if (!tabs.includes("revenue") && !tabs.includes("marketing") && revData) revForget();
   if (!tabs.includes("marketing") && mktData) mktForget();
   if (!tabs.includes("contractors") && cpData) cpForget();
@@ -9635,6 +9690,7 @@ function applyTab() {
   $("repView").hidden = !rp;
   $("mktView").hidden = !mk;
   $("cpView").hidden = !cp;
+  $("docView").hidden = !dc;
   $("noAccess").hidden = tabs.length > 0;
   $("viewWarehouse").setAttribute("aria-pressed", String(trk || sup));
   $("viewTrucks").setAttribute("aria-selected", String(trk));
@@ -9647,6 +9703,7 @@ function applyTab() {
   $("viewRepairs").setAttribute("aria-pressed", String(rp));
   $("viewMarketing").setAttribute("aria-pressed", String(mk));
   $("viewContractors").setAttribute("aria-pressed", String(cp));
+  $("viewDocuments").setAttribute("aria-pressed", String(dc));
   $("reportBtn").hidden = !trk;
   $("addTruck").hidden = !trk || !isAdmin();
   $("rcptTop").hidden = !trk || !isAdmin();
@@ -9659,6 +9716,8 @@ function applyTab() {
   if (rp) renderRevenue();
   if (mk) renderMarketing();
   if (cp) renderContractors();   // it loads what it needs
+  if (dc) { renderDocuments(); if (loaded) docLoad(); }
+  renderDocBadge();
 }
 $("viewTrucks").addEventListener("click", () => setTab("trucks"));
 $("viewSupplies").addEventListener("click", () => setTab("supplies"));
@@ -9674,6 +9733,7 @@ $("viewEstimates").addEventListener("click", () => setTab("estimates"));
 $("viewRepairs").addEventListener("click", () => setTab("repairs"));
 $("viewMarketing").addEventListener("click", () => setTab("marketing"));
 $("viewContractors").addEventListener("click", () => setTab("contractors"));
+$("viewDocuments").addEventListener("click", () => setTab("documents"));
 $("viewLeaderboard").addEventListener("click", () => setTab(repInLb() && view.lbSide === "repairs" ? "repairs" : cpInLb() && view.lbSide === "contractors" ? "contractors" : "leaderboard"));
 
 function renderSupBadge() {
@@ -16367,7 +16427,7 @@ const SPEED_NAMES = { "(app open)": "Opening the app (until its first answer)", 
   repairs: "Repairs", repSync: "Repairs: reading Housecall Pro", repPut: "Repairs: a save", cpRead: "Contractor Payroll", cpSend: "Contractor Payroll: send", cpPay: "Contractor Payroll: paid",
   supplies: "Warehouse", supplyReport: "Warehouse: a report", history: "Truck history", services: "Truck services", saveTruck: "Truck: a save", tmSkip: "Truck: skip", gpsStops: "Truck stops",
   receiptRead: "Receipt reading", receiptFile: "Receipt file", users: "Users", saveUser: "Users: a save", invite: "Users: an invite", resetUser: "Users: a new passcode",
-  changePasscode: "Passcode change", settingsOwner: "Settings' owner", setPayroll: "Payroll access", hcpTest: "Housecall Pro check", estProbe: "For Claude: an estimate", estMarkSent: "Mark sent",
+  changePasscode: "Passcode change", settingsOwner: "Settings' owner", setPayroll: "Payroll access", hcpTest: "Housecall Pro check", estProbe: "For Claude: an estimate", docList: "Documents", docSave: "Documents: a save", docDelete: "Documents: remove", docFile: "Documents: a file", estMarkSent: "Mark sent",
   backupInfo: "Backups", backupSet: "Backups: a change", tmMail: "TM hrs email", setShop: "The shop's place", gpsStopsSet: "Truck stops: a setting", saveService: "Truck: a service",
   deleteService: "Truck: a service taken off", deleteTruck: "Truck taken off", supplyStatus: "Warehouse: status", saveChecklist: "Warehouse: a checklist", lbRename: "Leaderboard: a rename",
   comClients: "Commercial clients", pcAssign: "Past clients: who calls which", kpiPeople: "KPI: people", kpiImport: "KPI: import", estCall: "Estimates: a call", estCallDays: "Estimates: call days",
@@ -23017,6 +23077,235 @@ $("installBtn").addEventListener("click", async () => {
 });
 $("installDismiss").addEventListener("click", () => { store.set(K_INSTALL, true); $("installbar").hidden = true; });
 
+/* ---------- Documents (Admins only): the company's and the people's certificates and licenses, each with its file (kept
+   in the Google account's Drive, VODA Hub › Documentation) and the day it expires. The app warns Admins: a count on the
+   Documents tab and a notice when it opens, from each one's own days before (60 unless set) until it's renewed (a new
+   expiry date), and once expired. Add several: many files at once, the details from each one's name ("Title - Holder -
+   exp 2027-02-28.pdf"), checked before saving. ---------- */
+const DOC_API = 146;                                    // the Google script with Documents
+const DOC_MAX = 10 * 1024 * 1024;
+const K_DOC_SUM = "voda.docSum", K_DOC_SEEN = "voda.docSeen";
+let docData = null, docErr = "", docLoading = false, docSum = store.get(K_DOC_SUM) || null;
+const docView = Object.assign({ f: "all", q: "" }, store.get("voda.docView") || {});
+const docSaveView = () => store.set("voda.docView", { f: docView.f, q: docView.q });
+const docCan = () => isAdmin() && (!apiLevel || apiLevel >= DOC_API);
+const DOC_REMINDS = [[30, "30 days before"], [60, "60 days before"], [90, "90 days before"], [120, "120 days before"], [180, "6 months before"]];
+const docDays = (day, today) => Math.round((Date.parse(`${day}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 864e5);
+const docToday = () => ofToday();   // New York's day, like the Google script's
+const docLong = d => { const x = lbDate(d); return `${MONTHS[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`; };
+/** Where a document stands today: expired (x), expiring within its days before (soon), valid (ok) or no expiry (none). */
+function docStatus(d, today) {
+  if (!d.exp) return { k: "none", days: null, text: "No expiry" };
+  const n = docDays(d.exp, today), plural = k => `${k} day${k === 1 ? "" : "s"}`;
+  if (n < 0) return { k: "x", days: n, text: `Expired ${plural(-n)} ago` };
+  if (n === 0) return { k: "x", days: 0, text: "Expires today" };
+  if (n <= d.remind) return { k: "soon", days: n, text: `Expires in ${plural(n)}` };
+  return { k: "ok", days: n, text: "Valid" };
+}
+/** The count Admins are warned about (expired, expiring soon), from the list when it's open, else from the app's start. */
+function docCounts() {
+  if (docData && Array.isArray(docData.docs)) {
+    const t = docToday(), st = docData.docs.map(d => docStatus(d, t).k);
+    return { expired: st.filter(k => k === "x").length, soon: st.filter(k => k === "soon").length };
+  }
+  return docSum ? { expired: Number(docSum.expired) || 0, soon: Number(docSum.soon) || 0 } : { expired: 0, soon: 0 };
+}
+/** The app's start (and every refresh): Admins' summary from the Google script. */
+function noteDocs(sum) {
+  if (!sum || typeof sum !== "object") return;
+  docSum = { expired: Number(sum.expired) || 0, soon: Number(sum.soon) || 0, at: Date.now() };
+  store.set(K_DOC_SUM, docSum);
+  renderDocBadge();
+}
+/** The Documents tab's count, and the notice under the bar at the top (until closed: then again the next day, or when
+ *  the count changes). */
+function renderDocBadge() {
+  const b = $("docBadge"), note = $("docNotice");
+  if (!b || !note) return;
+  const can = !!session && docCan(), c = can ? docCounts() : { expired: 0, soon: 0 }, n = c.expired + c.soon;
+  b.hidden = !n; b.textContent = String(n); b.classList.toggle("x", c.expired > 0);
+  b.title = n ? [c.expired ? `${c.expired} expired` : "", c.soon ? `${c.soon} expiring soon` : ""].filter(Boolean).join(", ") : "";
+  $("viewDocuments").setAttribute("aria-label", n ? `Documents, ${b.title}` : "Documents");
+  const key = `${docToday()}|${c.expired}|${c.soon}`, seen = store.get(K_DOC_SEEN);
+  const show = n > 0 && seen !== key && view.tab !== "documents";
+  note.hidden = !show;
+  if (!show) { note.replaceChildren(); return; }
+  note.className = "doc-notice" + (c.expired ? " x" : "");
+  note.replaceChildren(
+    h("span", { class: "doc-notice-i", "aria-hidden": "true", text: "!" }),
+    h("span", { class: "doc-notice-t" }, h("b", { text: "Documents: " }), [c.expired ? `${c.expired} expired` : "", c.soon ? `${c.soon} expiring soon` : ""].filter(Boolean).join(" · "), ". Renew them on time."),
+    h("button", { class: "btn small", type: "button", id: "docNoticeOpen", onclick: () => { docView.f = c.expired ? "x" : "soon"; docSaveView(); setTab("documents"); } }, "Open Documents"),
+    h("button", { class: "btn small ghost doc-notice-x", type: "button", "aria-label": "Close until tomorrow", title: "Close until tomorrow", onclick: () => { store.set(K_DOC_SEEN, key); renderDocBadge(); } }, "×"));
+}
+async function docLoad() {
+  if (docLoading || !session || !docCan()) return;
+  docLoading = true;
+  try { docData = await api("docList"); docErr = ""; noteDocs({ expired: docCounts().expired, soon: docCounts().soon }); }
+  catch (e) { docErr = errText(e, "The documents"); }
+  docLoading = false;
+  if (view.tab === "documents" && !dlg.open) renderDocuments();
+  renderDocBadge();
+}
+function renderDocuments() {
+  const box = $("docView");
+  if (view.tab !== "documents" || !session) return;
+  renderDocBadge();
+  if (!docData) { box.replaceChildren(h("div", { class: "panel" }, docErr ? h("p", { class: "dlg-err", text: docErr }) : h("p", { class: "loading", text: "Loading the documents…" }))); if (!docErr) docLoad(); return; }
+  const today = docToday(), all = docData.docs.map(d => Object.assign({ st: docStatus(d, today) }, d));
+  const rank = { x: 0, soon: 1, ok: 2, none: 3 };
+  all.sort((a, b) => rank[a.st.k] - rank[b.st.k] || (a.exp && b.exp ? (a.exp < b.exp ? -1 : a.exp > b.exp ? 1 : 0) : 0) || a.holder.localeCompare(b.holder) || a.title.localeCompare(b.title));
+  const F = [["all", "All"], ["x", "Expired"], ["soon", "Expiring soon"], ["ok", "Valid"], ["none", "No expiry"]];
+  const f = F.some(x => x[0] === docView.f) ? docView.f : "all", q = String(docView.q || "").trim().toLowerCase();
+  const byF = k => (k === "all" ? all : all.filter(d => d.st.k === k));
+  const shown = byF(f).filter(d => !q || [d.title, d.holder, d.issuer, d.num, d.notes].some(v => String(v || "").toLowerCase().includes(q)));
+  const seg = h("div", { class: "seg doc-seg", role: "tablist", "aria-label": "Show" }, F.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "data-k": k, "aria-selected": String(f === k),
+    onclick: () => { docView.f = k; docSaveView(); renderDocuments(); } }, t, h("i", { class: "doc-n" + (k === "x" && byF(k).length ? " x" : k === "soon" && byF(k).length ? " soon" : ""), text: fmt(byF(k).length) }))));
+  const search = h("input", { type: "search", id: "docFind", placeholder: "Title, person, company, number…", value: docView.q || "", "aria-label": "Search documents", "data-nodirty": "",
+    oninput: ev => { docView.q = ev.target.value; docSaveView(); const at = ev.target.selectionStart; renderDocuments(); const x = $("docFind"); if (x) { x.focus(); try { x.setSelectionRange(at, at); } catch (e) { /* fine */ } } } });
+  const row = d => h("li", { class: `doc-row ${d.st.k}`, "data-id": d.id, "data-st": d.st.k },
+    h("span", { class: `doc-st ${d.st.k}`, text: d.st.text }),
+    h("div", { class: "doc-main" }, h("b", { class: "doc-title", text: d.title }),
+      h("small", null, h("span", { class: "doc-kind", text: d.kind === "person" ? "Person" : "Company" }), " ", h("span", { class: "doc-holder", text: d.holder || "–" }),
+        d.issuer ? ` · ${d.issuer}` : "", d.num ? ` · #${d.num}` : ""),
+      d.notes ? h("small", { class: "doc-notes", text: d.notes }) : null),
+    h("div", { class: "doc-exp" }, d.exp ? [h("b", { text: docLong(d.exp) }), h("small", { text: d.st.k === "x" ? "expired" : "expires" })] : h("small", { text: d.issued ? `issued ${docLong(d.issued)}` : "no expiry" })),
+    h("div", { class: "doc-acts" },
+      d.file ? h("button", { class: "btn small", type: "button", "data-act": "view", onclick: () => docOpen(d) }, "View") : null,
+      h("button", { class: "btn small ghost", type: "button", "data-act": "edit", onclick: () => docEdit(d) }, d.st.k === "x" || d.st.k === "soon" ? "Renew / edit" : "Edit")));
+  box.replaceChildren(h("div", { class: "panel doc-panel" },
+    h("div", { class: "doc-head" }, h("h2", { text: "Documents" }),
+      h("div", { class: "doc-head-acts" },
+        h("button", { class: "btn small", type: "button", id: "docAddMany", onclick: () => docAddMany() }, "Add several"),
+        h("button", { class: "btn small primary", type: "button", id: "docAdd", onclick: () => docEdit(null) }, "Add document"))),
+    h("p", { class: "meta", text: "Certificates and licenses, with when each expires. The files stay in your Google Drive (VODA Hub › Documentation); only admins see this. The app warns admins here and on the Documents tab before one expires." }),
+    seg, search,
+    shown.length ? h("ul", { class: "doc-list", id: "docList" }, shown.map(row))
+      : h("p", { class: "meta", id: "docNone", text: all.length ? "No documents match." : "No documents yet: add one, or several at once." })));
+}
+/** A document's file in a new tab (a PDF or a photo). */
+async function docOpen(d) {
+  const w = window.open("", "_blank");
+  try {
+    const o = await api("docFile", { id: d.id }, 60000);
+    const bytes = Uint8Array.from(atob(o.data), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: o.mime || "application/pdf" }));
+    if (w) w.location.href = url; else window.open(url, "_blank");
+  } catch (e) { if (w) w.close(); toast(e && e.error === "file_gone" ? "That file isn't in Drive any more (VODA Hub › Documentation): add it again with Edit." : errText(e, "The file")); }
+}
+const docB64 = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej({ error: "read" }); r.readAsDataURL(f); });
+const docFileOk = f => !!f && f.size <= DOC_MAX && /\.(pdf|jpe?g|png)$/i.test(f.name || "");
+const docErrText = e => (e && e.error === "too_big" ? "That file is over 10 MB." : e && e.error === "not_file" ? "That file isn't a PDF or a photo (JPG, PNG)."
+  : e && e.error === "no_file" ? "Add the file (a PDF or a photo)." : e && e.error === "bad_value" ? `Check ${({ title: "the title", issued: "the issued day", exp: "the expiry day", remind: "the reminder" })[e.field] || "what you typed"}.`
+  : errText(e, "The document"));
+/** Adding a document (d: null) or changing one: its details, its file, when to warn; Remove (a second tap). */
+function docEdit(d) {
+  const cur = d || { title: "", holder: "", kind: "person", issuer: "", num: "", issued: "", exp: "", remind: 60, notes: "", file: null };
+  let kind = cur.kind, file = null, sure = false;
+  const err = h("p", { class: "dlg-err", role: "alert" });
+  const inp = (id, label, value, o) => h("div", { class: "field" }, h("label", { for: id, text: label }), h("input", Object.assign({ id, value: value || "", autocomplete: "off" }, o || {})));
+  const noExp = h("input", { type: "checkbox", id: "docNoExp", checked: !!d && !cur.exp, onchange: ev => { $("docExp").disabled = ev.target.checked; if (ev.target.checked) $("docExp").value = ""; } });
+  const kindSeg = h("div", { class: "seg", role: "radiogroup", "aria-label": "Whose" }, [["person", "A person"], ["company", "The company"]].map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "radio", "data-k": k, "aria-checked": String(kind === k), "aria-selected": String(kind === k),
+    onclick: ev => { kind = k; ev.target.closest(".seg").querySelectorAll(".seg-btn").forEach(b => { b.setAttribute("aria-checked", String(b.dataset.k === k)); b.setAttribute("aria-selected", String(b.dataset.k === k)); }); dlgDirty = true; } }, t)));
+  const remind = h("select", { id: "docRemind" }, DOC_REMINDS.map(([n, t]) => h("option", { value: String(n), text: t })));
+  remind.value = String(DOC_REMINDS.some(x => x[0] === cur.remind) ? cur.remind : 60);
+  const pick = h("input", { type: "file", id: "docFilePick", "data-drop": "the PDF or photo", accept: "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png", onchange: ev => { file = ev.target.files && ev.target.files[0] || null; err.textContent = file && !docFileOk(file) ? "A PDF or a photo (JPG, PNG), 10 MB at most." : ""; } });
+  const save = async ev => {
+    const btn = ev.target, x = { title: $("docTitle").value.trim(), holder: $("docHolder").value.trim(), kind, issuer: $("docIssuer").value.trim(), num: $("docNum").value.trim(),
+      issued: $("docIssued").value, exp: noExp.checked ? "" : $("docExp").value, remind: Number(remind.value), notes: $("docNotes").value.trim() };
+    if (!x.title) { err.textContent = "Give it a title (what it is: \"IICRC Water Damage Restoration\")."; return; }
+    if (!noExp.checked && !x.exp) { err.textContent = "Put in the day it expires, or tick Doesn't expire."; return; }
+    if (!d && !file) { err.textContent = "Add the file (a PDF or a photo)."; return; }
+    if (file && !docFileOk(file)) { err.textContent = "A PDF or a photo (JPG, PNG), 10 MB at most."; return; }
+    btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+    try {
+      const body = Object.assign({ doc: x }, d ? { id: d.id } : {});
+      if (file) body.file = { name: file.name, data: await docB64(file) };
+      const out = await api("docSave", body, 120000);
+      if (docData) { const i = docData.docs.findIndex(y => y.id === out.doc.id); if (i === -1) docData.docs.push(out.doc); else docData.docs[i] = out.doc; }
+      dlgDirty = false; closeDialog(); toast(d ? "Saved" : "Document added"); renderDocuments(); renderDocBadge();
+    } catch (e) { err.textContent = docErrText(e); btn.disabled = false; btn.textContent = "Save"; }
+  };
+  const remove = async ev => {
+    if (!sure) { sure = true; ev.target.textContent = "Sure? Tap again"; ev.target.classList.add("danger"); return; }
+    ev.target.disabled = true;
+    try { await api("docDelete", { id: d.id }); if (docData) docData.docs = docData.docs.filter(y => y.id !== d.id); dlgDirty = false; closeDialog(); toast("Removed (its file is in Drive's trash for 30 days)"); renderDocuments(); renderDocBadge(); }
+    catch (e) { err.textContent = docErrText(e); ev.target.disabled = false; }
+  };
+  openDialog(h("h3", { id: "dlgTitle", text: d ? (docStatus(cur, docToday()).k === "x" || docStatus(cur, docToday()).k === "soon" ? "Renew or edit" : "Edit document") : "Add document" }),
+    d && (docStatus(cur, docToday()).k === "x" || docStatus(cur, docToday()).k === "soon") ? h("p", { class: "hint", text: "Renewed? Put in the new expiry day and add the new certificate (the old file goes in Drive's trash)." }) : null,
+    inp("docTitle", "What it is", cur.title, { placeholder: "IICRC Water Damage Restoration", maxlength: "120" }),
+    h("div", { class: "grid2" }, inp("docHolder", "Whose (a person or the company)", cur.holder, { maxlength: "120" }), h("div", { class: "field" }, h("label", { text: "It's for" }), kindSeg)),
+    h("div", { class: "grid2" }, inp("docIssuer", "Issued by (optional)", cur.issuer, { placeholder: "IICRC, EPA, DPOR…", maxlength: "120" }), inp("docNum", "Number (optional)", cur.num, { maxlength: "60" })),
+    h("div", { class: "grid2" }, inp("docIssued", "Issued (optional)", cur.issued, { type: "date" }),
+      h("div", { class: "field" }, h("label", { for: "docExp", text: "Expires" }), h("input", { type: "date", id: "docExp", value: cur.exp || "", disabled: !!d && !cur.exp }),
+        h("label", { class: "doc-chk" }, noExp, " Doesn't expire"))),
+    h("div", { class: "field" }, h("label", { for: "docRemind", text: "Warn admins" }), remind),
+    h("div", { class: "field" }, h("label", { for: "docNotes", text: "Notes (optional)" }), h("textarea", { id: "docNotes", rows: "2", maxlength: "500" }, cur.notes || "")),
+    h("div", { class: "field" }, h("label", { for: "docFilePick", text: d ? "Replace the file (optional)" : "The file (a PDF or a photo)" }),
+      d && d.file ? h("p", { class: "hint" }, "Now: ", h("button", { class: "linkish", type: "button", onclick: () => docOpen(d) }, d.file.name)) : null, pick),
+    err,
+    h("div", { class: "dlg-foot" }, d ? h("button", { class: "btn ghost", type: "button", id: "docRemove", onclick: remove }, "Remove") : null,
+      h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog() }, "Cancel"),
+        h("button", { class: "btn primary", type: "button", id: "docSave", onclick: save }, "Save"))));
+}
+/** Details from a file's name: "Title - Holder - exp 2027-02-28.pdf" (or "- no exp"; a number in front to keep them in
+ *  order, "01 …", is left out); a holder with LLC, Inc, Company, Cleaning, Restoration… is the company. */
+function docFromName(name) {
+  const parts = String(name || "").replace(/\.[A-Za-z0-9]{2,5}$/, "").replace(/^\d{1,3}[\s._)-]+(?=\S)/, "").split(/\s+-\s+/).map(x => x.trim()).filter(Boolean);
+  let exp = "", none = false;
+  const last = parts.length > 1 ? parts[parts.length - 1] : "";
+  const m = /^exp(?:ires)?\s+(\d{4}-\d{2}-\d{2})$/i.exec(last);
+  if (m && lbIsDay(m[1])) { exp = m[1]; parts.pop(); } else if (/^no exp(iry)?$/i.test(last)) { none = true; parts.pop(); }
+  const holder = parts.slice(1).join(" - ");
+  return { title: parts[0] || String(name || "").slice(0, 120), holder, exp, none, kind: /\b(llc|inc|corp|company|co|enterprises?|restoration|cleaning|care)\b/i.test(holder) ? "company" : "person" };
+}
+/** Add several: many files at once; each one's details from its name, to check and change before saving them all. */
+function docAddMany() {
+  let rows = [];
+  const err = h("p", { class: "dlg-err", role: "alert" }), list = h("div", { class: "doc-many", id: "docMany" });
+  const draw = () => list.replaceChildren(...(rows.length ? rows.map((r, i) => h("div", { class: "doc-many-row" + (r.done ? " done" : "") + (r.err ? " bad" : ""), "data-i": i },
+    h("small", { class: "doc-many-file", text: `${r.file.name}${r.done ? " · saved" : r.err ? ` · ${r.err}` : ""}` }),
+    h("div", { class: "doc-many-in" },
+      h("input", { value: r.title, "aria-label": "What it is", placeholder: "What it is", disabled: r.done, oninput: ev => { r.title = ev.target.value; } }),
+      h("input", { value: r.holder, "aria-label": "Whose", placeholder: "Whose", disabled: r.done, oninput: ev => { r.holder = ev.target.value; } }),
+      (() => { const s = h("select", { "aria-label": "It's for", disabled: r.done, onchange: ev => { r.kind = ev.target.value; } }, h("option", { value: "person", text: "A person" }), h("option", { value: "company", text: "The company" })); s.value = r.kind; return s; })(),
+      h("input", { type: "date", value: r.exp, "aria-label": "Expires", disabled: r.done || r.none, oninput: ev => { r.exp = ev.target.value; } }),
+      h("label", { class: "doc-chk" }, h("input", { type: "checkbox", checked: r.none, disabled: r.done, onchange: ev => { r.none = ev.target.checked; if (r.none) r.exp = ""; draw(); } }), " No expiry"))))
+    : [h("p", { class: "hint", text: "Pick the files (PDFs or photos). Name them like \"IICRC Water Damage Restoration - Jane Doe - exp 2027-02-28.pdf\" and the details fill in; anything else you can type here." })]));
+  const pick = h("input", { type: "file", id: "docManyPick", multiple: true, "data-drop": "the PDFs or photos", accept: "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png",
+    onchange: ev => {
+      const fs = [...(ev.target.files || [])], bad = fs.filter(f => !docFileOk(f));
+      rows = rows.concat(fs.filter(docFileOk).map(f => Object.assign({ file: f }, docFromName(f.name))));
+      err.textContent = bad.length ? `Left out (not a PDF or photo, or over 10 MB): ${bad.map(f => f.name).join(", ")}` : "";
+      draw();
+    } });
+  const saveAll = async ev => {
+    const btn = ev.target, todo = rows.filter(r => !r.done);
+    if (!todo.length) { err.textContent = "Pick the files first."; return; }
+    const missing = todo.find(r => !r.title.trim() || (!r.none && !r.exp));
+    if (missing) { err.textContent = `${missing.file.name}: give it a title, and an expiry day or tick No expiry.`; return; }
+    btn.disabled = true; err.textContent = "";
+    let n = 0, ok = 0;
+    for (const r of todo) {
+      n++; btn.textContent = `Saving ${n} of ${todo.length}…`;
+      try {
+        const out = await api("docSave", { doc: { title: r.title.trim(), holder: r.holder.trim(), kind: r.kind, exp: r.none ? "" : r.exp, remind: 60 }, file: { name: r.file.name, data: await docB64(r.file) } }, 120000);
+        r.done = true; r.err = ""; ok++;
+        if (docData) docData.docs.push(out.doc);
+      } catch (e) { r.err = docErrText(e); }
+      draw();
+    }
+    btn.disabled = false; btn.textContent = "Save all";
+    renderDocBadge();
+    if (rows.every(r => r.done)) { dlgDirty = false; closeDialog(); toast(`${ok} document${ok === 1 ? "" : "s"} added`); renderDocuments(); }
+    else err.textContent = `${ok} saved; the ones in red weren't: check them and Save all again.`;
+  };
+  openDialog(h("h3", { id: "dlgTitle", text: "Add several documents" }),
+    h("div", { class: "field" }, h("label", { for: "docManyPick", text: "The files" }), pick), list, err,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => { closeDialog(); renderDocuments(); } }, "Close"),
+      h("button", { class: "btn primary", type: "button", id: "docSaveAll", onclick: saveAll }, "Save all"))));
+  draw();
+}
+
 /* ---------- start ---------- */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
@@ -23038,6 +23327,7 @@ else if (location.hash === "#estimates") { view.tab = "estimates"; saveView(); }
 else if (location.hash === "#repairs") { view.tab = "repairs"; saveView(); }
 else if (location.hash === "#marketing") { view.tab = "marketing"; saveView(); }
 else if (location.hash === "#contractors") { view.tab = "contractors"; saveView(); }
+else if (location.hash === "#documents") { view.tab = "documents"; saveView(); }
 if (!CONFIGURED) showNotConfigured();
 else if (!session) showSignIn("");
 else {
