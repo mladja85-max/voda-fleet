@@ -2332,6 +2332,13 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
 .doc-main small { color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
 .doc-kind { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 0 6px; border-radius: 6px; background: var(--surface-2); }
 .doc-notes { font-style: italic; }
+.doc-rw { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 3px; font-size: .8rem; color: var(--muted); }
+.doc-rw-who b { color: var(--ink); font-weight: 600; }
+.doc-rw-a { display: inline-flex; align-items: center; min-height: 26px; padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--accent); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.doc-rw-a:hover, .doc-rw-a:focus-visible { border-color: var(--accent); }
+.doc-row.x .doc-rw-a, .doc-row.soon .doc-rw-a { background: var(--surface); }
+.doc-rw-box { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px 2px; margin: 0; display: grid; gap: 0; min-width: 0; }
+.doc-rw-box legend { font-weight: 700; font-size: .85rem; padding: 0 4px; }
 .doc-exp { display: grid; gap: 1px; text-align: right; } .doc-exp b { font-size: .88rem; white-space: nowrap; } .doc-exp small { color: var(--muted); font-size: .74rem; }
 .doc-acts { display: flex; gap: 6px; justify-content: flex-end; }
 .doc-chk { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: .85rem; color: var(--ink); }
@@ -23109,6 +23116,24 @@ const docView = Object.assign({ f: "all", q: "", sp: "company" }, store.get("vod
 const docSaveView = () => store.set("voda.docView", { f: docView.f, q: docView.q, sp: docView.sp });
 const DOC_ACC_API = 147;                                // ... where the owner of Settings picks the admins who see them
 const DOC_OWN_API = 148;                                // ... and documents of one's own (only that admin sees them)
+const DOC_RW_API = 149;                                 // ... and who to renew each one with (a phone, an email, a website)
+const docRwCan = () => !!apiLevel && apiLevel >= DOC_RW_API;
+/** Who to renew a document with: { who, phone, email, url } (all "" when none). */
+const docRw = d => Object.assign({ who: "", phone: "", email: "", url: "" }, (d && d.rw) || {});
+/** A phone to tap: "(804) 555-0100 x12" → tel:8045550100,12. */
+const docTel = p => `tel:${String(p).replace(/\s*(x|ext\.?)\s*(\d+)\s*$/i, ",$2").replace(/[^\d+,]/g, "")}`;
+/** A website as typed ("dpor.virginia.gov") → https://dpor.virginia.gov; only http(s) links are ever opened. */
+const docUrl = u => { const v = String(u || "").trim(); if (!v) return ""; const w = /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : `https://${v.replace(/^\/+/, "")}`; return /^https?:\/\/[^\s<>"']+\.[^\s<>"']+$/i.test(w) ? w : ""; };
+const docSite = u => String(u).replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+/** The line under a document: Renew with who · Call · Email · Website (each one tap). */
+function docRwLine(d) {
+  const r = docRw(d), url = docUrl(r.url);
+  if (!r.who && !r.phone && !r.email && !url) return null;
+  return h("div", { class: "doc-rw" }, h("span", { class: "doc-rw-who" }, "Renew with ", h("b", { text: r.who || "–" })),
+    r.phone ? h("a", { class: "doc-rw-a", href: docTel(r.phone), "data-rw": "phone", title: `Call ${r.phone}` }, "Call ", r.phone) : null,
+    r.email ? h("a", { class: "doc-rw-a", href: `mailto:${r.email}`, "data-rw": "email", title: r.email }, "Email ", r.email) : null,
+    url ? h("a", { class: "doc-rw-a", href: url, target: "_blank", rel: "noopener noreferrer", "data-rw": "url", title: url }, docSite(url)) : null);
+}
 /** Sees the company's documents: an admin who owns Settings, or one he switched on (an older script, or no owner yet:
  *  every admin). */
 const docCoCan = () => isAdmin() && (!apiLevel || apiLevel >= DOC_API)
@@ -23192,7 +23217,7 @@ function renderDocuments() {
   const F = [["all", "All"], ["x", "Expired"], ["soon", "Expiring soon"], ["ok", "Valid"], ["none", "No expiry"]];
   const f = F.some(x => x[0] === docView.f) ? docView.f : "all", q = String(docView.q || "").trim().toLowerCase();
   const byF = k => (k === "all" ? all : all.filter(d => d.st.k === k));
-  const shown = byF(f).filter(d => !q || [d.title, d.holder, d.issuer, d.num, d.notes].some(v => String(v || "").toLowerCase().includes(q)));
+  const shown = byF(f).filter(d => !q || [d.title, d.holder, d.issuer, d.num, d.notes, docRw(d).who].some(v => String(v || "").toLowerCase().includes(q)));
   const seg = h("div", { class: "seg doc-seg", role: "tablist", "aria-label": "Show" }, F.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "tab", "data-k": k, "aria-selected": String(f === k),
     onclick: () => { docView.f = k; docSaveView(); renderDocuments(); } }, t, h("i", { class: "doc-n" + (k === "x" && byF(k).length ? " x" : k === "soon" && byF(k).length ? " soon" : ""), text: fmt(byF(k).length) }))));
   const search = h("input", { type: "search", id: "docFind", placeholder: "Title, person, company, number…", value: docView.q || "", "aria-label": "Search documents", "data-nodirty": "",
@@ -23202,7 +23227,7 @@ function renderDocuments() {
     h("div", { class: "doc-main" }, h("b", { class: "doc-title", text: d.title }),
       h("small", null, h("span", { class: "doc-kind", text: d.kind === "person" ? "Person" : "Company" }), " ", h("span", { class: "doc-holder", text: d.holder || "–" }),
         d.issuer ? ` · ${d.issuer}` : "", d.num ? ` · #${d.num}` : ""),
-      d.notes ? h("small", { class: "doc-notes", text: d.notes }) : null),
+      d.notes ? h("small", { class: "doc-notes", text: d.notes }) : null, docRwLine(d)),
     h("div", { class: "doc-exp" }, d.exp ? [h("b", { text: docLong(d.exp) }), h("small", { text: d.st.k === "x" ? "expired" : "expires" })] : h("small", { text: d.issued ? `issued ${docLong(d.issued)}` : "no expiry" })),
     h("div", { class: "doc-acts" },
       d.file ? h("button", { class: "btn small", type: "button", "data-act": "view", onclick: () => docOpen(d) }, "View") : null,
@@ -23234,7 +23259,7 @@ async function docOpen(d) {
 const docB64 = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej({ error: "read" }); r.readAsDataURL(f); });
 const docFileOk = f => !!f && f.size <= DOC_MAX && /\.(pdf|jpe?g|png)$/i.test(f.name || "");
 const docErrText = e => (e && e.error === "too_big" ? "That file is over 10 MB." : e && e.error === "not_file" ? "That file isn't a PDF or a photo (JPG, PNG)."
-  : e && e.error === "no_file" ? "Add the file (a PDF or a photo)." : e && e.error === "bad_value" ? `Check ${({ title: "the title", issued: "the issued day", exp: "the expiry day", remind: "the reminder" })[e.field] || "what you typed"}.`
+  : e && e.error === "no_file" ? "Add the file (a PDF or a photo)." : e && e.error === "bad_value" ? `Check ${({ title: "the title", issued: "the issued day", exp: "the expiry day", remind: "the reminder", rwPhone: "the phone to renew with", rwEmail: "the email to renew with", rwUrl: "the website to renew on" })[e.field] || "what you typed"}.`
   : errText(e, "The document"));
 /** Adding a document (d: null) or changing one: its details, its file, when to warn; Remove (a second tap). */
 function docEdit(d) {
@@ -23250,10 +23275,30 @@ function docEdit(d) {
     onclick: ev => { kind = k; ev.target.closest(".seg").querySelectorAll(".seg-btn").forEach(b => { b.setAttribute("aria-checked", String(b.dataset.k === k)); b.setAttribute("aria-selected", String(b.dataset.k === k)); }); dlgDirty = true; } }, t)));
   const remind = h("select", { id: "docRemind" }, DOC_REMINDS.map(([n, t]) => h("option", { value: String(n), text: t })));
   remind.value = String(DOC_REMINDS.some(x => x[0] === cur.remind) ? cur.remind : 60);
+  // who to renew it with: picking one already used on another document fills in its phone, email and website
+  const rw = docRw(cur), known = new Map();
+  ((docData && docData.docs) || []).forEach(y => { const r = docRw(y); if (r.who && (r.phone || r.email || r.url) && !known.has(r.who.toLowerCase())) known.set(r.who.toLowerCase(), r); });
+  const rwFill = ev => {
+    const r = known.get(String(ev.target.value).trim().toLowerCase());
+    if (!r) return;
+    [["docRwPhone", r.phone], ["docRwEmail", r.email], ["docRwUrl", r.url]].forEach(([id, v]) => { const el = $(id); if (el && !el.value.trim() && v) el.value = v; });
+  };
+  const rwBox = docRwCan() ? h("fieldset", { class: "doc-rw-box" }, h("legend", { text: "How to renew (optional)" }),
+    h("div", { class: "grid2" }, inp("docRwWho", "Renew with (who)", rw.who, { placeholder: "IICRC, DPOR, a training school…", maxlength: "120", list: "docRwKnown", oninput: rwFill, onchange: rwFill }),
+      inp("docRwPhone", "Phone", rw.phone, { type: "tel", placeholder: "(804) 555-0100", maxlength: "40", inputmode: "tel" })),
+    h("div", { class: "grid2" }, inp("docRwEmail", "Email", rw.email, { type: "email", placeholder: "renewals@example.org", maxlength: "120", inputmode: "email" }),
+      inp("docRwUrl", "Website", rw.url, { placeholder: "example.org/renew", maxlength: "300", inputmode: "url" })),
+    known.size ? h("datalist", { id: "docRwKnown" }, [...known.values()].map(r => h("option", { value: r.who }))) : null) : null;
   const pick = h("input", { type: "file", id: "docFilePick", "data-drop": "the PDF or photo", accept: "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png", onchange: ev => { file = ev.target.files && ev.target.files[0] || null; err.textContent = file && !docFileOk(file) ? "A PDF or a photo (JPG, PNG), 10 MB at most." : ""; } });
   const save = async ev => {
     const btn = ev.target, x = { title: $("docTitle").value.trim(), holder: $("docHolder").value.trim(), kind, issuer: $("docIssuer").value.trim(), num: $("docNum").value.trim(),
       issued: $("docIssued").value, exp: noExp.checked ? "" : $("docExp").value, remind: Number(remind.value), notes: $("docNotes").value.trim() };
+    if (rwBox) {
+      Object.assign(x, { rwWho: $("docRwWho").value.trim(), rwPhone: $("docRwPhone").value.trim(), rwEmail: $("docRwEmail").value.trim(), rwUrl: $("docRwUrl").value.trim() });
+      if (x.rwPhone && x.rwPhone.replace(/\s*(x|ext\.?)\s*\d+\s*$/i, "").replace(/\D/g, "").length < 7) { err.textContent = "Check the phone to renew with (the whole number, with the area code)."; $("docRwPhone").focus(); return; }
+      if (x.rwEmail && !/^[^\s@<>"']+@[^\s@<>"']+\.[A-Za-z]{2,}$/.test(x.rwEmail)) { err.textContent = "Check the email to renew with."; $("docRwEmail").focus(); return; }
+      if (x.rwUrl && !docUrl(x.rwUrl)) { err.textContent = "Check the website to renew on (like dpor.virginia.gov)."; $("docRwUrl").focus(); return; }
+    }
     if (!x.title) { err.textContent = "Give it a title (what it is: \"IICRC Water Damage Restoration\")."; return; }
     if (!noExp.checked && !x.exp) { err.textContent = "Put in the day it expires, or tick Doesn't expire."; return; }
     if (!d && !file) { err.textContent = "Add the file (a PDF or a photo)."; return; }
@@ -23283,7 +23328,8 @@ function docEdit(d) {
         h("label", { class: "doc-chk" }, noExp, " Doesn't expire"))),
     h("div", { class: "grid2" }, h("div", { class: "field" }, h("label", { for: "docRemind", text: "Warn" }), remind),
       spaceSel ? h("div", { class: "field" }, h("label", { for: "docSpaceSel", text: "Kept in" }), spaceSel) : null),
-    h("div", { class: "field" }, h("label", { for: "docNotes", text: "Notes (optional)" }), h("textarea", { id: "docNotes", rows: "2", maxlength: "500" }, cur.notes || "")),
+    rwBox,
+    h("div", { class: "field" }, h("label", { for: "docNotes", text: rwBox ? "Notes (optional: what renewing takes, like a refresher class or a fee)" : "Notes (optional)" }), h("textarea", { id: "docNotes", rows: "2", maxlength: "500" }, cur.notes || "")),
     h("div", { class: "field" }, h("label", { for: "docFilePick", text: d ? "Replace the file (optional)" : "The file (a PDF or a photo)" }),
       d && d.file ? h("p", { class: "hint" }, "Now: ", h("button", { class: "linkish", type: "button", onclick: () => docOpen(d) }, d.file.name)) : null, pick),
     err,

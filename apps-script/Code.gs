@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 148;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 149;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -1567,13 +1567,13 @@ function docAccessPut_(req) {
   if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   return { ok: true, user: publicUser_(x.u) };
 }
-const DOC_COLS = ["Id", "Title", "Holder", "Kind", "Issued by", "Number", "Issued", "Expires", "Remind days", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at", "Own (login id)"];
+const DOC_COLS = ["Id", "Title", "Holder", "Kind", "Issued by", "Number", "Issued", "Expires", "Remind days", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at", "Own (login id)", "Renew with", "Renew phone", "Renew email", "Renew website"];
 const DOC_MAX = 10 * 1024 * 1024, DOC_REMIND = 60, DOC_KINDS = ["company", "person"];
 const DOC_DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 function docFolder_() { return hubSub_("DOC_FOLDER_ID"); }
 const docTxt_ = function (v, n) { return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, n); };
 /** Every document: { row (on the tab), id, title, holder, kind, issuer, num, issued, exp, remind, fileId, file, type, notes, by, at, chBy, chAt,
- *  own: the login whose own document it is ("": the company's) }. */
+ *  own: the login whose own document it is ("": the company's), rwWho, rwPhone, rwEmail, rwUrl: who to renew it with and how }. */
 function docRows_() {
   const tz = Session.getScriptTimeZone(), iso = function (v) { return v instanceof Date ? v.toISOString() : String(v || ""); };
   return pcRows_(DOC_SHEET, DOC_COLS.length).map(function (r, i) {
@@ -1581,14 +1581,29 @@ function docRows_() {
     return { row: i + 2, id: String(r[0] || ""), title: String(r[1] || ""), holder: String(r[2] || ""), kind: DOC_KINDS.indexOf(String(r[3])) === -1 ? "company" : String(r[3]),
       issuer: String(r[4] || ""), num: String(r[5] || ""), issued: pcDay_(r[6], tz) || "", exp: pcDay_(r[7], tz) || "", remind: r[8] === "" || !isFinite(rem) ? DOC_REMIND : Math.max(0, Math.min(365, Math.round(rem))),
       fileId: String(r[9] || ""), file: String(r[10] || ""), type: String(r[11] || ""), notes: String(r[12] || ""), by: String(r[13] || ""), at: iso(r[14]), chBy: String(r[15] || ""), chAt: iso(r[16]),
-      own: String(r[17] || "") };
+      own: String(r[17] || ""), rwWho: String(r[18] || ""), rwPhone: String(r[19] || ""), rwEmail: String(r[20] || ""), rwUrl: String(r[21] || "") };
   }).filter(function (d) { return d.id; });
 }
 /** A document as the app gets it (no row, no Drive id: the file is fetched by the document's id; space: "company", or
  *  "own": the signed-in person's own). */
 function docOut_(d) {
   return { id: d.id, title: d.title, holder: d.holder, kind: d.kind, issuer: d.issuer, num: d.num, issued: d.issued, exp: d.exp, remind: d.remind,
-    file: d.fileId ? { name: d.file, type: d.type } : null, notes: d.notes, by: d.by, at: d.at, chBy: d.chBy, chAt: d.chAt, space: d.own ? "own" : "company" };
+    file: d.fileId ? { name: d.file, type: d.type } : null, notes: d.notes, by: d.by, at: d.at, chBy: d.chBy, chAt: d.chAt, space: d.own ? "own" : "company",
+    rw: { who: d.rwWho, phone: d.rwPhone, email: d.rwEmail, url: d.rwUrl } };
+}
+const DOC_PHONE = /^\+?[0-9().\-\s]+((x|ext\.?)\s*\d{1,6})?$/i, DOC_EMAIL = /^[^\s@<>"']+@[^\s@<>"']+\.[A-Za-z]{2,}$/;
+const DOC_URL = /^https?:\/\/[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+(:\d{1,5})?([\/?#][^\s<>"']*)?$/i;
+/** Who to renew a document with, and how: { who, phone, email, url } (a website without http(s):// gets https://; no
+ *  other kind of link); { field } when one isn't right. One the app didn't send is kept as it was. */
+function docRw_(x, was) {
+  const v = function (k, n) { return x[k] == null ? (was ? was[k] : "") : docTxt_(x[k], n); };
+  const who = v("rwWho", 120), phone = v("rwPhone", 40), email = v("rwEmail", 120);
+  let url = v("rwUrl", 300);
+  if (url && !/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url.replace(/^\/+/, "");
+  if (phone && (!DOC_PHONE.test(phone) || phone.replace(/(x|ext\.?)\s*\d+$/i, "").replace(/\D/g, "").length < 7)) return { field: "rwPhone" };
+  if (email && !DOC_EMAIL.test(email)) return { field: "rwEmail" };
+  if (url && !DOC_URL.test(url)) return { field: "rwUrl" };
+  return { who: who, phone: phone, email: email, url: url };
 }
 /** May this person see (and change) this document: the company's with Documents; his own with documents of his own. */
 function docMine_(d, user) { return d.own ? canDocsOwn_(user) && d.own === user.id : canDocs_(user); }
@@ -1625,7 +1640,8 @@ function docSave_(req, user) {
   // where it's kept: the company's, or his own (a new one: as asked; a change: where it was, unless moved)
   const space = req.space === "own" || req.space === "company" ? req.space : was ? (was.own ? "own" : "company") : "company";
   if (space === "own" ? !canDocsOwn_(user) : !canDocs_(user)) return { ok: false, error: "not_allowed" };
-  const own = space === "own" ? user.id : "";
+  const own = space === "own" ? user.id : "", rw = docRw_(x, was);
+  if (rw.field) return { ok: false, error: "bad_value", field: rw.field };
   let file = null;
   if (req.file && typeof req.file === "object") {
     let bytes;
@@ -1643,9 +1659,10 @@ function docSave_(req, user) {
   const now = tmNow_().toISOString(), who = docTxt_(user.name || "Admin", 60);
   const d = { id: was ? was.id : "d" + Utilities.getUuid().replace(/-/g, "").slice(0, 12), title: title, holder: holder, kind: kind, issuer: docTxt_(x.issuer, 120), num: docTxt_(x.num, 60),
     issued: issued, exp: exp, remind: Math.round(rem), fileId: file ? file.id : was.fileId, file: file ? file.name : was.file, type: file ? file.type : was.type, notes: docTxt_(x.notes, 500),
-    by: was ? was.by : who, at: was ? was.at : now, chBy: was ? who : "", chAt: was ? now : "", own: own };
+    by: was ? was.by : who, at: was ? was.at : now, chBy: was ? who : "", chAt: was ? now : "", own: own,
+    rwWho: rw.who, rwPhone: rw.phone, rwEmail: rw.email, rwUrl: rw.url };
   const s = pcSheet_(DOC_SHEET, DOC_COLS), at = was ? was.row : Math.max(2, s.getLastRow() + 1);
-  s.getRange(at, 1, 1, DOC_COLS.length).setNumberFormat("@").setValues([[d.id, d.title, d.holder, d.kind, d.issuer, d.num, d.issued, d.exp, String(d.remind), d.fileId, d.file, d.type, d.notes, d.by, d.at, d.chBy, d.chAt, d.own]]);
+  s.getRange(at, 1, 1, DOC_COLS.length).setNumberFormat("@").setValues([[d.id, d.title, d.holder, d.kind, d.issuer, d.num, d.issued, d.exp, String(d.remind), d.fileId, d.file, d.type, d.notes, d.by, d.at, d.chBy, d.chAt, d.own, d.rwWho, d.rwPhone, d.rwEmail, d.rwUrl]]);
   if (file && was && was.fileId) { try { DriveApp.getFileById(was.fileId).setTrashed(true); } catch (e) { /* gone already */ } }
   return { ok: true, doc: docOut_(d) };
 }
