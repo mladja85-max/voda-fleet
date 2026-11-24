@@ -1443,6 +1443,7 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .rv-kinds { margin-top: 6px; }
 .jk-check { display: inline-block; margin-left: 6px; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 9px; background: color-mix(in srgb, var(--soon) 22%, var(--surface)); color: color-mix(in srgb, var(--soon) 70%, var(--ink)); white-space: nowrap; }
 .jk-ok { margin-left: 6px; font-size: .75rem; }
+.spd-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .jk-both-line { margin: 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--soon) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--soon) 30%, var(--line)); }
 #jkBoth, .rev-avg-kinds .jk-both { color: color-mix(in srgb, var(--soon) 75%, var(--ink)); }
 .rev-avg-kinds .jk-both { justify-content: flex-start; gap: 6px; font-weight: 600; }
@@ -6242,7 +6243,7 @@ async function apiOnce(action, data, ms) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms || 30000);
   const t0 = performance.now();
-  let out, size = 0;
+  let out, size = 0, why = "";   // why: for Speed, why it failed (timeout, network, http_500, the script's own error)
   try {
     const res = await fetch(API_URL, {
       method: "POST",
@@ -6250,16 +6251,17 @@ async function apiOnce(action, data, ms) {
       body: JSON.stringify(Object.assign({ action, token: session ? session.token : "" }, data || {})),
       signal: ctrl.signal
     });
-    try { const text = await res.text(); size = text.length; out = JSON.parse(text); } catch (e) { throw { error: "network" }; }
-    if (!out || !out.ok) throw out || { error: "network" };
+    try { const text = await res.text(); size = text.length; out = JSON.parse(text); } catch (e) { why = ctrl.signal.aborted ? "timeout" : res.ok ? "bad_answer" : `http_${res.status}`; throw { error: "network" }; }
+    if (!out || !out.ok) { why = (out && out.error) || "bad_answer"; throw out || { error: "network" }; }
     return out;
   } catch (e) {
+    if (!why) why = ctrl.signal.aborted ? "timeout" : (e && e.error) || "network";
     if (e && e.error) throw e;
     throw { error: "network" };
   } finally {
     clearTimeout(timer);
     speedNote(action, performance.now() - t0, out && typeof out._ms === "number" ? out._ms : null, size, !!(out && out.ok),
-      out && typeof out._hcp === "number" ? out._hcp : null, out && typeof out._lock === "number" ? out._lock : null);
+      out && typeof out._hcp === "number" ? out._hcp : null, out && typeof out._lock === "number" ? out._lock : null, why);
   }
 }
 /* ---- Speed: every request this device sends is timed (from sending it to its answer being in; the Google script's own
@@ -6268,10 +6270,10 @@ async function apiOnce(action, data, ms) {
 const K_SPEED = "voda.speed", SPEED_KEEP = 400, SPEED_EVERY = 10 * 60e3, SPEED_API = 135;
 const speedLog = (() => { const v = store.get(K_SPEED); return v && Array.isArray(v.list) ? v : { list: [], sent: 0 }; })();
 let speedSaveT = 0, speedSending = false, speedOpened = false;
-function speedNote(action, ms, server, bytes, ok, hcp, lock) {
-  if (action === "speedPut" || action === "speedRead") return;
+function speedNote(action, ms, server, bytes, ok, hcp, lock, why) {
+  if (action === "speedPut" || action === "speedRead" || action === "speedReport") return;
   speedLog.list.push([Date.now(), String(action || ""), Math.round(ms), server == null ? -1 : Math.round(server), bytes || 0, ok ? 1 : 0,
-    hcp == null ? -1 : Math.round(hcp), lock == null ? -1 : Math.round(lock)]);
+    hcp == null ? -1 : Math.round(hcp), lock == null ? -1 : Math.round(lock), ok ? "" : String(why || "").replace(/[^A-Za-z0-9_]/g, "").slice(0, 30)]);
   if (speedLog.list.length > SPEED_KEEP) speedLog.list.splice(0, speedLog.list.length - SPEED_KEEP);
   clearTimeout(speedSaveT); speedSaveT = setTimeout(() => store.set(K_SPEED, speedLog), 2000);
 }
@@ -6284,7 +6286,7 @@ async function speedSend() {
   speedSending = true;
   try {
     const now = Date.now();
-    await api("speedPut", { device: speedDevice(), rows: fresh.map(([at, a, t, sv, b, ok, hp, lk]) => [Math.max(0, now - at), a, t, sv, b, ok, hp == null ? -1 : hp, lk == null ? -1 : lk]) });
+    await api("speedPut", { device: speedDevice(), rows: fresh.map(([at, a, t, sv, b, ok, hp, lk, why]) => [Math.max(0, now - at), a, t, sv, b, ok, hp == null ? -1 : hp, lk == null ? -1 : lk, why || ""]) });
     speedLog.sent = fresh[fresh.length - 1][0]; store.set(K_SPEED, speedLog);
   } catch (e) { /* the next time */ }
   finally { speedSending = false; }
@@ -17081,14 +17083,48 @@ const speedPct = (list, p) => { if (!list.length) return null; const a = list.sl
 /** This device's own requests in the last `days` days, as the Google script sums everyone's. */
 function speedLocal(days) {
   const cut = Date.now() - days * 864e5, by = {};
-  for (const [at, a, t, sv, b, ok, hp, lk] of speedLog.list) {
+  for (const [at, a, t, sv, b, ok, hp, lk, why] of speedLog.list) {
     if (at < cut || a === "speedPut") continue;
-    const x = by[a] || (by[a] = { t: [], s: [], kb: [], h: [], l: [], f: 0 });
-    x.t.push(t); if (sv >= 0) x.s.push(sv); x.kb.push(b / 1024); if (!ok) x.f++;
+    const x = by[a] || (by[a] = { t: [], s: [], kb: [], h: [], l: [], f: 0, e: {} });
+    x.t.push(t); if (sv >= 0) x.s.push(sv); x.kb.push(b / 1024);
+    if (!ok) { x.f++; const k = why || "unknown"; x.e[k] = (x.e[k] || 0) + 1; }
     if (hp >= 0) x.h.push(hp); if (lk >= 0) x.l.push(lk);
   }
   return Object.entries(by).map(([a, x]) => ({ a, n: x.t.length, p50: speedPct(x.t, 0.5), p90: speedPct(x.t, 0.9), max: speedPct(x.t, 1), s50: speedPct(x.s, 0.5), kb: speedPct(x.kb, 0.5), f: x.f,
-    h50: speedPct(x.h, 0.5), l50: speedPct(x.l, 0.5) }));
+    h50: speedPct(x.h, 0.5), l50: speedPct(x.l, 0.5), e: x.e }));
+}
+/** Why requests failed, in words: "20 timed out, 2 no answer". */
+const SPEED_WHY = { timeout: "timed out", network: "no answer", busy: "busy", hcp_busy: "Housecall Pro busy", hcp_unreachable: "Housecall Pro unreachable", hcp_failed: "Housecall Pro failed",
+  not_allowed: "not allowed", bad_answer: "bad answer", signed_out: "signed out", bad_code: "signed out", unknown: "reason not known" };
+const speedWhyText = e => Object.entries(e || {}).sort((p, q) => q[1] - p[1]).map(([k, n]) => `${fmt(n)} ${SPEED_WHY[k] || (/^http_\d+$/.test(k) ? `error ${k.slice(5)}` : k.replace(/_/g, " "))}`).join(", ");
+const SPEED_REPORT_API = 155;                             // the Google script with the Speed report
+/** Settings › Speed › Download report: one file with everything Speed knows for the days picked (everyone's requests one
+ *  by one, the totals, the 100 slowest, every tab's size, the script's timed jobs) and this device's own (sent or not, its
+ *  connection, the app's version): to hand on when something is slow. */
+async function speedReportDownload(btn, days) {
+  const was = btn.textContent;
+  btn.disabled = true; btn.textContent = "Preparing…";
+  try {
+    await speedSend();
+    const srv = await api("speedReport", { days }, 120000);
+    let versions = [];
+    try { versions = (await caches.keys()).filter(k => /^voda/.test(k)); } catch (e) { versions = []; }
+    const c = navigator.connection || {}, mm = q => { try { return matchMedia(q).matches; } catch (e) { return false; } };
+    const acts = new Set((srv.rows || []).map(x => x[3]).concat(speedLog.list.map(x => x[1])));
+    const rep = { report: "VODA Hub speed report", made: new Date().toISOString(), days,
+      app: { versions, api: apiLevel, device: speedDevice(), installed: mm("(display-mode: standalone)"), userAgent: navigator.userAgent,
+        screen: `${screen.width}x${screen.height}`, window: `${innerWidth}x${innerHeight}`, timeZone: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || "",
+        online: navigator.onLine, connection: c.effectiveType ? { type: c.effectiveType, downlinkMbps: c.downlink, rttMs: c.rtt, saveData: !!c.saveData } : null },
+      names: Object.fromEntries([...acts].map(a => [a, speedName(a)])),
+      thisDevice: { sentUpTo: speedLog.sent ? new Date(speedLog.sent).toISOString() : null,
+        cols: ["when", "request", "total ms", "script ms", "size KB", "ok", "Housecall Pro ms", "waiting ms", "error", "sent"],
+        rows: speedLog.list.map(([at, a, t, sv, b, ok, hp, lk, why]) => [new Date(at).toISOString(), a, t, sv >= 0 ? sv : null, Math.round((b || 0) / 102.4) / 10, ok, hp >= 0 ? hp : null, lk >= 0 ? lk : null, why || "", at <= speedLog.sent ? 1 : 0]) },
+      everyone: srv };
+    const name = `voda-hub-speed-${lbToday()}-${days === 1 ? "today" : `${days}-days`}.json`;
+    downloadFile(name, JSON.stringify(rep), "application/json");
+    toast(`Downloaded: ${name}`);
+  } catch (e) { toast(errText(e, "The report")); }
+  btn.disabled = false; btn.textContent = was;
 }
 /** Settings › Speed (admins): how long each screen waits for the Google script, on everyone's devices. */
 async function openSpeed() {
@@ -17101,7 +17137,7 @@ async function openSpeed() {
       h("th", { class: "num", text: "Slowest" }), h("th", { class: "num", text: "Script's part" }), h("th", { class: "num", title: "Of the script's part: waiting on Housecall Pro", text: "Housecall Pro" }),
       h("th", { class: "num", title: "Of the script's part: waiting for another save to finish", text: "Waiting" }), h("th", { class: "num", text: "Size" }))),
     h("tbody", null, list.sort((p, q) => (q.p90 || 0) - (p.p90 || 0)).map(x => h("tr", { "data-a": x.a, class: slowCls(x).trim() },
-      h("th", null, speedName(x.a), x.f ? h("small", { class: "spd-f", text: ` · ${fmt(x.f)} failed` }) : null),
+      h("th", null, speedName(x.a), x.f ? h("small", { class: "spd-f", text: ` · ${fmt(x.f)} failed${speedWhyText(x.e) ? ` (${speedWhyText(x.e)})` : ""}` }) : null),
       h("td", { class: "num", text: fmt(x.n) }), h("td", { class: "num" + slowCls(x), text: speedSec(x.p50) }), h("td", { class: "num", text: speedSec(x.p90) }),
       h("td", { class: "num", text: speedSec(x.max) }), h("td", { class: "num", text: x.a === "(app open)" ? "–" : speedSec(x.s50) }),
       h("td", { class: "num", text: x.h50 ? speedSec(x.h50) : "–" }), h("td", { class: "num", text: x.l50 ? speedSec(x.l50) : "–" }),
@@ -17109,9 +17145,12 @@ async function openSpeed() {
   const draw = () => {
     const seg = h("div", { class: "seg", role: "group", "aria-label": "Days" }, [[1, "Today"], [7, "7 days"], [14, "14 days"]].map(([d, t]) =>
       h("button", { class: "seg-btn" + (d === days ? " on" : ""), type: "button", "data-d": String(d), "aria-pressed": String(d === days), text: t, onclick: () => { days = d; store.set("voda.speedDays", d); load(); } })));
-    if (!cur) { box.replaceChildren(seg, h("p", { class: "lb-sub", text: "Loading…" })); return; }
+    // Download report: everything here for the days picked, in one file (beside the days, so a phone sees it at once)
+    const top = h("div", { class: "spd-top" }, seg, apiLevel >= SPEED_REPORT_API ? h("button", { class: "btn small", type: "button", id: "spdReport",
+      title: "One file with everything here (and each request one by one) for the days picked", onclick: ev => speedReportDownload(ev.currentTarget, days) }, "Download report") : null);
+    if (!cur) { box.replaceChildren(top, h("p", { class: "lb-sub", text: "Loading…" })); return; }
     const T = cur.total || {}, mine = speedLocal(days);
-    box.replaceChildren(seg,
+    box.replaceChildren(top,
       h("p", { class: "spd-sum", id: "spdSum" }, T.n ? [h("b", { text: `${fmt(T.n)} requests` }), ` on ${fmt(T.devices)} device${T.devices === 1 ? "" : "s"} · typical ${speedSec(T.p50)} · slow (1 in 10) ${speedSec(T.p90)}`]
         : "Nothing sent yet: each device sends what it timed every 10 minutes while the app is open."),
       cur.actions.length ? h("h4", { text: "Each screen and request" }) : null,
@@ -17128,7 +17167,7 @@ async function openSpeed() {
             h("td", { text: `${x.who} · ${x.device}` }), h("th", { text: speedName(x.a) }), h("td", { class: "num", text: speedSec(x.t) }), h("td", { class: "num", text: speedSec(x.s) })); }))))) : null,
       h("details", { class: "spd-fold", id: "spdMine" }, h("summary", null, h("b", { text: "This device only (sent or not)" })),
         mine.length ? actTable(mine, "spdMineTable") : h("p", { class: "lb-sub", text: "Nothing timed on this device in these days." })),
-      howFold("spdHow", h("p", { class: "hint", text: "Each request: from the moment the app sends it to the moment its answer is in. Typical: half of them are faster. Slow: 1 in 10 is slower. Script's part: the Google script's own work; of it, Housecall Pro: waiting on Housecall Pro's answers, and Waiting: waiting for another save to finish first. The rest of the script's part is the Google Sheet. The rest of the whole wait is Google starting the script and the internet. Each device sends what it timed every 10 minutes while the app is open; two weeks are kept on the Speed tab. Only the names of the screens, the times and the sizes: nothing about clients." })));
+      howFold("spdHow", h("p", { class: "hint", text: "Download report: one file with everything here for the days picked, each request one by one, every tab's size, and this device's own: to send when something is slow. Each request: from the moment the app sends it to the moment its answer is in. Typical: half of them are faster. Slow: 1 in 10 is slower. Script's part: the Google script's own work; of it, Housecall Pro: waiting on Housecall Pro's answers, and Waiting: waiting for another save to finish first. The rest of the script's part is the Google Sheet. The rest of the whole wait is Google starting the script and the internet. Each device sends what it timed every 10 minutes while the app is open; two weeks are kept on the Speed tab. Only the names of the screens, the times and the sizes: nothing about clients." })));
   };
   const load = async () => {
     cur = null; draw();
@@ -17139,7 +17178,8 @@ async function openSpeed() {
   openDialog(h("div", { class: "rp-dlg bk-dlg spd-dlg" },
     h("h3", { id: "dlgTitle", text: "Speed" }),
     h("p", { class: "hint", text: "How long each screen waits for the Google script, on everyone's devices. The slowest first." }), box,
-    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" },
+      h("button", { class: "btn", type: "button", text: "Close", onclick: () => closeDialog() })))));
   load();
 }
 async function openBackups(back) {
