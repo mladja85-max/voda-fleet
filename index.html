@@ -13153,6 +13153,7 @@ function cashTileEl(r, today, jt) {
    Special discount), from each job's service lines in Housecall Pro, on the job's day. Which column a service name
    goes to: the service map (an admin picks it once; the app guesses the rest from the name, then the department). ---- */
 const SRV_API = 125;
+const SRV_JOB_API = 134;   // the Google script that keeps "By the job" (and the one-time fix of names pinned to one department)
 // [key, as in the workbook, short]: its 24 columns, in its order
 const SRV_COLS = [["carpet", "Carpet cleaning", "Carpet"], ["comcarpet", "Commercial carpet cleaning", "Com. carpet"], ["stretch", "Stretching", "Stretching"],
   ["rugin", "In-House Rug", "In-house rug"], ["rugplant", "In-Plant Rug", "In-plant rug"], ["uph", "Upholstery cleaning", "Upholstery"], ["hfpolish", "H.F. cleaning & polish", "H.F. polish"],
@@ -13165,6 +13166,20 @@ const SRV_RANKED = SRV_COLS.slice(0, 21).map(c => c[0]);     // the workbook's M
 const srvDept = k => (k === "water" || k === "mold" ? "r" : k === "repair" ? "p" : SRV_LESS.has(k) || k === "ccfee" ? "o" : "c");
 // a service name's column, from the name (the first that fits)
 const SRV_GUESS = [[/credit\s*card|card\s*(service\s*)?(fee|charge)|\bc\.?\s?c\.?\s*fee|processing fee|surcharge/, "ccfee"], [/special\s*disc/, "sdisc"],
+  [/^wtr|tear\s*-?\s*out|tearout|\bwet\b|non-?salvageable|air scrubber|negative air|\bcat(egory)?\s*[123]\b/, "water"],
+  [/disc(ount)?\b|coupon|promo|\bcredit\b|\boff\b|courtesy|waive/, "disc"],
+  [/maxim|protect|scotch|guard/, n => (/plastic|cover|personal|glove|\bppe\b|tyvek|suit|mask/.test(n) ? null : /rug/.test(n) ? "maxrug" : /uphol|sofa|couch|chair|fabric|sectional|loveseat|ottoman|mattress/.test(n) ? "maxuph" : "maxcarpet")],
+  [/seal/, "sealer"], [/spot|stain/, "spots"], [/deodor|odor|disinfect|saniti|enzyme|urine|pet\s*treat/, "deodor"], [/stretch/, "stretch"],
+  [/rug/, n => (/plant|pick\s*-?\s*up|delivery|drop\s*-?\s*off|wash|soak|dust/.test(n) ? "rugplant" : "rugin")],
+  [/uphol|sofa|couch|loveseat|love seat|chair|ottoman|sectional|mattress|recliner|cushion|headboard/, "uph"], [/sandless/, "hfsandless"],
+  [/hard\s*wood|\bh\.?\s?f\.?\b|wood floor|polish|refinish|buff|screen\s*(and|&)\s*coat/, "hfpolish"], [/\bvct\b|strip|wax/, "vct"],
+  [/maid|house\s*clean|move\s*-?\s*(in|out)|janitor|deep clean/, "maid"], [/tile|grout|stone|marble|travertine|slate/, "tile"], [/duct|dryer vent/, "duct"],
+  [/mold|mould|remediat|antimicrobial|encapsul|hepa/, "mold"],
+  [/water|dry(ing|out)?\b|dehu|air mover|extract|flood|mitigat|moisture|demo(lition)?|content|pack\s*-?\s*out|equipment|monitor/, n => (/carpet|rug|uphol|clean/.test(n) && !/flood|mitigat|damage|dehu|air mover|dry(ing|out)/.test(n) ? null : "water")],
+  [/repair|rebuild|install|drywall|paint|baseboard|cabinet|plumb|electric|carpentry|trim|replace/, "repair"],
+  [/carpet|room|hall|stair|steam|area|closet|basement|clean/, "carpet"]];
+// the guesses before Nov 2026 (what Save kept as a guess, told apart from a column picked by hand once: srvFixJob)
+const SRV_GUESS_V1 = [[/credit\s*card|card\s*(service\s*)?(fee|charge)|\bc\.?\s?c\.?\s*fee|processing fee|surcharge/, "ccfee"], [/special\s*disc/, "sdisc"],
   [/disc(ount)?\b|coupon|promo|\bcredit\b|\boff\b|courtesy|waive/, "disc"],
   [/maxim|protect|scotch|guard/, n => (/rug/.test(n) ? "maxrug" : /uphol|sofa|couch|chair|fabric|sectional|loveseat|ottoman|mattress/.test(n) ? "maxuph" : "maxcarpet")],
   [/seal/, "sealer"], [/spot|stain/, "spots"], [/deodor|odor|disinfect|saniti|enzyme|urine|pet\s*treat/, "deodor"], [/stretch/, "stretch"],
@@ -13176,14 +13191,30 @@ const SRV_GUESS = [[/credit\s*card|card\s*(service\s*)?(fee|charge)|\bc\.?\s?c\.
   [/water|dry(ing|out)?\b|dehu|air mover|extract|flood|mitigat|moisture|demo(lition)?|content|pack\s*-?\s*out|equipment|monitor/, "water"],
   [/repair|rebuild|install|drywall|paint|baseboard|cabinet|plumb|electric|carpentry|trim|replace/, "repair"],
   [/carpet|room|hall|stair|steam|area|closet|basement|clean/, "carpet"]];
+/** A line "By the job": Water damage on a Restoration job, Repair on a Repairs job, else what its name says (or not sorted). */
+const srvByJob = (name, dep) => (dep === "r" ? "water" : dep === "p" ? "repair" : srvGuess(name, ""));
+/** The guess for a name across its jobs: what its name says; a name that doesn't say, on Restoration or Repairs jobs: By
+ *  the job (once the Google script keeps it; before, its biggest department's). */
+function srvNameGuess(nm) {
+  const g = srvGuess(nm.name, "");
+  if (g) return g;
+  if ((nm.deps.r || nm.deps.p) && !(apiLevel && apiLevel < SRV_JOB_API)) return "job";
+  return srvGuess(nm.name, nm.dep);
+}
 function srvGuess(name, dep) {
   const n = String(name || "").toLowerCase();
   if (!n.trim() || n === "(no name)") return "disc";   // a line with no name: the discount Housecall Pro puts under a job's subtotal
-  for (const [re, k] of SRV_GUESS) if (re.test(n)) return typeof k === "function" ? k(n) : k;
+  for (const [re, k] of SRV_GUESS) if (re.test(n)) { const v = typeof k === "function" ? k(n) : k; if (v) return v; }   // (a rule that says "not this" goes on)
   return dep === "r" ? "water" : dep === "p" ? "repair" : "";   // a Restoration job's: Water; a Repairs job's: Repair; else not sorted
 }
+function srvGuessV1(name, dep) {
+  const n = String(name || "").toLowerCase();
+  if (!n.trim() || n === "(no name)") return "disc";
+  for (const [re, k] of SRV_GUESS_V1) if (re.test(n)) return typeof k === "function" ? k(n) : k;
+  return dep === "r" ? "water" : dep === "p" ? "repair" : "";
+}
 let srvDoc = null;                                         // { key, items: [[job id, day, dep, inv #, type, ¢, lines | null]], map, left, at, t }
-const srvSt = { loading: "", syncing: false, err: "", left: 0 };
+const srvSt = { loading: "", syncing: false, err: "", left: 0, fixing: false };
 const srvCan = () => canSee("revenue") && (!apiLevel || apiLevel >= SRV_API);
 /** The service lines from..to (n: how many of those days are read on Operations: more read, asked for again), or null
  *  while they load (asked for here; again after 3 minutes). */
@@ -13195,13 +13226,33 @@ function srvFor(from, to, n) {
 async function srvLoad(from, to, key) {
   srvSt.loading = key;
   try {
-    const out = await api("srvRead", { from, to });
+    const out = await api("srvRead", { from, to, byJob: true });
     srvDoc = { key, from, to, items: Array.isArray(out.items) ? out.items : [], map: out.map && typeof out.map === "object" ? out.map : {}, left: Number(out.left) || 0, at: out.at || "", t: Date.now() };
     srvSt.left = srvDoc.left; srvSt.err = "";
+    if (!out.fixJob && isAdmin() && apiLevel >= SRV_JOB_API) srvFixJob();
     if (srvDoc.left && !srvSt.syncing) srvSync(from, to, false);
   } catch (e) { srvSt.err = revErrText(e); }
   finally { if (srvSt.loading === key) srvSt.loading = ""; }
   srvRedraw();
+}
+/** Once (an admin's app, the first time it reads the lines): what Save kept only as a guess (the column the old guesses
+ *  gave it on some department's job) gets today's guess: a name that doesn't say what it is By the job (Water damage on
+ *  Restoration jobs, Repair on Repairs jobs, not one for both), Xactimate's water lines (WTR…, tear-outs, air
+ *  scrubbers) Water damage. A column picked by hand (anything else) stays. */
+async function srvFixJob() {
+  if (srvSt.fixing) return;
+  srvSt.fixing = true;
+  try {
+    const map = {};
+    for (const [n, k] of Object.entries(srvDoc.map)) {
+      if (!["r", "p", "c"].some(d => srvGuessV1(n, d) === k)) continue;   // a column picked by hand: stays
+      const now = srvGuess(n, "") || "job";
+      if (now !== k) map[n] = now;
+    }
+    const out = await api("srvMapPut", { map, fix: "job1" });
+    if (out.map) { srvDoc.map = out.map; srvRedraw(); }
+  } catch (e) { /* tried again the next time the lines are read */ }
+  finally { srvSt.fixing = false; }
 }
 /** Reads the jobs' service lines from Housecall Pro in turns until they're all read (force: all again: Read again). */
 async function srvSync(from, to, force) {
@@ -13225,6 +13276,7 @@ function srvPaint() { const el = $("srvSyncing"); if (el) el.textContent = srvSt
  *  Housecall Pro marks as a discount (its kind) is a discount, whatever its name (unless set to Not counted). */
 function srvKey(doc, name, dep, type, kind) {
   let k = doc.map[String(name).toLowerCase()] || srvGuess(name, dep);
+  if (k === "job") k = srvByJob(name, dep) || "";
   if (k !== "skip" && k !== "disc" && k !== "sdisc" && /discount/i.test(kind || "")) k = "disc";
   if (k === "carpet" && /commercial/i.test(type || "")) k = "comcarpet";
   return k;
@@ -13265,7 +13317,7 @@ function srvSum(doc, a, b) {
     }
     if (c !== sum) { o.notIn += c - sum; o.notInN++; }
   }
-  for (const nm of o.names.values()) { const dep = Object.entries(nm.deps).sort((x, y) => y[1] - x[1])[0]; nm.dep = dep ? dep[0] : ""; nm.saved = doc.map[nm.low] || ""; nm.guess = srvGuess(nm.name, nm.dep); }
+  for (const nm of o.names.values()) { const dep = Object.entries(nm.deps).sort((x, y) => y[1] - x[1])[0]; nm.dep = dep ? dep[0] : ""; nm.saved = doc.map[nm.low] || ""; nm.guess = srvNameGuess(nm); }
   return o;
 }
 const srvShown = (o, k) => (SRV_LESS.has(k) ? -o.col[k] : o.col[k]);   // a discount as what was taken off
@@ -13350,7 +13402,7 @@ function srvEl(per, r, today) {
   // the service names in these days and where each goes (an admin picks; a guess until then)
   const names = [...o.names.values()].sort((a, b) => (!(a.saved || a.guess)) - (!(b.saved || b.guess)) || Math.abs(b.cents) - Math.abs(a.cents));
   const admin = isAdmin(), picks = new Map();
-  const opts = [["", "Not sorted"], ...SRV_COLS.map(c => [c[0], c[1]]), ["skip", "Not counted"]];
+  const opts = [["", "Not sorted"], ...(apiLevel && apiLevel < SRV_JOB_API ? [] : [["job", "By the job (Restoration: Water, Repairs: Repair)"]]), ...SRV_COLS.map(c => [c[0], c[1]]), ["skip", "Not counted"]];
   const nameRows = names.map(nm => {
     const cur = nm.saved || nm.guess || "";
     const sel = admin ? h("select", { class: "srv-pick", "aria-label": `${nm.name}: goes to` }, opts.map(([v, t]) => h("option", { value: v, text: t }))) : null;
@@ -13403,10 +13455,11 @@ function srvCompare(doc, a, b, today) {
     const d = "rcp".includes(dep) && dep ? dep : "o";
     if (d !== "o") { x.ops[d] += c; if (day === today) { x.today[d] += c; x.todayN++; } }
     if (!Array.isArray(lines)) { if (d !== "o" && c) { x.unread[d] += c; x.unreadN[d]++; } continue; }   // ($0: nothing to read)
-    const by = z(), names = { r: [], c: [], p: [] };
+    const by = z(), names = { r: [], c: [], p: [] }, off = [];
     let sum = 0;
     for (const { name, key, cents } of srvJobLines(doc, lines, dep, type, c)) {
       const ld = srvLineDep(key);
+      if (key === "skip" || SRV_LESS.has(key)) off.push([name, key, cents]);
       if (!ld) continue;
       by[ld] += cents; sum += cents;
       if (ld !== d) names[ld].push([name, cents]);
@@ -13417,7 +13470,7 @@ function srvCompare(doc, a, b, today) {
       for (const k of "rcp") x.other[k] += by[k];
       continue;
     }
-    if (sum !== c) { x.diff[d] += sum - c; x.diffJobs.push({ id, day, inv, d, c, sum, gap: sum - c }); }
+    if (sum !== c) { x.diff[d] += sum - c; x.diffJobs.push({ id, day, inv, d, c, sum, gap: sum - c, off }); }
     let moved = 0;
     for (const k of "rcp") if (k !== d && by[k]) { x.out[d][k] += by[k]; moved += Math.abs(by[k]); }
     if (moved) x.moved.push({ id, day, inv, d, c, by, names, moved });
@@ -13457,10 +13510,11 @@ function srvCmpDlg(doc, r, to, today) {
   const fold = (id, title, n, body) => (n ? h("details", { class: "srv-cfold", id }, h("summary", null, h("b", { text: title })), body) : null);
   const diffSum = x.diffJobs.reduce((n, j) => n + j.gap, 0);
   const diffEl = fold("srvCmpDiff", `Lines vs the job's total: ${big(diffSum, x.diffJobs.length, "job")}`, x.diffJobs.length,
-    h("div", null, h("p", { class: "hint", text: "Each job whose lines add up to more or less than its total in Housecall Pro. Lines short of the total: a tax or a fee on the job itself. Lines over it: a discount on the job, not on a line. Biggest first." }),
+    h("div", null, h("p", { class: "hint", text: "Each job whose lines add up to more or less than its total in Housecall Pro. Lines short of the total: a tax or a fee on the job itself, or a line that's charged but picked as a discount (taken off) or Not counted: its name is shown, pick its service. Lines over it: a discount on the job, not on a line. Biggest first." }),
       h("div", { class: "lb-scroll" }, h("table", { class: "lb-table srv-cmpl" },
         h("thead", null, h("tr", null, h("th", { text: "Job" }), h("th", { text: "Department" }), h("th", { class: "num", text: "Job's total" }), h("th", { class: "num", text: "Its lines" }), h("th", { class: "num", text: "Difference" }))),
-        h("tbody", null, x.diffJobs.slice(0, MAX).map(j => h("tr", null, h("th", null, job(j)), h("td", { text: depName(j.d) }), h("td", { class: "num", text: $c(j.c) }), h("td", { class: "num", text: $c(j.sum) }), h("td", { class: "num", text: sgn(j.gap) })))))),
+        h("tbody", null, x.diffJobs.slice(0, MAX).map(j => h("tr", null, h("th", null, job(j), j.off.length ? h("small", { class: "srv-cn srv-off", text: ` · ${j.off.slice(0, 3).map(([n, k, v]) => `${n} ${k === "skip" ? `(Not counted, ${$c(Math.abs(v))})` : `(taken off, −${$c(Math.abs(v))})`}`).join(", ")}${j.off.length > 3 ? "…" : ""}` }) : null),
+          h("td", { text: depName(j.d) }), h("td", { class: "num", text: $c(j.c) }), h("td", { class: "num", text: $c(j.sum) }), h("td", { class: "num", text: sgn(j.gap) })))))),
       x.diffJobs.length > MAX ? h("p", { class: "lb-sub", text: `and ${fmt(x.diffJobs.length - MAX)} more` }) : null));
   const movedSum = x.moved.reduce((n, j) => n + j.moved, 0);
   const movedEl = fold("srvCmpMoved", `Lines counted in another department: ${fmt(x.moved.length)} job${x.moved.length === 1 ? "" : "s"} · ${$c(movedSum)}`, x.moved.length,
