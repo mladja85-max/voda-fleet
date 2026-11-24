@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 151;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 152;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -420,6 +420,15 @@ function doPost(e) {
       case "atPut":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return atPut_(req); }));
+      case "venList": case "venFind": case "venLines": case "venRead": case "venSave": case "venDelete": case "venFile": case "venRecheck":
+        if (!canVen_(user)) return json_({ ok: false, error: "not_allowed" });
+        if (req.action === "venList") return json_(venList_());
+        if (req.action === "venRecheck") return json_(withTabLock_(function () { return venRecheck_(); }));
+        if (req.action === "venFind") return json_(venFind_(req));
+        if (req.action === "venLines") return json_(venLines_(req));
+        if (req.action === "venRead") return json_(venRead_(req));
+        if (req.action === "venFile") return json_(venFile_(req));
+        return json_(withTabLock_(function () { return req.action === "venSave" ? venSave_(req, user) : venDelete_(req); }));
       case "docList": case "docSave": case "docDelete": case "docFile":
         if (!canDocs_(user) && !canDocsOwn_(user)) return json_({ ok: false, error: "not_allowed" });
         if (req.action === "docList") return json_(docList_(user));
@@ -990,6 +999,7 @@ function saveUser_(req) {
     if (parseAccess_(x.u.access).indexOf(SETTINGS) !== -1) access.push(SETTINGS);         // ... and Settings only by its owner
     if (parseAccess_(x.u.access).indexOf(DOCS) !== -1) access.push(DOCS);                 // ... and Documents (docAccessPut_)
     if (parseAccess_(x.u.access).indexOf(DOCS_OWN) !== -1) access.push(DOCS_OWN);         // ... and his own documents
+    if (parseAccess_(x.u.access).indexOf(VEN) !== -1) access.push(VEN);                   // ... and Vendor costs
     if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   }
   if (x.u.role !== role || x.u.status !== status) {
@@ -1243,7 +1253,8 @@ function rcptFolder_() { return hubSub_("RCPT_FOLDER_ID"); }   // VODA Hub › R
 const HUB_FOLDER = "VODA Hub";
 // each folder: its Script Property (its id) → [its old name in My Drive, its name inside VODA Hub]
 const HUB_SUBS = { RCPT_FOLDER_ID: ["VODA Hub receipts", "Receipts"], CP_FOLDER_ID: ["VODA Hub - Contractor invoices", "Contractor invoices"], BACKUP_FOLDER_ID: ["VODA Prime backups", "Backups"],
-  RB_FOLDER_ID: ["VODA Hub - Rebuild estimates", "Rebuild estimates"], DOC_FOLDER_ID: ["VODA Hub - Documentation", "Documentation"] };
+  RB_FOLDER_ID: ["VODA Hub - Rebuild estimates", "Rebuild estimates"], DOC_FOLDER_ID: ["VODA Hub - Documentation", "Documentation"],
+  VEN_FOLDER_ID: ["VODA Hub - Vendor invoices", "Vendor invoices"] };
 function hubFolder_() {
   const P = PropertiesService.getScriptProperties(), id = P.getProperty("HUB_FOLDER_ID");
   if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* made again below */ } }
@@ -1560,8 +1571,8 @@ function docAccessPut_(req) {
   const s = usersSheet_(), x = readUsers_(s).filter(function (y) { return y.u.id === String(req.id || ""); })[0];
   if (!x) return { ok: false, error: "gone" };
   if (x.u.role !== "admin") return { ok: false, error: "bad_request" };
-  const FLAG = req.own === true ? DOCS_OWN : DOCS;
-  if (x.u.id === owner && FLAG === DOCS) return { ok: true, user: publicUser_(x.u) };
+  const FLAG = req.flag === "vendors" ? VEN : req.own === true ? DOCS_OWN : DOCS;   // Documents, his own documents, or Vendor costs
+  if (x.u.id === owner && (FLAG === DOCS || FLAG === VEN)) return { ok: true, user: publicUser_(x.u) };
   const access = parseAccess_(x.u.access).filter(function (a) { return a !== FLAG; });
   if (req.on) access.push(FLAG);
   if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
@@ -1683,6 +1694,277 @@ function docFile_(req) {
   if (!f) return { ok: false, error: "file_gone" };
   const b = f.getBlob();
   return { ok: true, name: d.file, mime: d.type || b.getContentType(), data: Utilities.base64Encode(b.getBytes()) };
+}
+
+/* ---- Operations › Vendor costs: the testing vendors' invoices (asbestos and lead, mold, other), each on its job: what
+   was paid (the invoice, read by Google, checked by whoever adds it) and what was charged (the job's Testing lines from
+   Housecall Pro, or typed). One row an invoice on the "Vendor invoices" tab; the files in Drive (VODA Hub › Vendor
+   invoices). The owner of Settings sees them and switches on the admins who do (as Documents). The Bonus goal counts
+   the revenue without what's paid to them, on the job's day, from its department. ---- */
+const VEN = "vendors";
+const VEN_SHEET = "Vendor invoices";
+const VEN_COLS = ["Id", "Job id", "Job #", "Job day", "Client", "Department", "Service", "Vendor", "Vendor invoice #", "Invoice day", "Paid (cents)", "Charged (cents)",
+  "Charged from", "Lines", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at"];
+const VEN_SVC = ["al", "mold", "other"], VEN_MAX_C = 1e9;
+function canVen_(user) {
+  if (!user || user.role !== "admin") return false;
+  const owner = settingsOwner_();
+  return !owner || user.id === owner || parseAccess_(user.access).indexOf(VEN) !== -1;
+}
+function venFolder_() { return hubSub_("VEN_FOLDER_ID"); }
+/** Every vendor invoice: { row (on the tab), id, jobId, inv, day, client, dept, svc, vendor, vinv, vday, paid, charged, from,
+ *  lines: [[name, description, cents]], fileId, file, type, notes, by, at, chBy, chAt }. */
+function venRows_() {
+  const tz = Session.getScriptTimeZone(), iso = function (v) { return v instanceof Date ? v.toISOString() : String(v || ""); };
+  return pcRows_(VEN_SHEET, VEN_COLS.length).map(function (r, i) {
+    let lines = [];
+    try { lines = JSON.parse(String(r[13] || "[]")) || []; } catch (e) { lines = []; }
+    return { row: i + 2, id: String(r[0] || ""), jobId: String(r[1] || ""), inv: String(r[2] || ""), day: pcDay_(r[3], tz) || "", client: String(r[4] || ""),
+      dept: REV_DEPTS.indexOf(String(r[5])) === -1 ? "o" : String(r[5]), svc: VEN_SVC.indexOf(String(r[6])) === -1 ? "other" : String(r[6]), vendor: String(r[7] || ""),
+      vinv: String(r[8] || ""), vday: pcDay_(r[9], tz) || "", paid: Math.round(Number(r[10]) || 0), charged: Math.round(Number(r[11]) || 0), from: String(r[12]) === "hcp" ? "hcp" : "typed",
+      lines: Array.isArray(lines) ? lines : [], fileId: String(r[14] || ""), file: String(r[15] || ""), type: String(r[16] || ""), notes: String(r[17] || ""),
+      by: String(r[18] || ""), at: iso(r[19]), chBy: String(r[20] || ""), chAt: iso(r[21]) };
+  }).filter(function (v) { return v.id; });
+}
+function venOut_(v) {
+  return { id: v.id, jobId: v.jobId, inv: v.inv, day: v.day, client: v.client, dept: v.dept, svc: v.svc, vendor: v.vendor, vinv: v.vinv, vday: v.vday, paid: v.paid,
+    charged: v.charged, from: v.from, lines: v.lines, file: v.fileId ? { name: v.file, type: v.type } : null, notes: v.notes, by: v.by, at: v.at, chBy: v.chBy, chAt: v.chAt };
+}
+function venList_() { return { ok: true, invoices: venRows_().map(venOut_) }; }
+/** The Revenue tab's jobs whose visits `hit` (a visit: [job id, invoice #, client, department, charged ¢, owes ¢, project,
+ *  …]), each job once (its visits together): { base (its #), ids (each visit's job id), day (its first visit's), client,
+ *  dept, proj, c (charged, all its visits) }, the newest first. */
+function venJobsWhere_(hit) {
+  const s = SpreadsheetApp.getActive().getSheetByName(REV_SHEET), by = {};
+  if (!s || s.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone(), rows = s.getRange(2, 1, s.getLastRow() - 1, REV_COLS.length).getValues();
+  rows.forEach(function (r) {
+    const day = pcDay_(r[0], tz);
+    let list = [];
+    try { list = JSON.parse(String(r[14] || "[]")) || []; } catch (e) { list = []; }
+    if (!day || !Array.isArray(list)) return;
+    list.forEach(function (x) {
+      if (!Array.isArray(x) || !x[0]) return;
+      const inv = String(x[1] || ""), base = inv.replace(/-\d+$/, "") || String(x[0]);
+      if (!hit(x, base)) return;
+      (by[base] || (by[base] = [])).push({ id: String(x[0]), inv: inv, day: day, client: String(x[2] || ""), dept: REV_DEPTS.indexOf(String(x[3])) === -1 ? "o" : String(x[3]),
+        proj: String(x[6] || ""), c: Math.round(Number(x[4]) || 0) });
+    });
+  });
+  // each job once: its first visit (no dash, or -1; else the earliest) gives its day, client, department and project
+  return Object.keys(by).map(function (base) {
+    const vs = by[base].sort(function (a, b) { return a.day < b.day ? -1 : a.day > b.day ? 1 : 0; });
+    const first = vs.filter(function (v) { return !/-\d+$/.test(v.inv) || /-1$/.test(v.inv); })[0] || vs[0];
+    const ids = [];
+    vs.forEach(function (v) { if (ids.indexOf(v.id) === -1) ids.push(v.id); });
+    return { base: base, ids: ids, day: first.day, client: first.client, dept: first.dept, proj: first.proj, c: vs.reduce(function (n, v) { return n + v.c; }, 0) };
+  }).sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : 0; });
+}
+/** The jobs a search finds (a job #, "#26482-1" or "26482", or part of the client's name), 12 at most. */
+function venFind_(req) {
+  const q = String(req.q || "").replace(/\s+/g, " ").trim().toLowerCase(), num = q.replace(/^#/, "").replace(/-\d+$/, "");
+  if (q.length < 2) return { ok: false, error: "bad_request" };
+  const isNum = /^\d{3,10}$/.test(num);
+  return { ok: true, jobs: venJobsWhere_(function (x, base) { return isNum ? base === num : String(x[2] || "").toLowerCase().indexOf(q) !== -1; }).slice(0, 12) };
+}
+/** Street addresses in a text ("1405 Bluemont Ct"), 3 at most. */
+const VEN_ADDR_RE = /\b(\d{1,6})\s+((?:[NSEW]\.?\s+)?[A-Za-z0-9'.-]+(?:\s+[A-Za-z0-9'.-]+){0,3}?)\s+(st|street|ave|avenue|rd|road|dr|drive|ct|court|ln|lane|blvd|boulevard|way|pl|place|cir|circle|ter|terrace|pkwy|parkway|hwy|highway|sq|square|trl|trail|loop|run|pike|landing|row|crossing)\b\.?/gi;
+function venAddrs_(text) {
+  const out = [];
+  let m;
+  VEN_ADDR_RE.lastIndex = 0;
+  while ((m = VEN_ADDR_RE.exec(String(text || ""))) && out.length < 3) {
+    const a = (m[1] + " " + m[2] + " " + m[3]).replace(/\s+/g, " ").trim();
+    if (out.map(function (x) { return x.toLowerCase(); }).indexOf(a.toLowerCase()) === -1) out.push(a);
+  }
+  return out;
+}
+/** Is this client's name in the text (a name of 2 words or more: each word there; one word: itself, 5 letters or more)? */
+function venNameIn_(client, low) {
+  const name = String(client || "").toLowerCase().replace(/[^a-z0-9&' ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!name) return false;
+  const words = name.split(" ").filter(function (w) { return w.length >= 2 && ["llc", "inc", "the", "and", "co", "corp", "ltd"].indexOf(w) === -1; });
+  const has = function (w) { return new RegExp("(^|[^a-z0-9])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z0-9]|$)").test(low); };
+  return words.length >= 2 ? words.every(has) : words.length === 1 && words[0].length >= 5 && has(words[0]);
+}
+/** The jobs a vendor's invoice is about, from what it says: the property's address (Housecall Pro's customers there, and
+ *  their jobs) and the client's name (the Revenue tab's clients): [{ job…, why: ["address 1405 Bluemont Ct", "client
+ *  Pat Lee"] }], the surest first (an address before a name), 6 at most. */
+function venMatch_(text) {
+  const raw = String(text || ""), low = raw.toLowerCase().replace(/[^a-z0-9&' ]+/g, " ").replace(/\s+/g, " ");
+  if (raw.length < 10) return [];
+  const why = {}, add = function (base, w) { (why[base] || (why[base] = [])).indexOf(w) === -1 && why[base].push(w); };
+  // the property's address: Housecall Pro's customers at it, and their jobs' #s
+  const bases = {};
+  if (hcpKey_()) venAddrs_(raw).forEach(function (a) {
+    const r = hcpGet_("/customers", { q: a, page_size: 5 }), d = r && !r.error ? r.data || {} : {}, cs = Array.isArray(d.customers) ? d.customers : [];
+    cs.slice(0, 3).forEach(function (c) {
+      if (!c || !c.id) return;
+      const jr = hcpGet_("/jobs", { customer_id: c.id, page_size: 100, sort_by: "created_at", sort_direction: "desc" }), jd = jr && !jr.error ? jr.data || {} : {};
+      (Array.isArray(jd.jobs) ? jd.jobs : []).forEach(function (j) {
+        const st = String((j.address && j.address.street) || "").toLowerCase();
+        // the job at that address (a customer can have more than one)
+        if (st && st.indexOf(a.toLowerCase().split(" ").slice(0, 2).join(" ")) === -1) return;
+        const base = String(j.invoice_number || "").replace(/-\d+$/, "");
+        if (base) { bases[base] = true; add(base, "address " + a); }
+      });
+    });
+  });
+  const named = {}, seen = {};   // (each client's name looked for once)
+  const jobs = venJobsWhere_(function (x, base) {
+    if (bases[base]) return true;
+    const c = String(x[2] || "");
+    if (!(c in seen)) seen[c] = venNameIn_(c, low);
+    if (seen[c]) { named[base] = c; return true; }
+    return false;
+  });
+  jobs.forEach(function (j) { if (named[j.base]) add(j.base, "client " + named[j.base]); j.why = why[j.base] || []; });
+  const score = function (j) { return j.why.reduce(function (n, w) { return n + (/^address/.test(w) ? 2 : 1); }, 0); };
+  return jobs.sort(function (a, b) { return score(b) - score(a) || (a.day < b.day ? 1 : a.day > b.day ? -1 : 0); }).slice(0, 6);
+}
+// a job's line that's testing ("Testing", "Lead test fee", "Asbestos survey", "Air sampling"; not "Mold remediation")
+const VEN_TEST_RE = /\btest(s|ing)?\b|sampl|survey|\blab\b|swab|spore|asbestos|clearance|mold (inspection|assessment)/i;
+/** The vendor invoices not billed (nothing charged for them: no Testing line on the job when they were added): each job's
+ *  lines read again; one with a Testing line now: charged from it. { ok, invoices (all), fixed: [ids] } (15 at a time). */
+function venRecheck_() {
+  const rows = venRows_(), todo = rows.filter(function (v) { return !v.charged; }).slice(0, 15), fixed = [];
+  if (!todo.length || !hcpKey_()) return { ok: true, invoices: rows.map(venOut_), fixed: fixed };
+  const s = pcSheet_(VEN_SHEET, VEN_COLS);
+  todo.forEach(function (v) {
+    const job = venJobsWhere_(function (x, base) { return base === v.inv; })[0], ids = job ? job.ids : [v.jobId];
+    const r = venLines_({ ids: ids });
+    if (!r.ok) return;
+    const picked = r.lines.filter(function (l) { return VEN_TEST_RE.test(l[0] + " " + l[1]); });
+    if (!picked.length) return;
+    v.lines = picked; v.charged = picked.reduce(function (n, l) { return n + l[2]; }, 0); v.from = "hcp";
+    s.getRange(v.row, 12, 1, 3).setNumberFormat("@").setValues([[String(v.charged), "hcp", JSON.stringify(v.lines)]]);
+    fixed.push(v.id);
+  });
+  return { ok: true, invoices: rows.map(venOut_), fixed: fixed };
+}
+/** A job's lines from Housecall Pro (every visit's): [[name, description, cents]] (a line of $0 left out). */
+function venLines_(req) {
+  const ids = (Array.isArray(req.ids) ? req.ids : []).map(String).filter(function (x, i, a) { return /^[A-Za-z0-9_-]{1,80}$/.test(x) && a.indexOf(x) === i; }).slice(0, 20);
+  if (!ids.length) return { ok: false, error: "bad_request" };
+  if (!hcpKey_()) return { ok: false, error: "no_key" };
+  const res = hcpGetAll_(ids.map(function (id) { return { path: "/jobs/" + encodeURIComponent(id) + "/line_items" }; })), out = [];
+  let failed = 0;
+  res.forEach(function (r) {
+    if (!r || r.error) { failed++; return; }
+    const d = r.data || {}, list = Array.isArray(d) ? d : Array.isArray(d.data) ? d.data : Array.isArray(d.line_items) ? d.line_items : [];
+    list.forEach(function (it) {
+      if (!it) return;
+      const name = String(it.name || it.service_name || it.title || "").replace(/\s+/g, " ").trim().slice(0, 80) || "(no name)";
+      const desc = String(it.description || "").replace(/\s+/g, " ").trim().slice(0, 160);
+      const amt = it.amount !== undefined && it.amount !== null ? Number(it.amount) : it.total_price !== undefined && it.total_price !== null ? Number(it.total_price)
+        : (Number(it.unit_price) || 0) * (it.quantity !== undefined && it.quantity !== null ? Number(it.quantity) || 0 : 1);
+      const c = Math.round(amt) || 0;
+      if (c) out.push([name, desc === name ? "" : desc, c]);
+    });
+  });
+  if (failed === ids.length) return { ok: false, error: "hcp_failed" };
+  return { ok: true, lines: out, failed: failed };
+}
+/** A vendor's invoice from the app: { name, data (base64) } → kept in the folder (pending until saved) and read by
+ *  Google: { fileId, name, type, text }. */
+function venRead_(req) {
+  let bytes;
+  try { bytes = Utilities.base64Decode(String(req.data || "")); } catch (e) { return { ok: false, error: "bad_request" }; }
+  if (!bytes || !bytes.length) return { ok: false, error: "bad_request" };
+  if (bytes.length > DOC_MAX) return { ok: false, error: "too_big" };
+  const type = rcptKind_(bytes);
+  if (!type) return { ok: false, error: "not_file" };
+  const ext = type === "application/pdf" ? ".pdf" : type === "image/png" ? ".png" : ".jpg";
+  const name = "(not saved) " + (String(req.name || "").replace(/[\\/:*?"<>|]+/g, " ").replace(/\.[A-Za-z0-9]{2,5}$/, "").replace(/\s+/g, " ").trim().slice(0, 100) || "Invoice") + ext;
+  const f = venFolder_().createFile(Utilities.newBlob(bytes, type, name));
+  let text = "", matches = [];
+  try { text = String(rcptOcr_(f.getBlob()) || "").replace(/\ufeff/g, ""); } catch (e) { text = ""; }
+  try { matches = venMatch_(text); } catch (e) { matches = []; }   // the job, from the address and the client on it
+  return { ok: true, fileId: f.getId(), name: name, type: type, text: text.slice(0, 20000), matches: matches };
+}
+/** Is this file one of the folder's (one just read, or the invoice's own)? */
+function venFileOk_(id) {
+  if (!/^[A-Za-z0-9_-]{10,80}$/.test(String(id || ""))) return null;
+  try {
+    const f = DriveApp.getFileById(id), folder = venFolder_().getId(), it = f.getParents();
+    while (it.hasNext()) if (it.next().getId() === folder) return f.isTrashed() ? null : f;
+  } catch (e) { /* gone */ }
+  return null;
+}
+/** Adds a vendor's invoice, or changes one ({ id }): its job, service, vendor, what was paid and charged; fileId: the file
+ *  read (venRead_), named after the vendor and the job; a new one replaces the old (the old goes in Drive's trash). */
+function venSave_(req, user) {
+  const x = req.inv && typeof req.inv === "object" ? req.inv : {}, id = String(req.id || "");
+  const t = function (v, n) { return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, n); };
+  const cents = function (v) { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= VEN_MAX_C ? Math.round(n) : NaN; };
+  if (id && !/^v[a-z0-9]{6,40}$/.test(id)) return { ok: false, error: "bad_request" };
+  const rows = venRows_(), was = id ? rows.filter(function (v) { return v.id === id; })[0] : null;
+  if (id && !was) return { ok: false, error: "not_found" };
+  const v = { jobId: t(x.jobId, 80), inv: t(x.inv, 30).replace(/^#/, ""), day: String(x.day || ""), client: t(x.client, 120), dept: REV_DEPTS.indexOf(String(x.dept)) === -1 ? "o" : String(x.dept),
+    svc: VEN_SVC.indexOf(String(x.svc)) === -1 ? "" : String(x.svc), vendor: t(x.vendor, 80), vinv: t(x.vinv, 40), vday: String(x.vday || ""), paid: cents(x.paid), charged: cents(x.charged || 0),
+    from: x.from === "hcp" ? "hcp" : "typed", notes: t(x.notes, 300) };
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(v.jobId) || !v.inv) return { ok: false, error: "bad_value", field: "job" };
+  if (!DOC_DAY.test(v.day)) return { ok: false, error: "bad_value", field: "job" };
+  if (!v.svc) return { ok: false, error: "bad_value", field: "svc" };
+  if (!v.vendor) return { ok: false, error: "bad_value", field: "vendor" };
+  if (v.vday && !DOC_DAY.test(v.vday)) return { ok: false, error: "bad_value", field: "vday" };
+  if (!Number.isFinite(v.paid) || v.paid <= 0) return { ok: false, error: "bad_value", field: "paid" };
+  if (!Number.isFinite(v.charged)) return { ok: false, error: "bad_value", field: "charged" };
+  v.lines = (Array.isArray(x.lines) ? x.lines : []).slice(0, 30).map(function (l) { return Array.isArray(l) ? [t(l[0], 80), t(l[1], 160), Math.round(Number(l[2]) || 0)] : null; }).filter(Boolean);
+  if (v.from === "hcp" && !v.lines.length) v.from = "typed";
+  let file = null;
+  if (req.fileId) {
+    const f = venFileOk_(String(req.fileId));
+    if (!f) return { ok: false, error: "no_file" };
+    file = f;
+  }
+  if (!was && !file) return { ok: false, error: "no_file" };
+  const now = tmNow_().toISOString(), who = t(user.name || "Admin", 60);
+  const out = { id: was ? was.id : "v" + Utilities.getUuid().replace(/-/g, "").slice(0, 12), fileId: was ? was.fileId : "", file: was ? was.file : "", type: was ? was.type : "",
+    by: was ? was.by : who, at: was ? was.at : now, chBy: was ? who : "", chAt: was ? now : "" };
+  Object.keys(v).forEach(function (k) { out[k] = v[k]; });
+  if (file) {
+    const type = file.getMimeType(), ext = type === "application/pdf" ? ".pdf" : type === "image/png" ? ".png" : ".jpg";
+    const name = ((v.vday || v.day) + " " + v.vendor + " - job " + v.inv).replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").slice(0, 120) + ext;
+    try { file.setName(name); } catch (e) { /* keeps its name */ }
+    if (was && was.fileId && was.fileId !== file.getId()) { try { DriveApp.getFileById(was.fileId).setTrashed(true); } catch (e) { /* gone already */ } }
+    out.fileId = file.getId(); out.file = name; out.type = type;
+  }
+  const s = pcSheet_(VEN_SHEET, VEN_COLS), at = was ? was.row : Math.max(2, s.getLastRow() + 1);
+  s.getRange(at, 1, 1, VEN_COLS.length).setNumberFormat("@").setValues([[out.id, out.jobId, out.inv, out.day, out.client, out.dept, out.svc, out.vendor, out.vinv, out.vday,
+    String(out.paid), String(out.charged), out.from, JSON.stringify(out.lines), out.fileId, out.file, out.type, out.notes, out.by, out.at, out.chBy, out.chAt]]);
+  return { ok: true, inv: venOut_(out) };
+}
+/** Takes a vendor's invoice off (its file goes in Drive's trash); a file read but never saved ({ fileId }) too. */
+function venDelete_(req) {
+  if (req.fileId && !req.id) {
+    const f = venFileOk_(String(req.fileId));
+    if (f && venRows_().every(function (v) { return v.fileId !== f.getId(); })) f.setTrashed(true);
+    return { ok: true };
+  }
+  const id = String(req.id || ""), v = venRows_().filter(function (x) { return x.id === id; })[0];
+  if (!v) return { ok: false, error: "not_found" };
+  SpreadsheetApp.getActive().getSheetByName(VEN_SHEET).deleteRow(v.row);
+  if (v.fileId) { try { DriveApp.getFileById(v.fileId).setTrashed(true); } catch (e) { /* gone already */ } }
+  return { ok: true, id: id };
+}
+/** A vendor's invoice to look at: { name, mime, data (base64) }. */
+function venFile_(req) {
+  const id = String(req.id || ""), v = venRows_().filter(function (x) { return x.id === id; })[0];
+  const f = v && v.fileId ? venFileOk_(v.fileId) : null;
+  if (!f) return { ok: false, error: v ? "file_gone" : "not_found" };
+  const b = f.getBlob();
+  return { ok: true, name: v.file, mime: v.type || b.getContentType(), data: Utilities.base64Encode(b.getBytes()) };
+}
+/** What the testing vendors were paid, by the job's day and department: { day: { r, c, p, o } } (cents) for a year. */
+function venPaidByDay_(y) {
+  const out = {};
+  venRows_().forEach(function (v) {
+    if (v.day.indexOf(y + "-") !== 0 || !v.paid) return;
+    const d = out[v.day] || (out[v.day] = { r: 0, c: 0, p: 0, o: 0 });
+    d[v.dept] = (d[v.dept] || 0) + v.paid;
+  });
+  return out;
 }
 
 /* ---------------- paperwork email ---------------- */
@@ -8399,7 +8681,10 @@ function goalsRead_(year) {
     const c = repCents_(r[16]) + repSplit_(r).mon;
     if (c) paid[r[1]] = (paid[r[1]] || 0) + c;
   });
-  return { ok: true, year: Number(y), goals: goalsDoc_(), contractors: paid };
+  // ... and what the testing vendors were paid (Vendor costs): the Bonus counts the revenue without it too
+  let vendors = {};
+  try { vendors = venPaidByDay_(y); } catch (e) { vendors = {}; }
+  return { ok: true, year: Number(y), goals: goalsDoc_(), contractors: paid, vendors: vendors };
 }
 /** Sets a year's department goals ({ year, depts: { r, c, p } }) and/or a month's ({ month, goals: { sup, min, bon } }). */
 function goalsPut_(req) {
