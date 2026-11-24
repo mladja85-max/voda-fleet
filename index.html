@@ -21060,7 +21060,7 @@ function ofBkSum(jobs) {
  *  change, the day it was booked, its status and who it's credited to (how). */
 function ofBkRowEl(j, showDay, showWho) {
   const diff = j.st === "d" && j.bc > 0 && j.fc != null ? j.fc - j.bc : null;
-  const st = j.st === "x" ? "Canceled" : j.st === "d" ? "Serviced" : "Not serviced yet";
+  const st = j.st === "x" ? "Canceled" : j.st === "d" ? (j.pf ? "Paid in full, not finished in Housecall Pro" : "Serviced") : "Not serviced yet";
   const how = j.how === "admin" ? `Picked by ${j.pickBy || "an admin"}${showWho ? `: ${j.name}` : ""}` : j.how === "out" ? `Office (${j.pickBy || "an admin"})`
     : j.how ? `${OF_BK_HOW[j.how] || j.how}${showWho ? `: ${j.name}` : ""}` : "Not credited to anyone";
   return h("li", { class: "of-bk-row", "data-inv": j.inv, "data-st": j.st },
@@ -21094,7 +21094,7 @@ function ofBkBoxes(p, bk, per, months, from, to) {
   const list = open ? h("div", { class: "of-bk-open", id: `ofBk-${p.name.replace(/[^A-Za-z0-9]/g, "")}` },
     jobs.length ? h("ul", { class: "of-bk-list" }, jobs.map(j => ofBkRowEl(j, per !== "day", false))) : xd ? null : h("p", { class: "meta", text: "No jobs booked then." }),
     xd ? h("p", { class: "of-bk-xl", text: `${pre ? "" : `Before ${lbDayText(since)}: `}${fmt(xn)} booked job${xn === 1 ? "" : "s"} from the Excel (SCHEDULED / COMPLETED), with no amounts: the app counts them with their amounts from ${sinceText}.` }) : null,
-    h("p", { class: "of-bk-note", text: `Her jobs on the schedule for ${per === "day" ? "this day" : "these days"}, whenever she booked them. Booked revenue: each job's amount when she booked it. Increase / decrease: once every visit is done, what it came to (less a card fee line) against that${t.done ? `: ${ofBkDiff(t.diff)} on ${t.done} job${t.done === 1 ? "" : "s"} booked at ${ofBkMoney(t.base)}` : ""}.` })) : null;
+    h("p", { class: "of-bk-note", text: `Her jobs on the schedule for ${per === "day" ? "this day" : "these days"}, whenever she booked them. Booked revenue: each job's amount when she booked it. Increase / decrease: once every visit is done (finished in Housecall Pro, or paid in full once its day has gone by), what it came to (less a card fee line) against that${t.done ? `: ${ofBkDiff(t.diff)} on ${t.done} job${t.done === 1 ? "" : "s"} booked at ${ofBkMoney(t.base)}` : ""}.` })) : null;
   return { boxes, list };
 }
 /* ---- Who booked each job (Admins only, under everyone): every job on the schedule for the days on screen (canceled
@@ -21159,7 +21159,7 @@ function ofBkFootEl(bk, per, cfg) {
   else if (none.length) out.push(howFold("ofBkNone", h("div", {},
     h("p", { class: "hint", text: `Add a tag "Booked: ${names[0] || "name"}" to the job in Housecall Pro (or mark the call Booked in the app): within the hour it counts for her.` }),
     h("ul", { class: "of-bk-list" }, none.map(j => ofBkRowEl(j, per !== "day", true)))), `Booked, not on anyone's scorecard (${none.length})`));
-  out.push(howFold("ofBkHow", h("p", { class: "hint", text: `Booked jobs: the jobs on the schedule for these days in Housecall Pro (the day of their first visit; a job's visits count once), whenever they were booked. A canceled job isn't counted (it shows as canceled). Who booked it: an admin's pick (Who booked each job), else the tag "Booked: <name>" on the job, else a call she marked Booked in the app (Past clients, Office › Estimates) for that client within 3 days of booking it. Booked revenue: each job's amount when it was booked (one priced later, before the visit: that price; one booked before ${bk.since ? lbDayText(bk.since) : "the app kept them"}: its amount that day). Increase / decrease: once every visit is done, what the job came to (less a card fee line) against that; jobs booked at $0 aren't in it. Read from Housecall Pro every hour. Days before ${bk.since ? lbDayText(bk.since) : "then"}: Booked jobs is the number from the Excel's SCHEDULED / COMPLETED column (Load from Excel › Only Booked jobs), with no amounts.` }), "How booked jobs are counted"));
+  out.push(howFold("ofBkHow", h("p", { class: "hint", text: `Booked jobs: the jobs on the schedule for these days in Housecall Pro (the day of their first visit; a job's visits count once), whenever they were booked. A canceled job isn't counted (it shows as canceled). Who booked it: an admin's pick (Who booked each job), else the tag "Booked: <name>" on the job, else a call she marked Booked in the app (Past clients, Office › Estimates) for that client within 3 days of booking it. Booked revenue: each job's amount when it was booked (one priced later, before the visit: that price; one booked before ${bk.since ? lbDayText(bk.since) : "the app kept them"}: its amount that day). Increase / decrease: once every visit is done (finished in Housecall Pro, or its invoice paid in full once its day has gone by), what the job came to (less a card fee line) against that; jobs booked at $0 aren't in it. Read from Housecall Pro every hour. Days before ${bk.since ? lbDayText(bk.since) : "then"}: Booked jobs is the number from the Excel's SCHEDULED / COMPLETED column (Load from Excel › Only Booked jobs), with no amounts.` }), "How booked jobs are counted"));
   return h("div", { class: "of-bk-foot", id: "ofBkFoot" }, out);
 }
 function ofScoreEl() {
