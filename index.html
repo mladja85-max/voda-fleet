@@ -23211,7 +23211,7 @@ function renderDocuments() {
   const spBtn = (k, t) => { const c = cnt(k); return h("button", { class: "seg-btn", type: "button", role: "tab", "data-sp": k, "aria-selected": String(sp === k),
     onclick: () => { docView.sp = k; docView.f = "all"; docSaveView(); renderDocuments(); } }, t, c.x + c.soon ? h("i", { class: "doc-n " + (c.x ? "x" : "soon"), text: fmt(c.x + c.soon) }) : null); };
   const spaces = both ? h("div", { class: "seg doc-spaces", role: "tablist", "aria-label": "Whose documents", id: "docSpaces" }, spBtn("company", "Company documents"), spBtn("own", docOwnName())) : null;
-  box.replaceChildren(spaces, h("div", { class: "panel doc-panel", "data-space": sp },
+  box.replaceChildren(...(spaces ? [spaces] : []), h("div", { class: "panel doc-panel", "data-space": sp },
     h("div", { class: "doc-head" }, h("h2", { text: sp === "own" ? docOwnName() : "Company documents" }),
       h("div", { class: "doc-head-acts" },
         h("button", { class: "btn small", type: "button", id: "docAddMany", onclick: () => docAddMany() }, "Add several"),
