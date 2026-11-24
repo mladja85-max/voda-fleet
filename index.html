@@ -1615,6 +1615,7 @@ dialog#dlg:has(.spd-dlg) { width: min(860px, calc(100% - 24px)); }   /* every co
 .rp-hcp { background: var(--bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; font-size: .88rem; }
 .rp-dlg h3 { font-size: 1.25rem; } .rp-dlg > h3:first-child { padding-right: 40px; }
 dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
+dialog#dlg:has(.ven-dlg) { width: min(1120px, calc(100% - 24px)); }   /* Vendor costs: its tables without sliding sideways */
 @media (max-width: 760px) {
   .pay-kpis.rp-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .rp-kpis .pay-kpi { padding: 8px 10px; } .rp-kpis .pay-kpi b { font-size: 1.1rem; }
@@ -1845,7 +1846,42 @@ dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
 .rev-ar-cash .go { font-size: 1.2rem; color: var(--accent); } .rev-ar-cash.on .go { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; background: var(--accent); color: #fff; }
 .rev-ar-cash:hover, .rev-ar-cash:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .rev-ar-cash.on { border-color: var(--accent); border-width: 2px; } .rev-ar-cash.on .go { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
-.rev-ar-barbox { display: none; gap: 6px; } .rev-ar-barbox .rev-ar-cash { margin-top: 0; }
+.rev-ar-barbox { display: none; gap: 6px; }
+/* Operations › Vendor costs: its card under Accounts receivable, its window, an invoice's form, the Jobs list's tag */
+.rev-ven { cursor: pointer; position: relative; display: grid; gap: 6px; padding: 12px 34px 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
+.rev-ven:hover, .rev-ven:focus-visible { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.rev-ven > small { font-size: .7rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.rev-ven .go { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; color: var(--muted); }
+.rev-ven-nums, .ven-tots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rev-ven-nums span, .ven-tots span { display: grid; min-width: 0; } .rev-ven-nums em, .ven-tots em { font-style: normal; font-size: .7rem; font-weight: 700; color: var(--muted); }
+.rev-ven-nums b, .ven-tots b { font-family: var(--font-display); font-size: 1.15rem; font-variant-numeric: tabular-nums; } .ven-tots b { font-size: 1.5rem; }
+.rev-ven-nums .m b, .ven-tots .m b { color: var(--ok); } .rev-ven-nums .m.neg b, .ven-tots .m.neg b, .ven-list td.neg, .ven-sum td.neg { color: var(--due); }
+.rev-ven-nums i, .ven-tots i { font-style: normal; font-size: .72rem; font-weight: 700; color: var(--muted); }
+.rev-ven-n { font-size: .78rem; color: var(--muted); } .rev-ven-nb { font-size: .78rem; font-weight: 700; color: var(--due); }
+.ven-nb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--due); background: var(--due-bg); }
+.ven-nb b { color: var(--due); } .ven-nb span { flex: 1 1 260px; font-size: .86rem; }
+.ven-list tr.nb td, .ven-list tr.nb th { background: color-mix(in srgb, var(--due) 6%, transparent); } .ven-nbt { color: var(--due); }
+.ven-nobill { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--due); background: var(--due-bg); }
+.ven-nobill > b { color: var(--due); font-size: .88rem; } .ven-nobill input[type="radio"] { width: auto; } .ven-nobill #venTyped { width: 160px; }
+.ven-why { flex-basis: 100%; font-size: .76rem; font-weight: 600; color: var(--accent); }
+.ven-body { display: grid; gap: 12px; } .ven-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.ven-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.ven-list td small, .ven-list th small, .ven-sum td small { display: block; color: var(--muted); font-size: .72rem; } .ven-sum td small { display: inline; }
+.ven-acts { white-space: nowrap; } .ven-acts .btn + .btn { margin-left: 4px; }
+.ven-form { display: grid; gap: 8px; min-width: 0; } .ven-form > * { min-width: 0; }
+#venSvc { flex-wrap: wrap; width: fit-content; max-width: 100%; box-sizing: border-box; } #venSvc .seg-btn { flex: 1 1 auto; white-space: normal; } .ven-find { display: flex; gap: 6px; } .ven-find input { flex: 1; min-width: 0; }
+.ven-job { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.ven-job small { color: var(--muted); font-size: .78rem; }
+.ven-found { display: grid; gap: 4px; max-height: 32vh; overflow: auto; }
+.ven-jobpick { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 1px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.ven-jobpick:hover, .ven-jobpick:focus-visible { border-color: var(--accent); } .ven-jobpick small { color: var(--muted); font-size: .76rem; }
+.ven-lines { display: grid; gap: 4px; } .ven-line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.ven-line.on { border-color: var(--accent); background: var(--accent-soft); } .ven-line input { width: auto; } .ven-line span { display: grid; min-width: 0; } .ven-line small { color: var(--muted); font-size: .76rem; }
+.ven-line em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ven-typed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .ven-typed input:not([type]) , .ven-typed #venTyped { width: 140px; }
+.ven-margin { margin: 0; font-size: .9rem; } .ven-margin b { font-variant-numeric: tabular-nums; } .ven-margin.neg b:last-of-type { color: var(--due); }
+.rv-ven { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 3px; font-size: .74rem; } .rv-ven-t { font-weight: 700; color: var(--ok); } .rv-ven-t.neg { color: var(--due); }
+.rv-ven-add { font-size: .74rem; font-weight: 700; } .rev-ar-barbox .rev-ar-cash { margin-top: 0; }
 @media (max-width: 1399px) { .rev-ar-barbox { display: grid; } }
 .cash-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border-radius: var(--radius); border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
 .cash-head-t { display: grid; } .cash-head-t h2 { margin: 0; color: var(--accent); } .cash-head-t span { font-size: .82rem; color: var(--muted); }
@@ -9053,7 +9089,7 @@ async function openUsers() {
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(true); return out; }
     catch (e) { err.textContent = e && e.error === "name_taken" ? "Someone else already has that name. Add a last name or an initial." : e && e.error === "bad_name" ? "Type a name (up to 40 letters)."
       : e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
-      : e && e.error === "not_allowed" && action === "setDocs" ? "Only the owner of Settings can switch Documents."
+      : e && e.error === "not_allowed" && action === "setDocs" ? (data && data.flag === "vendors" ? "Only the owner of Settings can switch Vendor costs." : "Only the owner of Settings can switch Documents.")
       : e && e.error === "not_allowed" && !["setPayroll", "setPriceCheck"].includes(action) ? "Only the owner of Settings and the people he picks can change that." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
       : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
@@ -9197,9 +9233,17 @@ async function openUsers() {
           title: hasOwnDoc ? "Tap to take their own documents away (kept: back if switched on again)" : "Their own documents: only they see them, you don't",
           onclick: () => call("setDocs", { id: u.id, own: true, on: !hasOwnDoc }, `${me ? "You" : u.name} ${hasOwnDoc ? (me ? "no longer have" : "no longer has") : (me ? "now have" : "now has")} documents of ${me ? "your" : "their"} own`) }, "Own documents")
       : hasOwnDoc ? h("span", { class: "user-meta", text: "Own documents" }) : null;
+    // Vendor costs (Operations): the owner of Settings always; the admins he switches on (only he can)
+    const hasVen = Array.isArray(u.access) && u.access.includes("vendors");
+    const dv = u.role !== "admin" || apiLevel < VEN_API || !owner || u.status === "invited" ? null
+      : isOwner ? h("span", { class: "user-meta", id: "ven-owner", text: "Sees Vendor costs (owns Settings)" })
+      : session.id === owner ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "vendors", id: "ven-" + (u.username || u.id), "aria-pressed": String(hasVen),
+          title: hasVen ? "Tap to take Vendor costs away" : "Tap to let them see Vendor costs (what the testing vendors cost and the margin)",
+          onclick: () => call("setDocs", { id: u.id, flag: "vendors", on: !hasVen }, `${u.name} ${hasVen ? "no longer sees" : "now sees"} Vendor costs`) }, "Vendor costs")
+      : h("span", { class: "user-meta", text: hasVen ? "Sees Vendor costs" : "No Vendor costs" });
     const sees = u.role === "admin"
       ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: "Sees" }), h("p", { class: "meta", text: "Admin: sees everything" + (apiLevel >= PAY_API ? `, VODA Payroll${dc ? " and Documents" : ""} only when on.` : ".") }),
-          h("div", { class: "acc" }, can ? pay : null, can ? pc : null, dc, dco))
+          h("div", { class: "acc" }, can ? pay : null, can ? pc : null, dc, dco, dv))
       : apiLevel >= SUP_API ? h("div", { class: "acc-ed", id: "uAcc" }, ...accessEditor(access, save, off, "acc-" + (u.username || u.id)).filter(Boolean),
           pc ? h("div", { class: "acc acc-pc" }, h("span", { class: "acc-lbl", text: "Price changes:" }), can ? pc : h("span", { class: "user-meta", text: (u.access || []).includes("pricecheck") ? "Checks price changes" : "Doesn't check price changes" }),
             (u.access || []).includes("pricecheck") && !access.includes("revenue") ? h("span", { class: "user-meta warn", text: "Tick Operations too, so they see them." }) : null) : null) : null;
@@ -14264,6 +14308,8 @@ function renderRevenue() {
     if (arBar) arBar = h("div", { class: "rev-ar-barbox", id: "revArBarBox" }, arBar, cashArRow(r, today, jt, "revCashArBar", cash));
     if (!arCard && aside) aside.prepend(cashTileEl(r, today, jt));
   }
+  // Vendor costs (the testing vendors' invoices), under Accounts receivable: whoever the owner of Settings switched on
+  if (venCan() && aside && r.from <= last) { const vt = venTileEl(r.from, to); if (arCard && arCard.parentNode === aside) arCard.after(vt); else aside.prepend(vt); }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
   const goalDays = (per === "week" || per === "dates") && r.from <= last ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
@@ -14648,7 +14694,7 @@ async function goalsLoad(y, force) {
   goalsBusy[y] = true; goalsTried[y] = now;
   try {
     const out = await api("goals", { year: y }), g = out.goals || {};
-    goalsDocs[y] = { year: y, goals: { years: g.years || {}, months: g.months || {} }, contractors: out.contractors || {}, at: Date.now() };
+    goalsDocs[y] = { year: y, goals: { years: g.years || {}, months: g.months || {} }, contractors: out.contractors || {}, vendors: out.vendors || {}, at: Date.now() };
     if (y === revThisYear()) store.set(K_GOALS, goalsDocs[y]);
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { goalsBusy[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
@@ -14715,6 +14761,7 @@ function goalDaysEl(G, P, shares, year) {
   const g = goalForDays(G, P.from, P.to), days = revDaysFor(P.from, P.upto), ps = days ? revSum(days, P.from, P.upto) : null;
   let contr = 0, cOk = true;
   for (let d = P.from; d <= P.upto; d = lbAddDays(d, 1)) { const cd = goalsDocs[Number(d.slice(0, 4))]; if (!cd) { cOk = false; break; } contr += Number(cd.contractors[d]) || 0; }
+  const ven = goalVenFor(P.from, P.upto) || VEN_NONE;
   const oneMonth = P.from.slice(0, 7) === P.to.slice(0, 7), mName = lbMonthLong(Number(P.from.slice(5, 7))), mAll = lbWorkDays(P.from.slice(0, 7));
   const these = P.per === "week" ? "This week" : "These days", wd = n => `${fmt(n)} working day${n === 1 ? "" : "s"}`;
   // today in these days: which of the month's working days it is, and how many are left after it
@@ -14730,13 +14777,13 @@ function goalDaysEl(G, P, shares, year) {
   if (!g.n) { el.append(h("p", { class: "goal-lead", text: "No working days in these days." })); return el; }
   const rows = GOAL_MONTH.filter(([k]) => !g.miss.has(k));
   for (const [k, label] of rows) {
-    const goal = g[k], done = ps ? (k === "bon" ? (cOk ? ps.cents - contr : null) : ps.cents) : null, hit = done != null && goal > 0 && done >= goal;
+    const goal = g[k], done = ps ? (k === "bon" ? (cOk ? ps.cents - contr - ven.t : null) : ps.cents) : null, hit = done != null && goal > 0 && done >= goal;
     el.append(h("div", { class: "goal-row " + k + (hit ? " hit" : ""), "data-k": k },
       h("span", { class: "goal-rn", text: label }), h("b", { class: "goal-rg", text: lbMoney(goal / 100) }),
       goalBar(done || 0, goal, "gold"),
       h("span", { class: "goal-rs" }, done == null ? "…" : hit ? h("span", { class: "goal-hit-t", text: `✓ Reached · ${k === "bon" ? "counts" : "produced"} ${lbMoney(done / 100)}` })
         : h("span", null, `${k === "bon" ? "counts" : "produced"} `, h("b", { text: lbMoney(done / 100) })), done != null ? h("em", { text: goalPct(done, goal) }) : null),
-      k === "bon" && done != null ? h("small", { class: "goal-bon", text: `All revenue less ${lbMoney(contr / 100)} to the repair contractors` }) : null));
+      k === "bon" && done != null ? h("small", { class: "goal-bon", text: `All revenue ${goalLessText(contr, ven)}` }) : null));
   }
   const gone = GOAL_MONTH.filter(([k]) => g.miss.has(k)).map(([, l]) => l.replace(" goal", ""));
   if (gone.length) el.append(h("p", { class: "goal-lead small", text: `No ${gone.join(", ")} goal for some months of these days${isAdmin() ? ": set them with Edit on the month" : ""}.` }));
@@ -14771,20 +14818,35 @@ function goalShares(yg, ys) {
   const by = src => { const t = GOAL_DEPTS.reduce((n, [k]) => n + Math.max(0, src(k)), 0); return t > 0 ? Object.fromEntries(GOAL_DEPTS.map(([k]) => [k, Math.max(0, src(k)) / t])) : null; };
   return (yg && by(k => yg[k] || 0)) || (ys && by(k => ys[k][0])) || Object.fromEntries(GOAL_DEPTS.map(([k]) => [k, 1 / 3]));
 }
+/** What the testing vendors were paid for the jobs of from..to (Operations › Vendor costs, on each job's day): { t, r, c,
+ *  p, o } (cents); null while a year's goals load. */
+function goalVenFor(from, to) {
+  const o = { t: 0, r: 0, c: 0, p: 0, o: 0 };
+  for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+    const cd = goalsDocs[Number(d.slice(0, 4))];
+    if (!cd) return null;
+    const v = (cd.vendors || {})[d];
+    if (v) for (const k of ["r", "c", "p", "o"]) { const n = Number(v[k]) || 0; o[k] += n; o.t += n; }
+  }
+  return o;
+}
+const VEN_NONE = { t: 0, r: 0, c: 0, p: 0, o: 0 };
+/** "less $1,124 to the repair contractors" (and "$650 to testing vendors"). */
+const goalLessText = (contr, ven) => `less ${lbMoney(contr / 100)} to the repair contractors${ven && ven.t ? ` and ${lbMoney(ven.t / 100)} to testing vendors` : ""}`;
 /** How much of Repairs' revenue the Bonus counts: what's left after the repair contractors are paid, as a % (30% when
  *  they're paid 70%); null with no repair revenue. */
 const goalRepPct = (ms, contr) => (ms.p[0] > 0 ? Math.round((ms.p[0] - contr) / ms.p[0] * 100) : null);
 /** A month goal opened: each department's part of it, what it produced, what's left, and a working day's worth; then the
  *  total, so the rows add up to the goal (the Bonus: Repairs only what's left after the contractors; the Super and
  *  Minimum: all of it). */
-function goalSplitEl(k, goal, ms, contr, shares, daysLeft, year) {
-  const bon = k === "bon";
+function goalSplitEl(k, goal, ms, contr, shares, daysLeft, year, ven0) {
+  const bon = k === "bon", ven = ven0 || VEN_NONE;
   const pg = goalParts(goal, shares);
   const parts = GOAL_DEPTS.map(([d, name]) => {
-    const g = pg[d], done = d === "p" && bon ? ms.p[0] - contr : ms[d][0], left = g - done;
+    const g = pg[d], done = bon ? ms[d][0] - (d === "p" ? contr : 0) - (ven[d] || 0) : ms[d][0], left = g - done;
     return { d, name, g, done, left };
   });
-  const counted = ms.cents - (bon ? contr : 0), left = goal - counted, rp = goalRepPct(ms, contr);
+  const counted = ms.cents - (bon ? contr + ven.t : 0), left = goal - counted, rp = goalRepPct(ms, contr);
   // what the department rows don't show but the total counts: Other jobs (no department), a department past its part
   const why = [];
   if (ms.o[0]) why.push(`${lbMoney(ms.o[0] / 100)} from Other jobs (a Job type with no department${ms.other.size ? `: ${[...ms.other].join(", ")}` : ""})`);
@@ -14795,7 +14857,7 @@ function goalSplitEl(k, goal, ms, contr, shares, daysLeft, year) {
       h("span", { class: "goal-dl" + (x.left <= 0 ? " hit" : ""), "data-d": x.d }, h("b", { text: x.left > 0 ? lbMoney(x.left / 100) : "✓ Reached" })),
       goalBar(x.done, x.g, x.d),
       h("span", { class: "goal-dline" },
-        h("span", { class: "goal-dg" }, "Part ", h("b", { text: lbMoney(x.g / 100) }), ` · ${bon && x.d === "p" ? "counts" : "produced"} `, h("b", { text: lbMoney(x.done / 100) })),
+        h("span", { class: "goal-dg" }, "Part ", h("b", { text: lbMoney(x.g / 100) }), ` · ${bon && (x.d === "p" || ven[x.d]) ? "counts" : "produced"} `, h("b", { text: lbMoney(x.done / 100) })),
         h("small", { class: "goal-dp" }, x.left > 0 && daysLeft ? `${lbMoney(x.left / daysLeft / 100)} a day` : goalPct(x.done, x.g)))]),
     // the total: the parts add up to the goal, and what counts plus what's left is the goal
     h("i", { class: "goal-split-hr", "aria-hidden": "true" }),
@@ -14808,6 +14870,7 @@ function goalSplitEl(k, goal, ms, contr, shares, daysLeft, year) {
     why.length ? h("small", { class: "goal-split-oth", id: "goalSplitOther", text: `The total also counts ${why.join(" and ")}.` }) : null,
     h("small", { class: "goal-split-how", text: `Each department's part: its share of the ${year ? `${year} goal` : "year's production"} (${GOAL_DEPTS.map(([d, n]) => `${n} ${Math.round(shares[d] * 100)}%`).join(", ")}).`
       + (bon ? ` Repairs counts ${rp != null ? `${rp}%: ` : ""}its revenue${rp != null ? ` (${lbMoney(ms.p[0] / 100)})` : ""} less what the repair contractors are paid${contr ? ` (${lbMoney(contr / 100)})` : ""}.`
+        + (ven.t ? ` Each department also less what its jobs' testing vendors were paid (${GOAL_DEPTS.filter(([d]) => ven[d]).map(([d, n]) => `${n} ${lbMoney(ven[d] / 100)}`).join(", ")}).` : "")
         : " Repairs counts all of its revenue, the repair contractors' share too.") }));
 }
 function revGoalEl(asOf, P) {
@@ -14827,6 +14890,7 @@ function revGoalEl(asOf, P) {
   const ys = days ? revSum(days, from, asOf) : null, ms = days ? revSum(days, mFrom, asOf) : null;
   let contr = 0;
   for (let d = mFrom; d <= asOf; d = lbAddDays(d, 1)) contr += Number(doc.contractors[d]) || 0;
+  const ven = goalVenFor(mFrom, asOf) || VEN_NONE;   // ... and the testing vendors (Vendor costs)
   const M = c => (ys ? lbMoney(c / 100) : "…");
   const intro = goalsIntro && !!ys;   // the shine and the bars filling: once, the first time it's drawn with its numbers
   if (ys) goalsIntro = false;
@@ -14867,15 +14931,15 @@ function revGoalEl(asOf, P) {
   if (mg) for (const [k, label] of GOAL_MONTH) {
     const g = mg[k];
     if (g == null) continue;
-    const done = ms ? (k === "bon" ? ms.cents - contr : ms.cents) : 0, hit = !!ms && g > 0 && done >= g, open = goalOpen === k;
+    const done = ms ? (k === "bon" ? ms.cents - contr - ven.t : ms.cents) : 0, hit = !!ms && g > 0 && done >= g, open = goalOpen === k;
     const toggle = () => { goalOpen = open ? "" : k; store.set("voda.goalOpen", goalOpen); renderRevenue(); };
     mo.append(h("div", { class: "goal-row goal-tap " + k + (hit ? " hit" : "") + (open ? " open" : ""), "data-k": k, role: "button", tabindex: "0", "aria-expanded": String(open),
       title: open ? "Close" : "See each department's part", onclick: toggle, onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } } },
       h("span", { class: "goal-rn" }, label, h("i", { class: "goal-chev", "aria-hidden": "true", text: "▾" })), h("b", { class: "goal-rg", text: lbMoney(g / 100) }),
       goalBar(done, g, "gold"),
       h("span", { class: "goal-rs" }, !ms ? "…" : hit ? h("span", { class: "goal-hit-t", text: "✓ Reached" }) : h("span", null, h("b", { text: lbMoney((g - done) / 100) }), " to go"), ms ? h("em", { text: goalPct(done, g) }) : null),
-      k === "bon" ? h("small", { class: "goal-bon", id: "goalBonus", text: ms ? `Counts ${lbMoney(done / 100)}: all revenue less ${lbMoney(contr / 100)} to the repair contractors` : "" }) : null));
-    if (open && ms) mo.append(goalSplitEl(k, g, ms, contr, shares, daysLeft, yg ? y : 0));
+      k === "bon" ? h("small", { class: "goal-bon", id: "goalBonus", text: ms ? `Counts ${lbMoney(done / 100)}: all revenue ${goalLessText(contr, ven)}` : "" }) : null));
+    if (open && ms) mo.append(goalSplitEl(k, g, ms, contr, shares, daysLeft, yg ? y : 0, ven));
   }
   else mo.append(h("p", { class: "goal-lead", text: isAdmin() ? `No goals for ${monName} yet: Edit to set them.` : `No goals for ${monName} yet.` }));
   const whole = asOf >= `${m}-${String(lbDaysIn(m)).padStart(2, "0")}` && asOf < lbToday();
@@ -14883,7 +14947,7 @@ function revGoalEl(asOf, P) {
   const bonOpen = goalOpen === "bon" && !!ms && !!mg && mg.bon != null, rp = ms ? goalRepPct(ms, contr) : null;
   mo.append(h("div", { class: "goal-mtd", id: "goalMtd" }, h("small", { text: whole ? `${monName} total` : "MTD" }),
     h("b", { text: ms ? lbMoney(ms.cents / 100) : "…" }), h("span", { text: revSpanText(mFrom, asOf) + (bonOpen ? " · all revenue" : "") }),
-    bonOpen ? h("em", { id: "goalMtdBon" }, "Toward the Bonus ", h("strong", { text: lbMoney((ms.cents - contr) / 100) }), rp != null ? ` · Repairs at ${rp}%` : "") : null));
+    bonOpen ? h("em", { id: "goalMtdBon" }, "Toward the Bonus ", h("strong", { text: lbMoney((ms.cents - contr - ven.t) / 100) }), rp != null ? ` · Repairs at ${rp}%` : "") : null));
   body.append(mo);
   return out;
 }
@@ -15108,6 +15172,17 @@ const rvSmall = (id, inv, parts) => { const out = []; parts.filter(Boolean).forE
 /** A tile's jobs: every visit of from..to (canceled left out) for a department or all of them, by day: client, project,
  *  job, day, department, charged, paid, owes, status. Read from Housecall Pro with each day (the Jobs column). */
 const revStatus = ws => { const t = String(ws || "").replace(/\s*(un)?rated$/i, "").trim(); return t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : "–"; };
+/** The Jobs list, a job's first visit: its vendor invoices (paid · charged · margin; tapped: Vendor costs) and + Vendor
+ *  invoice (the job filled in). */
+function venJobTag(x) {
+  if (!venData && !venLoading && !venErr) setTimeout(() => venLoad(), 0);
+  const base = String(x.inv || "").replace(/-\d+$/, ""), mine = ((venData && venData.invoices) || []).filter(v => v.inv === base), s = venSum(mine);
+  const add = () => venEdit(null, { base, ids: [x.id], day: x.day, client: x.client, dept: x.dep === "o" ? "o" : x.dep, proj: x.proj });
+  return h("span", { class: "rv-ven", "data-base": base },
+    s.n ? h("span", { class: "rv-ven-t" + (s.charged - s.paid < 0 || mine.some(venNotBilled) ? " neg" : ""), title: mine.map(v => `${VEN_SVC_SHORT[v.svc]}: ${v.vendor} ${lbMoney(v.paid / 100)}`).join(" · ") },
+      mine.some(venNotBilled) ? `Vendor ${lbMoney(s.paid / 100)} · NOT BILLED` : `Vendor ${lbMoney(s.paid / 100)} · charged ${lbMoney(s.charged / 100)} · margin ${lbMoney((s.charged - s.paid) / 100)}`) : null,
+    h("button", { class: "linkish rv-ven-add", type: "button", onclick: add }, "+ Vendor invoice"));
+}
 function revJobsDlg(dep, from, to0) {
   const st = { dep: dep || "all" };
   const box = h("div", { class: "rv-unpaid-body" });
@@ -15143,7 +15218,7 @@ function revJobsDlg(dep, from, to0) {
           h("th", { class: "rv-ch", text: "Charged" }), h("th", { class: "rv-pd", text: "Paid" }), h("th", { text: "Owes" }), h("th", { class: "rv-st", text: "Status" }))),
         h("tbody", null, shown.map(x => h("tr", { "data-job": x.id, "data-dep": x.dep, class: x.first ? "" : "later" },
           h("th", null, x.client || "–", h("small", { class: "rv-sm" }, rvSmall(x.id, x.inv, [x.proj, x.inv && "#", revStatus(x.ws)]))),
-          h("td", { class: "rv-proj", text: (x.proj || "–") + (x.first ? "" : " (a later visit)") }), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("td", { class: "rv-proj" }, (x.proj || "–") + (x.first ? "" : " (a later visit)"), venCan() && x.first ? venJobTag(x) : null), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
           h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
           h("td", { class: "rv-ch", text: lbCash(x.c / 100) }), h("td", { class: "rv-pd", text: lbCash(paid(x) / 100) }),
           h("td", { class: "rv-owes" + (x.owes ? "" : " zero"), text: lbCash(x.owes / 100) }), h("td", { class: "rv-st", text: revStatus(x.ws) })))),
@@ -15160,6 +15235,300 @@ function revJobsDlg(dep, from, to0) {
     box,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
   draw();
+}
+
+/* ======================= Operations › Vendor costs: the testing vendors' invoices =======================
+   Asbestos and lead testing, mold testing (and anything else a vendor does on a job): each invoice on its job, what was
+   paid (the invoice: Google reads its total, day and number; checked before saving) and what was charged (the job's
+   Testing lines from Housecall Pro, picked; or typed). A card under Accounts receivable (the period on screen, by the
+   job's day) opens them all: totals, by service, by vendor, each invoice (its file, Edit). The owner of Settings sees it
+   and switches on the admins who do (Settings › Users). The Bonus goal counts the revenue without what's paid. */
+const VEN_API = 152;                                    // the Google script with Vendor costs
+const VEN_SVC = [["al", "Asbestos & lead testing"], ["mold", "Mold testing"], ["other", "Other"]];
+const VEN_SVC_SHORT = { al: "Asbestos & lead", mold: "Mold", other: "Other" };
+// a job's line that's testing ("Testing", "Lead test fee", "Asbestos survey", "Air sampling"; not "Mold remediation")
+const VEN_LINE_RE = /\btest(s|ing)?\b|sampl|survey|\blab\b|swab|spore|asbestos|clearance|mold (inspection|assessment)/i;
+let venData = null, venErr = "", venLoading = false, venRedraw = null;
+/** Sees Vendor costs: an admin who owns Settings, or one he switched on (no owner yet: every admin). */
+const venCan = () => isAdmin() && !!apiLevel && apiLevel >= VEN_API && !!session && (!session.owner || session.id === session.owner || userAccess().includes("vendors"));
+async function venLoad(force) {
+  if (venLoading || !venCan() || (venData && !force)) return;
+  venLoading = true;
+  try { venData = await api("venList"); venErr = ""; } catch (e) { venErr = errText(e, "Vendor costs"); }
+  venLoading = false;
+  if (view.tab === "revenue" && !dlg.open) renderRevenue();
+  if (venRedraw) venRedraw();
+}
+/** The invoices on the jobs of from..to (the job's day); every one with no days. */
+const venIn = (from, to) => ((venData && venData.invoices) || []).filter(v => !from || (v.day >= from && v.day <= to));
+const venSum = list => list.reduce((o, v) => { o.paid += v.paid; o.charged += v.charged; o.n++; return o; }, { paid: 0, charged: 0, n: 0 });
+const venPct = (m, c) => (c > 0 ? `${Math.round(m / c * 100)}%` : "");
+/** Not billed: nothing charged for it (no Testing line on the job's invoice when it was added, and none typed). */
+const venNotBilled = v => !v.charged;
+let venCheckedAt = 0;
+/** The ones not billed: each job's lines looked at again; a Testing line there now: charged from it. */
+async function venRecheck(quiet) {
+  if (!venData || !venData.invoices.some(venNotBilled)) return;
+  venCheckedAt = Date.now();
+  try {
+    const o = await api("venRecheck", {}, 120000);
+    venData.invoices = o.invoices || venData.invoices;
+    if (o.fixed && o.fixed.length) toast(`Found the testing charge on ${o.fixed.length} job${o.fixed.length === 1 ? "'s" : "s'"} invoice${o.fixed.length === 1 ? "" : "s"}`);
+    else if (!quiet) toast("Still no testing charge on those jobs' invoices");
+  } catch (e) { if (!quiet) toast(errText(e, "The check")); }
+  if (venRedraw) venRedraw();
+  if (view.tab === "revenue" && !dlg.open) renderRevenue();
+}
+/** The card under Accounts receivable: the period's charged, paid and margin; tapped, the invoices. */
+function venTileEl(from, to) {
+  if (!venData && !venLoading && !venErr) setTimeout(() => venLoad(), 0);
+  const s = venSum(venIn(from, to)), m = s.charged - s.paid, go = () => venDlg(from, to);
+  const nb = ((venData && venData.invoices) || []).filter(venNotBilled).length;   // any day: not to forget them
+  return h("div", { class: "rev-ven", id: "revVen", role: "button", tabindex: "0", title: "Vendor costs: the testing vendors' invoices, what we charged and the margin",
+      onclick: go, onkeydown: e => { if (e.key === "Enter") go(); } },
+    h("small", { text: `Vendor costs · ${revSpanText(from, to)}` }),
+    !venData ? h("span", { class: "rev-ven-n", text: venErr || "Loading…" })
+      : s.n ? h("div", { class: "rev-ven-nums" },
+        h("span", null, h("em", { text: "Charged" }), h("b", { id: "revVenCh", text: lbMoney(s.charged / 100) })),
+        h("span", null, h("em", { text: "Paid vendors" }), h("b", { id: "revVenPd", text: lbMoney(s.paid / 100) })),
+        h("span", { class: "m" + (m < 0 ? " neg" : "") }, h("em", { text: "Margin" }), h("b", { id: "revVenM", text: lbMoney(m / 100) }), h("i", { text: venPct(m, s.charged) })))
+      : null,
+    venData ? h("span", { class: "rev-ven-n", text: s.n ? `${s.n} invoice${s.n === 1 ? "" : "s"} on these days' jobs` : "No vendor invoices on these days' jobs: tap to add one" }) : null,
+    nb ? h("span", { class: "rev-ven-nb", id: "revVenNb", text: `⚠ ${nb} not billed yet: no testing charge on ${nb === 1 ? "its job's invoice" : "their jobs' invoices"}` }) : null,
+    h("span", { class: "go", "aria-hidden": "true", text: "›" }));
+}
+/** Every invoice of the period (or every one): the totals, by service and by vendor, each invoice; + Vendor invoice. */
+function venDlg(from, to) {
+  const st = { all: false };
+  const box = h("div", { class: "ven-body", id: "venBody" });
+  const draw = () => {
+    if (!box.isConnected && venRedraw === draw && box.dataset.drawn) { venRedraw = null; return; }
+    box.dataset.drawn = "1";
+    const list = venIn(st.all ? "" : from, to).slice().sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.paid - a.paid));
+    const s = venSum(list), m = s.charged - s.paid;
+    const groups = (key, name) => { const g = new Map(); list.forEach(v => { const k = key(v); if (!g.has(k)) g.set(k, []); g.get(k).push(v); });
+      return [...g.entries()].map(([k, xs]) => [name(k), venSum(xs)]).sort((a, b) => b[1].paid - a[1].paid); };
+    const sumTable = (id, head, rows) => h("table", { class: "lb-table ven-sum", id }, h("thead", null, h("tr", null, h("th", { text: head }), h("th", { text: "Invoices" }), h("th", { text: "Charged" }), h("th", { text: "Paid" }), h("th", { text: "Margin" }))),
+      h("tbody", null, rows.map(([n, x]) => h("tr", null, h("th", { text: n }), h("td", { text: fmt(x.n) }), h("td", { text: lbMoney(x.charged / 100) }), h("td", { text: lbMoney(x.paid / 100) }),
+        h("td", { class: x.charged - x.paid < 0 ? "neg" : "" }, lbMoney((x.charged - x.paid) / 100), h("small", { text: ` ${venPct(x.charged - x.paid, x.charged)}` }))))));
+    const nbs = ((venData && venData.invoices) || []).filter(venNotBilled);
+    box.replaceChildren(...[
+      nbs.length ? h("div", { class: "ven-nb", id: "venNb" }, h("b", { text: `⚠ ${nbs.length} not billed yet` }),
+        h("span", { text: `No testing charge on ${nbs.length === 1 ? "its job's invoice" : "their jobs' invoices"} in Housecall Pro: ${nbs.map(v => `#${v.inv} ${v.client}`).join(", ")}. Add it to the invoice; the app finds it there.` }),
+        h("button", { class: "btn small", type: "button", id: "venRecheck", onclick: () => venRecheck(false) }, "Check again")) : null,
+      h("div", { class: "ven-top" },
+        h("div", { class: "seg", role: "tablist", "aria-label": "Which" }, [[false, revSpanText(from, to)], [true, "Every invoice"]].map(([k, t]) => h("button", { class: "seg-btn", type: "button", "data-all": String(k),
+          "aria-pressed": String(st.all === k), onclick: () => { st.all = k; draw(); } }, t))),
+        h("button", { class: "btn small primary", type: "button", id: "venAdd", onclick: () => venEdit(null, null) }, "+ Vendor invoice")),
+      !venData ? h("p", { class: venErr ? "dlg-err" : "loading", text: venErr || "Loading…" }) : null,
+      venData && list.length ? h("div", { class: "ven-tots", id: "venTots" },
+        h("span", null, h("em", { text: "Charged for these" }), h("b", { text: lbMoney(s.charged / 100) })),
+        h("span", null, h("em", { text: "Paid the vendors" }), h("b", { text: lbMoney(s.paid / 100) })),
+        h("span", { class: "m" + (m < 0 ? " neg" : "") }, h("em", { text: "Margin" }), h("b", { text: lbMoney(m / 100) }), h("i", { text: venPct(m, s.charged) }))) : null,
+      venData && list.length ? h("div", { class: "ven-groups" },
+        h("div", { class: "lb-scroll" }, sumTable("venBySvc", "Service", groups(v => v.svc, k => VEN_SVC_SHORT[k] || k))),
+        h("div", { class: "lb-scroll" }, sumTable("venByVendor", "Vendor", groups(v => v.vendor, k => k)))) : null,
+      venData ? (list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table ven-list", id: "venList" },
+        h("thead", null, h("tr", null, ["Job day", "Job", "Client", "Service", "Vendor", "Paid", "Charged", "Margin", ""].map(t => h("th", { text: t })))),
+        h("tbody", null, list.map(v => h("tr", { "data-id": v.id, class: venNotBilled(v) ? "nb" : "" },
+          h("td", { class: "ven-day", text: lbDayText(v.day) }), h("td", null, hcpLink("job", v.jobId, `#${v.inv}`)),
+          h("th", null, v.client || "–", h("small", { text: (REV_DEPTS.find(([k]) => k === v.dept) || [, "Other"])[1] })),
+          h("td", { text: VEN_SVC_SHORT[v.svc] || v.svc }), h("td", null, v.vendor, v.vinv ? h("small", { text: `#${v.vinv}${v.vday ? ` · ${lbDayText(v.vday)}` : ""}` }) : null),
+          h("td", { text: lbMoney(v.paid / 100) }), venNotBilled(v) ? h("td", { class: "neg" }, h("b", { class: "ven-nbt", text: "Not billed" }), h("small", { text: "no testing charge" }))
+            : h("td", null, lbMoney(v.charged / 100), h("small", { text: v.from === "hcp" ? "from the job" : "typed" })),
+          h("td", { class: v.charged - v.paid < 0 ? "neg" : "" }, lbMoney((v.charged - v.paid) / 100)),
+          h("td", { class: "ven-acts" }, v.file ? h("button", { class: "btn small", type: "button", "data-act": "view", onclick: () => venOpen(v) }, "View") : null,
+            h("button", { class: "btn small ghost", type: "button", "data-act": "edit", onclick: () => venEdit(v, null) }, "Edit")))))))
+        : h("p", { class: "meta", id: "venNone", text: st.all ? "No vendor invoices yet." : "No vendor invoices on these days' jobs yet." })) : null,
+      howFold("venHow", h("p", { class: "hint", text: "Each vendor's invoice counts on its job's day (the day the job is counted in Operations). Paid: the invoice's total (Google reads it; you check it). Charged: the job's Testing lines in Housecall Pro you picked, or what you typed. Not billed: no testing charge on the job's invoice (and none typed): it stays on top here, and on the card, until the job's invoice has one (the app looks again each time this opens). The Bonus goal counts the revenue less what the testing vendors were paid, each from its job's department. The files are in your Google Drive (VODA Hub › Vendor invoices)." }), "How it's counted")].filter(Boolean));
+  };
+  venRedraw = draw;
+  if (!venData) venLoad();
+  else if (Date.now() - venCheckedAt > 5 * 60e3) setTimeout(() => venRecheck(true), 0);   // the ones not billed: looked at again
+  openDialog(h("div", { class: "rp-dlg ven-dlg" },
+    h("h3", { id: "dlgTitle", text: "Vendor costs" }),
+    h("p", { class: "hint", text: "The testing vendors' invoices (asbestos and lead, mold) on each job: what we paid them, what we charged for it, and the margin." }),
+    box,
+    h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
+  draw();
+}
+/** An invoice's file in a new tab. */
+async function venOpen(v) {
+  const w = window.open("", "_blank");
+  try {
+    const o = await api("venFile", { id: v.id }, 60000);
+    const bytes = Uint8Array.from(atob(o.data), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: o.mime || "application/pdf" }));
+    if (w) w.location.href = url; else window.open(url, "_blank");
+  } catch (e) { if (w) w.close(); toast(e && e.error === "file_gone" ? "That file isn't in Drive any more (VODA Hub › Vendor invoices)." : errText(e, "The file")); }
+}
+/** What a vendor's invoice says (Google read it): { paid (dollars), day, vinv, vendor (one used before, if it names it), svc }. */
+function venParse(text, today) {
+  const p = rcptParse(text, today), raw = String(text || "");
+  const num = raw.match(/\binv(?:oice)?\.?\s*(?:#|no\.?|number|num\.?)?\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{2,19})\b/i);
+  const known = [...new Set(((venData && venData.invoices) || []).map(v => v.vendor))].find(n => n && raw.toLowerCase().includes(n.toLowerCase())) || "";
+  return { paid: p.total, day: p.date, vinv: num && /\d/.test(num[1]) ? num[1] : "", vendor: known,
+    svc: /asbestos|\blead\b/i.test(raw) ? "al" : /mold|spore|air ?sampl/i.test(raw) ? "mold" : "" };
+}
+/** Adding a vendor's invoice (v: null) or changing one: the file (Google reads it), the job (its # or the client; its
+ *  lines from Housecall Pro, the Testing ones picked: what was charged, or typed), the service, the vendor, its invoice
+ *  # and day, what was paid, a note; Remove (a second tap). job: a job to start from ({ base, ids, day, client, dept,
+ *  proj }, from the Jobs list). Done: back to the window it was opened from. */
+function venEdit(v, job) {
+  const today = lbToday();
+  // done (saved, removed, or Cancel): back to the window it came from (Vendor costs, the Jobs list), drawn again
+  const done = () => { dlgDirty = false; if (dlgStack.length) { dlgBack(); if (venRedraw) venRedraw(); if (revUnpaidRedraw) revUnpaidRedraw(); } else closeDialog(); };
+  const f = v ? { job: { base: v.inv, ids: [v.jobId], day: v.day, client: v.client, dept: v.dept, proj: "" }, lines: v.lines.slice(), picked: new Set(v.lines.map((l, i) => i)),
+      typed: v.from === "typed" && v.charged ? String(v.charged / 100) : "", from: v.from, nb: v.charged ? "typed" : "no", svc: v.svc, vendor: v.vendor, vinv: v.vinv, vday: v.vday, paid: String(v.paid / 100), notes: v.notes }
+    : { job: job || null, lines: null, picked: new Set(), typed: "", from: "hcp", nb: "no", svc: "", vendor: "", vinv: "", vday: "", paid: "", notes: "" };
+  Object.assign(f, { fileId: "", fileName: "", reading: false, q: "", found: null, finding: false, linesBusy: false, linesErr: "", err: "", busy: false, sure: false, saved: false,
+    matches: null, matchedBy: null });
+  const vendors = [...new Set(((venData && venData.invoices) || []).map(x => x.vendor).filter(Boolean))].sort();
+  const body = h("div", { class: "ven-form", id: "venForm" });
+  const set = (k, val) => { f[k] = val; f.err = ""; };
+  // what we charged: the job's lines picked; none: typed (billed another way, like the Xactimate), or nothing (not billed)
+  const fromLines = () => f.from === "hcp" && !!f.lines && f.picked.size > 0;
+  const charged = () => (fromLines() ? [...f.picked].reduce((n, i) => n + (f.lines[i] ? f.lines[i][2] : 0), 0)
+    : f.nb === "no" ? 0 : Math.round((Number(String(f.typed).replace(/[$,\s]/g, "")) || 0) * 100));
+  const loadLines = async () => {
+    if (!f.job) return;
+    f.linesBusy = true; f.linesErr = ""; draw();
+    try {
+      let ids = f.job.ids || [];
+      if (v && ids.length <= 1) { const o = await api("venFind", { q: f.job.base }); const m = (o.jobs || []).find(j => j.base === f.job.base); if (m) ids = m.ids; }
+      const o = await api("venLines", { ids }, 60000);
+      f.lines = o.lines || []; f.picked = new Set(f.lines.map((l, i) => (VEN_LINE_RE.test(`${l[0]} ${l[1]}`) ? i : -1)).filter(i => i >= 0));
+      f.from = f.picked.size ? "hcp" : "typed";
+      if (!f.picked.size && !f.typed) f.nb = "no";   // no Testing line: not billed, unless typed
+      if (!f.svc) { const t = [...f.picked].map(i => `${f.lines[i][0]} ${f.lines[i][1]}`).join(" "); f.svc = /asbestos|\blead\b/i.test(t) ? "al" : /mold|spore|air ?sampl/i.test(t) ? "mold" : f.svc; }
+    } catch (e) { f.linesErr = e && e.error === "no_key" ? "Housecall Pro isn't connected: type what was charged." : errText(e, "The job's lines"); f.from = "typed"; }
+    f.linesBusy = false; draw();
+  };
+  const find = async () => {
+    const q = String(f.q || "").trim();
+    if (q.length < 2) { f.err = "Type the job # (26482) or part of the client's name."; draw(); return; }
+    f.finding = true; f.err = ""; draw();
+    try { const o = await api("venFind", { q }); f.found = o.jobs || []; } catch (e) { f.err = errText(e, "The search"); }
+    f.finding = false; draw();
+  };
+  const readFile = async file => {
+    if (!file) return;
+    f.reading = true; f.err = ""; draw();
+    try {
+      if (f.fileId && !f.saved) api("venDelete", { fileId: f.fileId }).catch(() => {});
+      const o = await api("venRead", await rcptPrep(file), 120000), p = venParse(o.text, today);
+      Object.assign(f, { fileId: o.fileId, fileName: file.name || o.name, readOk: !!o.text, matches: o.matches || [] });
+      // the job, from the address and the client on it: the surest one picked (checked by whoever adds it)
+      const best = (o.matches || [])[0];
+      if (!f.job && best && (best.why.some(w => /^address/.test(w)) || o.matches.length === 1)) { f.job = best; f.matchedBy = best.why; setTimeout(loadLines, 0); }
+      if (p.paid != null && !f.paid) f.paid = String(p.paid);
+      if (p.day && !f.vday) f.vday = p.day;
+      if (p.vinv && !f.vinv) f.vinv = p.vinv;
+      if (p.vendor && !f.vendor) f.vendor = p.vendor;
+      if (p.svc && !f.svc) f.svc = p.svc;
+    } catch (e) { f.err = e && (e.error === "not_receipt" || e.error === "not_file") ? "That isn't a PDF or a photo." : e && e.error === "too_big" ? "That file is over 10 MB." : errText(e, "The invoice"); }
+    f.reading = false; draw();
+  };
+  const save = async () => {
+    const paid = Math.round((Number(String(f.paid).replace(/[$,\s]/g, "")) || 0) * 100), ch = charged();
+    if (!v && !f.fileId) { f.err = "Add the vendor's invoice (a PDF or a photo)."; draw(); return; }
+    if (!f.job) { f.err = "Pick the job: its # or the client's name, then Find."; draw(); return; }
+    if (!f.svc) { f.err = "Pick the service: asbestos & lead, mold, or other."; draw(); return; }
+    if (!String(f.vendor).trim()) { f.err = "Type the vendor's name."; draw(); return; }
+    if (!(paid > 0)) { f.err = "Type what the vendor's invoice comes to (Paid)."; draw(); return; }
+    if (!fromLines() && f.nb === "typed" && String(f.typed).trim() === "") { f.err = "Type what we charged for it (billed another way), or pick Not billed yet."; draw(); return; }
+    f.busy = true; f.err = ""; draw();
+    const inv = { jobId: (f.job.ids || [])[0] || (v && v.jobId), inv: f.job.base, day: f.job.day, client: f.job.client, dept: f.job.dept, svc: f.svc, vendor: String(f.vendor).trim(),
+      vinv: String(f.vinv).trim(), vday: f.vday, paid, charged: ch, from: fromLines() ? "hcp" : "typed",
+      lines: fromLines() ? [...f.picked].map(i => f.lines[i]).filter(Boolean) : [], notes: String(f.notes).trim() };
+    if (v && v.jobId && f.job.base === v.inv) inv.jobId = v.jobId;
+    try {
+      const o = await api("venSave", Object.assign({ inv }, v ? { id: v.id } : {}, f.fileId ? { fileId: f.fileId } : {}), 60000);
+      f.saved = true;
+      if (venData) { const i = venData.invoices.findIndex(x => x.id === o.inv.id); if (i === -1) venData.invoices.push(o.inv); else venData.invoices[i] = o.inv; }
+      goalsLoad(Number(String(inv.day).slice(0, 4)), true);
+      toast(!ch ? "Saved: Not billed yet (you'll see it on Vendor costs until the job's invoice has it)" : v ? "Saved" : "Vendor invoice added"); done();
+      if (view.tab === "revenue") renderRevenue();
+    } catch (e) { f.busy = false; f.err = e && e.error === "bad_value" ? `Check ${({ vendor: "the vendor", svc: "the service", paid: "what was paid", charged: "what was charged", job: "the job", vday: "the invoice's day" })[e.field] || "what you typed"}.` : e && e.error === "no_file" ? "Add the vendor's invoice again (a PDF or a photo)." : errText(e, "The invoice"); draw(); }
+  };
+  const remove = async () => {
+    if (!f.sure) { f.sure = true; draw(); return; }
+    try { await api("venDelete", { id: v.id }); if (venData) venData.invoices = venData.invoices.filter(x => x.id !== v.id); goalsLoad(Number(v.day.slice(0, 4)), true);
+      toast("Removed (its file is in Drive's trash for 30 days)"); done(); if (view.tab === "revenue") renderRevenue(); }
+    catch (e) { f.err = errText(e, "The invoice"); f.sure = false; draw(); }
+  };
+  const inp = (id, label, key, o) => h("div", { class: "field" }, h("label", { for: id, text: label }),
+    h("input", Object.assign({ id, value: f[key] || "", autocomplete: "off", oninput: ev => set(key, ev.target.value) }, o || {})));
+  const draw = () => {
+    const ch = charged(), paid = Math.round((Number(String(f.paid).replace(/[$,\s]/g, "")) || 0) * 100);
+    body.replaceChildren(...[
+      // the file
+      h("div", { class: "field" }, h("label", { for: "venFile", text: v ? "Replace the vendor's invoice (optional)" : "The vendor's invoice (a PDF or a photo)" }),
+        v && v.file && !f.fileId ? h("p", { class: "hint" }, "Now: ", h("button", { class: "linkish", type: "button", onclick: () => venOpen(v) }, v.file.name)) : null,
+        f.fileId ? h("p", { class: "hint", id: "venFileOk" }, `✓ ${f.fileName}`, f.readOk ? " · read: check what it found below" : " · Google couldn't read it: type the amounts") : null,
+        f.reading ? h("p", { class: "loading", text: "Reading the invoice…" }) : h("input", { type: "file", id: "venFile", "data-drop": "the PDF or photo", accept: "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
+          onchange: ev => readFile(ev.target.files && ev.target.files[0]) })),
+      // the job
+      h("div", { class: "field" }, h("label", { for: "venQ", text: "The job" }),
+        f.job ? h("div", { class: "ven-job", id: "venJob" }, h("b", { text: `#${f.job.base} · ${f.job.client || "–"}` }),
+            h("small", { text: [lbDayText(f.job.day), (REV_DEPTS.find(([k]) => k === f.job.dept) || [, "Other"])[1], f.job.proj].filter(Boolean).join(" · ") }),
+            f.matchedBy ? h("span", { class: "ven-why", id: "venWhy", text: `Matched by the invoice: ${f.matchedBy.join(" · ")}. Check it's the right job.` }) : null,
+            h("button", { class: "linkish", type: "button", id: "venJobChange", onclick: () => { Object.assign(f, { job: null, lines: null, picked: new Set(), found: null, matchedBy: null }); draw(); } }, "Change"))
+          : h("div", { class: "ven-find" }, h("input", { id: "venQ", type: "search", value: f.q, placeholder: "Job # (26482) or the client's name", autocomplete: "off",
+              oninput: ev => set("q", ev.target.value), onkeydown: ev => { if (ev.key === "Enter") { ev.preventDefault(); find(); } } }),
+            h("button", { class: "btn small", type: "button", id: "venFind", disabled: f.finding, onclick: find }, f.finding ? "Finding…" : "Find")),
+        !f.job && f.found ? (f.found.length ? h("div", { class: "ven-found", id: "venFound" }, f.found.map(j => h("button", { class: "ven-jobpick", type: "button", "data-base": j.base,
+            onclick: () => { Object.assign(f, { job: j, found: null }); loadLines(); } }, h("b", { text: `#${j.base} · ${j.client || "–"}` }),
+            h("small", { text: `${lbDayText(j.day)} · ${(REV_DEPTS.find(([k]) => k === j.dept) || [, "Other"])[1]} · ${lbMoney(j.c / 100)}${j.proj ? ` · ${j.proj}` : ""}` }))))
+          : h("p", { class: "meta", id: "venNoJob", text: "No job found (jobs read in Operations): try its # or another part of the name." })) : null,
+        // what the invoice named: the jobs it could be (another one than the one picked; or none picked yet)
+        f.matches && f.matches.filter(j => !f.job || j.base !== f.job.base).length ? h("div", { class: "ven-found ven-matches", id: "venMatches" },
+          h("span", { class: "ec-lbl", text: f.job ? "Other jobs the invoice could be" : "Jobs the invoice names" }),
+          f.matches.filter(j => !f.job || j.base !== f.job.base).map(j => h("button", { class: "ven-jobpick", type: "button", "data-base": j.base,
+            onclick: () => { Object.assign(f, { job: j, matchedBy: j.why, lines: null, picked: new Set(), found: null }); loadLines(); } },
+            h("b", { text: `#${j.base} · ${j.client || "–"}` }), h("small", { text: `${lbDayText(j.day)} · ${j.why.join(" · ")}` })))) : null,
+        f.matches && !f.matches.length && !f.job ? h("p", { class: "meta", id: "venNoMatch", text: "The invoice doesn't name a job the app knows (its address or client): find it by its # or the client's name." }) : null),
+      // what was charged
+      f.job ? h("div", { class: "field" }, h("span", { class: "ec-lbl", text: "What we charged for it" }),
+        f.linesBusy ? h("p", { class: "loading", text: "Reading the job's lines from Housecall Pro…" }) : null,
+        f.linesErr ? h("p", { class: "dlg-err", text: f.linesErr }) : null,
+        !f.linesBusy && f.lines && f.lines.length ? h("div", { class: "ven-lines", id: "venLines" }, f.lines.map((l, i) => h("label", { class: "ven-line" + (f.picked.has(i) ? " on" : "") },
+            h("input", { type: "checkbox", checked: f.picked.has(i), "data-i": i, onchange: ev => { if (ev.target.checked) f.picked.add(i); else f.picked.delete(i); f.from = f.picked.size ? "hcp" : "typed"; draw(); } }),
+            h("span", null, h("b", { text: l[0] }), l[1] ? h("small", { text: l[1] }) : null), h("em", { text: lbMoney(l[2] / 100) })))) : null,
+        !f.linesBusy && f.lines && !f.lines.length ? h("p", { class: "meta", text: "The job has no lines in Housecall Pro: type what we charged." }) : null,
+        !f.linesBusy && !f.lines && !v ? h("button", { class: "linkish", type: "button", onclick: loadLines }, "Read the job's lines") : null,
+        v && !f.linesBusy && f.lines === v.lines ? h("button", { class: "linkish", type: "button", id: "venRelines", onclick: loadLines }, "Read the job's lines again") : null,
+        // no Testing line picked: not billed (the reminder), or billed another way (typed)
+        !f.linesBusy && (f.lines || v) && !fromLines() ? h("div", { class: "ven-nobill", id: "venNoBill" },
+          h("b", { text: f.lines && f.lines.length && !f.lines.some(l => VEN_LINE_RE.test(`${l[0]} ${l[1]}`)) || (f.lines && !f.lines.length) ? "⚠ No testing charge on this job's invoice in Housecall Pro. Did we forget to bill it?" : "No line picked: what we charged" }),
+          h("label", { class: "doc-chk" }, h("input", { type: "radio", name: "venNb", id: "venNbNo", checked: f.nb === "no", onchange: () => { f.nb = "no"; f.from = "typed"; draw(); } }),
+            " Not billed yet: remind me (it stays on Vendor costs until the job's invoice has it)"),
+          h("label", { class: "doc-chk" }, h("input", { type: "radio", name: "venNb", id: "venNbTyped", checked: f.nb === "typed", onchange: () => { f.nb = "typed"; f.from = "typed"; draw(); } }),
+            " Billed another way (like the Xactimate): what we charged"),
+          f.nb === "typed" ? h("input", { id: "venTyped", inputmode: "decimal", value: f.typed, placeholder: "$ charged", "aria-label": "What we charged", oninput: ev => { set("typed", ev.target.value); } }) : null) : null,
+        fromLines() ? h("div", { class: "ven-typed" }, h("label", { class: "doc-chk" }, h("input", { type: "checkbox", id: "venTypedOn",
+            onchange: ev => { if (ev.target.checked) { f.from = "typed"; f.nb = "typed"; } draw(); } }), " Type it instead")) : null) : null,
+      // the service
+      h("div", { class: "field" }, h("span", { class: "ec-lbl", text: "Service" }),
+        h("div", { class: "seg", role: "radiogroup", "aria-label": "Service", id: "venSvc" }, VEN_SVC.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "radio", "data-k": k,
+          "aria-checked": String(f.svc === k), "aria-pressed": String(f.svc === k), onclick: () => { set("svc", k); draw(); } }, t)))),
+      h("div", { class: "grid2" }, inp("venVendor", "Vendor", "vendor", { list: "venVendors", maxlength: "80", placeholder: "The testing company" }),
+        inp("venPaid", "Paid (the invoice's total, $)", "paid", { inputmode: "decimal", placeholder: "650.00" })),
+      vendors.length ? h("datalist", { id: "venVendors" }, vendors.map(n => h("option", { value: n }))) : null,
+      h("div", { class: "grid2" }, inp("venVinv", "Vendor's invoice # (optional)", "vinv", { maxlength: "40" }), inp("venVday", "Invoice day (optional)", "vday", { type: "date", max: today })),
+      inp("venNotes", "Notes (optional)", "notes", { maxlength: "300" }),
+      // the margin, as it stands
+      paid > 0 || ch > 0 ? h("p", { class: "ven-margin" + (ch - paid < 0 ? " neg" : ""), id: "venMargin" }, "Charged ", h("b", { text: f.job && !ch ? "nothing (not billed)" : lbMoney(ch / 100) }), " · paid ", h("b", { text: lbMoney(paid / 100) }),
+        " · margin ", h("b", { text: lbMoney((ch - paid) / 100) }), ch > 0 ? ` (${venPct(ch - paid, ch)})` : "") : null,
+      f.err ? h("p", { class: "dlg-err", id: "venErr", role: "alert", text: f.err }) : null,
+      h("div", { class: "dlg-foot" }, v ? h("button", { class: "btn ghost" + (f.sure ? " danger" : ""), type: "button", id: "venRemove", onclick: remove }, f.sure ? "Sure? Tap again" : "Remove") : null,
+        h("div", { class: "right" }, h("button", { class: "btn", type: "button", id: "venCancel", onclick: () => { if (f.fileId && !f.saved) api("venDelete", { fileId: f.fileId }).catch(() => {}); done(); } }, "Cancel"),
+          h("button", { class: "btn primary", type: "button", id: "venSave", disabled: f.busy || f.reading, onclick: save }, f.busy ? "Saving…" : "Save")))].filter(Boolean));
+    upgradeFiles(body);   // the file picker: a box to drop the invoice on, or tap to choose
+  };
+  openDialog(h("h3", { id: "dlgTitle", text: v ? "Vendor invoice" : "Add a vendor invoice" }),
+    h("p", { class: "hint", text: "Asbestos and lead testing, mold testing: the vendor's invoice on its job, and what we charged for it." }), body);
+  draw();
+  if (f.job && !f.lines) loadLines();
 }
 
 /* ======================= Repairs split: each repair job, its client payments, and Monumental's and VODA's share ======================= */
@@ -18651,8 +19020,9 @@ function estReportEl(d, name) {
         h("span", { class: "er-gs" }, done0 === null ? "…" : left > 0 ? h("span", null, h("b", { text: lbMoney(left / 100) }), " to go", R.daysLeft ? ` · ${lbMoney(left / R.daysLeft / 100)} a working day` : "") : h("span", { class: "goal-hit-t", text: "✓ Reached" }),
           h("em", { text: goalPct(done, g) })),
         sub ? h("small", { class: "er-bon", text: sub }) : null); };
-    const bonDone = R.prod === null || R.contr === null ? null : R.prod - R.contr, rp = bonDone !== null && R.prod > 0 ? Math.round(bonDone / R.prod * 100) : null;
-    const bonSub = d === "p" && bonDone !== null ? `Counts ${lbMoney(bonDone / 100)}: ${lbMoney(R.prod / 100)} less ${lbMoney(R.contr / 100)} to the repair contractors${rp !== null ? ` (${rp}%)` : ""}` : "";
+    const bonDone = R.prod === null || R.contr === null || R.ven === null ? null : R.prod - R.contr - R.ven, rp = bonDone !== null && R.prod > 0 ? Math.round(bonDone / R.prod * 100) : null;
+    const less = [d === "p" ? `${lbMoney(R.contr / 100)} to the repair contractors` : "", R.ven ? `${lbMoney(R.ven / 100)} to testing vendors` : ""].filter(Boolean).join(" and ");
+    const bonSub = bonDone !== null && less ? `Counts ${lbMoney(bonDone / 100)}: ${lbMoney(R.prod / 100)} less ${less}${rp !== null ? ` (${rp}%)` : ""}` : "";
     return h("div", { class: "er-goals", id: "erGoal" },
       per === "year" ? line(`${r.label} goal`, R.goal.year, "min", R.prod) : [line("Minimum goal (its part)", R.goal.min, "min", R.prod), R.goal.sup ? line("Super goal (stretch)", R.goal.sup, "sup", R.prod) : null,
         R.goal.bon ? line("Bonus goal (its part)", R.goal.bon, "bon", bonDone, bonSub) : null],
@@ -18732,7 +19102,9 @@ function estRepData(d, per, r, to, pv, all, today) {
         likely: Math.round(open.filter(e => estGroup(e) === k).reduce((s, e) => s + e.est * e.p, 0)) };
     }).filter(k => !["u", "f"].includes(k.k) || k.cur.n || k.appr.n || k.likely);
   }
-  return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, contr, daysLeft, fc, people, kinds };
+  // ... and what its jobs' testing vendors were paid (Vendor costs): the Bonus counts it less that too; null while loading
+  const venAll = goalVenFor(r.from, to), ven = venAll ? venAll[d] || 0 : null;
+  return { cur, prev, appr: apprIn(r.from, to), pappr: apprIn(pv.from, pv.to), prod: prodOf(r.from, to), pprod: prodOf(pv.from, pv.to), goal, contr, ven, daysLeft, fc, people, kinds };
 }
 /** The report on screen as plain HTML for a PDF (styles inline, tables only: what the Google script's PDF maker reads):
  *  the title, who's in charge and what it's compared with, the tiles, the goal with its bars, then each table. */
