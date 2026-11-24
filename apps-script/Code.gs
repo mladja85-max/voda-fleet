@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 137;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 138;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -8998,7 +8998,49 @@ function canOffice_(user) { return canSee_(user, "office") || canSee_(user, OF_E
 /** Types anyone's numbers, any day, the admin-only ones too. */
 function ofEditor_(user) { return !!user && (user.role === "admin" || parseAccess_(user.access).indexOf(OF_EDIT) !== -1); }
 /** Today in the office (the script's time zone): the only day someone without "Office (any day)" types. */
-function ofToday_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"); }
+// the office's day and hours: New York's (not the script's own time zone setting); CSRs type today's numbers until 6 PM
+const OF_TZ = "America/New_York", OF_UNTIL = 18;
+function ofToday_() { return Utilities.formatDate(tmNow_(), OF_TZ, "yyyy-MM-dd"); }
+function ofLate_() { return Number(Utilities.formatDate(tmNow_(), OF_TZ, "HH")) >= OF_UNTIL; }
+/** Once (Nov 2026), for everyone in the office now: Other outbound calls and Booked from other outbound calls (they
+ *  show last in Outbound calls); the admins' Scheduled / completed is called Total daily booked (its history kept) and
+ *  Completed by booked goes beside it (shown as a % of it). */
+const OF_OTHER = [{ id: "oth", label: "Other outbound calls", kind: "out", of: "" }, { id: "othb", label: "Booked from other outbound calls", kind: "num", of: "oth" }];
+function ofAddOther_() {
+  const P = PropertiesService.getScriptProperties();
+  if (P.getProperty("OF_NOV24") === "1") return;
+  withTabLock_(function () {
+    if (P.getProperty("OF_NOV24") === "1") return;
+    const s = ofSheet_(false), byKey = {};
+    if (s) lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
+    if (byKey.config) {
+      const cfg = ofConfig_(lbParse_(byKey.config.json)), ym = ofToday_().slice(0, 7);
+      let changed = false;
+      cfg.people.forEach(function (p) {
+        if (p.to && p.to < ym) return;   // not in the office any more
+        const has = function (id, re) { return p.fields.some(function (f) { return f.id === id || re.test(f.label); }); };
+        if (!has("oth", /^other outbound/i) && !has("othb", /^booked from other outbound/i) && p.fields.length + 2 <= OF_MAX_FIELDS) {
+          OF_OTHER.forEach(function (f) { p.fields.push({ id: f.id, label: f.label, kind: f.kind, of: f.of }); });
+          changed = true;
+        }
+        const done = p.fields.filter(function (f) { return f.kind === "admin" && !f.hide && (f.id === "done" || /^scheduled \/ completed/i.test(f.label)); })[0];
+        if (done) {
+          if (done.label !== "Total daily booked") { done.label = "Total daily booked"; changed = true; }
+          if (!has("compb", /^completed by booked/i) && p.fields.length + 1 <= OF_MAX_FIELDS) {
+            p.fields.splice(p.fields.indexOf(done) + 1, 0, { id: "compb", label: "Completed by booked", kind: "admin", of: done.id });
+            changed = true;
+          }
+        }
+      });
+      if (changed) {
+        const now = new Date().toISOString(), doc = ofConfig_(cfg);
+        doc.at = now; doc.by = "VODA Hub";
+        lbSaveRow_(s, byKey, "config", JSON.stringify(doc), now, "VODA Hub");
+      }
+    }
+    P.setProperty("OF_NOV24", "1");
+  });
+}
 const OF_KINDS = ["out", "num", "admin"];   // counts toward the outgoing calls goal; any other number; typed by Admins only
 const OF_MAX_FIELDS = 40;   // numbers a person can have (past-only ones included)
 
@@ -9067,6 +9109,7 @@ function ofMonth_(d, key) {
 }
 function ofRead_(user, year) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+  try { ofAddOther_(); } catch (e) { /* the next read */ }
   let pcAuto = pcAutoFrom_(false);
   if (!pcAuto) { try { withTabLock_(function () { pcAuto = pcAutoFrom_(true); if (pcAuto) ofPcSync_(pcAuto); }); } catch (e) { pcAuto = pcAutoFrom_(false); } }
   const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_(),
@@ -9090,6 +9133,8 @@ function ofPut_(req) {
   if (!admin && writes.some(function (w) { return w && (w.key === "config" || (w.data && typeof w.data === "object")); })) return { ok: false, error: "not_allowed" };
   if (!editor && writes.some(function (w) { return w && w.patch && w.patch.days && typeof w.patch.days === "object" && Object.keys(w.patch.days).some(function (d) { return d !== today; }); }))
     return { ok: false, error: "only_today", today: today };
+  if (!editor && ofLate_() && writes.some(function (w) { return w && w.patch && w.patch.days && typeof w.patch.days === "object" && Object.keys(w.patch.days).length; }))
+    return { ok: false, error: "after_hours", today: today, until: OF_UNTIL };
   const s = ofSheet_(true);
   const byKey = {};
   lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
