@@ -1421,6 +1421,26 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .rev-bar { display: flex; height: 8px; border-radius: 6px; overflow: hidden; background: var(--line); margin-top: 8px; }
 .rev-bar i { display: block; height: 100%; }
 .rev-bar .r { background: var(--accent); } .rev-bar .c { background: var(--clean); } .rev-bar .p { background: var(--soon); } .rev-bar .o { background: var(--muted); }
+/* Restoration's kinds: Water damage, Mold, Fire and smoke, Not sorted */
+:root { --jk-w: #0e8fd6; --jk-m: #7c5cd6; --jk-f: #e0623a; --jk-u: #9aa0a6; }
+.rev-bar .w, .rev-dot.w { background: var(--jk-w); } .rev-bar .m, .rev-dot.m { background: var(--jk-m); } .rev-bar .f, .rev-dot.f { background: var(--jk-f); } .rev-bar .u, .rev-dot.u { background: var(--jk-u); }
+#revTable .col-w, .rev-strip [data-k=w], .rev-kpis .pay-kpi[data-k=w], .rev-avg.w { --tint: var(--jk-w); }
+#revTable .col-m, .rev-strip [data-k=m], .rev-kpis .pay-kpi[data-k=m], .rev-avg.m { --tint: var(--jk-m); }
+#revTable .col-f, .rev-strip [data-k=f], .rev-kpis .pay-kpi[data-k=f], .rev-avg.f { --tint: var(--jk-f); }
+#revTable .col-w, #revTable .col-m, #revTable .col-f { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); }
+#revTable thead .col-w, #revTable thead .col-m, #revTable thead .col-f { background: color-mix(in srgb, var(--tint) 14%, var(--surface)); color: color-mix(in srgb, var(--tint) 80%, var(--ink)); }
+#revTable tfoot .col-w, #revTable tfoot .col-m, #revTable tfoot .col-f { background: color-mix(in srgb, var(--tint) 15%, var(--surface)); }
+.rev-kpis .pay-kpi[data-k=w], .rev-kpis .pay-kpi[data-k=m], .rev-kpis .pay-kpi[data-k=f], .rev-avg.w, .rev-avg.m, .rev-avg.f { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
+.rev-kpis.jk-on .pay-kpi[data-k=total] { --tint: var(--accent); background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
+.rev-focus .seg-btn { white-space: nowrap; }
+.rev-avg-kinds { display: grid; gap: 2px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--line)); font-size: .8rem; }
+.rev-avg-kinds div { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+.rev-avg-kinds b { color: var(--ink); font-weight: 600; }
+.jk-tag { display: inline-block; margin-left: 6px; font-size: .72rem; padding: 1px 6px; border-radius: 9px; background: color-mix(in srgb, var(--jk-u) 18%, var(--surface)); color: var(--ink); white-space: nowrap; }
+.jk-tag.w, .jk-sel.w { background: color-mix(in srgb, var(--jk-w) 16%, var(--surface)); } .jk-tag.m, .jk-sel.m { background: color-mix(in srgb, var(--jk-m) 16%, var(--surface)); }
+.jk-tag.f, .jk-sel.f { background: color-mix(in srgb, var(--jk-f) 16%, var(--surface)); }
+.jk-sel { margin-left: 6px; font-size: .75rem; padding: 1px 4px; border-radius: 8px; border: 1px solid var(--line); max-width: 130px; }
+.rv-kinds { margin-top: 6px; }
 .rev-strip { display: none; }
 #revTable .col-r, .rev-strip [data-k=r], .rev-kpis .pay-kpi[data-k=r] { --tint: var(--accent); }
 #revTable .col-c, .rev-strip [data-k=c], .rev-kpis .pay-kpi[data-k=c] { --tint: var(--clean); }
@@ -2235,7 +2255,10 @@ dialog#dlg:has(.er) { width: min(1000px, calc(100% - 24px)); }   /* a report: ro
   .rev-strip b.rev-ytag { display: inline-block; font-family: var(--font-body); font-size: .56rem; font-weight: 800; margin-right: 3px; }
   .rev-strip span { display: block; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   #revTable .pj, #revTable .oth { display: none; }
-  .rev-bar-top .rev-tools { width: 100%; justify-content: space-between; }
+  .rev-bar-top .rev-tools { width: 100%; justify-content: space-between; flex-wrap: wrap; }
+  .rev-tools .rev-focus { flex: 1 0 100%; }   /* All departments / Restoration: its own row */
+  .rev-focus .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; box-sizing: border-box; }
+  .rev-focus .seg-btn { justify-content: center; }
   .rev-bar-top .rev-tools.rev-tools-fit { width: auto; margin-left: auto; }   /* Office: Read again beside ‹ › when it fits */
   #revTable td .rev-was { padding: 3px 4px 4px; font-size: .7rem; }
   #revTable td .rev-was .rev-ch { display: block; }
@@ -13177,8 +13200,8 @@ let revOther = {};                                      // other years', loaded 
 let revLoading = {}, revErr = "", revOld = false;
 let revSync = { busy: false, what: "", err: "", n: 0, done: 0 };
 const revAsked = {};                                    // day → when this window last read it (not again by itself for 10 minutes)
-const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0, sub: "dep", rper: "month", roff: 0, rfrom: "", rto: "" }, store.get(K_REV_VIEW) || {});
-const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp, sub: revView.sub, rper: revView.rper, roff: revView.roff, rfrom: revView.rfrom, rto: revView.rto });
+const revView = Object.assign({ per: "week", off: 0, from: "", to: "", cmp: 0, sub: "dep", rper: "month", roff: 0, rfrom: "", rto: "", focus: "" }, store.get(K_REV_VIEW) || {});
+const revSaveView = () => store.set(K_REV_VIEW, { per: revView.per, from: revView.from, to: revView.to, cmp: revView.cmp, sub: revView.sub, rper: revView.rper, roff: revView.roff, rfrom: revView.rfrom, rto: revView.rto, focus: revView.focus });
 const REV_PER = { day: "Day", week: "Week", month: "Month", year: "Year", dates: "Dates" };
 /* ---- Operations › Money in: every payment on the day it came in, whatever the job's day (a balance from March paid
    on November 21 counts on November 21). Jobs / Money in beside the periods; the same Day, Week, Month, Year and Dates.
@@ -14170,7 +14193,11 @@ function renderRevenue() {
       h("option", { value: "0", text: "Off" }),
       yearsBack.map(n => h("option", { value: String(n), text: r.from.slice(0, 4) === r.to.slice(0, 4) ? `with ${Number(r.from.slice(0, 4)) - n}` : `${n} year${n === 1 ? "" : "s"} before` }))));
   cmpSel.querySelector("select").value = String(cmp);
-  const tools = h("div", { class: "rev-tools" }, readBtn, cash ? null : cmpSel);   // Compare: for the jobs
+  // All departments, or Restoration on its own: Water damage, Mold, Fire and smoke (the Google script that sorts them)
+  const focus = revView.focus === "r" && jkOn() && !cash;
+  const focusSeg = jkOn() && !cash ? h("div", { class: "rev-focus", id: "revFocus" },
+    lbSeg([["", [h("span", { class: "t-long", text: "All departments" }), h("span", { class: "t-short", text: "All" })]], ["r", "Restoration"]], focus ? "r" : "", k => { revView.focus = k; revSaveView(); renderRevenue(); }, "Show")) : null;
+  const tools = h("div", { class: "rev-tools" }, readBtn, cash ? null : cmpSel, focusSeg);   // Compare: for the jobs
   // Money in (each payment on the day it came in) opens from Accounts receivable; on it, a bar on top goes back to Jobs
   const bar = h("div", { class: "lb-bar rev-bar-top" },
     lbSeg(Object.entries(REV_PER), per, k => {
@@ -14192,6 +14219,9 @@ function renderRevenue() {
   const old = cmp && r.from <= last ? revDaysFor(cf, ct) : {};
   if (!days || !old) { box.replaceChildren(...[top, bar].filter(Boolean), h("p", { class: "loading", text: `Loading ${(!days ? r.from : cf).slice(0, 4)}…` })); return; }
   const s = revSum(days, r.from, to), c = cmp ? revSum(old, cf, ct) : null;
+  // Restoration on its own: its kinds instead of the departments (S, C: what the tiles and the table add up)
+  const sumOf = focus ? jkSum : revSum;
+  const S = focus ? jkSum(days, r.from, to) : s, C = focus && cmp ? jkSum(old, cf, ct) : c;
   const cmpName = cmp ? (cf.slice(0, 4) === ct.slice(0, 4) ? cf.slice(0, 4) : `${cf.slice(0, 4)}–${ct.slice(0, 4)}`) : "";
   const status = h("p", { class: "lb-sub rev-status" + (revSync.busy ? " busy" : ""), id: "revStatus", role: "status" },
     revSync.busy ? `Reading Housecall Pro: ${revSync.what}${revSync.n > 1 ? ` (${revSync.done + 1} of ${revSync.n})` : ""}…`
@@ -14200,7 +14230,8 @@ function renderRevenue() {
     cmp && !revSync.busy ? h("span", { class: "rev-vs", id: "revVs", text: ` · compared with ${revSpanText(cf, ct)}${per === "week" ? " (the same weekdays)" : ""}` }) : null);
   const err = revSync.err ? h("p", { class: "dlg-err", id: "revErr" }, revSync.err, " ",
     h("button", { class: "btn small", type: "button", onclick: () => { revSync.err = ""; renderRevenue(); } }, "Try again")) : null;
-  const shown = REV_DEPTS.filter(([k]) => k !== "o" || s.o[0] || s.o[1] || (c && (c.o[0] || c.o[1])));
+  const shown = focus ? JK_KINDS.concat(S.u[0] || S.u[1] || (C && (C.u[0] || C.u[1])) ? [JK_NONE] : [])
+    : REV_DEPTS.filter(([k]) => k !== "o" || s.o[0] || s.o[1] || (c && (c.o[0] || c.o[1])));
   const vs = (now, then) => { const ch = revChange(now, then); return h("em", { class: "rev-ch " + ch.cls, text: ch.text }); };
   const cmpShort = /^\d{4}$/.test(cmpName) ? `’${cmpName.slice(2)}` : cmpName;
   const revYearTag = () => h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: cmpName }), h("span", { class: "t-short", text: cmpShort }));
@@ -14208,23 +14239,25 @@ function renderRevenue() {
   // change on this year's tiles), one thin row on a phone
   const nowName = r.from.slice(0, 4) === to.slice(0, 4) ? r.from.slice(0, 4) : `${r.from.slice(0, 4)}–${to.slice(0, 4)}`;
   // a tile opens its jobs (Total: every department's) for the days it adds up
-  const opener = (k, a, b) => ({ role: "button", tabindex: "0", title: "See the jobs", onclick: () => revJobsDlg(k === "total" ? "all" : k, a, b), onkeydown: e => { if (e.key === "Enter") revJobsDlg(k === "total" ? "all" : k, a, b); } });
-  const tileRow = (x, yName, id, chg, a, b) => h("div", { class: "pay-kpis rev-kpis" + (chg ? "" : " rev-kpis-was"), id, style: `--n:${shown.length}` },
-    h("div", Object.assign({ class: "pay-kpi rev-open", "data-k": "total" }, opener("total", a, b)), h("small", null, "Total revenue", h("b", { class: "rev-ytag rev-tyear", text: yName })), h("b", { text: lbMoney(x.cents / 100) }),
+  // (Restoration on its own: the jobs of Restoration, of the kind tapped)
+  const goJobs = (k, a, b) => (focus ? revJobsDlg("r", a, b, k === "total" ? "" : k) : revJobsDlg(k === "total" ? "all" : k, a, b));
+  const opener = (k, a, b) => ({ role: "button", tabindex: "0", title: "See the jobs", onclick: () => goJobs(k, a, b), onkeydown: e => { if (e.key === "Enter") goJobs(k, a, b); } });
+  const tileRow = (x, yName, id, chg, a, b) => h("div", { class: "pay-kpis rev-kpis" + (chg ? "" : " rev-kpis-was") + (focus ? " jk-on" : ""), id, style: `--n:${shown.length}` },
+    h("div", Object.assign({ class: "pay-kpi rev-open", "data-k": "total" }, opener("total", a, b)), h("small", null, focus ? [h("i", { class: "rev-dot r" }), "Restoration"] : "Total revenue", h("b", { class: "rev-ytag rev-tyear", text: yName })), h("b", { text: lbMoney(x.cents / 100) }),
       h("span", { text: `${revJobs(x.jobs)}${x.jobs ? ` · ${lbMoney(x.cents / 100 / x.jobs)} a job` : ""}` }),
-      chg ? h("span", { class: "rev-chg" }, vs(x.cents, c.cents), ` vs ${cmpName}`) : null,
+      chg ? h("span", { class: "rev-chg" }, vs(x.cents, C.cents), ` vs ${cmpName}`) : null,
       h("div", { class: "rev-bar", "aria-hidden": "true" }, shown.map(([k]) => h("i", { class: k, style: `width:${x.cents > 0 ? Math.max(0, x[k][0]) / x.cents * 100 : 0}%` })))),
     shown.map(([k, name]) => h("div", Object.assign({ class: "pay-kpi rev-open", "data-k": k }, opener(k, a, b)), h("small", null, h("i", { class: "rev-dot " + k }), name, h("b", { class: "rev-ytag rev-tyear", text: yName })), h("b", { text: lbMoney(x[k][0] / 100) }),
       h("span", { text: `${revJobs(x[k][1])} · ${revPct(x[k][0], x.cents)}` }),
-      chg ? h("span", { class: "rev-chg" }, vs(x[k][0], c[k][0]), ` vs ${cmpName}`) : null)));
-  const tiles = tileRow(s, nowName, "revTiles", !!c, r.from, to), tilesWas = c ? tileRow(c, cmpName, "revTilesWas", false, cf, ct) : null;
+      chg ? h("span", { class: "rev-chg" }, vs(x[k][0], C[k][0]), ` vs ${cmpName}`) : null)));
+  const tiles = tileRow(S, nowName, "revTiles", !!C, r.from, to), tilesWas = C ? tileRow(C, cmpName, "revTilesWas", false, cf, ct) : null;
   const strip = h("div", { class: "rev-strip", id: "revStrip" },
-    [["total", "Total", s.cents, s.jobs, c && c.cents]].concat(REV_DEPTS.slice(0, 3).map(([k, , short]) => [k, short, s[k][0], s[k][1], c && c[k][0]])).map(([k, t, cents, j, was]) =>
+    [["total", focus ? "Rest." : "Total", S.cents, S.jobs, C && C.cents]].concat((focus ? JK_KINDS : REV_DEPTS.slice(0, 3)).map(([k, , short]) => [k, short, S[k][0], S[k][1], C && C[k][0]])).map(([k, t, cents, j, was]) =>
       h("div", Object.assign({ "data-k": k, class: "rev-open" }, opener(k, r.from, to)), h("small", null, k !== "total" ? h("i", { class: "rev-dot " + k }) : null, t), h("b", { text: revShort(cents) }),
         c ? h("span", null, h("b", { class: "rev-ytag", text: cmpShort }), vs(cents, was)) : h("span", { text: revJobs(j) }))));
   // the table: each line's own days, and (comparing) the same days before
   const lines = r.from > last ? [] : revLines(per, r, to, last);
-  const lineOld = L => (c && !L.future ? revSum(old, revShift(L.a, cmp, per), revShift(L.b, cmp, per)) : null);
+  const lineOld = L => (C && !L.future ? sumOf(old, revShift(L.a, cmp, per), revShift(L.b, cmp, per)) : null);
   const openMonth = k => { const t = clockNow(); revView.per = "month"; revView.off = (Number(k.slice(0, 4)) * 12 + Number(k.slice(5)) - 1) - (t.getFullYear() * 12 + t.getMonth()); revSaveView(); renderRevenue(); };
   const attrs = L => Object.assign({ class: [L.cls, L.future ? "future" : ""].filter(Boolean).join(" ") },
     L.day ? { "data-day": L.day } : {}, L.month ? { "data-month": L.month, tabindex: "0", title: "Show this month", onclick: () => openMonth(L.month) } : {});
@@ -14237,7 +14270,7 @@ function renderRevenue() {
   // change and its jobs
   const head = h("tr", null, h("th", { text: lines[0] && lines[0].month ? "Month" : lines[0] && lines[0].cls === "rev-yr" ? "Year" : "Day" }),
     shown.map(([k, name, short]) => h("th", { class: k === "o" ? "oth" : `col-${k}` }, h("i", { class: "rev-dot " + k }), h("span", { class: "t-long", text: name }), h("span", { class: "t-short", text: short }))),
-    h("th", { text: "Total" }), h("th", { class: "pj", text: "Per job" }));
+    h("th", { text: focus ? "Restoration" : "Total" }), h("th", { class: "pj", text: "Per job" }));
   const cell = (x, o, k, cls) => {
     const v = k === "t" ? [x.cents, x.jobs] : x[k], w = o && o.read ? (k === "t" ? [o.cents, o.jobs] : o[k]) : null;
     return h("td", { class: (cls || "") + (v[0] || v[1] ? "" : " zero"), title: lbCash(v[0] / 100) }, revCash(v[0]), v[1] ? h("small", { text: revJobs(v[1]) }) : null,
@@ -14247,13 +14280,13 @@ function renderRevenue() {
     x && (x.read || foot) ? shown.map(([k]) => cell(x, o, k, k === "o" ? "oth" : `col-${k}`)) : shown.map(([k]) => dash(k === "o" ? "oth" : `col-${k}`)),
     x && (x.read || foot) ? cell(x, o, "t", "tot") : dash("tot"),
     h("td", { class: "pj", text: x && x.jobs ? lbMoney(x.cents / 100 / x.jobs) : "–" }));
-  const rows = lines.map(L => row(L, L.future ? null : revSum(days, L.a, L.b), lineOld(L)));
+  const rows = lines.map(L => row(L, L.future ? null : sumOf(days, L.a, L.b), lineOld(L)));
   const table = h("div", { class: "panel" },
-    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "revTable" },
-      h("thead", null, head), h("tbody", null, rows), h("tfoot", null, row(null, s.read ? s : null, c, true)))));
-  const notes = [];
-  if (s.o[0] || s.o[1]) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
-  notes.push(howFold("revHow", h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }), "How it's counted"));
+    h("div", { class: "lb-scroll" }, h("table", { class: "lb-table" + (focus ? " jk-table" : ""), id: "revTable" },
+      h("thead", null, head), h("tbody", null, rows), h("tfoot", null, row(null, S.read ? S : null, C, true)))));
+  const notes = focus ? jkNotes(S) : [];
+  if (!focus && (s.o[0] || s.o[1])) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
+  if (!focus) notes.push(howFold("revHow", h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }), "How it's counted"));
   // Accounts receivable: what's still owed for the jobs of the period on screen (Week, Month, Year or the dates picked)
   const arSpan = r.from > last ? "" : revSpanText(r.from, to);
   const ar = (apiLevel && apiLevel < UNPAID_API) || r.from > last ? null : revArSum(days, r.from, to);
@@ -14300,14 +14333,15 @@ function renderRevenue() {
       h("div", { class: "rev-aside-head" }, h("h3", { text: "Average job" }),
         h("p", { id: "revAvgSpan", text: `${per === "dates" ? "" : `${r.label}${to < r.to ? " (so far)" : ""} · `}${revSpanText(r.from, to)}` }),
         cmp ? h("p", { class: "vs" }, "vs ", h("b", { class: "rev-ytag", text: ayName }), ` ${revSpanText(cf, ct)}`) : h("p", { class: "vs", text: "Pick a year in Compare to see it here too." })),
-      [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["t", "All jobs"]].map(([k, name]) => {
-        const a = avg(s, k), b = c ? avg(c, k) : null;
-        return h("div", { class: "rev-avg " + k, "data-k": k },
+      (focus ? [["t", "Restoration"]].concat(JK_KINDS.map(([k, name]) => [k, name])) : [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["t", "All jobs"]]).map(([k, name]) => {
+        const a = avg(S, k), b = C ? avg(C, k) : null;
+        return h("div", { class: "rev-avg " + (focus && k === "t" ? "r" : k), "data-k": focus && k === "t" ? "r" : k },
           h("small", null, k !== "t" ? h("i", { class: "rev-dot " + k }) : null, name),
           h("b", { text: a.jobs ? lbMoney(a.avg / 100) : "–" }),
           h("span", { class: "rev-avg-n", text: `${revJobs(a.jobs)} · ${lbMoney(a.cents / 100)}` }),
           b ? h("span", { class: "rev-was" }, h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: ayName }), h("span", { class: "t-short", text: ayShort })),
-            b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null);
+            b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null,
+          !focus && k === "r" ? jkAvgLines(days, r.from, to) : null);
       }));
   }
   // Money in, inside Accounts receivable (the card, and its bar on a smaller screen): tapped, the Money in view; with no
@@ -14332,6 +14366,12 @@ function renderRevenue() {
   box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, cash ? null : status, err, revPriceEl(), slot === "top" ? gbox : null, cash ? cashParts : r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, cash || r.from > today ? null : table, ...(cash ? [] : notes)].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [gbox] : []));
   if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
+  // Restoration's kinds: sorted now when the days on screen have jobs never sorted (else every 10 minutes)
+  if (jkOn() && !jk.busy) {
+    const wait = Date.now() - jk.tried, unk = r.from <= last ? jkSum(days, r.from, to).unk : 0;
+    if (wait > JK_EVERY || (unk && !jk.err && wait > 8e3)) setTimeout(jkLoad, 0);
+    else if (unk && !jk.err && !jk.timer) jk.timer = setTimeout(() => { jk.timer = 0; if (view.tab === "revenue") renderRevenue(); }, 8e3 - wait + 50);
+  }
   // after the days on screen are read (their jobs tell each invoice's department)
   if (canSee("revenue")) setTimeout(() => { if (!revSync.busy) unsentLoad(false); }, 0);
 }
@@ -15196,8 +15236,8 @@ function venJobTag(x) {
       mine.some(venNotBilled) ? `Vendor ${lbMoney(s.paid / 100)} · NOT BILLED` : `Vendor ${lbMoney(s.paid / 100)} · charged ${lbMoney(s.charged / 100)} · margin ${lbMoney((s.charged - s.paid) / 100)}`) : null,
     h("button", { class: "linkish rv-ven-add", type: "button", onclick: add }, "+ Vendor invoice"));
 }
-function revJobsDlg(dep, from, to0) {
-  const st = { dep: dep || "all" };
+function revJobsDlg(dep, from, to0, kind) {
+  const st = { dep: dep || "all", kind: kind || "" };
   const box = h("div", { class: "rv-unpaid-body" });
   const draw = () => {
     const today = lbToday(), end = to0 && to0 < today ? to0 : today;
@@ -15216,7 +15256,10 @@ function revJobsDlg(dep, from, to0) {
     const byDep = k => all.filter(x => k === "all" || x.dep === k);
     const deps = [["all", "All"]].concat(REV_DEPTS.filter(([k]) => k !== "o" || all.some(x => x.dep === "o")).map(([k, name]) => [k, name]));
     if (!deps.some(([k]) => k === st.dep)) st.dep = "all";
-    const shown = byDep(st.dep), jobs = shown.filter(x => x.first).length;
+    // Restoration: by its kind too (Water damage, Mold, Fire and smoke, Not sorted)
+    const kinds = st.dep === "r" && jkOn();
+    if (!kinds) st.kind = "";
+    const shown = byDep(st.dep).filter(x => !st.kind || jkKindOf(x) === st.kind), jobs = shown.filter(x => x.first).length;
     const dayText = d => { const x = lbDate(d), old = d.slice(0, 4) !== today.slice(0, 4);
       return [h("span", { class: "t-long", text: `${LB_WD[x.getDay()]} ${MONTHS[x.getMonth()]} ${x.getDate()}${old ? `, ${d.slice(0, 4)}` : ""}` }), h("span", { class: "t-short", text: `${x.getMonth() + 1}/${x.getDate()}${old ? `/${d.slice(2, 4)}` : ""}` })]; };
     const old = apiLevel && apiLevel < JOBS_API, reading = !old && (!days || missing > 0);
@@ -15226,12 +15269,15 @@ function revJobsDlg(dep, from, to0) {
       h("div", { class: "seg rv-seg", role: "tablist", "aria-label": "Department" }, deps.map(([k, name]) =>
         h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(k === st.dep), onclick: () => { st.dep = k; draw(); } },
           k !== "all" ? h("i", { class: "rev-dot " + k }) : null, name, h("em", { text: ` ${lbMoney(sum(byDep(k), x => x.c) / 100)}` })))),
+      kinds ? h("div", { class: "seg rv-seg rv-kinds", id: "rvKinds", role: "tablist", "aria-label": "Kind" }, [["", "All", ""]].concat(JK_KINDS, [JK_NONE]).filter(([k]) => k !== "u" || byDep("r").some(x => jkKindOf(x) === "u")).map(([k, , short]) =>
+        h("button", { class: "seg-btn", type: "button", "data-kind": k, "aria-pressed": String(k === st.kind), onclick: () => { st.kind = k; draw(); } },
+          k ? h("i", { class: "rev-dot " + k }) : null, short || "All", h("em", { text: ` ${lbMoney(sum(byDep("r").filter(x => !k || jkKindOf(x) === k), x => x.c) / 100)}` })))) : null,
       shown.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "rvJobsTable" },
         h("thead", null, h("tr", null, h("th", { text: "Client" }), h("th", { class: "rv-proj", text: "Project" }), h("th", { class: "rv-inv", text: "Job" }), h("th", { text: "Day" }), h("th", { class: "rv-dep", text: "Department" }),
           h("th", { class: "rv-ch", text: "Charged" }), h("th", { class: "rv-pd", text: "Paid" }), h("th", { text: "Owes" }), h("th", { class: "rv-st", text: "Status" }))),
         h("tbody", null, shown.map(x => h("tr", { "data-job": x.id, "data-dep": x.dep, class: x.first ? "" : "later" },
           h("th", null, x.client || "–", h("small", { class: "rv-sm" }, rvSmall(x.id, x.inv, [x.proj, x.inv && "#", revStatus(x.ws)]))),
-          h("td", { class: "rv-proj" }, (x.proj || "–") + (x.first ? "" : " (a later visit)"), venCan() && x.first ? venJobTag(x) : null), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("td", { class: "rv-proj" }, (x.proj || "–") + (x.first ? "" : " (a later visit)"), venCan() && x.first ? venJobTag(x) : null, x.dep === "r" && x.first && jkOn() ? jkJobTag(x) : null), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
           h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
           h("td", { class: "rv-ch", text: lbCash(x.c / 100) }), h("td", { class: "rv-pd", text: lbCash(paid(x) / 100) }),
           h("td", { class: "rv-owes" + (x.owes ? "" : " zero"), text: lbCash(x.owes / 100) }), h("td", { class: "rv-st", text: revStatus(x.ws) })))),
@@ -15248,6 +15294,108 @@ function revJobsDlg(dep, from, to0) {
     box,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
   draw();
+}
+
+/* ======================= Operations › Restoration: Water damage, Mold, Fire and smoke =======================
+   Restoration on its own (a switch next to Compare): its total, and Water damage, Mold, Fire and smoke in the tiles, the
+   table and the average job. The Google script sorts each job once (its Job type or tags; else where the most money is
+   on its invoice lines; else its description), a few a call while Operations is open; an admin can change any job's
+   kind in its jobs window (a tile tapped). Not sorted: what nothing in Housecall Pro said yet, and days read before the
+   app kept each day's jobs. Restoration's average job card also shows each kind's average in the usual view. */
+const JK_API = 154;                                       // the Google script that sorts Restoration's jobs
+const JK_KINDS = [["w", "Water damage", "Water"], ["m", "Mold", "Mold"], ["f", "Fire and smoke", "Fire"]];
+const JK_NONE = ["u", "Not sorted", "Not sorted"];
+const JK_EVERY = 10 * 60e3;                               // the next sorting run, while Operations stays open
+const K_JK = "voda.jobKinds";
+const jk = { kinds: store.get(K_JK) || {}, busy: false, left: 0, err: "", tried: 0, timer: 0 };
+const jkOn = () => !!session && apiLevel >= JK_API && canSee("revenue");
+const jkBase = x => String(x.inv || "").replace(/-\d+$/, "") || String(x.id || "");
+/** A job's kind ("w", "m", "f"; "u": not sorted). x: { id, inv }. */
+const jkKindOf = x => { const k = (jk.kinds[jkBase(x)] || [])[0]; return k === "w" || k === "m" || k === "f" ? k : "u"; };
+/** The kinds from the Google script, which sorts the next few each call, until none are left (or it can't). */
+async function jkLoad() {
+  if (!jkOn() || jk.busy) return;
+  jk.busy = true; jk.tried = Date.now();
+  const redraw = () => { if (view.tab === "revenue") renderRevenue(); if (revUnpaidRedraw && dlg.open) revUnpaidRedraw(); };
+  try {
+    for (let n = 0; n < 80; n++) {
+      const out = await api("jobKinds", { sort: true }, 120000);
+      jk.kinds = out.kinds || {}; jk.left = Number(out.left) || 0; jk.err = out.err || "";
+      store.set(K_JK, jk.kinds);
+      redraw();
+      if (!out.sorted || !jk.left || view.tab !== "revenue") break;
+    }
+  } catch (e) { jk.err = (e && e.error) || "failed"; }
+  jk.busy = false;
+  redraw();
+}
+/** Restoration's days from..to by kind: { w, m, f, u: [cents, jobs], cents, jobs (Restoration's), read, at }. A day read
+ *  before the app kept its jobs: all Not sorted. unk: its jobs the Google script hasn't sorted yet. */
+function jkSum(days, from, to) {
+  const s = { w: [0, 0], m: [0, 0], f: [0, 0], u: [0, 0], cents: 0, jobs: 0, n: 0, read: 0, at: 0, unk: 0 };
+  for (let d = from; d <= to; d = lbAddDays(d, 1)) {
+    s.n++;
+    const v = days[d];
+    if (!v) continue;
+    s.read++;
+    s.at = Math.max(s.at, Number(v[9]) || 0);
+    const rc = Math.round((Number(v[0]) || 0) * 100), rj = Number(v[1]) || 0;
+    let c = 0, j = 0;
+    if (Array.isArray(v[13])) v[13].forEach(x => {
+      if (!Array.isArray(x) || x[3] !== "r") return;
+      const k = jkKindOf({ id: x[0], inv: x[1] });
+      if (k === "u") { if (x[8] && !jk.kinds[jkBase({ id: x[0], inv: x[1] })]) s.unk++; return; }
+      const xc = Math.round(Number(x[4]) || 0), xj = x[8] ? 1 : 0;
+      s[k][0] += xc; s[k][1] += xj; c += xc; j += xj;
+    });
+    // the rest of the day's Restoration (a few cents of rounding aren't a job)
+    const uc = rc - c, uj = Math.max(0, rj - j);
+    if (uj || Math.abs(uc) >= 100) { s.u[0] += uc; s.u[1] += uj; }
+    s.cents += rc; s.jobs += rj;
+  }
+  return s;
+}
+/** Under Restoration's average job (the usual view): each kind's average, when some are sorted. */
+function jkAvgLines(days, from, to) {
+  if (!jkOn()) return null;
+  const x = jkSum(days, from, to);
+  if (!(x.w[1] + x.m[1] + x.f[1])) return null;
+  return h("div", { class: "rev-avg-kinds", id: "revAvgKinds" }, JK_KINDS.map(([k, name, short]) =>
+    h("div", { "data-k": k, title: name }, h("span", null, h("i", { class: "rev-dot " + k }), `${short} · ${revJobs(x[k][1])}`), h("b", { text: x[k][1] ? lbMoney(x[k][0] / 100 / x[k][1]) : "–" }))));
+}
+/** Restoration on its own: what's not sorted, the sorting, and how it's sorted. */
+function jkNotes(S) {
+  const out = [];
+  const left = jk.left, busy = jk.busy;
+  if (busy && left) out.push(h("p", { class: "hint rev-status busy", id: "jkSorting", text: `Sorting Restoration's jobs from Housecall Pro… ${fmt(left)} left` }));
+  if (jk.err && !busy) out.push(h("p", { class: "dlg-err", id: "jkErr" }, jk.err === "no_key" ? "Housecall Pro isn't connected, so jobs can't be sorted. Settings › Housecall Pro." : "Housecall Pro didn't answer, so some jobs aren't sorted yet. ",
+    jk.err === "no_key" ? null : h("button", { class: "btn small", type: "button", onclick: () => { jk.err = ""; jk.tried = 0; jkLoad(); } }, "Try again")));
+  if (S.u[0] || S.u[1]) out.push(h("p", { class: "hint", id: "jkUnsorted", text: `Not sorted: ${lbMoney(S.u[0] / 100)}, ${revJobs(S.u[1])}. ${busy ? "Being sorted now." : "Nothing in Housecall Pro said which yet"}${isAdmin() ? ": tap a tile, then pick on the job." : "."}` }));
+  out.push(howFold("jkHow", h("p", { class: "hint", text: "Each Restoration job is sorted once: its Job type or a tag that says Water, Mold or Fire (smoke, soot); else its invoice lines (a job that's both counts where the most money is: extraction, drying and wet materials are water; mold; fire, smoke and soot); else its description. An admin can change any job: tap a tile, then pick on the job (the app never changes it after). Money counts on each visit's day and a job counts once, as everywhere on Operations." }), "How jobs are sorted"));
+  return out;
+}
+/** A job's kind in its jobs window: an admin picks (Water, Mold, Fire; back to the app's own pick); others see it. */
+function jkJobTag(x) {
+  const base = jkBase(x), row = jk.kinds[base] || [], k = jkKindOf(x), name = k === "u" ? "Not sorted" : JK_KINDS.find(z => z[0] === k)[2];
+  const title = row[1] === "admin" ? `Set by ${row[3] || "an admin"}` : row[1] === "lines" ? `Its invoice lines: ${row[2]}` : row[1] === "type" ? `Its Job type: ${row[2]}`
+    : row[1] === "tag" ? `Its tag: ${row[2]}` : row[1] === "notes" ? `Its description: ${row[2]}` : row[1] === "none" ? "Nothing in Housecall Pro said which" : "Not sorted yet";
+  if (!isAdmin()) return h("span", { class: "jk-tag " + k, "data-base": base, title, text: name });
+  const sel = h("select", { class: "jk-sel " + k, "data-base": base, "aria-label": `Kind of job #${base}`, title, onclick: e => e.stopPropagation(), onchange: e => jkSet(base, e.target.value) },
+    JK_KINDS.map(([kk, , short]) => h("option", { value: kk, text: short })),
+    k === "u" ? h("option", { value: "u", text: "Not sorted", disabled: true }) : null,
+    row[1] === "admin" ? h("option", { value: "", text: "The app's pick" }) : null);
+  sel.value = k;
+  return sel;
+}
+async function jkSet(base, k) {
+  try {
+    const out = await api("setJobKind", { base, kind: k });
+    jk.kinds = out.kinds || jk.kinds; store.set(K_JK, jk.kinds);
+    toast(k ? `#${base}: ${JK_KINDS.find(z => z[0] === k)[1]}` : `#${base}: back to the app's pick`);
+    if (!k) { jk.tried = 0; setTimeout(jkLoad, 0); }
+  } catch (e) { toast(e && e.error === "not_allowed" ? "Only admins change a job's kind." : errText(e, "The change")); }
+  if (view.tab === "revenue") renderRevenue();
+  if (revUnpaidRedraw && dlg.open) revUnpaidRedraw();
 }
 
 /* ======================= Operations › Vendor costs: the testing vendors' invoices =======================

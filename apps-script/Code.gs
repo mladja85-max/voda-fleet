@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 153;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 154;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -447,6 +447,12 @@ function doPost(e) {
       case "revBooked":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(revBooked_(req));
+      case "jobKinds":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(jobKinds_(req));
+      case "setJobKind":
+        if (user.role !== "admin" || !canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(withLock_(function () { return setJobKind_(req, user); }));
       case "revSync":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revSync_(req), user));
@@ -1854,19 +1860,139 @@ function venLines_(req) {
   let failed = 0;
   res.forEach(function (r) {
     if (!r || r.error) { failed++; return; }
-    const d = r.data || {}, list = Array.isArray(d) ? d : Array.isArray(d.data) ? d.data : Array.isArray(d.line_items) ? d.line_items : [];
-    list.forEach(function (it) {
-      if (!it) return;
-      const name = String(it.name || it.service_name || it.title || "").replace(/\s+/g, " ").trim().slice(0, 80) || "(no name)";
-      const desc = String(it.description || "").replace(/\s+/g, " ").trim().slice(0, 160);
-      const amt = it.amount !== undefined && it.amount !== null ? Number(it.amount) : it.total_price !== undefined && it.total_price !== null ? Number(it.total_price)
-        : (Number(it.unit_price) || 0) * (it.quantity !== undefined && it.quantity !== null ? Number(it.quantity) || 0 : 1);
-      const c = Math.round(amt) || 0;
-      if (c) out.push([name, desc === name ? "" : desc, c]);
-    });
+    hcpLines_(r.data).forEach(function (l) { out.push(l); });
   });
   if (failed === ids.length) return { ok: false, error: "hcp_failed" };
   return { ok: true, lines: out, failed: failed };
+}
+/** A job's line items as Housecall Pro sends them → [[name, description, cents]] (a line of $0 left out). */
+function hcpLines_(d) {
+  d = d || {};
+  const list = Array.isArray(d) ? d : Array.isArray(d.data) ? d.data : Array.isArray(d.line_items) ? d.line_items : [], out = [];
+  list.forEach(function (it) {
+    if (!it) return;
+    const name = String(it.name || it.service_name || it.title || "").replace(/\s+/g, " ").trim().slice(0, 80) || "(no name)";
+    const desc = String(it.description || "").replace(/\s+/g, " ").trim().slice(0, 160);
+    const amt = it.amount !== undefined && it.amount !== null ? Number(it.amount) : it.total_price !== undefined && it.total_price !== null ? Number(it.total_price)
+      : (Number(it.unit_price) || 0) * (it.quantity !== undefined && it.quantity !== null ? Number(it.quantity) || 0 : 1);
+    const c = Math.round(amt) || 0;
+    if (c) out.push([name, desc === name ? "" : desc, c]);
+  });
+  return out;
+}
+
+/* ======================= Operations › Restoration: Water damage, Mold, Fire and smoke =======================
+   Each Restoration job (its # with all its visits) sorted once: its Job type or tags say which ("Restoration Water…",
+   a tag "Mold"); else its invoice lines: the kind with the most money on its lines (a job that's both counts where the
+   most money is); else its description. One that nothing points to stays not sorted (tried again a day later). An
+   admin can set any job's kind, and the app never changes his. Kept on the "Restoration kinds" tab; the app sorts a
+   few jobs a call, the newest first, while anyone looks at Operations. */
+const JK_SHEET = "Restoration kinds";
+const JK_COLS = ["Job #", "Kind", "From", "Why", "Set by", "Set at"];
+const JK_KINDS = ["w", "m", "f"];                // Water damage, Mold, Fire and smoke ("": not sorted)
+const JK_BATCH = 12;                            // jobs sorted a call (a read of the job and of up to 3 visits' lines each)
+const JK_RETRY_MS = 24 * 3600 * 1000;           // one nothing pointed to: tried again after a day
+// what a line, a type, a tag or a description says (the first that fits: fire, then mold, then water)
+const JK_RE = [["f", /\b(fire|smoke|soot|charred|thermal fog\w*|ozone|hydroxyl)\b/i], ["m", /\b(mold|mould|microbial growth|fung(al|us)|spores?)\b/i],
+  ["w", /\b(water|extract(ion|ed)?|dehu\w*|air movers?|drying|dry[- ]?out|flood\w*|wet|moisture|sewage|leak\w*|burst|cat(egory)? ?[123])\b/i]];
+/** { base (the job #): { row, k, from ("type", "tag", "lines", "notes", "none", "admin"), why, by, at (ms) } } */
+function jkRows_() {
+  const out = {};
+  pcRows_(JK_SHEET, JK_COLS.length).forEach(function (r, i) {
+    const base = String(r[0] || "").trim();
+    if (!base) return;
+    const at = r[5] instanceof Date ? r[5].getTime() : Date.parse(String(r[5] || "")) || 0;
+    out[base] = { row: i + 2, k: JK_KINDS.indexOf(String(r[1])) === -1 ? "" : String(r[1]), from: String(r[2] || ""), why: String(r[3] || ""), by: String(r[4] || ""), at: at };
+  });
+  return out;
+}
+function jkOut_(rows) {
+  const out = {};
+  Object.keys(rows).forEach(function (b) { const r = rows[b]; out[b] = [r.k, r.from, r.why, r.by]; });
+  return out;
+}
+/** Which kinds a text names: ["w"], ["m", "w"], []. */
+function jkHits_(text) { return JK_RE.filter(function (x) { return x[1].test(text); }).map(function (x) { return x[0]; }); }
+/** A job's kind from Housecall Pro: its job (type, tags, description) and its visits' line items → [kind, from, why]. */
+function jkKind_(job, lineData) {
+  job = job || {};
+  const jf = job.job_fields || {}, jt = jf.job_type || job.job_type || null;
+  const type = String((jt && typeof jt === "object" ? jt.name : jt) || "").replace(/\s+/g, " ").trim();
+  let h = jkHits_(type);
+  if (h.length === 1) return [h[0], "type", type.slice(0, 80)];
+  const tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return String(t && typeof t === "object" ? t.name || "" : t || "").trim(); }).filter(Boolean);
+  const tagKinds = {}, tagWhy = {};
+  tags.forEach(function (t) { jkHits_(t).forEach(function (k) { tagKinds[k] = true; if (!tagWhy[k]) tagWhy[k] = t; }); });
+  h = Object.keys(tagKinds);
+  if (h.length === 1) return [h[0], "tag", tagWhy[h[0]].slice(0, 80)];
+  // the lines: the money on each kind's lines (a line: the first kind its name or description names)
+  const by = { w: 0, m: 0, f: 0 }, top = {};
+  lineData.forEach(function (d) {
+    hcpLines_(d).forEach(function (l) {
+      const k = jkHits_(l[0] + " " + l[1])[0];
+      if (!k) return;
+      const c = Math.abs(l[2]);
+      by[k] += c;
+      if (!top[k] || c > top[k][1]) top[k] = [l[0], c];
+    });
+  });
+  const best = JK_KINDS.slice().sort(function (a, b) { return by[b] - by[a]; })[0];
+  if (by[best] > 0) {
+    const also = JK_KINDS.filter(function (k) { return k !== best && by[k] > 0; });
+    return [best, "lines", (top[best][0] + (also.length ? " (most of the money; also " + also.map(function (k) { return { w: "water", m: "mold", f: "fire" }[k]; }).join(", ") + ")" : "")).slice(0, 120)];
+  }
+  h = jkHits_(String(job.description || "") + " " + String(job.name || ""));
+  if (h.length === 1) return [h[0], "notes", String(job.description || job.name || "").replace(/\s+/g, " ").trim().slice(0, 80)];
+  return ["", "none", ""];
+}
+/** Every job's kind (whoever sees Operations); sort: true also sorts the next few Restoration jobs not sorted yet (the
+ *  newest first) from Housecall Pro. → { kinds: { base: [kind, from, why, by] }, sorted, left, err }. */
+function jobKinds_(req) {
+  let rows = jkRows_(), sorted = 0, err = "";
+  const now = Date.now();
+  const due = function (rs) {
+    return venJobsWhere_(function (x) { return String(x[3]) === "r"; }).filter(function (j) {
+      const r = rs[j.base];
+      return !r || (!r.k && r.from !== "admin" && now - r.at > JK_RETRY_MS);
+    });
+  };
+  let todo = due(rows);
+  if (req.sort === true && todo.length) {
+    if (!hcpKey_()) err = "no_key";
+    else {
+      const batch = todo.slice(0, JK_BATCH), reads = [];
+      batch.forEach(function (j) {
+        reads.push({ path: "/jobs/" + encodeURIComponent(j.ids[0]) });
+        j.ids.slice(0, 3).forEach(function (id) { reads.push({ path: "/jobs/" + encodeURIComponent(id) + "/line_items" }); });
+      });
+      const res = hcpGetAll_(reads), out = [], at = new Date(now).toISOString();
+      let i = 0;
+      batch.forEach(function (j) {
+        const job = res[i++], lines = j.ids.slice(0, 3).map(function () { return res[i++]; });
+        const got = lines.filter(function (l) { return l && !l.error; });
+        if ((!job || job.error) && !got.length) { err = (job && job.error) || "hcp_failed"; return; }   // tried again on the next call
+        const k = jkKind_(job && !job.error ? job.data : {}, got.map(function (l) { return l.data; }));
+        out.push([j.base, k[0], k[1], k[2], "", at]);
+      });
+      if (out.length) {
+        // never over an admin's (set while this was reading)
+        withLock_(function () { pcUpsert_(JK_SHEET, JK_COLS, out, function (row, old) { return old && String(old[2]) === "admin" ? old.map(String) : row; }); });
+        sorted = out.length;
+        rows = jkRows_();
+        todo = due(rows);
+      }
+    }
+  }
+  return { ok: true, kinds: jkOut_(rows), sorted: sorted, left: todo.length, err: err };
+}
+/** An admin sets a job's kind ({ base, kind: "w" | "m" | "f" }), or gives it back to the app (kind ""). */
+function setJobKind_(req, user) {
+  const base = String(req.base || "").trim(), k = String(req.kind || "");
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(base) || (k && JK_KINDS.indexOf(k) === -1)) return { ok: false, error: "bad_request" };
+  const rows = jkRows_();
+  if (k) pcUpsert_(JK_SHEET, JK_COLS, [[base, k, "admin", "", String(user.name || "").slice(0, 60), new Date().toISOString()]]);
+  else if (rows[base]) SpreadsheetApp.getActive().getSheetByName(JK_SHEET).deleteRow(rows[base].row);
+  return { ok: true, kinds: jkOut_(jkRows_()) };
 }
 /** A vendor's invoice from the app: { name, data (base64) } → kept in the folder (pending until saved) and read by
  *  Google: { fileId, name, type, text }. */
