@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 147;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 148;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -307,7 +307,7 @@ function doPost(e) {
         let supplies = null;
         try { supplies = supCached_(user); } catch (e) { supplies = null; }   // nor do the checklists
         let docs;   // Admins: the documents expired or expiring soon (the Documents tab's count and the notice)
-        if (canDocs_(user)) { try { docs = docSummary_(); } catch (e) { docs = undefined; } }
+        if (canDocs_(user) || canDocsOwn_(user)) { try { docs = docSummary_(user); } catch (e) { docs = undefined; } }
         return json_({ ok: true, trucks: trucks, gps: gps, supplies: supplies, docs: docs, me: Object.assign(publicUser_(user), { owner: settingsOwner_() }), serverTime: new Date().toISOString() });
       }
       case "saveTruck":
@@ -421,8 +421,8 @@ function doPost(e) {
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return atPut_(req); }));
       case "docList": case "docSave": case "docDelete": case "docFile":
-        if (!canDocs_(user)) return json_({ ok: false, error: "not_allowed" });
-        if (req.action === "docList") return json_(docList_());
+        if (!canDocs_(user) && !canDocsOwn_(user)) return json_({ ok: false, error: "not_allowed" });
+        if (req.action === "docList") return json_(docList_(user));
         if (req.action === "docFile") return json_(docFile_(req));
         return json_(withTabLock_(function () { return req.action === "docSave" ? docSave_(req, user) : docDelete_(req); }));
       case "estMarkSent":
@@ -989,6 +989,7 @@ function saveUser_(req) {
     if (parseAccess_(x.u.access).indexOf(PRICE_CHECK) !== -1) access.push(PRICE_CHECK);   // switched only with setPriceCheck
     if (parseAccess_(x.u.access).indexOf(SETTINGS) !== -1) access.push(SETTINGS);         // ... and Settings only by its owner
     if (parseAccess_(x.u.access).indexOf(DOCS) !== -1) access.push(DOCS);                 // ... and Documents (docAccessPut_)
+    if (parseAccess_(x.u.access).indexOf(DOCS_OWN) !== -1) access.push(DOCS_OWN);         // ... and his own documents
     if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   }
   if (x.u.role !== role || x.u.status !== status) {
@@ -1548,54 +1549,66 @@ function canDocs_(user) {
   const owner = settingsOwner_();
   return !owner || user.id === owner || parseAccess_(user.access).indexOf(DOCS) !== -1;
 }
-/** The owner of Settings lets an admin see Documents, or not ({ id, on }). Only admins; he always sees them himself. */
+const DOCS_OWN = "documents-own";   // an admin with documents of his own: only he sees them (switched on by the owner of Settings)
+/** Has documents of his own (his own space in Documents, that only he sees). */
+function canDocsOwn_(user) { return !!user && user.role === "admin" && parseAccess_(user.access).indexOf(DOCS_OWN) !== -1; }
+/** The owner of Settings switches an admin's Documents ({ id, on }: the company's documents; with own: true, documents of
+ *  his own, that only that admin sees, the owner included). Only admins; the owner always sees the company's himself. */
 function docAccessPut_(req) {
   const owner = settingsOwner_();
   if (!owner || req.user.id !== owner) return { ok: false, error: "not_allowed" };
   const s = usersSheet_(), x = readUsers_(s).filter(function (y) { return y.u.id === String(req.id || ""); })[0];
   if (!x) return { ok: false, error: "gone" };
   if (x.u.role !== "admin") return { ok: false, error: "bad_request" };
-  if (x.u.id === owner) return { ok: true, user: publicUser_(x.u) };
-  const access = parseAccess_(x.u.access).filter(function (a) { return a !== DOCS; });
-  if (req.on) access.push(DOCS);
+  const FLAG = req.own === true ? DOCS_OWN : DOCS;
+  if (x.u.id === owner && FLAG === DOCS) return { ok: true, user: publicUser_(x.u) };
+  const access = parseAccess_(x.u.access).filter(function (a) { return a !== FLAG; });
+  if (req.on) access.push(FLAG);
   if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   return { ok: true, user: publicUser_(x.u) };
 }
-const DOC_COLS = ["Id", "Title", "Holder", "Kind", "Issued by", "Number", "Issued", "Expires", "Remind days", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at"];
+const DOC_COLS = ["Id", "Title", "Holder", "Kind", "Issued by", "Number", "Issued", "Expires", "Remind days", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at", "Own (login id)"];
 const DOC_MAX = 10 * 1024 * 1024, DOC_REMIND = 60, DOC_KINDS = ["company", "person"];
 const DOC_DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 function docFolder_() { return hubSub_("DOC_FOLDER_ID"); }
 const docTxt_ = function (v, n) { return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, n); };
-/** Every document: { row (on the tab), id, title, holder, kind, issuer, num, issued, exp, remind, fileId, file, type, notes, by, at, chBy, chAt }. */
+/** Every document: { row (on the tab), id, title, holder, kind, issuer, num, issued, exp, remind, fileId, file, type, notes, by, at, chBy, chAt,
+ *  own: the login whose own document it is ("": the company's) }. */
 function docRows_() {
   const tz = Session.getScriptTimeZone(), iso = function (v) { return v instanceof Date ? v.toISOString() : String(v || ""); };
   return pcRows_(DOC_SHEET, DOC_COLS.length).map(function (r, i) {
     const rem = Number(r[8]);
     return { row: i + 2, id: String(r[0] || ""), title: String(r[1] || ""), holder: String(r[2] || ""), kind: DOC_KINDS.indexOf(String(r[3])) === -1 ? "company" : String(r[3]),
       issuer: String(r[4] || ""), num: String(r[5] || ""), issued: pcDay_(r[6], tz) || "", exp: pcDay_(r[7], tz) || "", remind: r[8] === "" || !isFinite(rem) ? DOC_REMIND : Math.max(0, Math.min(365, Math.round(rem))),
-      fileId: String(r[9] || ""), file: String(r[10] || ""), type: String(r[11] || ""), notes: String(r[12] || ""), by: String(r[13] || ""), at: iso(r[14]), chBy: String(r[15] || ""), chAt: iso(r[16]) };
+      fileId: String(r[9] || ""), file: String(r[10] || ""), type: String(r[11] || ""), notes: String(r[12] || ""), by: String(r[13] || ""), at: iso(r[14]), chBy: String(r[15] || ""), chAt: iso(r[16]),
+      own: String(r[17] || "") };
   }).filter(function (d) { return d.id; });
 }
-/** A document as the app gets it (no row, no Drive id: the file is fetched by the document's id). */
+/** A document as the app gets it (no row, no Drive id: the file is fetched by the document's id; space: "company", or
+ *  "own": the signed-in person's own). */
 function docOut_(d) {
   return { id: d.id, title: d.title, holder: d.holder, kind: d.kind, issuer: d.issuer, num: d.num, issued: d.issued, exp: d.exp, remind: d.remind,
-    file: d.fileId ? { name: d.file, type: d.type } : null, notes: d.notes, by: d.by, at: d.at, chBy: d.chBy, chAt: d.chAt };
+    file: d.fileId ? { name: d.file, type: d.type } : null, notes: d.notes, by: d.by, at: d.at, chBy: d.chBy, chAt: d.chAt, space: d.own ? "own" : "company" };
 }
+/** May this person see (and change) this document: the company's with Documents; his own with documents of his own. */
+function docMine_(d, user) { return d.own ? canDocsOwn_(user) && d.own === user.id : canDocs_(user); }
 /** Days from today to a day (yyyy-MM-dd), in the script's time zone. */
 function docDays_(day, today) { return Math.round((Date.parse(day + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / 864e5); }
-/** What the app warns about: { expired, soon, today } (soon: within each one's own days before). */
-function docSummary_() {
+/** What the app warns this person about (the documents he sees): { expired, soon, today } (soon: within each one's own
+ *  days before). */
+function docSummary_(user) {
   const today = Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd"), out = { expired: 0, soon: 0, today: today };
   docRows_().forEach(function (d) {
-    if (!d.exp) return;
+    if (!d.exp || !docMine_(d, user)) return;
     const n = docDays_(d.exp, today);
     if (n < 0) out.expired++; else if (n <= d.remind) out.soon++;
   });
   return out;
 }
-function docList_() {
+/** The documents this person sees ({ company, own }: which spaces he has). */
+function docList_(user) {
   const today = Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-  return { ok: true, today: today, docs: docRows_().map(docOut_) };
+  return { ok: true, today: today, company: canDocs_(user), own: canDocsOwn_(user), docs: docRows_().filter(function (d) { return docMine_(d, user); }).map(docOut_) };
 }
 /** Adds a document, or changes one ({ id }): its details, and with { file: { name, data (base64) } } its file (a PDF or a
  *  photo; a new one replaces the old, which goes in Drive's trash). */
@@ -1607,8 +1620,12 @@ function docSave_(req, user) {
   if ((issued && !DOC_DAY.test(issued)) || (exp && !DOC_DAY.test(exp))) return { ok: false, error: "bad_value", field: issued && !DOC_DAY.test(issued) ? "issued" : "exp" };
   if (!isFinite(rem) || rem < 0 || rem > 365) return { ok: false, error: "bad_value", field: "remind" };
   if (id && !/^d[a-z0-9]{6,40}$/.test(id)) return { ok: false, error: "bad_request" };
-  const rows = docRows_(), was = id ? rows.filter(function (d) { return d.id === id; })[0] : null;
+  const rows = docRows_(), was = id ? rows.filter(function (d) { return d.id === id && docMine_(d, user); })[0] : null;
   if (id && !was) return { ok: false, error: "not_found" };
+  // where it's kept: the company's, or his own (a new one: as asked; a change: where it was, unless moved)
+  const space = req.space === "own" || req.space === "company" ? req.space : was ? (was.own ? "own" : "company") : "company";
+  if (space === "own" ? !canDocsOwn_(user) : !canDocs_(user)) return { ok: false, error: "not_allowed" };
+  const own = space === "own" ? user.id : "";
   let file = null;
   if (req.file && typeof req.file === "object") {
     let bytes;
@@ -1626,15 +1643,15 @@ function docSave_(req, user) {
   const now = tmNow_().toISOString(), who = docTxt_(user.name || "Admin", 60);
   const d = { id: was ? was.id : "d" + Utilities.getUuid().replace(/-/g, "").slice(0, 12), title: title, holder: holder, kind: kind, issuer: docTxt_(x.issuer, 120), num: docTxt_(x.num, 60),
     issued: issued, exp: exp, remind: Math.round(rem), fileId: file ? file.id : was.fileId, file: file ? file.name : was.file, type: file ? file.type : was.type, notes: docTxt_(x.notes, 500),
-    by: was ? was.by : who, at: was ? was.at : now, chBy: was ? who : "", chAt: was ? now : "" };
+    by: was ? was.by : who, at: was ? was.at : now, chBy: was ? who : "", chAt: was ? now : "", own: own };
   const s = pcSheet_(DOC_SHEET, DOC_COLS), at = was ? was.row : Math.max(2, s.getLastRow() + 1);
-  s.getRange(at, 1, 1, DOC_COLS.length).setNumberFormat("@").setValues([[d.id, d.title, d.holder, d.kind, d.issuer, d.num, d.issued, d.exp, String(d.remind), d.fileId, d.file, d.type, d.notes, d.by, d.at, d.chBy, d.chAt]]);
+  s.getRange(at, 1, 1, DOC_COLS.length).setNumberFormat("@").setValues([[d.id, d.title, d.holder, d.kind, d.issuer, d.num, d.issued, d.exp, String(d.remind), d.fileId, d.file, d.type, d.notes, d.by, d.at, d.chBy, d.chAt, d.own]]);
   if (file && was && was.fileId) { try { DriveApp.getFileById(was.fileId).setTrashed(true); } catch (e) { /* gone already */ } }
   return { ok: true, doc: docOut_(d) };
 }
 /** Takes a document off (its file goes in Drive's trash: back from there for 30 days). */
 function docDelete_(req) {
-  const id = String(req.id || ""), d = docRows_().filter(function (x) { return x.id === id; })[0];
+  const id = String(req.id || ""), d = docRows_().filter(function (x) { return x.id === id && docMine_(x, req.user); })[0];
   if (!d) return { ok: false, error: "not_found" };
   SpreadsheetApp.getActive().getSheetByName(DOC_SHEET).deleteRow(d.row);
   if (d.fileId) { try { DriveApp.getFileById(d.fileId).setTrashed(true); } catch (e) { /* gone already */ } }
@@ -1642,7 +1659,7 @@ function docDelete_(req) {
 }
 /** A document's file to look at: { name, mime, data (base64) }. */
 function docFile_(req) {
-  const id = String(req.id || ""), d = docRows_().filter(function (x) { return x.id === id; })[0];
+  const id = String(req.id || ""), d = docRows_().filter(function (x) { return x.id === id && docMine_(x, req.user); })[0];
   if (!d || !d.fileId) return { ok: false, error: "not_found" };
   let f = null;
   try { f = DriveApp.getFileById(d.fileId); if (f.isTrashed()) f = null; } catch (e) { f = null; }
