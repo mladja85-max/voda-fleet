@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 154;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 155;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -277,6 +277,9 @@ function doPost(e) {
         return json_(withTabLock_(function () { return speedPut_(req); }));
       case "speedRead":
         return json_(speedRead_(req));
+      case "speedReport":
+        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        return json_(speedReport_(req));
       case "me":
         if (user.role === "admin") {
           try { hubTidyOnce_(); } catch (e) { /* the folders move in on their next use */ }
@@ -2356,14 +2359,15 @@ function withTabLock_(fn) {
 /* ---- Speed: each device times its requests (from sending one to its answer being in; the script's own part comes in
    every answer as _ms) and sends them every 10 minutes: one row a request on the Speed tab, two weeks kept. Admins see
    the slowest (Settings › Speed). Only request names, times and sizes: nothing about clients. ---- */
-const SPEED_SHEET = "Speed", SPEED_COLS = ["When", "Person", "Device", "Request", "Total ms", "Script ms", "Size KB", "OK", "Housecall Pro ms", "Waiting ms"];
+const SPEED_SHEET = "Speed", SPEED_COLS = ["When", "Person", "Device", "Request", "Total ms", "Script ms", "Size KB", "OK", "Housecall Pro ms", "Waiting ms", "Error"];
 const SPEED_DAYS = 14, SPEED_PUT_MAX = 500;
 function speedSheet_(create) {
   return create ? pcSheet_(SPEED_SHEET, SPEED_COLS) : SpreadsheetApp.getActive().getSheetByName(SPEED_SHEET);   // (made, or its newer columns added)
 }
 /** A device's requests since it last sent them: rows [age ms (how long ago, by its own clock), request, total ms, script
- *  ms (-1: none), bytes, ok, Housecall Pro ms, waiting ms (for another save; -1 or none: not known)]. When: the script's
- *  clock less the age (a phone's clock may be off). */
+ *  ms (-1: none), bytes, ok, Housecall Pro ms, waiting ms (for another save; -1 or none: not known), why it failed (a
+ *  short code: "timeout", "network", "busy", "not_allowed", "http_500"…; none: worked, or an older app)]. When: the
+ *  script's clock less the age (a phone's clock may be off). */
 function speedPut_(req) {
   const rows = Array.isArray(req.rows) ? req.rows.slice(-SPEED_PUT_MAX) : [], now = Date.now(), out = [];
   const dev = /^(phone|tablet|computer)$/.test(String(req.device || "")) ? String(req.device) : "other";
@@ -2374,7 +2378,8 @@ function speedPut_(req) {
     if (age < 0 || !a || t < 0) return;
     const sv = num(r[3], 600000), b = num(r[4], 50 * 1024 * 1024);
     const hp = num(r[6], 600000), lk = num(r[7], 600000);
-    out.push([new Date(now - age), String(req.by || "").slice(0, 60), dev, a, t, sv < 0 ? "" : sv, b < 0 ? "" : Math.round(b / 102.4) / 10, r[5] ? 1 : 0, hp < 0 ? "" : hp, lk < 0 ? "" : lk]);
+    const err = r[5] ? "" : String(r[8] || "").replace(/[^A-Za-z0-9_]/g, "").slice(0, 30);
+    out.push([new Date(now - age), String(req.by || "").slice(0, 60), dev, a, t, sv < 0 ? "" : sv, b < 0 ? "" : Math.round(b / 102.4) / 10, r[5] ? 1 : 0, hp < 0 ? "" : hp, lk < 0 ? "" : lk, err]);
   });
   if (!out.length) return { ok: true, saved: 0 };
   out.sort(function (x, y) { return x[0] - y[0]; });
@@ -2409,8 +2414,9 @@ function speedRead_(req) {
     const at = speedTime_(r[0]);
     if (at < cut || !r[3]) return;
     const t = Number(r[4]) || 0, sv = r[5] === "" ? null : Number(r[5]), kb = r[6] === "" ? null : Number(r[6]), a = String(r[3]), k = String(r[1]) + "|" + String(r[2]);
-    const x = by[a] || (by[a] = { t: [], s: [], kb: [], h: [], l: [], f: 0 });
-    x.t.push(t); if (sv !== null) x.s.push(sv); if (kb !== null) x.kb.push(kb); if (!Number(r[7])) x.f++;
+    const x = by[a] || (by[a] = { t: [], s: [], kb: [], h: [], l: [], f: 0, e: {} });
+    x.t.push(t); if (sv !== null) x.s.push(sv); if (kb !== null) x.kb.push(kb);
+    if (!Number(r[7])) { x.f++; const why = String(r[10] || "") || "unknown"; x.e[why] = (x.e[why] || 0) + 1; }
     if (r[8] !== "" && r[8] !== undefined) x.h.push(Number(r[8]) || 0);
     if (r[9] !== "" && r[9] !== undefined) x.l.push(Number(r[9]) || 0);
     (who[k] || (who[k] = [])).push(t);
@@ -2421,9 +2427,33 @@ function speedRead_(req) {
   return { ok: true, days: days,
     total: { n: all.length, p50: speedPct_(all, 0.5), p90: speedPct_(all, 0.9), devices: Object.keys(who).length },
     actions: Object.keys(by).map(function (a) { const x = by[a]; return { a: a, n: x.t.length, p50: speedPct_(x.t, 0.5), p90: speedPct_(x.t, 0.9), max: speedPct_(x.t, 1), s50: speedPct_(x.s, 0.5), kb: speedPct_(x.kb, 0.5), f: x.f,
-      h50: speedPct_(x.h, 0.5), l50: speedPct_(x.l, 0.5) }; }),
+      h50: speedPct_(x.h, 0.5), l50: speedPct_(x.l, 0.5), e: x.e }; }),
     people: Object.keys(who).map(function (k) { const p = k.split("|"); return { who: p[0], device: p[1], n: who[k].length, p50: speedPct_(who[k], 0.5), p90: speedPct_(who[k], 0.9) }; }),
-    slowest: slow.slice(0, 15).map(function (x) { return { at: new Date(x[0]).toISOString(), who: x[1], device: x[2], a: x[3], t: x[4], s: x[5] }; }) };
+    slowest: slow.slice(0, req.slowest === 100 ? 100 : 15).map(function (x) { return { at: new Date(x[0]).toISOString(), who: x[1], device: x[2], a: x[3], t: x[4], s: x[5] }; }) };
+}
+const SPEED_REPORT_MAX = 40000;   // requests in one report (the newest)
+/** Admins: everything Settings › Speed shows for the last `days` days (1, 7 or 14), with the 100 slowest, plus each
+ *  request one by one (the newest SPEED_REPORT_MAX), every tab's size and the script's timed jobs: a file to download
+ *  and hand on when something is slow. Names, times and sizes only: nothing about clients. */
+function speedReport_(req) {
+  const sum = speedRead_({ days: req.days, slowest: 100 }), cut = Date.now() - sum.days * 864e5;
+  const s = speedSheet_(false), w = s ? Math.min(SPEED_COLS.length, Math.max(8, s.getLastColumn())) : 0;
+  const all = s && s.getLastRow() > 1 ? s.getRange(2, 1, s.getLastRow() - 1, w).getValues() : [];
+  let rows = all.filter(function (r) { return speedTime_(r[0]) >= cut && r[3]; }).map(function (r) {
+    const v = function (i) { return r[i] === "" || r[i] === undefined ? null : r[i]; };
+    return [new Date(speedTime_(r[0])).toISOString(), String(r[1] || ""), String(r[2] || ""), String(r[3]), Number(r[4]) || 0, v(5), v(6), Number(r[7]) ? 1 : 0, v(8), v(9), String(r[10] || "")];
+  });
+  const cut2 = rows.length > SPEED_REPORT_MAX;
+  if (cut2) rows = rows.slice(-SPEED_REPORT_MAX);
+  const ss = SpreadsheetApp.getActive();
+  const tabs = ss.getSheets().map(function (t) { return [t.getName(), t.getLastRow(), t.getLastColumn()]; });
+  let triggers = [];
+  try {
+    triggers = ScriptApp.getProjectTriggers().map(function (t) { let ev = ""; try { ev = String(t.getEventType()); } catch (e) { ev = ""; } return [t.getHandlerFunction(), ev]; });
+  } catch (e) { triggers = [["(couldn't read)", ""]]; }
+  return { ok: true, days: sum.days, at: new Date().toISOString(), tz: Session.getScriptTimeZone(), api: API_VERSION, summary: sum,
+    cols: ["when", "person", "device", "request", "total ms", "script ms", "size KB", "ok", "Housecall Pro ms", "waiting ms", "error"],
+    rows: rows, cut: cut2, tabs: tabs, triggers: triggers };
 }
 function json_(obj) {
   if (obj && typeof obj === "object") { obj.api = API_VERSION; if (REQ_T0_) { obj._ms = Date.now() - REQ_T0_; obj._hcp = REQ_HCP_MS_; obj._lock = REQ_LOCK_MS_; } }
