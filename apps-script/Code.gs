@@ -7094,10 +7094,14 @@ function kpiImport_(req) {
    Property REBUILD_VENDOR_EMAIL instead, if it's there; no "shared with you" email; never anyone with the link)
    and attached to the event. Looked for when it's booked, then with the notes once an hour for a month (a PDF added
    later), until one is on it. Several with that amount: the one whose biggest amount it is (its total), then the
-   newest. Each PDF read once. ---- */
+   newest. Each PDF read once. 90 days after it was approved the PDF is taken off the event and its copy goes in Drive's
+   trash (only PDFs, one an estimate: Drive doesn't fill up). ---- */
 const RB_SHEET = "Rebuild calendar";
-const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title", "Notes added", "Notes checked at", "PDF", "PDFs read"];
+const RB_COLS = ["Estimate id", "Estimate #", "Client", "Approved on", "Event id", "Booked at", "Status", "Title", "Notes added", "Notes checked at", "PDF", "PDFs read", "PDF file"];
 const RB_PDF_PER_RUN = 5, RB_PDF_MAX = 25 * 1024 * 1024, RB_PDF_ON = "attached: ";   // PDFs read a run (Google reads each one: seconds)
+// the PDF's copy in Drive: taken off the event and put in Drive's trash this many days after it was approved (Drive
+// empties its trash itself 30 days later), a few a run
+const RB_PDF_DAYS = 90, RB_PDF_GONE = "removed after 90 days: ", RB_EXPIRE_PER_RUN = 10;
 const RB_NOTES_EVERY = 60 * 60e3, RB_NOTES_DAYS = 30, RB_NOTES_PER_RUN = 20;   // new Private notes: each estimate looked at once an hour, for a month, 20 a run
 const RB_TITLE = "APPROVED - NEED TO SCHEDULE - ", RB_CANCEL = "CANCELED - ", RB_HOUR = 6, RB_NAME = "VODA rebuilds";
 function rbSheet_() {
@@ -7119,7 +7123,7 @@ function rbRead_(s) {
     const at = r[9] instanceof Date ? r[9].getTime() : Date.parse(String(r[9] || "")) || 0;
     const day = r[3] instanceof Date ? Utilities.formatDate(r[3], Session.getScriptTimeZone(), "yyyy-MM-dd") : String(r[3] || "");
     if (id) out[id] = { row: i + 2, rec: { event: String(r[4] || ""), status: String(r[6] || ""), day: day, keys: Array.isArray(keys) ? keys.map(String) : [], checked: at,
-      pdf: String(r[10] || ""), read: Array.isArray(read) ? read.map(String) : [] } };
+      pdf: String(r[10] || ""), read: Array.isArray(read) ? read.map(String) : [], file: String(r[12] || "") } };
   });
   return out;
 }
@@ -7183,7 +7187,7 @@ function rebuildBook_() {
       const ev = cal.createEvent(title, start, new Date(start.getTime() + 3600e3), { location: addr, description: desc });
       try { ev.setColor(CalendarApp.EventColor.RED); } catch (e) { /* the color is a nicety */ }
       const pdf = rbPdf_(eid, amt, ev.getId(), [], out, id);
-      appendRows_(s, RB_COLS.length, [[eid, String(r[1]), String(r[4] || ""), day, ev.getId(), now, "booked", title, JSON.stringify(notes.map(function (n) { return n.k; })), now, pdf.status, JSON.stringify(pdf.read)]]);
+      appendRows_(s, RB_COLS.length, [[eid, String(r[1]), String(r[4] || ""), day, ev.getId(), now, "booked", title, JSON.stringify(notes.map(function (n) { return n.k; })), now, pdf.status, JSON.stringify(pdf.read), pdf.file || ""]]);
       out.booked++;
       return;
     }
@@ -7196,6 +7200,7 @@ function rebuildBook_() {
       if (ev && ev.getTitle().indexOf(RB_CANCEL) === 0) ev.setTitle(ev.getTitle().slice(RB_CANCEL.length));
       s.getRange(x.row, 7).setValues([["booked"]]); out.back++;
     } else if (x.rec.status === "booked" && approved) rbNotesLater_(x, r, eid, ev, s, out, today, id);
+    rbPdfExpire_(x, s, out, today, id);
   });
   return out;
 }
@@ -7229,8 +7234,53 @@ function rbNotesLater_(x, r, eid, ev, s, out, today, calId) {
   // its PDF, when none is on it yet (one added in Housecall Pro since)
   if (x.rec.pdf.indexOf(RB_PDF_ON) !== 0) {
     const pdf = rbPdf_(eid, Number(r[13]) || Number(r[12]) || 0, ev.getId(), x.rec.read, out, calId);
-    s.getRange(x.row, 11, 1, 2).setValues([[pdf.status, JSON.stringify(pdf.read)]]);
+    s.getRange(x.row, 11, 1, 3).setValues([[pdf.status, JSON.stringify(pdf.read), pdf.file || ""]]);
+    x.rec.pdf = pdf.status; x.rec.file = pdf.file || "";
   }
+}
+/** A Drive file's id from a calendar attachment (its fileId, else its link). */
+function rbFileId_(a) {
+  if (a && a.fileId) return String(a.fileId);
+  const m = /\/d\/([A-Za-z0-9_-]{10,})|[?&]id=([A-Za-z0-9_-]{10,})/.exec(String((a && a.fileUrl) || ""));
+  return m ? m[1] || m[2] : "";
+}
+/** The app's own PDF copy (in VODA Hub › Rebuild estimates), or null: never anything else. */
+function rbOwnFile_(id, folderId) {
+  if (!id) return null;
+  try {
+    const f = DriveApp.getFileById(id), it = f.getParents();
+    while (it.hasNext()) if (it.next().getId() === folderId) return f;
+  } catch (e) { /* gone */ }
+  return null;
+}
+/** 90 days after it was approved: its PDF off the event (what the vendor attached stays) and the copy in Drive's trash. */
+function rbPdfExpire_(x, s, out, today, calId) {
+  if (x.rec.pdf.indexOf(RB_PDF_ON) !== 0 || (out.expired || 0) >= RB_EXPIRE_PER_RUN) return;
+  const dayMs = Date.parse(x.rec.day + "T12:00:00Z");
+  if (!dayMs || Date.parse(today + "T12:00:00Z") - dayMs <= RB_PDF_DAYS * 864e5) return;
+  const folder = hubSub_("RB_FOLDER_ID").getId(), name = x.rec.pdf.slice(RB_PDF_ON.length), ids = {};
+  if (x.rec.file) ids[x.rec.file] = true;
+  // the event: the app's PDF taken off it
+  if (x.rec.event && calId) {
+    const url = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/events/" + encodeURIComponent(String(x.rec.event).replace(/@google\.com$/, ""));
+    const cur = rbGoogle_("get", url + "?fields=attachments,status");
+    if (cur.code < 300 && cur.data && cur.data.status !== "cancelled") {
+      const all = Array.isArray(cur.data.attachments) ? cur.data.attachments : [], keep = [];
+      all.forEach(function (a) { const id = rbFileId_(a); if (id && (ids[id] || rbOwnFile_(id, folder))) ids[id] = true; else keep.push({ fileUrl: a.fileUrl, title: a.title, mimeType: a.mimeType }); });
+      if (keep.length !== all.length) {
+        const put = rbGoogle_("patch", url + "?supportsAttachments=true&fields=id", { attachments: keep });
+        if (put.code >= 300) return;   // tried again next time
+      }
+    } else if (cur.code !== 404 && cur.code !== 410 && !(cur.data && cur.data.status === "cancelled")) return;   // not reachable now: next time
+  }
+  // booked before the copy's id was kept, and no longer on an event: by its name in the folder
+  if (!Object.keys(ids).length && name) {
+    const it = DriveApp.getFolderById(folder).getFiles();
+    while (it.hasNext()) { const f = it.next(); if (f.getName() === name) ids[f.getId()] = true; }
+  }
+  Object.keys(ids).forEach(function (id) { const f = rbOwnFile_(id, folder); if (f) try { f.setTrashed(true); } catch (e) { /* gone */ } });
+  s.getRange(x.row, 11, 1, 3).setValues([[RB_PDF_GONE + name, s.getRange(x.row, 12, 1, 1).getValues()[0][0], ""]]);
+  out.expired = (out.expired || 0) + 1;
 }
 /** "11,636.44" written anywhere in the text (with or without its commas): the amount in cents. */
 function rbHasAmount_(text, cents) {
@@ -7339,7 +7389,7 @@ function rbPdf_(eid, amt, evId, read, out, calId) {
   const put = rbGoogle_("patch", evUrl + "?supportsAttachments=true&fields=id", { attachments: list.slice(-25) });
   if (put.code >= 300) return drop("couldn't attach it to the event (" + put.code + ")");
   out.pdfs = (out.pdfs || 0) + 1;
-  return { status: RB_PDF_ON + best.name, read: read };
+  return { status: RB_PDF_ON + best.name, read: read, file: file.getId() };
 }
 /** Every 15 minutes (rebuildCalendarSetup turns it on): what changed in Housecall Pro, then the calendar. */
 function rebuildCalendarTick() {
