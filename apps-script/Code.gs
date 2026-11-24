@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 149;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 150;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -6207,8 +6207,10 @@ function estRead_(year, user) {
    (1, 2, 3, 7 and 14 days after, an admin can change them), and on the day a call back was asked for. Each call is a row
    on the "Estimate calls" tab (the same one Office › Estimates marks), in order: No answer, Voicemail, Spoke with (the
    client, the property manager, the adjuster or someone else; a note; a day to call again), Call back (a day, a note),
-   Booked, Don't call again; a "clear" takes back that day's last one. ---- */
-const EST_CALL_RESULTS = { nr: "No answer", vm: "Voicemail", sw: "Spoke with", cb: "Call back", booked: "Booked", dnc: "Don't call again", clear: "" };
+   Booked, Don't call again; Emailed (a note, a day to follow up); a "clear" takes back that day's last one. Each one can
+   have a note (what was said or sent), so the next call knows the last one. ---- */
+const EST_CALL_RESULTS = { nr: "No answer", vm: "Voicemail", sw: "Spoke with", em: "Emailed", cb: "Call back", booked: "Booked", dnc: "Don't call again", clear: "" };
+const EST_NOTE_MAX = 500, EST_CALLS_KEEP = 60;   // a note's length; the calls an estimate brings (its last ones)
 const EST_CALL_WHO = { client: "Client", pm: "Property manager", adjuster: "Adjuster", other: "Someone else" };
 const EST_CALL_DAYS = "EST_CALL_DAYS", EST_CALL_DAYS_DEF = [1, 2, 3, 7, 14];
 function estCallDays_() {
@@ -6237,10 +6239,10 @@ function estCallsAll_() {
   });
   return out;
 }
-/** The open estimates get their calls (the last 20). */
+/** The open estimates get their calls (the last EST_CALLS_KEEP: their history, with the notes). */
 function estCallsOn_(list) {
   const C = estCallsAll_();
-  (list || []).forEach(function (e) { if (e.st === "open" && C[e.id]) e.calls = C[e.id].slice(-20); });
+  (list || []).forEach(function (e) { if (e.st === "open" && C[e.id]) e.calls = C[e.id].slice(-EST_CALLS_KEEP); });
 }
 /** A call on an estimate: whoever's in charge of it (on it in Housecall Pro), or someone who sees them all. */
 function estCall_(req, user) {
@@ -6258,15 +6260,15 @@ function estCall_(req, user) {
     if (!last) return { ok: false, error: "gone" };
     if (last.d !== today && user.role !== "admin") return { ok: false, error: "locked" };
   }
-  const cb = r === "cb" || r === "sw" ? String(req.cb || "") : "";
+  const cb = r === "cb" || r === "sw" || r === "em" ? String(req.cb || "") : "";
   if ((r === "cb" || cb) && (!/^\d{4}-\d{2}-\d{2}$/.test(cb) || cb <= today || cb > tmAddDays_(today, 366))) return { ok: false, error: "bad_value", field: "cb" };
   const sw = r === "sw" ? String(req.sw || "") : "";
   if (r === "sw" && !Object.prototype.hasOwnProperty.call(EST_CALL_WHO, sw)) return { ok: false, error: "bad_value", field: "sw" };
-  const note = r === "cb" || r === "sw" ? String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140) : "";
+  const note = r !== "clear" ? String(req.note || "").replace(/\s+/g, " ").trim().slice(0, EST_NOTE_MAX) : "";
   const s = pcSheet_(OF_EST_CALLS, OF_EST_CALL_COLS), first = Math.max(2, s.getLastRow() + 1);
   if (s.getMaxRows() < first) s.insertRowsAfter(s.getMaxRows(), 200);
   s.getRange(first, 1, 1, OF_EST_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, id, r === "clear" ? "" : r, user.name, cb, note, sw]]);
-  return { ok: true, calls: (estCallsAll_()[id] || []).slice(-20) };
+  return { ok: true, calls: (estCallsAll_()[id] || []).slice(-EST_CALLS_KEEP) };
 }
 /** Office › Estimates: a year's estimates of one department (Cleaning), every one of them, as on Estimates (who's in
  *  charge from Employees), and which years have any of it. */
