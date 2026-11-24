@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 152;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 153;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -489,17 +489,19 @@ function doPost(e) {
       case "priceList":
         if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(priceList_(user, false));
-      case "priceScan":
-        if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
+      case "priceScan":   // Check now: who sees them, switched on for it
+        if ((user.role !== "admin" && !canPriceCheck_(user)) || !canPriceBulk_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(priceList_(user, true));
       case "priceHistory":
         if (user.role !== "admin" && !canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(priceHistory_(req));
-      case "priceCheck":
-        if (!canPriceCheck_(user)) return json_({ ok: false, error: "not_allowed" });
+      case "priceCheck":   // one checked; more than one at once (Mark all checked): switched on for that too
+        if (!canPriceCheck_(user) || (Array.isArray(req.ids) && req.ids.length > 1 && !canPriceBulk_(user))) return json_({ ok: false, error: "not_allowed" });
         return json_(withLock_(function () { return priceCheck_(req, user); }));
       case "setPriceCheck":
         return json_(withLock_(function () { return setPriceCheck_(req); }));
+      case "setPriceBulk":
+        return json_(withLock_(function () { return setPriceBulk_(req); }));
       case "ofBooked":
         if (!ofEditor_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(ofBooked_(req));
@@ -1000,6 +1002,7 @@ function saveUser_(req) {
     if (parseAccess_(x.u.access).indexOf(DOCS) !== -1) access.push(DOCS);                 // ... and Documents (docAccessPut_)
     if (parseAccess_(x.u.access).indexOf(DOCS_OWN) !== -1) access.push(DOCS_OWN);         // ... and his own documents
     if (parseAccess_(x.u.access).indexOf(VEN) !== -1) access.push(VEN);                   // ... and Vendor costs
+    if (parseAccess_(x.u.access).indexOf(PRICE_BULK) !== -1) access.push(PRICE_BULK);     // ... and Check now / Mark all checked
     if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   }
   if (x.u.role !== role || x.u.status !== status) {
@@ -4237,6 +4240,7 @@ function supplyEmailTest() {
 
 const ACCESS_DEFAULT = ["trucks"];
 const PRICE_CHECK = "pricecheck";   // an admin who marks Housecall Pro price changes checked (switched per admin, like Payroll)
+const PRICE_BULK = "pricebulk";     // ... who has Check now and Mark all checked (only the owner of Settings switches it, himself too)
 const PAYROLL = "payroll";   // an admin who sees Leaderboard > Payroll (switched per admin, see setPayroll_)
 // Settings (Users and invites: who signs in, roles, what each sees, invites, passcode resets, turning accounts off, and
 // the VODA Payroll and price-change switches): its owner (Script Property SETTINGS_OWNER, a user id) and whoever he
@@ -8141,6 +8145,21 @@ function priceLastDay_(job, tz) {
 }
 /** Marks price changes checked (and sees them): anyone switched on for it, an admin or not. */
 function canPriceCheck_(user) { return !!user && user.status !== "disabled" && parseAccess_(user.access).indexOf(PRICE_CHECK) !== -1; }
+/** Check now (Housecall Pro looked at, now) and Mark all checked: only whom the owner of Settings switched on (himself too). */
+function canPriceBulk_(user) { return !!user && user.status !== "disabled" && parseAccess_(user.access).indexOf(PRICE_BULK) !== -1; }
+/** The owner of Settings switches Check now and Mark all checked for someone who sees price changes (an admin, or
+ *  someone who checks them), himself too. */
+function setPriceBulk_(req) {
+  const owner = settingsOwner_();
+  if (!owner || req.user.id !== owner) return { ok: false, error: "not_allowed" };
+  const s = usersSheet_(), x = readUsers_(s).filter(function (y) { return y.u.id === String(req.id || ""); })[0];
+  if (!x) return { ok: false, error: "gone" };
+  if (x.u.role !== "admin" && parseAccess_(x.u.access).indexOf(PRICE_CHECK) === -1) return { ok: false, error: "bad_request" };
+  const access = parseAccess_(x.u.access).filter(function (a) { return a !== PRICE_BULK; });
+  if (req.on) access.push(PRICE_BULK);
+  if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
+  return { ok: true, user: publicUser_(x.u) };
+}
 function priceSheet_(name, cols) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(name);
@@ -8303,7 +8322,7 @@ function priceList_(user, scan) {
   const all = rows.map(priceOut_);
   const open = all.filter(function (x) { return x.status === "open"; }).sort(function (a, b) { return a.last < b.last ? 1 : -1; });
   const checked = all.filter(function (x) { return x.status === "checked"; }).sort(function (a, b) { return a.at < b.at ? 1 : -1; }).slice(0, 50);
-  return { ok: true, open: open, checked: checked, scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err, trigger: trigger, connected: !!hcpKey_(), mayCheck: canPriceCheck_(user) };
+  return { ok: true, open: open, checked: checked, scanAt: Number(P.getProperty(PRICE_AT)) || 0, err: err, trigger: trigger, connected: !!hcpKey_(), mayCheck: canPriceCheck_(user), mayBulk: canPriceBulk_(user) };
 }
 /** History by dates ({ from, to }: yyyy-MM-dd, a year at most): every price change made in those days (the day it was
  *  noticed in Housecall Pro), checked or still to check, newest first; and the money: removed (cuts), added (raises),
