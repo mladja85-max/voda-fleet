@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 141;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 142;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -6531,8 +6531,9 @@ function pcLeft_(c, s, cu, never) {
 function pcCom_(s, cu) {
   return !!s.com || String(cu[4] || "").split(/\s*,\s*/).some(function (t) { return PC_COM.test(t); });
 }
-/** Office › Estimates › Commercial clients: every commercial client (a Commercial job type, or a commercial / property
- *  manager tag) with a job done before this year and nothing this year (no job done since January 1, none booked):
+/** Office › Estimates › Commercial clients: every commercial client (the last job done was a Commercial job type; an
+ *  earlier Commercial job or a commercial / property manager tag isn't enough) with a job done before this year and
+ *  nothing this year (no job done since January 1, none booked):
  *  who to win back, the last ones first. Left off: do not call (marked here, a tag, Housecall Pro's do not service) and
  *  moved away. From the Past clients tabs (read from Housecall Pro there). { ready, year, list: [{ id, name, contact,
  *  phone, phone2, addr, last, lastInv, lastJob, type, years, jobs, spent }], n: { com, back, dnc, away }, from, reread } */
@@ -6552,7 +6553,7 @@ function comClients_(user) {
   const n = { com: 0, back: 0, dnc: 0, away: 0 }, list = [];
   Object.keys(K.by).forEach(function (c) {
     const s = K.by[c], cu = K.cust[c] || [];
-    if (!s.last || !pcCom_(s, cu)) return;
+    if (!s.last || !PC_COM.test(s.type)) return;   // the last job done: a Commercial job type
     n.com++;
     // this year: a job done since January 1, or one booked (on the schedule this year or later, or not scheduled yet)
     if (s.last >= y0 || s.open.some(function (o) { return o[0] ? o[0] >= y0 : o[1] >= y0 || !o[1]; })) { n.back++; return; }
@@ -6560,7 +6561,7 @@ function comClients_(user) {
     if (left && left.why !== "booked") { n[left.why] = (n[left.why] || 0) + 1; return; }
     const nm = pcName_(cu), e = ex[c] || { years: {}, spent: 0 };
     list.push({ id: c, name: nm.name, contact: nm.contact, phone: String(cu[2] || ""), phone2: String(cu[3] || ""), addr: s.addr, last: s.last, lastInv: s.lastInv, lastJob: s.lastJob,
-      type: s.type || s.com, years: Object.keys(e.years).sort().reverse().map(Number), jobs: s.jobs, spent: e.spent });
+      type: s.type, years: Object.keys(e.years).sort().reverse().map(Number), jobs: s.jobs, spent: e.spent });
   });
   // the last ones first; then the ones with us the most years; then the most spent
   list.sort(function (a, b) { return a.last.slice(0, 4) < b.last.slice(0, 4) ? 1 : a.last.slice(0, 4) > b.last.slice(0, 4) ? -1 : b.years.length - a.years.length || b.spent - a.spent || (a.last < b.last ? 1 : -1); });
