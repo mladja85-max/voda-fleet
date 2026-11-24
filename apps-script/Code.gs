@@ -1888,10 +1888,13 @@ function hcpLines_(d) {
    admin can set any job's kind, and the app never changes his. Kept on the "Restoration kinds" tab; the app sorts a
    few jobs a call, the newest first, while anyone looks at Operations. */
 const JK_SHEET = "Restoration kinds";
-const JK_COLS = ["Job #", "Kind", "From", "Why", "Set by", "Set at"];
+const JK_COLS = ["Job #", "Kind", "From", "Why", "Set by", "Set at", "Also"];
 const JK_KINDS = ["w", "m", "f"];                // Water damage, Mold, Fire and smoke ("": not sorted)
 const JK_BATCH = 12;                            // jobs sorted a call (a read of the job and of up to 3 visits' lines each)
 const JK_RETRY_MS = 24 * 3600 * 1000;           // one nothing pointed to: tried again after a day
+// a job that's more than one kind (flagged for an admin to check its invoice): its type or tags name two, or another
+// kind has at least this share of the money on its lines (a small "mold inhibitor" line on a water job isn't)
+const JK_BOTH_SHARE = 0.1;
 // what a line, a type, a tag or a description says (the first that fits: fire, then mold, then water)
 const JK_RE = [["f", /\b(fire|smoke|soot|charred|thermal fog\w*|ozone|hydroxyl)\b/i], ["m", /\b(mold|mould|microbial growth|fung(al|us)|spores?)\b/i],
   ["w", /\b(water|extract(ion|ed)?|dehu\w*|air movers?|drying|dry[- ]?out|flood\w*|wet|moisture|sewage|leak\w*|burst|cat(egory)? ?[123])\b/i]];
@@ -1902,29 +1905,29 @@ function jkRows_() {
     const base = String(r[0] || "").trim();
     if (!base) return;
     const at = r[5] instanceof Date ? r[5].getTime() : Date.parse(String(r[5] || "")) || 0;
-    out[base] = { row: i + 2, k: JK_KINDS.indexOf(String(r[1])) === -1 ? "" : String(r[1]), from: String(r[2] || ""), why: String(r[3] || ""), by: String(r[4] || ""), at: at };
+    const also = String(r[6] || "").split(",").filter(function (k) { return JK_KINDS.indexOf(k) !== -1; }).join(",");
+    out[base] = { row: i + 2, k: JK_KINDS.indexOf(String(r[1])) === -1 ? "" : String(r[1]), from: String(r[2] || ""), why: String(r[3] || ""), by: String(r[4] || ""), at: at, also: also };
   });
   return out;
 }
 function jkOut_(rows) {
   const out = {};
-  Object.keys(rows).forEach(function (b) { const r = rows[b]; out[b] = [r.k, r.from, r.why, r.by]; });
+  Object.keys(rows).forEach(function (b) { const r = rows[b]; out[b] = [r.k, r.from, r.why, r.by, r.also]; });
   return out;
 }
 /** Which kinds a text names: ["w"], ["m", "w"], []. */
 function jkHits_(text) { return JK_RE.filter(function (x) { return x[1].test(text); }).map(function (x) { return x[0]; }); }
-/** A job's kind from Housecall Pro: its job (type, tags, description) and its visits' line items → [kind, from, why]. */
+/** A job's kind from Housecall Pro: its job (type, tags, description) and its visits' line items → [kind, from, why,
+ *  also (the other kinds it is too, "w,m": its type or tags name them, or they have JK_BOTH_SHARE of its lines' money)]. */
 function jkKind_(job, lineData) {
   job = job || {};
   const jf = job.job_fields || {}, jt = jf.job_type || job.job_type || null;
   const type = String((jt && typeof jt === "object" ? jt.name : jt) || "").replace(/\s+/g, " ").trim();
-  let h = jkHits_(type);
-  if (h.length === 1) return [h[0], "type", type.slice(0, 80)];
   const tags = (Array.isArray(job.tags) ? job.tags : []).map(function (t) { return String(t && typeof t === "object" ? t.name || "" : t || "").trim(); }).filter(Boolean);
-  const tagKinds = {}, tagWhy = {};
-  tags.forEach(function (t) { jkHits_(t).forEach(function (k) { tagKinds[k] = true; if (!tagWhy[k]) tagWhy[k] = t; }); });
-  h = Object.keys(tagKinds);
-  if (h.length === 1) return [h[0], "tag", tagWhy[h[0]].slice(0, 80)];
+  const typeK = jkHits_(type), tagWhy = {}, tagK = [];
+  tags.forEach(function (t) { jkHits_(t).forEach(function (k) { if (!tagWhy[k]) { tagWhy[k] = t; tagK.push(k); } }); });
+  // what its type and tags name (in the order fire, mold, water)
+  const named = JK_RE.map(function (x) { return x[0]; }).filter(function (k) { return typeK.indexOf(k) !== -1 || tagWhy[k]; });
   // the lines: the money on each kind's lines (a line: the first kind its name or description names)
   const by = { w: 0, m: 0, f: 0 }, top = {};
   lineData.forEach(function (d) {
@@ -1936,14 +1939,32 @@ function jkKind_(job, lineData) {
       if (!top[k] || c > top[k][1]) top[k] = [l[0], c];
     });
   });
-  const best = JK_KINDS.slice().sort(function (a, b) { return by[b] - by[a]; })[0];
-  if (by[best] > 0) {
-    const also = JK_KINDS.filter(function (k) { return k !== best && by[k] > 0; });
-    return [best, "lines", (top[best][0] + (also.length ? " (most of the money; also " + also.map(function (k) { return { w: "water", m: "mold", f: "fire" }[k]; }).join(", ") + ")" : "")).slice(0, 120)];
+  const total = by.w + by.m + by.f;
+  const most = function (ks) { return ks.slice().sort(function (a, b) { return by[b] - by[a]; })[0]; };
+  const big = JK_KINDS.filter(function (k) { return by[k] > 0 && by[k] >= total * JK_BOTH_SHARE; });
+  const alsoOf = function (k) { return JK_KINDS.filter(function (x) { return x !== k && (named.indexOf(x) !== -1 || big.indexOf(x) !== -1); }).join(","); };
+  const NAME = { w: "water", m: "mold", f: "fire" };
+  const linesWhy = function (k) {
+    const also = JK_KINDS.filter(function (x) { return x !== k && by[x] > 0; });
+    return (top[k][0] + (also.length ? " (most of the money; also " + also.map(function (x) { return NAME[x]; }).join(", ") + ")" : "")).slice(0, 120);
+  };
+  const namedWhy = function (k) { return (typeK.indexOf(k) !== -1 ? type : tagWhy[k] || "").slice(0, 80); };
+  let k;
+  if (named.length === 1) {
+    k = named[0];
+    return [k, typeK.length === 1 && typeK[0] === k ? "type" : "tag", namedWhy(k), alsoOf(k)];
   }
-  h = jkHits_(String(job.description || "") + " " + String(job.name || ""));
-  if (h.length === 1) return [h[0], "notes", String(job.description || job.name || "").replace(/\s+/g, " ").trim().slice(0, 80)];
-  return ["", "none", ""];
+  if (named.length > 1) {
+    // its type or tags name more than one: where the most money is among them (else the first named)
+    k = most(named);
+    if (by[k] > 0) return [k, "lines", linesWhy(k) + " · " + named.map(function (x) { return namedWhy(x); }).filter(Boolean).join(", ").slice(0, 80), alsoOf(k)];
+    k = typeK.length === 1 ? typeK[0] : tagK[0] || named[0];   // no money on any: its type, else its first tag
+    return [k, typeK.indexOf(k) !== -1 ? "type" : "tag", named.map(function (x) { return namedWhy(x); }).filter(function (t, i, a) { return t && a.indexOf(t) === i; }).join(", ").slice(0, 120), alsoOf(k)];
+  }
+  if (total > 0) { k = most(JK_KINDS); return [k, "lines", linesWhy(k), alsoOf(k)]; }
+  const h = jkHits_(String(job.description || "") + " " + String(job.name || ""));
+  if (h.length === 1) return [h[0], "notes", String(job.description || job.name || "").replace(/\s+/g, " ").trim().slice(0, 80), ""];
+  return ["", "none", "", ""];
 }
 /** Every job's kind (whoever sees Operations); sort: true also sorts the next few Restoration jobs not sorted yet (the
  *  newest first) from Housecall Pro. → { kinds: { base: [kind, from, why, by] }, sorted, left, err }. */
@@ -1972,7 +1993,7 @@ function jobKinds_(req) {
         const got = lines.filter(function (l) { return l && !l.error; });
         if ((!job || job.error) && !got.length) { err = (job && job.error) || "hcp_failed"; return; }   // tried again on the next call
         const k = jkKind_(job && !job.error ? job.data : {}, got.map(function (l) { return l.data; }));
-        out.push([j.base, k[0], k[1], k[2], "", at]);
+        out.push([j.base, k[0], k[1], k[2], "", at, k[3]]);
       });
       if (out.length) {
         // never over an admin's (set while this was reading)
@@ -1985,12 +2006,14 @@ function jobKinds_(req) {
   }
   return { ok: true, kinds: jkOut_(rows), sorted: sorted, left: todo.length, err: err };
 }
-/** An admin sets a job's kind ({ base, kind: "w" | "m" | "f" }), or gives it back to the app (kind ""). */
+/** An admin sets a job's kind ({ base, kind: "w" | "m" | "f" }), the same one too (a job of more than one kind checked:
+ *  what else it had is kept), or gives it back to the app (kind ""). */
 function setJobKind_(req, user) {
   const base = String(req.base || "").trim(), k = String(req.kind || "");
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(base) || (k && JK_KINDS.indexOf(k) === -1)) return { ok: false, error: "bad_request" };
   const rows = jkRows_();
-  if (k) pcUpsert_(JK_SHEET, JK_COLS, [[base, k, "admin", "", String(user.name || "").slice(0, 60), new Date().toISOString()]]);
+  const was = rows[base];
+  if (k) pcUpsert_(JK_SHEET, JK_COLS, [[base, k, "admin", was ? was.why : "", String(user.name || "").slice(0, 60), new Date().toISOString(), was ? was.also : ""]]);
   else if (rows[base]) SpreadsheetApp.getActive().getSheetByName(JK_SHEET).deleteRow(rows[base].row);
   return { ok: true, kinds: jkOut_(jkRows_()) };
 }

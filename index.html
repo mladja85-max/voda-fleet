@@ -1441,6 +1441,11 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .jk-tag.f, .jk-sel.f { background: color-mix(in srgb, var(--jk-f) 16%, var(--surface)); }
 .jk-sel { margin-left: 6px; font-size: .75rem; padding: 1px 4px; border-radius: 8px; border: 1px solid var(--line); max-width: 130px; }
 .rv-kinds { margin-top: 6px; }
+.jk-check { display: inline-block; margin-left: 6px; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 9px; background: color-mix(in srgb, var(--soon) 22%, var(--surface)); color: color-mix(in srgb, var(--soon) 70%, var(--ink)); white-space: nowrap; }
+.jk-ok { margin-left: 6px; font-size: .75rem; }
+.jk-both-line { margin: 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--soon) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--soon) 30%, var(--line)); }
+#jkBoth, .rev-avg-kinds .jk-both { color: color-mix(in srgb, var(--soon) 75%, var(--ink)); }
+.rev-avg-kinds .jk-both { justify-content: flex-start; gap: 6px; font-weight: 600; }
 .rev-strip { display: none; }
 #revTable .col-r, .rev-strip [data-k=r], .rev-kpis .pay-kpi[data-k=r] { --tint: var(--accent); }
 #revTable .col-c, .rev-strip [data-k=c], .rev-kpis .pay-kpi[data-k=c] { --tint: var(--clean); }
@@ -14284,7 +14289,7 @@ function renderRevenue() {
   const table = h("div", { class: "panel" },
     h("div", { class: "lb-scroll" }, h("table", { class: "lb-table" + (focus ? " jk-table" : ""), id: "revTable" },
       h("thead", null, head), h("tbody", null, rows), h("tfoot", null, row(null, S.read ? S : null, C, true)))));
-  const notes = focus ? jkNotes(S) : [];
+  const notes = focus ? jkNotes(S, r.from, to) : [];
   if (!focus && (s.o[0] || s.o[1])) notes.push(h("p", { class: "hint", id: "revOther", text: `Other: ${lbMoney(s.o[0] / 100)}, ${revJobs(s.o[1])} with a Job type that doesn't start with Restoration, Cleaning or Repair${s.other.size ? `: ${[...s.other].join(", ")}` : ""}. It's in the total.${isAdmin() ? " Fix the Job type in Housecall Pro to put it in a department." : ""}` }));
   if (!focus) notes.push(howFold("revHow", h("p", { class: "hint", text: "From Housecall Pro: each visit's money counts on its scheduled day; a job counts once, on its first visit; canceled jobs are left out. A job's department is the first word of its Job type." + (cmp ? " Compared with the same days before (a week: the same weekdays, 52 weeks before)." : "") }), "How it's counted"));
   // Accounts receivable: what's still owed for the jobs of the period on screen (Week, Month, Year or the dates picked)
@@ -14363,7 +14368,7 @@ function renderRevenue() {
   if (slot === "side") { if (aside) aside.prepend(gbox); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, gbox); }
   box.classList.toggle("goal3", slot === "wide");
   const cashParts = cash ? [cashHeadEl()].concat(cashEl(per, r, today, r.from > last ? null : to)) : null;
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, cash ? null : status, err, revPriceEl(), slot === "top" ? gbox : null, cash ? cashParts : r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip], canSee("revenue") ? unsentEl() : null, arBar, cash || r.from > today ? null : table, ...(cash ? [] : notes)].flat().filter(Boolean)),
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, cash ? null : status, err, revPriceEl(), slot === "top" ? gbox : null, cash ? cashParts : r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip, focus ? jkBothEl(S, r.from, to) : null], canSee("revenue") ? unsentEl() : null, arBar, cash || r.from > today ? null : table, ...(cash ? [] : notes)].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [gbox] : []));
   if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
   // Restoration's kinds: sorted now when the days on screen have jobs never sorted (else every 10 minutes)
@@ -15259,7 +15264,7 @@ function revJobsDlg(dep, from, to0, kind) {
     // Restoration: by its kind too (Water damage, Mold, Fire and smoke, Not sorted)
     const kinds = st.dep === "r" && jkOn();
     if (!kinds) st.kind = "";
-    const shown = byDep(st.dep).filter(x => !st.kind || jkKindOf(x) === st.kind), jobs = shown.filter(x => x.first).length;
+    const shown = byDep(st.dep).filter(x => jkMatch(x, st.kind)), jobs = shown.filter(x => x.first).length;
     const dayText = d => { const x = lbDate(d), old = d.slice(0, 4) !== today.slice(0, 4);
       return [h("span", { class: "t-long", text: `${LB_WD[x.getDay()]} ${MONTHS[x.getMonth()]} ${x.getDate()}${old ? `, ${d.slice(0, 4)}` : ""}` }), h("span", { class: "t-short", text: `${x.getMonth() + 1}/${x.getDate()}${old ? `/${d.slice(2, 4)}` : ""}` })]; };
     const old = apiLevel && apiLevel < JOBS_API, reading = !old && (!days || missing > 0);
@@ -15269,9 +15274,11 @@ function revJobsDlg(dep, from, to0, kind) {
       h("div", { class: "seg rv-seg", role: "tablist", "aria-label": "Department" }, deps.map(([k, name]) =>
         h("button", { class: "seg-btn", type: "button", "data-k": k, "aria-pressed": String(k === st.dep), onclick: () => { st.dep = k; draw(); } },
           k !== "all" ? h("i", { class: "rev-dot " + k }) : null, name, h("em", { text: ` ${lbMoney(sum(byDep(k), x => x.c) / 100)}` })))),
-      kinds ? h("div", { class: "seg rv-seg rv-kinds", id: "rvKinds", role: "tablist", "aria-label": "Kind" }, [["", "All", ""]].concat(JK_KINDS, [JK_NONE]).filter(([k]) => k !== "u" || byDep("r").some(x => jkKindOf(x) === "u")).map(([k, , short]) =>
+      kinds ? h("div", { class: "seg rv-seg rv-kinds", id: "rvKinds", role: "tablist", "aria-label": "Kind" }, [["", "All", ""]].concat(JK_KINDS, [JK_NONE, JK_CHECK])
+        .filter(([k]) => (k !== "u" && k !== "b") || k === st.kind || byDep("r").some(x => jkMatch(x, k))).map(([k, , short]) =>
         h("button", { class: "seg-btn", type: "button", "data-kind": k, "aria-pressed": String(k === st.kind), onclick: () => { st.kind = k; draw(); } },
-          k ? h("i", { class: "rev-dot " + k }) : null, short || "All", h("em", { text: ` ${lbMoney(sum(byDep("r").filter(x => !k || jkKindOf(x) === k), x => x.c) / 100)}` })))) : null,
+          k === "b" ? "⚑ " : k ? h("i", { class: "rev-dot " + k }) : null, short || "All",
+          h("em", { text: k === "b" ? ` ${byDep("r").filter(x => x.first && jkFlag(x)).length}` : ` ${lbMoney(sum(byDep("r").filter(x => jkMatch(x, k)), x => x.c) / 100)}` })))) : null,
       shown.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table", id: "rvJobsTable" },
         h("thead", null, h("tr", null, h("th", { text: "Client" }), h("th", { class: "rv-proj", text: "Project" }), h("th", { class: "rv-inv", text: "Job" }), h("th", { text: "Day" }), h("th", { class: "rv-dep", text: "Department" }),
           h("th", { class: "rv-ch", text: "Charged" }), h("th", { class: "rv-pd", text: "Paid" }), h("th", { text: "Owes" }), h("th", { class: "rv-st", text: "Status" }))),
@@ -15310,6 +15317,12 @@ const K_JK = "voda.jobKinds";
 const jk = { kinds: store.get(K_JK) || {}, busy: false, left: 0, err: "", tried: 0, timer: 0 };
 const jkOn = () => !!session && apiLevel >= JK_API && canSee("revenue");
 const jkBase = x => String(x.inv || "").replace(/-\d+$/, "") || String(x.id || "");
+/** A job that's more than one kind (its type or tags name two, or its lines have money on two), not checked by an
+ *  admin yet: the other kinds ["m"], else null. */
+const jkFlag = x => { const row = jk.kinds[jkBase(x)]; return row && row[4] && row[1] !== "admin" ? String(row[4]).split(",").filter(k => "wmf".includes(k) && k) : null; };
+const JK_CHECK = ["b", "To check", "To check"];
+/** A kind's filter in the jobs window ("b": to check). */
+const jkMatch = (x, k) => !k || (k === "b" ? !!jkFlag(x) : jkKindOf(x) === k);
 /** A job's kind ("w", "m", "f"; "u": not sorted). x: { id, inv }. */
 const jkKindOf = x => { const k = (jk.kinds[jkBase(x)] || [])[0]; return k === "w" || k === "m" || k === "f" ? k : "u"; };
 /** The kinds from the Google script, which sorts the next few each call, until none are left (or it can't). */
@@ -15330,9 +15343,10 @@ async function jkLoad() {
   redraw();
 }
 /** Restoration's days from..to by kind: { w, m, f, u: [cents, jobs], cents, jobs (Restoration's), read, at }. A day read
- *  before the app kept its jobs: all Not sorted. unk: its jobs the Google script hasn't sorted yet. */
+ *  before the app kept its jobs: all Not sorted. unk: its jobs the Google script hasn't sorted yet. both: its jobs of
+ *  more than one kind for an admin to check. */
 function jkSum(days, from, to) {
-  const s = { w: [0, 0], m: [0, 0], f: [0, 0], u: [0, 0], cents: 0, jobs: 0, n: 0, read: 0, at: 0, unk: 0 };
+  const s = { w: [0, 0], m: [0, 0], f: [0, 0], u: [0, 0], cents: 0, jobs: 0, n: 0, read: 0, at: 0, unk: 0, both: 0 };
   for (let d = from; d <= to; d = lbAddDays(d, 1)) {
     s.n++;
     const v = days[d];
@@ -15347,6 +15361,7 @@ function jkSum(days, from, to) {
       if (k === "u") { if (x[8] && !jk.kinds[jkBase({ id: x[0], inv: x[1] })]) s.unk++; return; }
       const xc = Math.round(Number(x[4]) || 0), xj = x[8] ? 1 : 0;
       s[k][0] += xc; s[k][1] += xj; c += xc; j += xj;
+      if (xj && jkFlag({ id: x[0], inv: x[1] })) s.both++;
     });
     // the rest of the day's Restoration (a few cents of rounding aren't a job)
     const uc = rc - c, uj = Math.max(0, rj - j);
@@ -15361,17 +15376,24 @@ function jkAvgLines(days, from, to) {
   const x = jkSum(days, from, to);
   if (!(x.w[1] + x.m[1] + x.f[1])) return null;
   return h("div", { class: "rev-avg-kinds", id: "revAvgKinds" }, JK_KINDS.map(([k, name, short]) =>
-    h("div", { "data-k": k, title: name }, h("span", null, h("i", { class: "rev-dot " + k }), `${short} · ${revJobs(x[k][1])}`), h("b", { text: x[k][1] ? lbMoney(x[k][0] / 100 / x[k][1]) : "–" }))));
+    h("div", { "data-k": k, title: name }, h("span", null, h("i", { class: "rev-dot " + k }), `${short} · ${revJobs(x[k][1])}`), h("b", { text: x[k][1] ? lbMoney(x[k][0] / 100 / x[k][1]) : "–" }))),
+    x.both ? h("div", { class: "jk-both", id: "revAvgBoth" }, "⚑", h("button", { class: "linkish", type: "button", onclick: () => revJobsDlg("r", from, to, "b") },
+      `${revJobs(x.both)} with more than one kind: check ${x.both === 1 ? "its invoice" : "their invoices"}`)) : null);
 }
 /** Restoration on its own: what's not sorted, the sorting, and how it's sorted. */
-function jkNotes(S) {
+/** Restoration on its own, under its tiles: the jobs of more than one kind to check, and a button to them. */
+function jkBothEl(S, from, to) {
+  return S.both ? h("p", { class: "hint jk-both-line", id: "jkBoth" }, `⚑ ${revJobs(S.both)} ${S.both === 1 ? "is" : "are"} more than one kind (water and mold, say): ${S.both === 1 ? "its invoice" : "their invoices"} to check. `,
+    h("button", { class: "btn small", type: "button", id: "jkBothBtn", onclick: () => revJobsDlg("r", from, to, "b") }, "Show them")) : null;
+}
+function jkNotes(S, from, to) {
   const out = [];
   const left = jk.left, busy = jk.busy;
   if (busy && left) out.push(h("p", { class: "hint rev-status busy", id: "jkSorting", text: `Sorting Restoration's jobs from Housecall Pro… ${fmt(left)} left` }));
   if (jk.err && !busy) out.push(h("p", { class: "dlg-err", id: "jkErr" }, jk.err === "no_key" ? "Housecall Pro isn't connected, so jobs can't be sorted. Settings › Housecall Pro." : "Housecall Pro didn't answer, so some jobs aren't sorted yet. ",
     jk.err === "no_key" ? null : h("button", { class: "btn small", type: "button", onclick: () => { jk.err = ""; jk.tried = 0; jkLoad(); } }, "Try again")));
   if (S.u[0] || S.u[1]) out.push(h("p", { class: "hint", id: "jkUnsorted", text: `Not sorted: ${lbMoney(S.u[0] / 100)}, ${revJobs(S.u[1])}. ${busy ? "Being sorted now." : "Nothing in Housecall Pro said which yet"}${isAdmin() ? ": tap a tile, then pick on the job." : "."}` }));
-  out.push(howFold("jkHow", h("p", { class: "hint", text: "Each Restoration job is sorted once: its Job type or a tag that says Water, Mold or Fire (smoke, soot); else its invoice lines (a job that's both counts where the most money is: extraction, drying and wet materials are water; mold; fire, smoke and soot); else its description. An admin can change any job: tap a tile, then pick on the job (the app never changes it after). Money counts on each visit's day and a job counts once, as everywhere on Operations." }), "How jobs are sorted"));
+  out.push(howFold("jkHow", h("p", { class: "hint", text: "Each Restoration job is sorted once: its Job type or a tag that says Water, Mold or Fire (smoke, soot); else its invoice lines (a job that's both counts where the most money is: extraction, drying and wet materials are water; mold; fire, smoke and soot); else its description. A job of more than one kind (its type or tags name two, or another kind has a tenth or more of its lines' money) is flagged ⚑ to check its invoice, until an admin taps Checked or picks its kind. An admin can change any job: tap a tile, then pick on the job (the app never changes it after). Money counts on each visit's day and a job counts once, as everywhere on Operations." }), "How jobs are sorted"));
   return out;
 }
 /** A job's kind in its jobs window: an admin picks (Water, Mold, Fire; back to the app's own pick); others see it. */
@@ -15379,19 +15401,23 @@ function jkJobTag(x) {
   const base = jkBase(x), row = jk.kinds[base] || [], k = jkKindOf(x), name = k === "u" ? "Not sorted" : JK_KINDS.find(z => z[0] === k)[2];
   const title = row[1] === "admin" ? `Set by ${row[3] || "an admin"}` : row[1] === "lines" ? `Its invoice lines: ${row[2]}` : row[1] === "type" ? `Its Job type: ${row[2]}`
     : row[1] === "tag" ? `Its tag: ${row[2]}` : row[1] === "notes" ? `Its description: ${row[2]}` : row[1] === "none" ? "Nothing in Housecall Pro said which" : "Not sorted yet";
-  if (!isAdmin()) return h("span", { class: "jk-tag " + k, "data-base": base, title, text: name });
+  const also = jkFlag(x), NAMES = { w: "Water", m: "Mold", f: "Fire" };
+  const flag = also && also.length ? h("span", { class: "jk-check", "data-check": base, title: `Its invoice has more than one kind: ${title}`, text: `⚑ Check: also ${also.map(a => NAMES[a]).join(", ")}` }) : null;
+  const okBtn = flag && isAdmin() && k !== "u" ? h("button", { class: "linkish jk-ok", type: "button", "data-ok": base, title: `The invoice is checked: it stays ${name}`, onclick: e => { e.stopPropagation(); jkSet(base, k, true); } }, "Checked") : null;
+  if (!isAdmin()) return h("span", null, h("span", { class: "jk-tag " + k, "data-base": base, title, text: name }), flag);
   const sel = h("select", { class: "jk-sel " + k, "data-base": base, "aria-label": `Kind of job #${base}`, title, onclick: e => e.stopPropagation(), onchange: e => jkSet(base, e.target.value) },
     JK_KINDS.map(([kk, , short]) => h("option", { value: kk, text: short })),
     k === "u" ? h("option", { value: "u", text: "Not sorted", disabled: true }) : null,
     row[1] === "admin" ? h("option", { value: "", text: "The app's pick" }) : null);
   sel.value = k;
-  return sel;
+  return flag ? h("span", null, sel, flag, okBtn) : sel;
 }
-async function jkSet(base, k) {
+/** An admin's kind for a job (checked: the same kind, its invoice looked at). */
+async function jkSet(base, k, checked) {
   try {
     const out = await api("setJobKind", { base, kind: k });
     jk.kinds = out.kinds || jk.kinds; store.set(K_JK, jk.kinds);
-    toast(k ? `#${base}: ${JK_KINDS.find(z => z[0] === k)[1]}` : `#${base}: back to the app's pick`);
+    toast(checked ? `#${base} checked: ${JK_KINDS.find(z => z[0] === k)[1]}` : k ? `#${base}: ${JK_KINDS.find(z => z[0] === k)[1]}` : `#${base}: back to the app's pick`);
     if (!k) { jk.tried = 0; setTimeout(jkLoad, 0); }
   } catch (e) { toast(e && e.error === "not_allowed" ? "Only admins change a job's kind." : errText(e, "The change")); }
   if (view.tab === "revenue") renderRevenue();
