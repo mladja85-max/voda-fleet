@@ -953,6 +953,8 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 .ec-count { margin-left: auto; font-size: .82rem; font-weight: 700; color: var(--muted); }
 .ec-bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; } .ec-bar i { display: block; height: 100%; background: var(--ok); }
 .ec-sec { margin: 8px 0 0; font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.ec-sec.ec-other { color: var(--warn, #b45309); border-top: 1px dashed var(--line, #ddd); padding-top: 8px; margin-top: 12px; }
+.ec-per { font-weight: 400; }
 .ec-row { border-top: 1px solid var(--line); padding: 8px 0; display: grid; gap: 8px; }
 .ec-sec + .ec-row { border-top: 0; }
 .ec-row.next { background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 8px; padding: 8px; margin: 0 -8px; border-top-color: transparent; }
@@ -18391,7 +18393,7 @@ function renderEstimates() {
   // nothing created in these days: says so (and where Housecall Pro's estimates start) instead of tiles full of zeros
   if (!listAll.length && doc.done && !estSync.busy) {
     const first = (doc.years || []).length ? Math.min(...doc.years) : 0;
-    const calls = estCallsEl(today, all, all ? estView.who || "" : "");
+    const calls = estCallsEl(today, all, all ? estView.who || "" : "", { from: r.from, to, label: r.label });
     const main = [...head, h("div", { class: "panel est-empty", id: "estEmpty" },
       h("p", null, h("b", { text: `No estimates in ${r.label}.` }),
         first && Number(r.to.slice(0, 4)) < first ? ` Housecall Pro's estimates start in ${first}.` : r.from > today ? "" : " Every estimate in Housecall Pro is read; none were scheduled (or made) in these days."))];
@@ -18510,7 +18512,7 @@ function renderEstimates() {
   // Today's calls: the person picked; else one department's tile picked (Restoration or Repairs): its In charge's calls,
   // as a person's tile does (Cleaning's calls are the office's)
   const deptPicked = !who && sel.length === 1 && ["r", "p"].includes(sel[0]) ? sel[0] : "";
-  const calls = estCallsEl(today, all, who || (deptPicked ? leadOf(deptPicked) : ""));
+  const calls = estCallsEl(today, all, who || (deptPicked ? leadOf(deptPicked) : ""), { from: r.from, to, label: r.label });
   const main = [...head, tiles, people, how, listBox].filter(Boolean);
   box.replaceChildren(...(calls ? [h("div", { class: "est-main" }, ...main), calls] : main));
 }
@@ -18706,34 +18708,46 @@ function estCallRowEl(c, next, showWho) {
     btns, form ? estCallFormEl(e) : null);
 }
 /** The panel (null with an older Google script, or for someone who can't see estimates). who: the person picked
- *  (someone who sees them all), or "" for everyone's. */
-function estCallsEl(today, all, who) {
+ *  (someone who sees them all), or "" for everyone's. per: the period picked ({ from, to, label }): the clients whose
+ *  estimate's day is in it; a call back due today on one from another day comes after them, on its own. */
+function estCallsEl(today, all, who, per) {
   if (!estData || (apiLevel && apiLevel < EST_CALLS_API) || !Array.isArray(estData.callDays)) return null;
   const days = estData.callDays.length ? estData.callDays : EST_CALL_DAYS_DEF, from = estData.sentFrom || "";
-  const pool = estData.estimates.concat((estOther[estData.year - 1] || {}).estimates || []);
+  const seen = new Set(), pool = [];
+  // this year and last, and the period's own days (an older year picked)
+  [estData.estimates, (estOther[estData.year - 1] || {}).estimates || [], per ? estFor(per.from, per.to) || [] : []]
+    .forEach(l => l.forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); pool.push(e); } }));
   const mine = pool.filter(e => !all || !who || estOwners(e).includes(who));
   // the youngest to the oldest: the estimate's own day, then its number
   const eday = c => c.e.day || c.sent || "";
-  const due = mine.map(e => estCallDue(e, today, days, from)).filter(Boolean)
-    .sort((a, b) => eday(a) < eday(b) ? 1 : eday(a) > eday(b) ? -1 : Number(b.e.n) - Number(a.e.n) || 0);
+  const inPer = c => !per || (eday(c) >= per.from && eday(c) <= per.to);
+  const byDay = (a, b) => eday(a) < eday(b) ? 1 : eday(a) > eday(b) ? -1 : Number(b.e.n) - Number(a.e.n) || 0;
+  const every = mine.map(e => estCallDue(e, today, days, from)).filter(Boolean);
+  const other = per ? every.filter(c => !inPer(c) && c.due.kind === "cb").sort(byDay) : [];
+  const due = every.filter(inPer).sort(byDay).concat(other);
   const done = due.filter(c => c.done).length, nextId = (due.find(c => !c.done) || {}).e;
   const fold = store.get(K_EST_CALLS_FOLD) === true;
   // a line for each month (the estimate's own day)
   const sec = c => { const d = eday(c); return d ? new Date(`${d}T12:00:00Z`).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) : "No day"; };
   const body = [];
   let at = "";
-  due.forEach(c => { const t = sec(c); if (t !== at) { at = t; body.push(h("p", { class: "ec-sec", text: t })); } body.push(estCallRowEl(c, nextId === c.e, all && !who)); });
+  due.forEach(c => {
+    const t = per && !inPer(c) ? "Call backs due · other days" : sec(c);
+    if (t !== at) { at = t; body.push(h("p", { class: "ec-sec" + (per && !inPer(c) ? " ec-other" : ""), text: t })); }
+    body.push(estCallRowEl(c, nextId === c.e, all && !who));
+  });
   const soon = mine.map(e => { const l = estCallMarks(e).slice(-1)[0]; return e.st === "open" && l && l.cb && l.cb > today && l.cb <= lbAddDays(today, 7) ? l.cb : ""; }).filter(Boolean).sort();
   return h("section", { class: "panel est-calls" + (fold ? " folded" : ""), id: "estCalls", "aria-label": "Today's calls" },
     h("div", { class: "ec-head" },
-      h("h3", null, "Today's calls", all ? h("small", { text: who ? ` · ${who}` : " · everyone's" }) : null),
+      h("h3", null, "Today's calls", all ? h("small", { text: who ? ` · ${who}` : " · everyone's" }) : null,
+        per ? h("small", { class: "ec-per", id: "ecPer", text: ` · ${per.label}` }) : null),
       h("span", { class: "ec-count", id: "ecCount", text: due.length ? (done === due.length ? "All done ✓" : `${done} of ${due.length} done`) : "None today" }),
       h("button", { class: "btn small ghost ec-fold", type: "button", "aria-expanded": String(!fold), onclick: () => { store.set(K_EST_CALLS_FOLD, !fold); renderEstimates(); } }, fold ? "Show" : "Hide")),
     fold ? null : [
       due.length ? h("div", { class: "ec-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(due.length), "aria-valuenow": String(done) }, h("i", { style: `width:${Math.round(done / due.length * 100)}%` })) : null,
       due.length ? h("div", { class: "ec-list", id: "ecList" }, body)
-        : h("p", { class: "lb-sub", id: "ecNone", text: `No open estimates to call.${soon.length ? ` Next call back: ${lbDayText(soon[0])}${soon.length > 1 ? ` (${soon.length} this week)` : ""}.` : ""}` }),
-      howFold("estCallsHow", h("p", { class: "lb-sub" }, "Every open estimate that's been sent to the client is here every day, from the youngest to the oldest (the estimate's own day), until someone speaks with them and sets no day to call again, it's booked, or Don't call again. Call back… takes it off until the day picked. Each day starts fresh: today's calls show as done, and each row keeps its last call and how many tries. Not sent yet: in the list's Not sent, not here. Cleaning estimates are the office's (Office › Estimates)."))]);
+        : h("p", { class: "lb-sub", id: "ecNone", text: `No open estimates to call${per ? ` in ${per.label}` : ""}.${soon.length ? ` Next call back: ${lbDayText(soon[0])}${soon.length > 1 ? ` (${soon.length} this week)` : ""}.` : ""}` }),
+      howFold("estCallsHow", h("p", { class: "lb-sub" }, "Every open estimate that's been sent to the client in the days picked above (Day, Week, Month, Year or Dates: the estimate's own day) is here every day, from the youngest to the oldest, for the person or department picked. A call back due today on an estimate from other days comes last, on its own. Each stays until someone speaks with them and sets no day to call again, it's booked, or Don't call again. Call back… takes it off until the day picked. Each day starts fresh: today's calls show as done, and each row keeps its last call and how many tries. Not sent yet: in the list's Not sent, not here. Cleaning estimates are the office's (Office › Estimates)."))]);
 }
 
 /* ---- Admins: Mark sent, on an open estimate the app reads as not sent (sent before the app kept "sent", and Housecall
