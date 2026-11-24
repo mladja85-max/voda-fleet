@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 133;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 134;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -4773,7 +4773,7 @@ const SRV_MAP = "SRV_MAP";   // (before the tab) Script Property: { "service nam
 // each service name's column, on its own tab (a Script Property holds 9 KB: a year's names didn't fit)
 const SRV_MAP_SHEET = "Service columns", SRV_MAP_COLS = ["Name in Housecall Pro", "Column"];
 const SRV_KEYS = ["carpet", "comcarpet", "stretch", "rugin", "rugplant", "uph", "hfpolish", "hfsandless", "vct", "maid", "tile", "water", "mold", "duct", "repair",
-  "maxcarpet", "maxrug", "maxuph", "sealer", "spots", "deodor", "ccfee", "disc", "sdisc", "skip"];
+  "maxcarpet", "maxrug", "maxuph", "sealer", "spots", "deodor", "ccfee", "disc", "sdisc", "skip", "job"];   // job: by the job's department
 function srvSheet_(create) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(SRV_SHEET);
@@ -4882,7 +4882,10 @@ function srvRead_(req) {
     items.push([id, j.day, j.dep, j.inv, j.type, j.c, h ? h.lines : null]);
   });
   items.sort(function (a, b) { return a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0; });
-  return { ok: true, items: items, left: left, map: srvMap_(), at: at ? new Date(at).toISOString() : "" };
+  // "By the job" only to an app that knows it (an older one guesses by the job anyway); fixJob: the one-time fix is done
+  const map = srvMap_();
+  if (!req.byJob) Object.keys(map).forEach(function (n) { if (map[n] === "job") delete map[n]; });
+  return { ok: true, items: items, left: left, map: map, at: at ? new Date(at).toISOString() : "", fixJob: PropertiesService.getScriptProperties().getProperty("SRV_FIX") === "job1" };
 }
 function srvMap_() {
   const s = SpreadsheetApp.getActive().getSheetByName(SRV_MAP_SHEET);
@@ -4898,7 +4901,9 @@ function srvMap_() {
   try { m = JSON.parse(PropertiesService.getScriptProperties().getProperty(SRV_MAP) || "{}") || {}; } catch (e) { m = {}; }
   return m && typeof m === "object" ? m : {};
 }
-/** Admins: the service map, { map: { name: key } } merged in (a key of "" takes a name off, back to the app's guess). */
+/** Admins: the service map, { map: { name: key } } merged in (a key of "" takes a name off, back to the app's guess).
+ *  fix "job1": the one-time fix (names saved as Water damage or Repair only because that was their guess on most of
+ *  their jobs, made By the job) is done. */
 function srvMapPut_(req) {
   const m = srvMap_(), add = req.map && typeof req.map === "object" ? req.map : null;
   if (!add) return { ok: false, error: "bad_request" };
@@ -4915,6 +4920,7 @@ function srvMapPut_(req) {
     s.getRange(2, 1, names.length, 2).setNumberFormat("@").setValues(names.map(function (n) { return [/^[=+\-@]/.test(n) ? "'" + n : n, m[n]]; }));
   }
   PropertiesService.getScriptProperties().deleteProperty(SRV_MAP);
+  if (req.fix === "job1") PropertiesService.getScriptProperties().setProperty("SRV_FIX", "job1");
   return { ok: true, map: m };
 }
 
