@@ -6058,7 +6058,8 @@ async function apiOnce(action, data, ms) {
     throw { error: "network" };
   } finally {
     clearTimeout(timer);
-    speedNote(action, performance.now() - t0, out && typeof out._ms === "number" ? out._ms : null, size, !!(out && out.ok));
+    speedNote(action, performance.now() - t0, out && typeof out._ms === "number" ? out._ms : null, size, !!(out && out.ok),
+      out && typeof out._hcp === "number" ? out._hcp : null, out && typeof out._lock === "number" ? out._lock : null);
   }
 }
 /* ---- Speed: every request this device sends is timed (from sending it to its answer being in; the Google script's own
@@ -6067,9 +6068,10 @@ async function apiOnce(action, data, ms) {
 const K_SPEED = "voda.speed", SPEED_KEEP = 400, SPEED_EVERY = 10 * 60e3, SPEED_API = 135;
 const speedLog = (() => { const v = store.get(K_SPEED); return v && Array.isArray(v.list) ? v : { list: [], sent: 0 }; })();
 let speedSaveT = 0, speedSending = false, speedOpened = false;
-function speedNote(action, ms, server, bytes, ok) {
+function speedNote(action, ms, server, bytes, ok, hcp, lock) {
   if (action === "speedPut" || action === "speedRead") return;
-  speedLog.list.push([Date.now(), String(action || ""), Math.round(ms), server == null ? -1 : Math.round(server), bytes || 0, ok ? 1 : 0]);
+  speedLog.list.push([Date.now(), String(action || ""), Math.round(ms), server == null ? -1 : Math.round(server), bytes || 0, ok ? 1 : 0,
+    hcp == null ? -1 : Math.round(hcp), lock == null ? -1 : Math.round(lock)]);
   if (speedLog.list.length > SPEED_KEEP) speedLog.list.splice(0, speedLog.list.length - SPEED_KEEP);
   clearTimeout(speedSaveT); speedSaveT = setTimeout(() => store.set(K_SPEED, speedLog), 2000);
 }
@@ -6082,7 +6084,7 @@ async function speedSend() {
   speedSending = true;
   try {
     const now = Date.now();
-    await api("speedPut", { device: speedDevice(), rows: fresh.map(([at, a, t, sv, b, ok]) => [Math.max(0, now - at), a, t, sv, b, ok]) });
+    await api("speedPut", { device: speedDevice(), rows: fresh.map(([at, a, t, sv, b, ok, hp, lk]) => [Math.max(0, now - at), a, t, sv, b, ok, hp == null ? -1 : hp, lk == null ? -1 : lk]) });
     speedLog.sent = fresh[fresh.length - 1][0]; store.set(K_SPEED, speedLog);
   } catch (e) { /* the next time */ }
   finally { speedSending = false; }
@@ -16334,12 +16336,14 @@ const speedPct = (list, p) => { if (!list.length) return null; const a = list.sl
 /** This device's own requests in the last `days` days, as the Google script sums everyone's. */
 function speedLocal(days) {
   const cut = Date.now() - days * 864e5, by = {};
-  for (const [at, a, t, sv, b, ok] of speedLog.list) {
+  for (const [at, a, t, sv, b, ok, hp, lk] of speedLog.list) {
     if (at < cut || a === "speedPut") continue;
-    const x = by[a] || (by[a] = { t: [], s: [], kb: [], f: 0 });
+    const x = by[a] || (by[a] = { t: [], s: [], kb: [], h: [], l: [], f: 0 });
     x.t.push(t); if (sv >= 0) x.s.push(sv); x.kb.push(b / 1024); if (!ok) x.f++;
+    if (hp >= 0) x.h.push(hp); if (lk >= 0) x.l.push(lk);
   }
-  return Object.entries(by).map(([a, x]) => ({ a, n: x.t.length, p50: speedPct(x.t, 0.5), p90: speedPct(x.t, 0.9), max: speedPct(x.t, 1), s50: speedPct(x.s, 0.5), kb: speedPct(x.kb, 0.5), f: x.f }));
+  return Object.entries(by).map(([a, x]) => ({ a, n: x.t.length, p50: speedPct(x.t, 0.5), p90: speedPct(x.t, 0.9), max: speedPct(x.t, 1), s50: speedPct(x.s, 0.5), kb: speedPct(x.kb, 0.5), f: x.f,
+    h50: speedPct(x.h, 0.5), l50: speedPct(x.l, 0.5) }));
 }
 /** Settings › Speed (admins): how long each screen waits for the Google script, on everyone's devices. */
 async function openSpeed() {
@@ -16349,11 +16353,14 @@ async function openSpeed() {
   const slowCls = x => (x.p50 >= 3000 || x.p90 >= 8000 ? " spd-slow" : x.p50 >= 1500 || x.p90 >= 4000 ? " spd-mid" : "");
   const actTable = (list, id) => h("div", { class: "lb-scroll" }, h("table", { class: "lb-table spd-table", id },
     h("thead", null, h("tr", null, h("th", { text: "Screen or request" }), h("th", { class: "num", text: "Times" }), h("th", { class: "num", text: "Typical" }), h("th", { class: "num", text: "Slow (1 in 10)" }),
-      h("th", { class: "num", text: "Slowest" }), h("th", { class: "num", text: "Script's part" }), h("th", { class: "num", text: "Size" }))),
+      h("th", { class: "num", text: "Slowest" }), h("th", { class: "num", text: "Script's part" }), h("th", { class: "num", title: "Of the script's part: waiting on Housecall Pro", text: "Housecall Pro" }),
+      h("th", { class: "num", title: "Of the script's part: waiting for another save to finish", text: "Waiting" }), h("th", { class: "num", text: "Size" }))),
     h("tbody", null, list.sort((p, q) => (q.p90 || 0) - (p.p90 || 0)).map(x => h("tr", { "data-a": x.a, class: slowCls(x).trim() },
       h("th", null, speedName(x.a), x.f ? h("small", { class: "spd-f", text: ` · ${fmt(x.f)} failed` }) : null),
       h("td", { class: "num", text: fmt(x.n) }), h("td", { class: "num" + slowCls(x), text: speedSec(x.p50) }), h("td", { class: "num", text: speedSec(x.p90) }),
-      h("td", { class: "num", text: speedSec(x.max) }), h("td", { class: "num", text: x.a === "(app open)" ? "–" : speedSec(x.s50) }), h("td", { class: "num", text: x.kb == null ? "–" : `${x.kb < 10 ? x.kb.toFixed(1) : Math.round(x.kb)} KB` }))))));
+      h("td", { class: "num", text: speedSec(x.max) }), h("td", { class: "num", text: x.a === "(app open)" ? "–" : speedSec(x.s50) }),
+      h("td", { class: "num", text: x.h50 ? speedSec(x.h50) : "–" }), h("td", { class: "num", text: x.l50 ? speedSec(x.l50) : "–" }),
+      h("td", { class: "num", text: x.kb == null ? "–" : `${x.kb < 10 ? x.kb.toFixed(1) : Math.round(x.kb)} KB` }))))));
   const draw = () => {
     const seg = h("div", { class: "seg", role: "group", "aria-label": "Days" }, [[1, "Today"], [7, "7 days"], [14, "14 days"]].map(([d, t]) =>
       h("button", { class: "seg-btn" + (d === days ? " on" : ""), type: "button", "data-d": String(d), "aria-pressed": String(d === days), text: t, onclick: () => { days = d; store.set("voda.speedDays", d); load(); } })));
@@ -16376,7 +16383,7 @@ async function openSpeed() {
             h("td", { text: `${x.who} · ${x.device}` }), h("th", { text: speedName(x.a) }), h("td", { class: "num", text: speedSec(x.t) }), h("td", { class: "num", text: speedSec(x.s) })); }))))) : null,
       h("details", { class: "spd-fold", id: "spdMine" }, h("summary", null, h("b", { text: "This device only (sent or not)" })),
         mine.length ? actTable(mine, "spdMineTable") : h("p", { class: "lb-sub", text: "Nothing timed on this device in these days." })),
-      howFold("spdHow", h("p", { class: "hint", text: "Each request: from the moment the app sends it to the moment its answer is in. Typical: half of them are faster. Slow: 1 in 10 is slower. Script's part: the Google script's own work (reading the Sheet, asking Housecall Pro); the rest is Google starting the script and the internet. Each device sends what it timed every 10 minutes while the app is open; two weeks are kept on the Speed tab. Only the names of the screens, the times and the sizes: nothing about clients." })));
+      howFold("spdHow", h("p", { class: "hint", text: "Each request: from the moment the app sends it to the moment its answer is in. Typical: half of them are faster. Slow: 1 in 10 is slower. Script's part: the Google script's own work; of it, Housecall Pro: waiting on Housecall Pro's answers, and Waiting: waiting for another save to finish first. The rest of the script's part is the Google Sheet. The rest of the whole wait is Google starting the script and the internet. Each device sends what it timed every 10 minutes while the app is open; two weeks are kept on the Speed tab. Only the names of the screens, the times and the sizes: nothing about clients." })));
   };
   const load = async () => {
     cur = null; draw();
