@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 144;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 145;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -7928,10 +7928,16 @@ function priceWatchSetup() {
    jobs on the schedule from that day on. One row a visit on the Bookings tab; a job's visits ("1234-2") are one job. ---- */
 const BK_SHEET = "Bookings";
 const BK_COLS = ["Job id", "Job #", "Created at", "First seen", "Booked day", "Booked at", "Booked $", "Service day", "Tagged by", "Customer id", "Client",
-  "From estimate", "Now $", "Job status", "Done at", "Last seen", "Card fee $", "Fee read at $", "Tags", "Job type"];
-const BK = { day: 4, at: 5, bc: 6, svc: 7, tag: 8, cust: 9, client: 10, est: 11, now: 12, st: 13, done: 14, seen: 15, fee: 16, feeAt: 17, tags: 18, type: 19 };
+  "From estimate", "Now $", "Job status", "Done at", "Last seen", "Card fee $", "Fee read at $", "Tags", "Job type", "Owes $"];
+const BK = { day: 4, at: 5, bc: 6, svc: 7, tag: 8, cust: 9, client: 10, est: 11, now: 12, st: 13, done: 14, seen: 15, fee: 16, feeAt: 17, tags: 18, type: 19, owes: 20 };
 const BK_FROM = "BK_FROM", BK_ERR = "BK_ERR", BK_AHEAD = "BK_AHEAD_DAY";
 const BK_AHEAD_DAYS = 93;  // once a day: the jobs on the schedule for today and the next 3 months
+const BK_BACK_DAYS = 14;   // ... and the last two weeks' (a job finished or paid since it last changed)
+const BK_AHEAD_V = "|b";   // the daily read's version (a new one reads again the same day: after an update)
+/** Done: finished in Housecall Pro, or its invoice paid in full (it came to something, nothing owed) once its day has
+ *  gone by (a tech who didn't tap Finish). */
+function bkPaid_(cents, owes, svcDay, today) { return cents > 0 && owes === 0 && !!svcDay && svcDay < today; }
+const bkOwes_ = function (job) { return job.outstanding_balance === undefined || job.outstanding_balance === null || job.outstanding_balance === "" ? null : Math.round(Number(job.outstanding_balance) || 0); };
 const BK_FEE_MAX = 25;     // serviced jobs' card fees read a check (their line items); the rest at the next one
 const BK_MARK_DAYS = 3;    // a Booked mark counts for a job booked up to 3 days before or after it
 /** The name on a "Booked: <name>" tag (also "Booked by <name>", "Booked - <name>"), or "". */
@@ -7964,14 +7970,16 @@ function bkStep_(jobs, now) {
   const fromMs = Date.parse(from) || now, fromDay = Utilities.formatDate(new Date(fromMs), tz, "yyyy-MM-dd");
   const today = Utilities.formatDate(new Date(now), tz, "yyyy-MM-dd");
   let list = (jobs || []).slice(), ahead = 0;
-  if (String(P.getProperty(BK_AHEAD) || "") !== today) {
+  if (String(P.getProperty(BK_AHEAD) || "") !== today + BK_AHEAD_V) {
     let ok = true;
-    for (let k = 0; k < BK_AHEAD_DAYS && ok; k += HCP_MAX_DAYS) {
-      const got = hcpJobsIn_(tmAddDays_(today, k), tmAddDays_(today, Math.min(k + HCP_MAX_DAYS, BK_AHEAD_DAYS) - 1));
+    for (let k = -BK_BACK_DAYS; k < BK_AHEAD_DAYS && ok; k += HCP_MAX_DAYS) {   // the last two weeks, today and the next 3 months
+      const to = Math.min(k + HCP_MAX_DAYS, k < 0 ? 0 : BK_AHEAD_DAYS) - 1;
+      const got = hcpJobsIn_(tmAddDays_(today, k), tmAddDays_(today, to));
       if (got.error) ok = false;
       else { list = list.concat(got.jobs); ahead += got.jobs.length; }
+      if (k < 0) k = -HCP_MAX_DAYS;   // then from today
     }
-    if (ok) P.setProperty(BK_AHEAD, today);
+    if (ok) P.setProperty(BK_AHEAD, today + BK_AHEAD_V);
   }
   const once = {};
   const mine = list.filter(function (j) {
@@ -7987,8 +7995,8 @@ function bkStep_(jobs, now) {
   const fee = {};
   let reads = 0;
   mine.forEach(function (j) {
-    if (!/complete/i.test(String(j.work_status || ""))) return;
     const cents = Math.round(Number(j.total_amount) || 0), r = had[String(j.id)];
+    if (!/complete/i.test(String(j.work_status || "")) && !bkPaid_(cents, bkOwes_(j), bkSvcDay_(j, tz), today)) return;
     if (r && bkNum_(r[BK.feeAt]) === cents) return;   // read at this amount already
     if (!cents) { fee[j.id] = 0; return; }
     if (reads >= BK_FEE_MAX) return;
@@ -8034,6 +8042,7 @@ function bkKeep_(jobs, now, fee) {
     r[1] = String(job.invoice_number || ""); r[BK.svc] = bkSvcDay_(job, tz); r[BK.tag] = bkTagWho_(job.tags);
     r[BK.cust] = String((job.customer && job.customer.id) || job.customer_id || ""); r[BK.client] = hcpClient_(job); r[BK.est] = ests.join(",").slice(0, 400);
     r[BK.type] = hcpJobType_(job).slice(0, 80);
+    const ow = bkOwes_(job); r[BK.owes] = ow === null ? "" : ow / 100;
     r[BK.now] = cents / 100; r[BK.st] = st; r[BK.done] = String(wt.completed_at || ""); r[BK.seen] = at;
     if (Object.prototype.hasOwnProperty.call(fee, id)) { r[BK.fee] = fee[id] / 100; r[BK.feeAt] = cents / 100; }
     r[BK.tags] = tags.join(", ").slice(0, 300);
@@ -8049,19 +8058,20 @@ function bkKeep_(jobs, now, fee) {
  *  every visit not canceled is serviced, what they came to (later visits too, less card fees). Booked before the app
  *  kept them (pre): its amount is the one first seen (seen: that day). */
 function bkGroups_(rows, tz, fromMs) {
-  const by = {};
+  const by = {}, today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
   rows.forEach(function (r) {
     const inv = String(r[1] || "").trim(), base = inv.replace(/-\d+$/, "");
     if (!base) return;
     const st = String(r[BK.st] || "");
     (by[base] || (by[base] = [])).push({ inv: inv, jid: String(r[0] || ""), type: String(r[BK.type] || ""), first: hcpFirstVisit_({ invoice_number: inv }), bday: pcDay_(r[BK.day], tz), sday: pcDay_(r[BK.svc], tz), bc: bkNum_(r[BK.bc]),
-      tag: String(r[BK.tag] || ""), cust: String(r[BK.cust] || ""), client: String(r[BK.client] || ""), ests: String(r[BK.est] || "").split(",").filter(Boolean),
-      now: bkNum_(r[BK.now]) || 0, can: /cancel/i.test(st), done: /complete/i.test(st), fee: bkNum_(r[BK.fee]) || 0,
+      owes: bkNum_(r[BK.owes]), tag: String(r[BK.tag] || ""), cust: String(r[BK.cust] || ""), client: String(r[BK.client] || ""), ests: String(r[BK.est] || "").split(",").filter(Boolean),
+      now: bkNum_(r[BK.now]) || 0, can: /cancel/i.test(st), fin: /complete/i.test(st), fee: bkNum_(r[BK.fee]) || 0,
       pre: (Date.parse(bkIso_(r[2])) || 0) < fromMs, seen: pcDay_(r[3] instanceof Date ? r[3] : new Date(String(r[3] || "")), tz) });
   });
   const out = [];
   Object.keys(by).forEach(function (base) {
     const vs = by[base], first = vs.filter(function (v) { return v.first && v.bday && v.sday; })[0];
+    vs.forEach(function (v) { v.done = v.fin || bkPaid_(v.now, v.owes, v.sday, today); });   // finished, or paid in full once its day went by
     if (!first) return;   // its first visit isn't on the schedule (or was made, and done, before the app kept them)
     const booking = vs.filter(function (v) { return v.bday === first.bday; }), live = vs.filter(function (v) { return !v.can; });
     let bc = 0;
@@ -8071,7 +8081,7 @@ function bkGroups_(rows, tz, fromMs) {
     const ests = [];
     vs.forEach(function (v) { v.ests.forEach(function (e) { if (ests.indexOf(e) === -1) ests.push(e); }); });
     const typed = [first].concat(vs).filter(function (v) { return v.type; })[0];
-    out.push({ key: base, jid: first.jid, type: typed ? typed.type : "", inv: first.inv, day: first.sday, bday: first.bday, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
+    out.push({ key: base, jid: first.jid, type: typed ? typed.type : "", pf: st === "d" && live.some(function (v) { return !v.fin; }), inv: first.inv, day: first.sday, bday: first.bday, bc: bc, fc: st === "d" ? live.reduce(function (n, v) { return n + v.now - v.fee; }, 0) : null, st: st, n: vs.length,
       tag: tagged ? tagged.tag : "", cust: first.cust, client: first.client, ests: ests, pre: first.pre, seen: first.pre ? first.seen : "" });
   });
   return out;
@@ -8163,6 +8173,7 @@ function bkJobsOut_(groups) {
     const j = { key: g.key, jid: g.jid, type: type, dep: type ? revDept_(type) : "", inv: g.inv, day: g.day, bday: g.bday, by: person(g.name, g.how), name: String(g.name || ""), how: g.how || "", client: g.client, bc: g.bc, fc: g.fc, st: g.st, n: g.n,
       seen: g.seen || "" };
     if (g.pickBy) { j.pickBy = g.pickBy; j.pickAt = g.pickAt; }
+    if (g.pf) j.pf = true;   // done by its invoice paid in full: not finished in Housecall Pro
     return j;
   }).sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : a.inv < b.inv ? 1 : -1; });
 }
