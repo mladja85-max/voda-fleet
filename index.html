@@ -926,6 +926,7 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
 /* Estimates › Today's calls: beside the list on a wide screen (the page gets wider for it), above it otherwise */
 .est-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
 .est-calls { order: -1; gap: 6px; }
+.ec-who .ec-last { display: block; font-size: .74rem; color: var(--muted); font-style: italic; }
 .ec-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .ec-head h3 { margin: 0; } .ec-head h3 small { font-weight: 600; color: var(--muted); font-size: .8rem; }
 .ec-count { margin-left: auto; font-size: .82rem; font-weight: 700; color: var(--muted); }
@@ -18118,41 +18119,36 @@ function renderEstimates() {
   box.replaceChildren(...(calls ? [h("div", { class: "est-main" }, ...main), calls] : main));
 }
 
-/* ---- Estimates › Today's calls: whoever's in charge of an estimate calls the client after it's sent, on the call days
-   (1, 2, 3, 7 and 14 days after it's sent; an admin can change them) and on the day a call back was asked for, until
-   someone speaks with them (and sets no day to call again), it's booked, or Don't call again. A call day missed stays
-   on the list EST_CALL_GRACE more days. The order to call in: call backs due, then the newest sent to the oldest; the
-   first not called yet is "Call next". Cleaning estimates are the office's (Office › Estimates); Freddy's visits aren't
-   estimates. Beside the list on a wide screen, above it otherwise. ---- */
+/* ---- Estimates › Today's calls: every open estimate that's been sent (not approved, declined or canceled), every day,
+   from the youngest to the oldest (the estimate's own day), until someone speaks with them (and sets no day to call
+   again), it's booked, or Don't call again; a call back asked for a later day takes it off until that day. Each day
+   starts fresh: today's call shows as done; each row has its last call and how many tries. The first not called yet is
+   "Call next". Not sent: not here (the list's Not sent). Cleaning estimates are the office's (Office › Estimates);
+   Freddy's visits aren't estimates. Beside the list on a wide screen, above it otherwise. ---- */
 const EST_CALLS_API = 105;                                // the Google script version with calls on estimates
-const EST_CALL_GRACE = 2;
 const EST_CALL_DAYS_DEF = [1, 2, 3, 7, 14];
 const EST_CALL_TEXT = { nr: "No answer", vm: "Voicemail", sw: "Spoke with", cb: "Call back", booked: "Booked", dnc: "Don't call again" };
 const EST_CALL_WHO = [["client", "Client"], ["pm", "Property manager"], ["adjuster", "Adjuster"], ["other", "Someone else"]];
 const EST_CALL_SOON = [[1, "Tomorrow"], [3, "In 3 days"], [7, "In a week"], [14, "In 2 weeks"], [30, "In a month"]];
 const K_EST_CALLS_FOLD = "voda.estCallsFold";
-let estCallOpen = "", estCallSure = "", estCallForm = null, estCallDaysEdit = false;   // the row with its buttons open; Don't call's second tap; Spoke with / Call back's box
+let estCallOpen = "", estCallSure = "", estCallForm = null;   // the row with its buttons open; Don't call's second tap; Spoke with / Call back's box
 const estDayGap = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
 /** An estimate's calls as they stand (a clear takes back the one before it). */
 const estCallMarks = e => { const ms = []; (e.calls || []).forEach(m => { if (m.r) ms.push(m); else ms.pop(); }); return ms; };
 /** The day it was sent: the first day the app read it as sent, or (sent before the app kept that) its own day. */
 // marked sent by an Admin: sent on a day the app doesn't know, so its scheduled day (like one sent before the app kept "sent")
 const estSentDay = (e, from) => { const s = e.sentBy && e.sentBy.at && e.sentBy.how !== "marked" ? lbDayKey(new Date(e.sentBy.at)) : ""; return s && from && s > from ? s : e.day; };
-/** Is it a call for today? { e, due: { kind: "cb" | "day", day, n }, sent, age, done (today's call), last, tries }, or null. */
+/** Is it on today's calls? Every open estimate that's been sent, every day, until a call before today was Booked, Don't
+ *  call again, or Spoke with (with no day to call again); a call back: from its day on. { e, due: { kind: "cb" | "open",
+ *  day }, sent, age, done (today's call), last, tries }, or null. (days: no longer used; the list isn't on call days.) */
 function estCallDue(e, today, days, from) {
   if (e.st !== "open" || estNotSent(e) || ["c", "v"].includes(estGroup(e))) return null;
   const ms = estCallMarks(e), before = ms.filter(m => m.d < today), todays = ms.filter(m => m.d === today), last = before[before.length - 1] || null;
   const sent = estSentDay(e, from);
-  let due = null;
+  let due = { kind: "open", day: e.day || sent };
   if (last && (last.r === "dnc" || last.r === "booked")) due = null;
   else if (last && last.cb) due = last.cb <= today ? { kind: "cb", day: last.cb } : null;
   else if (last && last.r === "sw") due = null;
-  else if (sent) {
-    let k = -1;
-    days.forEach((n, i) => { if (lbAddDays(sent, n) <= today) k = i; });
-    const t = k >= 0 ? lbAddDays(sent, days[k]) : "";
-    if (t && estDayGap(t, today) <= EST_CALL_GRACE && !before.some(m => m.d >= t)) due = { kind: "day", day: t, n: days[k] };
-  }
   if (!due) return null;
   return { e, due, sent, age: estDayGap(sent, today), done: todays[todays.length - 1] || null, last, tries: before.filter(m => m.r === "nr" || m.r === "vm").length };
 }
@@ -18198,7 +18194,9 @@ function estCallFormEl(e) {
  *  Call back…, Booked, Don't call again (a second tap). */
 function estCallRowEl(c, next, showWho) {
   const e = c.e, m = c.done, sure = estCallSure === e.id, form = estCallForm && estCallForm.id === e.id ? estCallForm : null;
-  const why = c.due.kind === "cb" ? (c.due.day < lbToday() ? `call back from ${lbDayText(c.due.day)}` : "call back today") : c.due.day < lbToday() ? `missed ${lbDayText(c.due.day)}` : "";
+  const why = c.due.kind === "cb" ? (c.due.day < lbToday() ? `call back from ${lbDayText(c.due.day)}` : "call back today") : "";
+  // its last call before today (what happened and when): each day starts fresh, the record stays
+  const lastCall = c.last && c.due.kind !== "cb" ? `last: ${estCallText(c.last)} ${lbDayText(c.last.d)}` : !c.last ? "not called yet" : "";
   const lastNote = c.due.kind === "cb" && c.last && c.last.n ? `“${c.last.n}”` : "";
   const right = m ? h("span", { class: "ec-done" }, h("span", { class: `pc-chip pc-${m.r}`, text: estCallText(m), title: m.n || null }),
       m.saving ? h("small", { text: "saving…" }) : h("button", { class: "linkish ec-change", type: "button", title: "Take back today's call", onclick: () => estCallSave(e, "clear") }, "Change")) : null;
@@ -18213,13 +18211,15 @@ function estCallRowEl(c, next, showWho) {
     btn("booked", "Booked", () => estCallSave(e, "booked")),
     h("button", { class: "btn small" + (sure ? " danger" : " ghost"), type: "button", "data-r": "dnc",
       onclick: () => { if (sure) estCallSave(e, "dnc"); else { estCallSure = e.id; estCallForm = null; renderEstimates(); } } }, sure ? "Sure? Tap again" : "Don't call again"));
-  return h("div", { class: "ec-row" + (m ? " done" : "") + (next ? " next" : ""), "data-id": e.id, "data-sent": c.sent, "data-kind": c.due.kind },
+  return h("div", { class: "ec-row" + (m ? " done" : "") + (next ? " next" : ""), "data-id": e.id, "data-sent": c.sent, "data-day": e.day || "", "data-kind": c.due.kind },
     h("div", { class: "ec-top" },
       h("div", { class: "ec-who" },
         next ? h("span", { class: "ec-next", text: "Call next" }) : null,
         h("b", { text: e.client || "No name" }),
-        h("small", null, hcpLink("est", estOptId(e), `#${e.n}`), ` · ${lbMoney(estValue(e) / 100)}`, showWho ? ` · ${e.inc || "Nobody assigned"}` : "",
-          c.tries ? ` · try ${c.tries + 1}` : "", why ? h("span", { class: "ec-why", text: ` · ${why}` }) : null, lastNote ? h("span", { class: "ec-said", text: ` · ${lastNote}` }) : null)),
+        h("small", null, hcpLink("est", estOptId(e), `#${e.n}`), ` · ${lbMoney(estValue(e) / 100)}`, e.day ? h("span", { class: "ec-day", text: ` · ${lbDayText(e.day)}` }) : null,
+          showWho ? ` · ${e.inc || "Nobody assigned"}` : "", c.tries ? ` · try ${c.tries + 1}` : "", why ? h("span", { class: "ec-why", text: ` · ${why}` }) : null,
+          lastNote ? h("span", { class: "ec-said", text: ` · ${lastNote}` }) : null),
+        lastCall ? h("small", { class: "ec-last", text: lastCall }) : null),
       right),
     btns, form ? estCallFormEl(e) : null);
 }
@@ -18230,24 +18230,18 @@ function estCallsEl(today, all, who) {
   const days = estData.callDays.length ? estData.callDays : EST_CALL_DAYS_DEF, from = estData.sentFrom || "";
   const pool = estData.estimates.concat((estOther[estData.year - 1] || {}).estimates || []);
   const mine = pool.filter(e => !all || !who || estOwners(e).includes(who));
+  // the youngest to the oldest: the estimate's own day, then its number
+  const eday = c => c.e.day || c.sent || "";
   const due = mine.map(e => estCallDue(e, today, days, from)).filter(Boolean)
-    // call backs due first, then the newest sent to the oldest
-    .sort((a, b) => (a.due.kind === "cb") !== (b.due.kind === "cb") ? (a.due.kind === "cb" ? -1 : 1) : a.sent < b.sent ? 1 : a.sent > b.sent ? -1 : Number(b.e.n) - Number(a.e.n) || 0);
+    .sort((a, b) => eday(a) < eday(b) ? 1 : eday(a) > eday(b) ? -1 : Number(b.e.n) - Number(a.e.n) || 0);
   const done = due.filter(c => c.done).length, nextId = (due.find(c => !c.done) || {}).e;
   const fold = store.get(K_EST_CALLS_FOLD) === true;
-  const sec = c => c.due.kind === "cb" ? "Call backs due" : c.age <= 1 ? "Sent yesterday" : c.age === 7 ? "Sent a week ago" : c.age === 14 ? "Sent 2 weeks ago" : `Sent ${c.age} days ago`;
+  // a line for each month (the estimate's own day)
+  const sec = c => { const d = eday(c); return d ? new Date(`${d}T12:00:00Z`).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) : "No day"; };
   const body = [];
   let at = "";
   due.forEach(c => { const t = sec(c); if (t !== at) { at = t; body.push(h("p", { class: "ec-sec", text: t })); } body.push(estCallRowEl(c, nextId === c.e, all && !who)); });
   const soon = mine.map(e => { const l = estCallMarks(e).slice(-1)[0]; return e.st === "open" && l && l.cb && l.cb > today && l.cb <= lbAddDays(today, 7) ? l.cb : ""; }).filter(Boolean).sort();
-  const daysEl = isAdmin() ? (estCallDaysEdit
-    ? h("div", { class: "ec-days" }, h("input", { type: "text", id: "ecDaysIn", value: days.join(", "), inputmode: "numeric", "aria-label": "Call days", "data-nodirty": "" }),
-      h("button", { class: "btn small", type: "button", id: "ecDaysSave", onclick: async () => {
-        const v = String($("ecDaysIn").value || "").split(/[\s,]+/).filter(Boolean).map(Number);
-        if (!v.length || v.some(n => !Number.isInteger(n) || n < 1 || n > 90)) { toast("Days after it's sent, like 1, 2, 3, 7, 14"); return; }
-        try { const out = await api("estCallDays", { days: v }); estData.callDays = out.days; store.set(K_EST, estData); estCallDaysEdit = false; renderEstimates(); } catch (err) { toast(errText(err, "The call days")); }
-      } }, "Save"), h("button", { class: "btn small ghost", type: "button", onclick: () => { estCallDaysEdit = false; renderEstimates(); } }, "Cancel"))
-    : h("p", { class: "ec-foot" }, `Called ${days.join(", ")} days after it's sent · `, h("button", { class: "linkish", type: "button", id: "ecDaysBtn", onclick: () => { estCallDaysEdit = true; renderEstimates(); } }, "Change"))) : null;
   return h("section", { class: "panel est-calls" + (fold ? " folded" : ""), id: "estCalls", "aria-label": "Today's calls" },
     h("div", { class: "ec-head" },
       h("h3", null, "Today's calls", all ? h("small", { text: who ? ` · ${who}` : " · everyone's" }) : null),
@@ -18256,9 +18250,8 @@ function estCallsEl(today, all, who) {
     fold ? null : [
       due.length ? h("div", { class: "ec-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(due.length), "aria-valuenow": String(done) }, h("i", { style: `width:${Math.round(done / due.length * 100)}%` })) : null,
       due.length ? h("div", { class: "ec-list", id: "ecList" }, body)
-        : h("p", { class: "lb-sub", id: "ecNone", text: `No calls due today.${soon.length ? ` Next call back: ${lbDayText(soon[0])}${soon.length > 1 ? ` (${soon.length} this week)` : ""}.` : ""}` }),
-      daysEl,
-      howFold("estCallsHow", h("p", { class: "lb-sub" }, `Each estimate's people in Housecall Pro call the client ${days.join(", ")} days after it's sent (one sent before ${from ? lbDayText(from) : "the app kept it"} counts from its scheduled day), until they speak with someone and set no day to call again, it's booked, or Don't call again. A call day that's missed stays on the list ${EST_CALL_GRACE} more days. A call back comes back on its day. The order: call backs first, then the newest sent to the oldest. Cleaning estimates are the office's (Office › Estimates).`))]);
+        : h("p", { class: "lb-sub", id: "ecNone", text: `No open estimates to call.${soon.length ? ` Next call back: ${lbDayText(soon[0])}${soon.length > 1 ? ` (${soon.length} this week)` : ""}.` : ""}` }),
+      howFold("estCallsHow", h("p", { class: "lb-sub" }, "Every open estimate that's been sent to the client is here every day, from the youngest to the oldest (the estimate's own day), until someone speaks with them and sets no day to call again, it's booked, or Don't call again. Call back… takes it off until the day picked. Each day starts fresh: today's calls show as done, and each row keeps its last call and how many tries. Not sent yet: in the list's Not sent, not here. Cleaning estimates are the office's (Office › Estimates)."))]);
 }
 
 /* ---- Admins: Mark sent, on an open estimate the app reads as not sent (sent before the app kept "sent", and Housecall
