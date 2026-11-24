@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 146;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 147;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -297,6 +297,8 @@ function doPost(e) {
         return json_(withLock_(function () { return resetUser_(req); }));
       case "setPayroll":
         return json_(withLock_(function () { return setPayroll_(req); }));
+      case "setDocs":
+        return json_(withLock_(function () { return docAccessPut_(req); }));
       case "list": {
         const seesTrucks = canSee_(user, "trucks");
         const trucks = seesTrucks ? readTrucks_().map(function (x) { return x.truck; }) : [];
@@ -305,7 +307,7 @@ function doPost(e) {
         let supplies = null;
         try { supplies = supCached_(user); } catch (e) { supplies = null; }   // nor do the checklists
         let docs;   // Admins: the documents expired or expiring soon (the Documents tab's count and the notice)
-        if (user.role === "admin") { try { docs = docSummary_(); } catch (e) { docs = undefined; } }
+        if (canDocs_(user)) { try { docs = docSummary_(); } catch (e) { docs = undefined; } }
         return json_({ ok: true, trucks: trucks, gps: gps, supplies: supplies, docs: docs, me: Object.assign(publicUser_(user), { owner: settingsOwner_() }), serverTime: new Date().toISOString() });
       }
       case "saveTruck":
@@ -419,7 +421,7 @@ function doPost(e) {
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return atPut_(req); }));
       case "docList": case "docSave": case "docDelete": case "docFile":
-        if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
+        if (!canDocs_(user)) return json_({ ok: false, error: "not_allowed" });
         if (req.action === "docList") return json_(docList_());
         if (req.action === "docFile") return json_(docFile_(req));
         return json_(withTabLock_(function () { return req.action === "docSave" ? docSave_(req, user) : docDelete_(req); }));
@@ -986,6 +988,7 @@ function saveUser_(req) {
     if (!access) return { ok: false, error: "bad_request" };
     if (parseAccess_(x.u.access).indexOf(PRICE_CHECK) !== -1) access.push(PRICE_CHECK);   // switched only with setPriceCheck
     if (parseAccess_(x.u.access).indexOf(SETTINGS) !== -1) access.push(SETTINGS);         // ... and Settings only by its owner
+    if (parseAccess_(x.u.access).indexOf(DOCS) !== -1) access.push(DOCS);                 // ... and Documents (docAccessPut_)
     if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   }
   if (x.u.role !== role || x.u.status !== status) {
@@ -1532,12 +1535,32 @@ function tmCheckEmail(test) {
   return to;
 }
 
-/* ---- Documentation (Admins only): the company's and the people's certificates and licenses (IICRC, EPA, contractor
+/* ---- Documentation (the owner of Settings, and the admins he lets see it): the company's and the people's certificates and licenses (IICRC, EPA, contractor
    licenses…), each with its file (a PDF or a photo, in VODA Hub › Documentation in this Google account's Drive: never
    shared) and the day it expires. Admins are warned in the app (a count on the Documents tab, a notice when the app
    opens) from its own number of days before (60 unless set) until it's renewed (a new expiry date), and once expired.
    One row a document on the "Documentation" tab. ---- */
 const DOC_SHEET = "Documentation";
+const DOCS = "documents";   // an admin the owner of Settings lets see Documents (switched per admin, see docAccessPut_)
+/** Sees Documents: an admin who is the owner of Settings, or one he switched on (no owner yet: every admin). */
+function canDocs_(user) {
+  if (!user || user.role !== "admin") return false;
+  const owner = settingsOwner_();
+  return !owner || user.id === owner || parseAccess_(user.access).indexOf(DOCS) !== -1;
+}
+/** The owner of Settings lets an admin see Documents, or not ({ id, on }). Only admins; he always sees them himself. */
+function docAccessPut_(req) {
+  const owner = settingsOwner_();
+  if (!owner || req.user.id !== owner) return { ok: false, error: "not_allowed" };
+  const s = usersSheet_(), x = readUsers_(s).filter(function (y) { return y.u.id === String(req.id || ""); })[0];
+  if (!x) return { ok: false, error: "gone" };
+  if (x.u.role !== "admin") return { ok: false, error: "bad_request" };
+  if (x.u.id === owner) return { ok: true, user: publicUser_(x.u) };
+  const access = parseAccess_(x.u.access).filter(function (a) { return a !== DOCS; });
+  if (req.on) access.push(DOCS);
+  if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
+  return { ok: true, user: publicUser_(x.u) };
+}
 const DOC_COLS = ["Id", "Title", "Holder", "Kind", "Issued by", "Number", "Issued", "Expires", "Remind days", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at"];
 const DOC_MAX = 10 * 1024 * 1024, DOC_REMIND = 60, DOC_KINDS = ["company", "person"];
 const DOC_DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;

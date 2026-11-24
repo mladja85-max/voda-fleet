@@ -9015,6 +9015,7 @@ async function openUsers() {
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(true); return out; }
     catch (e) { err.textContent = e && e.error === "name_taken" ? "Someone else already has that name. Add a last name or an initial." : e && e.error === "bad_name" ? "Type a name (up to 40 letters)."
       : e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
+      : e && e.error === "not_allowed" && action === "setDocs" ? "Only the owner of Settings can switch Documents."
       : e && e.error === "not_allowed" && !["setPayroll", "setPriceCheck"].includes(action) ? "Only the owner of Settings and the people he picks can change that." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
       : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
@@ -9143,9 +9144,17 @@ async function openUsers() {
         } }, "Yes, change it"),
         h("button", { class: "btn small ghost", type: "button", id: "uJobNo", onclick: () => { jobAsk = ""; openOne(u.id); } }, "Cancel"))) : null;
     const save = (next, name, on) => quick(u, { access: next }, `${u.name} ${on ? "now sees" : "no longer sees"} ${name}`);
+    // Documents: the owner of Settings always; the admins he switches on (only he can)
+    const hasDoc = Array.isArray(u.access) && u.access.includes("documents");
+    const dc = u.role !== "admin" || apiLevel < DOC_ACC_API || !owner || u.status === "invited" ? null
+      : isOwner ? h("span", { class: "user-meta", id: "doc-owner", text: "Sees Documents (owns Settings)" })
+      : session.id === owner ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "documents", id: "doc-" + (u.username || u.id), "aria-pressed": String(hasDoc),
+          title: hasDoc ? "Tap to take Documents away" : "Tap to let them see Documents",
+          onclick: () => call("setDocs", { id: u.id, on: !hasDoc }, `${u.name} ${hasDoc ? "no longer sees" : "now sees"} Documents`) }, "Documents")
+      : h("span", { class: "user-meta", text: hasDoc ? "Sees Documents" : "No Documents" });
     const sees = u.role === "admin"
-      ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: "Sees" }), h("p", { class: "meta", text: "Admin: sees everything" + (apiLevel >= PAY_API ? ", VODA Payroll only when on." : ".") }),
-          h("div", { class: "acc" }, can ? pay : null, can ? pc : null))
+      ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: "Sees" }), h("p", { class: "meta", text: "Admin: sees everything" + (apiLevel >= PAY_API ? `, VODA Payroll${dc ? " and Documents" : ""} only when on.` : ".") }),
+          h("div", { class: "acc" }, can ? pay : null, can ? pc : null, dc))
       : apiLevel >= SUP_API ? h("div", { class: "acc-ed", id: "uAcc" }, ...accessEditor(access, save, off, "acc-" + (u.username || u.id)).filter(Boolean),
           pc ? h("div", { class: "acc acc-pc" }, h("span", { class: "acc-lbl", text: "Price changes:" }), can ? pc : h("span", { class: "user-meta", text: (u.access || []).includes("pricecheck") ? "Checks price changes" : "Doesn't check price changes" }),
             (u.access || []).includes("pricecheck") && !access.includes("revenue") ? h("span", { class: "user-meta warn", text: "Tick Operations too, so they see them." }) : null) : null) : null;
@@ -10269,7 +10278,7 @@ function accessItems() {
    A person's job is the one whose role and ticks are exactly his, else Custom. Checks price changes, VODA Payroll and
    Changes settings are switched on their own (not part of a job). */
 const USER_JOBS = [["tech", "Technician"], ["sup", "Supervisor"], ["csr", "Office / CSR"], ["mgr", "Manager"], ["admin", "Admin"], ["custom", "Custom"]];
-const ACC_EXTRA = ["pricecheck", "payroll", "settings"];
+const ACC_EXTRA = ["pricecheck", "payroll", "settings", "documents"];
 function jobSet(k) {
   const have = accessItems().map(x => x[0]), lists = (supplies && supplies.lists) || [];
   const like = (re, not) => lists.filter(l => re.test(l.name) && !(not && not.test(l.name))).map(l => l.id), pick = a => have.filter(id => a.includes(id));
@@ -16427,7 +16436,7 @@ const SPEED_NAMES = { "(app open)": "Opening the app (until its first answer)", 
   repairs: "Repairs", repSync: "Repairs: reading Housecall Pro", repPut: "Repairs: a save", cpRead: "Contractor Payroll", cpSend: "Contractor Payroll: send", cpPay: "Contractor Payroll: paid",
   supplies: "Warehouse", supplyReport: "Warehouse: a report", history: "Truck history", services: "Truck services", saveTruck: "Truck: a save", tmSkip: "Truck: skip", gpsStops: "Truck stops",
   receiptRead: "Receipt reading", receiptFile: "Receipt file", users: "Users", saveUser: "Users: a save", invite: "Users: an invite", resetUser: "Users: a new passcode",
-  changePasscode: "Passcode change", settingsOwner: "Settings' owner", setPayroll: "Payroll access", hcpTest: "Housecall Pro check", estProbe: "For Claude: an estimate", docList: "Documents", docSave: "Documents: a save", docDelete: "Documents: remove", docFile: "Documents: a file", estMarkSent: "Mark sent",
+  changePasscode: "Passcode change", settingsOwner: "Settings' owner", setPayroll: "Payroll access", setDocs: "Documents access", hcpTest: "Housecall Pro check", estProbe: "For Claude: an estimate", docList: "Documents", docSave: "Documents: a save", docDelete: "Documents: remove", docFile: "Documents: a file", estMarkSent: "Mark sent",
   backupInfo: "Backups", backupSet: "Backups: a change", tmMail: "TM hrs email", setShop: "The shop's place", gpsStopsSet: "Truck stops: a setting", saveService: "Truck: a service",
   deleteService: "Truck: a service taken off", deleteTruck: "Truck taken off", supplyStatus: "Warehouse: status", saveChecklist: "Warehouse: a checklist", lbRename: "Leaderboard: a rename",
   comClients: "Commercial clients", pcAssign: "Past clients: who calls which", kpiPeople: "KPI: people", kpiImport: "KPI: import", estCall: "Estimates: a call", estCallDays: "Estimates: call days",
@@ -23088,7 +23097,10 @@ const K_DOC_SUM = "voda.docSum", K_DOC_SEEN = "voda.docSeen";
 let docData = null, docErr = "", docLoading = false, docSum = store.get(K_DOC_SUM) || null;
 const docView = Object.assign({ f: "all", q: "" }, store.get("voda.docView") || {});
 const docSaveView = () => store.set("voda.docView", { f: docView.f, q: docView.q });
-const docCan = () => isAdmin() && (!apiLevel || apiLevel >= DOC_API);
+const DOC_ACC_API = 147;                                // ... where the owner of Settings picks the admins who see them
+/** Sees Documents: an admin who owns Settings, or one he switched on (an older script, or no owner yet: every admin). */
+const docCan = () => isAdmin() && (!apiLevel || apiLevel >= DOC_API)
+  && (!session || !session.owner || (apiLevel && apiLevel < DOC_ACC_API) || session.id === session.owner || userAccess().includes("documents"));
 const DOC_REMINDS = [[30, "30 days before"], [60, "60 days before"], [90, "90 days before"], [120, "120 days before"], [180, "6 months before"]];
 const docDays = (day, today) => Math.round((Date.parse(`${day}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 864e5);
 const docToday = () => ofToday();   // New York's day, like the Google script's
