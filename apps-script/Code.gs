@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 139;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 140;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -504,6 +504,9 @@ function doPost(e) {
       case "ofEstMark":
         if (!canOffice_(user) || !ofEstOk_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return ofEstMark_(req, user); }));
+      case "ofEstDayMarks":
+        if (!canOffice_(user)) return json_({ ok: false, error: "not_allowed" });
+        return json_(ofEstDayMarks_(req, user));
       case "estCall":
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return estCall_(req, user); }));
@@ -6801,13 +6804,14 @@ function pcDayMarks_(req, user) {
   return { ok: true, day: day, who: who, list: list };
 }
 function ofUserNames_() { const out = {}; readUsers_(usersSheet_()).forEach(function (x) { out[x.u.id] = x.u.name; }); return out; }
-/** Puts the counts into a month (from..to, its days only) for everyone linked to a login: what changed, by day and person. */
-function ofPcApply_(doc, key, cfg, counts, names, from, to) {
+/** Puts the counts into a month (from..to, its days only) for everyone linked to a login: what changed, by day and person.
+ *  idsOf: a person's two numbers (Past clients': ofPcIds_; Office › Estimates': ofEstIds_). */
+function ofPcApply_(doc, key, cfg, counts, names, from, to, idsOf) {
   const patch = {}, first = key + "-01", last = tmAddDays_(tmAddDays_(first, 31).slice(0, 8) + "01", -1);
   if (!doc.days || typeof doc.days !== "object") doc.days = {};
   for (let d = from > first ? from : first; d <= (to < last ? to : last); d = tmAddDays_(d, 1)) {
     cfg.people.forEach(function (p) {
-      const who = p.user && names[p.user], ids = ofPcIds_(p);
+      const who = p.user && names[p.user], ids = (idsOf || ofPcIds_)(p);
       if (!who || (!ids.c && !ids.b)) return;
       const t = (counts[d] && counts[d][who]) || { c: 0, b: 0 }, want = {};
       if (ids.c) want[ids.c] = t.c > 0 ? t.c : null;
@@ -6832,6 +6836,10 @@ function ofPcApply_(doc, key, cfg, counts, names, from, to) {
 function ofPcSync_(day) {
   const auto = pcAutoFrom_(true);
   if (!auto || day < auto) return null;
+  return ofAutoSync_(day, pcCounts_(day, day), ofPcIds_, "Past clients");
+}
+/** A day's counted numbers saved into the office's month: what changed ({ key, days }), or null. */
+function ofAutoSync_(day, counts, idsOf, by) {
   const s = ofSheet_(false);
   if (!s) return null;
   const byKey = {};
@@ -6839,8 +6847,8 @@ function ofPcSync_(day) {
   if (!byKey.config) return null;
   const cfg = ofConfig_(lbParse_(byKey.config.json)), key = day.slice(0, 7);
   const doc = ofMonth_(lbParse_(byKey[key] ? byKey[key].json : ""), key);
-  const patch = ofPcApply_(doc, key, cfg, pcCounts_(day, day), ofUserNames_(), day, day);
-  if (Object.keys(patch).length) lbSaveRow_(s, byKey, key, JSON.stringify(ofMonth_(doc, key)), new Date().toISOString(), "Past clients");
+  const patch = ofPcApply_(doc, key, cfg, counts, ofUserNames_(), day, day, idsOf);
+  if (Object.keys(patch).length) lbSaveRow_(s, byKey, key, JSON.stringify(ofMonth_(doc, key)), new Date().toISOString(), by);
   return { key: key, days: patch };
 }
 
@@ -7020,30 +7028,42 @@ function ofEstWhoPut_(req) {
   PropertiesService.getScriptProperties().setProperty("OF_EST_WHO", JSON.stringify(out));
   return { ok: true, users: out };
 }
-/** Each estimate's last mark: { r, who, at, cb, note, day }. */
-function ofEstMarks_() {
-  const tz = Session.getScriptTimeZone(), out = {};
+/** Each estimate's last mark: { r, who, at, cb, note, day }. calls (if given): each one's last call made before today
+ *  (a mark, not one taken back). */
+function ofEstMarks_(calls) {
+  const tz = Session.getScriptTimeZone(), out = {}, today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
   pcRows_(OF_EST_CALLS, OF_EST_CALL_COLS.length).forEach(function (r) {
     const id = String(r[2] || "");
     if (!id) return;
     const m = { r: String(r[3] || ""), who: String(r[4] || ""), at: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || ""), day: pcDay_(r[1], tz) };
     if (m.r === "cb") { m.cb = pcDay_(r[5], tz); m.note = String(r[6] || ""); }
     out[id] = m;   // in the order made: the last one counts
+    if (calls && m.r && m.day && m.day < today) calls[id] = m;
   });
   return out;
 }
+/** Each estimate's mark (m) and, when it isn't that one, its last call before today (lc): a new day the open ones get
+ *  the buttons again, with the last call shown. */
 function ofEstMarksOn_(list) {
-  const M = ofEstMarks_();
-  (list || []).forEach(function (e) { const m = M[e.id]; if (m && m.r) e.m = m; });
+  const calls = {}, M = ofEstMarks_(calls);
+  (list || []).forEach(function (e) {
+    const m = M[e.id], c = calls[e.id];
+    if (m && m.r) e.m = m;
+    if (c && c !== m) e.lc = c;
+  });
 }
+/** A new day, the estimate can be called again: its last mark was Not now or Voicemail, or a call back (any day: the
+ *  client may call first). Booked and Don't call again end it (an admin can change them). */
+const OF_EST_AGAIN = { na: true, vm: true, cb: true };
 function ofEstMark_(req, user) {
   const id = String(req.id || ""), r = String(req.r || "");
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || !Object.prototype.hasOwnProperty.call(PC_RESULTS, r)) return { ok: false, error: "bad_request" };
   const tz = Session.getScriptTimeZone(), when = tmNow_(), at = when.toISOString(), today = Utilities.formatDate(when, tz, "yyyy-MM-dd");
   if (user.role !== "admin") {
-    // once the day it was marked is over, a mark stays as it is (a call-back can still be marked when it's due)
+    // a mark from an earlier day stays as it is, but a new day's call can be marked over Not now, Voicemail or a call
+    // back (and a call back taken back: called back). Booked and Don't call again: locked.
     const last = ofEstMarks_()[id];
-    if (last && last.r && last.r !== "cb" && last.day && last.day < today) return { ok: false, error: "locked", m: last };
+    if (last && last.r && last.day && last.day < today && (r === "clear" ? last.r !== "cb" : !OF_EST_AGAIN[last.r])) return { ok: false, error: "locked", m: last };
   }
   const cb = r === "cb" ? String(req.cb || "") : "", note = r === "cb" ? String(req.note || "").replace(/\s+/g, " ").trim().slice(0, 140) : "";
   if (r === "cb" && (!/^\d{4}-\d{2}-\d{2}$/.test(cb) || cb <= today || cb > tmAddDays_(today, 366))) return { ok: false, error: "bad_value", field: "cb" };
@@ -7052,7 +7072,73 @@ function ofEstMark_(req, user) {
   s.getRange(first, 1, 1, OF_EST_CALL_COLS.length).setNumberFormat("@").setValues([[at, today, id, r === "clear" ? "" : r, user.name, cb, note, ""]]);
   const m = { r: r === "clear" ? "" : r, who: user.name, at: at, day: today };
   if (cb) { m.cb = cb; m.note = note; }
-  return { ok: true, m: m };
+  let of = null;
+  try { of = ofEstSync_(today); } catch (e) { of = null; }   // her Cleaning estimate follow-ups on Office Calls
+  return { ok: true, m: m, of: of };
+}
+/* ---- Office › Estimates → Office Calls: a CSR's "Cleaning estimate follow-ups" and "Booked from estimates" aren't typed
+   (from EST_AUTO_FROM on, the day this started; days before keep what was typed): they're the estimates she marked on
+   Office › Estimates that day, and how many of them she marked Booked. An estimate she marked more than once the same
+   day counts once (her last mark that day, if not taken back). ---- */
+const EST_AUTO = "EST_AUTO_FROM";
+/** The first day the numbers are counted ("" before; set: start today). */
+function estAutoFrom_(set) {
+  const P = PropertiesService.getScriptProperties();
+  let v = P.getProperty(EST_AUTO) || "";
+  if (!v && set) { v = Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd"); P.setProperty(EST_AUTO, v); }
+  return v;
+}
+/** A person's two estimate numbers (ids), when she has them. */
+function ofEstIds_(p) {
+  const vis = (p.fields || []).filter(function (f) { return !f.hide; });
+  const c = vis.filter(function (f) { return f.kind === "out" && /^(cleaning )?estimates? follow/i.test(f.label); })[0];
+  const b = vis.filter(function (f) { return /^booked from (cleaning )?estimates?\b/i.test(f.label); })[0];
+  return { c: c ? c.id : "", b: b ? b.id : "" };
+}
+/** The estimates marked from..to (the day each was marked): { day: { who: { c: estimates called, b: booked } } }. */
+function ofEstCounts_(from, to) {
+  const tz = Session.getScriptTimeZone(), last = {};
+  pcRows_(OF_EST_CALLS, OF_EST_CALL_COLS.length).forEach(function (x) {
+    const d = pcDay_(x[1], tz), id = String(x[2] || ""), who = String(x[4] || "");
+    if (!d || d < from || d > to || !id || !who) return;
+    last[d + "|" + id + "|" + who] = x;   // in the order made: her last mark that day counts
+  });
+  const out = {};
+  Object.keys(last).forEach(function (k) {
+    const x = last[k], r = String(x[3] || ""), who = String(x[4] || ""), d = k.split("|")[0];
+    if (!r) return;
+    const t = (out[d] || (out[d] = {}))[who] || (out[d][who] = { c: 0, b: 0 });
+    t.c++;
+    if (r === "booked") t.b++;
+  });
+  return out;
+}
+/** A day's estimate numbers counted again and saved (after a mark): what changed ({ key, days }), or null. */
+function ofEstSync_(day) {
+  const auto = estAutoFrom_(true);
+  if (!auto || day < auto) return null;
+  return ofAutoSync_(day, ofEstCounts_(day, day), ofEstIds_, "Office › Estimates");
+}
+/** The estimates one person marked on a day (what makes her Cleaning estimate follow-ups): each one's number, client,
+ *  the mark and when ({ day, uid: login id; only her own unless an admin or Office (any day) }). */
+function ofEstDayMarks_(req, user) {
+  const tz = Session.getScriptTimeZone(), day = String(req.day || ""), uid = String(req.uid || user.id);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: "bad_request" };
+  if (uid !== user.id && !ofEditor_(user)) return { ok: false, error: "not_allowed" };
+  const who = ofUserNames_()[uid];
+  if (!who) return { ok: false, error: "bad_request" };
+  const last = {};
+  pcRows_(OF_EST_CALLS, OF_EST_CALL_COLS.length).forEach(function (x) {
+    if (pcDay_(x[1], tz) === day && String(x[4] || "") === who && String(x[2] || "")) last[String(x[2])] = x;
+  });
+  const er = estRows_(SpreadsheetApp.getActive().getSheetByName(EST_SHEET)), list = [];
+  Object.keys(last).forEach(function (id) {
+    const x = last[id], r = String(x[3] || ""), row = er[id];
+    if (!r) return;
+    list.push({ id: id, n: row ? String(row[1] || "") : "", client: row ? String(row[4] || "") : "", r: r, at: x[0] instanceof Date ? x[0].toISOString() : String(x[0] || "") });
+  });
+  list.sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; });
+  return { ok: true, day: day, who: who, list: list };
 }
 
 /* ---------------- KPI (Office › KPI) ----------------
@@ -9136,8 +9222,10 @@ function ofRead_(user, year) {
   try { ofAddOther_(); ofOneBox_(); } catch (e) { /* the next read */ }
   let pcAuto = pcAutoFrom_(false);
   if (!pcAuto) { try { withTabLock_(function () { pcAuto = pcAutoFrom_(true); if (pcAuto) ofPcSync_(pcAuto); }); } catch (e) { pcAuto = pcAutoFrom_(false); } }
+  let estAuto = estAutoFrom_(false);   // the first time: from today on, Office › Estimates' marks counted
+  if (!estAuto) { try { withTabLock_(function () { estAuto = estAutoFrom_(true); ofEstSync_(estAuto); }); } catch (e) { estAuto = estAutoFrom_(false); } }
   const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_(),
-    estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined, pcAuto: pcAuto,
+    estOk: ofEstOk_(user), estWho: user.role === "admin" ? ofEstWho_() : undefined, pcAuto: pcAuto, estAuto: estAuto,
     trcOk: trcOk_(user), trcWho: user.role === "admin" ? trcWho_() : undefined,
     pcMine: pcMine_(user, pcAssign_()) };   // her Past clients groups: none, no Past clients tab
   lbRows_(ofSheet_(false)).forEach(function (r) {
@@ -9166,7 +9254,8 @@ function ofPut_(req) {
   const now = new Date().toISOString();
   const out = { ok: true, months: {} };
   const pcAuto = pcAutoFrom_(false), pcToday = Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-  let pcCnt = null, pcNames = null;
+  const estAuto = estAutoFrom_(false);
+  let pcCnt = null, pcNames = null, estCnt = null;
   writes.forEach(function (w) {
     const key = String((w && w.key) || "");
     const whole = w && w.data && typeof w.data === "object";
@@ -9204,6 +9293,13 @@ function ofPut_(req) {
       if (pcAuto && key >= pcAuto.slice(0, 7) && pcAuto <= pcToday) {
         if (!pcCnt) { pcCnt = pcCounts_(pcAuto, pcToday); pcNames = ofUserNames_(); }
         ofPcApply_(doc, key, cfg, pcCnt, pcNames, pcAuto, pcToday);
+        doc = ofMonth_(doc, key);
+      }
+      // Office › Estimates' numbers too
+      if (estAuto && key >= estAuto.slice(0, 7) && estAuto <= pcToday) {
+        if (!estCnt) estCnt = ofEstCounts_(estAuto, pcToday);
+        if (!pcNames) pcNames = ofUserNames_();
+        ofPcApply_(doc, key, cfg, estCnt, pcNames, estAuto, pcToday, ofEstIds_);
         doc = ofMonth_(doc, key);
       }
     }
