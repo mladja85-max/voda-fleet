@@ -1065,6 +1065,15 @@ details.ord-closed .ord-qty { font-size: 1.05rem; color: var(--muted); }
   .of-line > .lb-box, .of-line > .lb-box.kid { grid-column: auto; }
 }
 .of-in { position: relative; }
+/* Office Calls: small boxes (a number is a digit or two), several on a line; what each booked under its box */
+@media (min-width: 900px) {
+  .of-day .of-line { grid-template-columns: repeat(auto-fill, minmax(128px, 150px)); justify-content: start; gap: 8px 10px; }
+  .of-day .of-line > .lb-box > span { font-size: .74rem; line-height: 1.25; }
+  .of-day .of-in input { font-size: 1.05rem; padding: 5px 8px; }
+  .of-day .of-in .of-ratio { position: static; transform: none; display: block; margin: 3px 0 0 2px; white-space: normal; }
+  .of-day .of-in:has(.of-ratio) input { padding-right: 8px; }
+  .of-day .of-in .of-auto { position: static; display: block; margin: 3px 0 0 2px; transform: none; }
+}
 .of-in .of-ratio { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: .72rem; white-space: nowrap; }
 .of-in:has(.of-ratio) input { padding-right: 6.6em; }
 .of-day .of-in input { padding-top: 6px; padding-bottom: 6px; }
@@ -5552,7 +5561,9 @@ const OF_TASK_LISTS = {
     { id: "pastb", label: "Booked from past clients", kind: "num", of: "past" },
     { id: "gg", label: "Google Guaranteed / Online Booking", kind: "num" },
     { id: "ggs", label: "Booked from Google / Online", kind: "num", of: "gg" },
-    { id: "conf", label: "Confirmation calls (tomorrow)", kind: "out" }],
+    { id: "conf", label: "Confirmation calls (tomorrow)", kind: "out" },
+    { id: "oth", label: "Other outbound calls", kind: "out" },
+    { id: "othb", label: "Booked from other outbound calls", kind: "num", of: "oth" }],
   Destiny: [
     { id: "vm", label: "Voicemail follow-ups", kind: "out" },
     { id: "vmb", label: "Booked from voicemails", kind: "num", of: "vm" },
@@ -5561,8 +5572,12 @@ const OF_TASK_LISTS = {
     { id: "est", label: "Cleaning estimate follow-ups", kind: "out" },
     { id: "estb", label: "Booked from estimates", kind: "num", of: "est" },
     { id: "price", label: "Pricing follow-ups (not booked yet)", kind: "out" },
-    { id: "priceb", label: "Booked from pricing calls", kind: "num", of: "price" }] };
+    { id: "priceb", label: "Booked from pricing calls", kind: "num", of: "price" },
+    { id: "oth", label: "Other outbound calls", kind: "out" },
+    { id: "othb", label: "Booked from other outbound calls", kind: "num", of: "oth" }] };
 const OF_RETIRED = ["fu", "fus", "other"];
+/** What a number's % of its calls says: "scheduled", "completed" (Completed by booked: of Total daily booked) or "booked". */
+const ofRatioWord = f => (/^sched/i.test(f.label) ? "scheduled" : /^completed/i.test(f.label) ? "completed" : "booked");
 /** Does she track exactly the scorecard's numbers (as on the Excel: the 8 of OF_DEFAULT_FIELDS)? */
 const ofHasCard = fields => OF_DEFAULT_FIELDS.every(d => fields.some(f => f.id === d.id && f.label === d.label && f.kind === d.kind && !f.hide))
   && fields.filter(f => !f.hide).length === OF_DEFAULT_FIELDS.length;
@@ -5575,11 +5590,14 @@ const OF_CSR_FIELDS = [
   { id: "past", label: "Past clients (6M, 1Y, 18M, 2Y, 3Y)", kind: "out", re: /^past clients/i },
   { id: "pastb", label: "Booked from past clients", kind: "num", of: "past", re: /booked from past/i },
   { id: "conf", label: "Confirmation calls (tomorrow)", kind: "out", re: /^confirmation/i },
+  { id: "oth", label: "Other outbound calls", kind: "out", re: /^other outbound/i },
+  { id: "othb", label: "Booked from other outbound calls", kind: "num", of: "oth", re: /booked from other outbound/i },
   { id: "opp", label: "Opportunity calls", kind: "num", re: /^opportunit/i },
   { id: "sched", label: "Scheduled jobs/estimates", kind: "num", of: "opp", re: /^scheduled jobs(\/estimates)?$/i },
   { id: "gg", label: "Google Guaranteed / Online Booking", kind: "num", re: /^google guaranteed/i },
   { id: "ggs", label: "Booked from Google / Online", kind: "num", of: "gg", re: /^booked from google|^scheduled google/i },   // on screen in full (ofFieldName; a name holds 40 letters)
-  { id: "done", label: "Scheduled / completed", kind: "admin", re: /^scheduled \/ completed/i }];
+  { id: "done", label: "Total daily booked", kind: "admin", re: /^scheduled \/ completed|^total daily booked/i },
+  { id: "compb", label: "Completed by booked", kind: "admin", of: "done", re: /^completed by booked/i }];
 /** Is she on the CSR numbers (all of them, nothing else)? */
 const ofHasCsr = fields => OF_CSR_FIELDS.every(d => fields.some(f => !f.hide && f.label === d.label && f.kind === d.kind))
   && fields.filter(f => !f.hide).length === OF_CSR_FIELDS.length;
@@ -5635,7 +5653,7 @@ function ofWithTasks(fields, list) {
  *  goal under Outbound, anything else under Inbound, after the known ones. */
 const OF_ROWS = {
   out: [["fb", /^feedback/i], ["price", /^pricing follow/i], ["priceb", /booked from pricing/i], ["past", /^past clients/i], ["pastb", /booked from past/i], ["conf", /^confirmation/i],
-    ["vm", /voicemail follow/i], ["vmb", /booked from voicemail/i], ["est", /estimate follow/i], ["estb", /booked from estimate/i]],
+    ["vm", /voicemail follow/i], ["vmb", /booked from voicemail/i], ["est", /estimate follow/i], ["estb", /booked from estimate/i], ["oth", /^other outbound/i], ["othb", /booked from other outbound/i]],
   in: [["opp", /^opportunit/i], ["sched", /^scheduled jobs(\/estimates)?$/i], ["gg", /^google guaranteed/i], ["ggs", /^booked from google|^scheduled google/i]] };
 function ofRows(fields) {
   const at = (f, list) => list.findIndex(([id, re]) => f.id === id || re.test(f.label));
@@ -18533,6 +18551,12 @@ const ofMe = () => (ofData && ofData.me ? ofCfg().people.find(p => p.user === of
 const ofTypingNow = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && a.closest && a.closest("#ofView") && document.hasFocus()); };
 const ofThisYear = () => clockNow().getFullYear();
 
+/** The office's day and hours: New York's, whatever the computer's own clock or time zone says (a computer set to
+ *  another time zone made "today" tomorrow by 5 PM). CSRs type today's numbers until OF_UNTIL (6 PM). */
+const OF_TZ = "America/New_York", OF_UNTIL = 18, OF_UNTIL_TEXT = "6 PM";
+const ofNyParts = d => Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: OF_TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(d).map(x => [x.type, x.value]));
+const ofToday = () => { const p = ofNyParts(clockNow()); return `${p.year}-${p.month}-${p.day}`; };
+const ofLate = () => Number(ofNyParts(clockNow()).hour) >= OF_UNTIL;
 async function ofLoad(year) {
   if (!session || !ofCan()) return;
   const y = year || ofThisYear();
@@ -18589,8 +18613,10 @@ async function ofFlush() {
     for (const [k, d] of Object.entries(out.months || {})) ofData.months[k] = lbMerge(lbClone(d), lbClone(ofPending[k] || {}));
     ofSaveState = Object.keys(ofPending).length ? "pending" : "saved"; ofSaveErr = "";
   } catch (e) {
-    if (e && e.error === "only_today") {
-      ofSaveState = "refused"; ofSaveErr = "Only today's numbers can be typed: that wasn't saved. To fix another day, ask Mike.";
+    if (e && (e.error === "only_today" || e.error === "after_hours")) {
+      ofSaveState = "refused"; ofSaveErr = e.error === "after_hours" ? `Today's numbers can be typed until ${OF_UNTIL_TEXT}: that wasn't saved. To fix them, ask Mike.`
+        : "Only today's numbers can be typed: that wasn't saved. To fix another day, ask Mike.";
+      if (e.error === "after_hours") renderOffice();
       setTimeout(() => { ofLoad(); }, 0);
       return;
     }
@@ -20798,7 +20824,7 @@ function ofPcPatch(of) {
 }
 function ofTodayEl() {
   const cfg = ofCfg(), admin = isAdmin(), editor = ofEditor(), y = ofData.year;
-  const today = lbToday();
+  const today = ofToday(), late = ofLate();   // the company's day (New York), whatever the computer's clock says
   const day = lbIsDay(ofView.day) && ofView.day.startsWith(y + "-") ? ofView.day : today.startsWith(y + "-") ? today : `${y}-12-31`;
   const key = day.slice(0, 7);
   const people = cfg.people.filter(p => lbOnBoard(p, key));
@@ -20826,7 +20852,7 @@ function ofTodayEl() {
     }))));
   const e = ofEntry(ofData.months, day, p.name) || {};
   const goal = cfg.goal, work = ofWorkDay(day);
-  const locked = !editor && day !== today;   // another day: only Admins and Office (any day) change it
+  const locked = !editor && (day !== today || late);   // another day, or today after 6 PM: only Admins and Office (any day) change it
   const box = (f, i, row) => {
     const auto = ofPcAuto(p, f.id, day);   // Past clients' numbers: counted from her marks, not typed
     const mine = (f.kind !== "admin" || editor) && !locked && !auto;
@@ -20845,7 +20871,8 @@ function ofTodayEl() {
   const line = (list) => h("div", { class: "of-line", style: `--n:${Math.min(6, Math.max(4, list.length))}` }, list.map(box));   // wide screen: each row on one line
   out.push(h("div", { class: "lb-card of-day", id: "ofDayCard", "data-person": p.name },
     h("div", { class: "lb-card-head" }, h("strong", { text: p.name }), h("span", { class: "lb-unit", text: work ? "Goal day" : lbHoliday(day) ? `${lbHoliday(day)}: closed` : "Weekend: no goal" })),
-    locked ? h("p", { class: "of-locked", id: "ofLocked", text: `Only today's numbers can be typed. To fix ${day < today ? "a past" : "another"} day, ask Mike.` }) : null,
+    locked ? h("p", { class: "of-locked", id: "ofLocked", text: day === today ? `Today's numbers can be typed until ${OF_UNTIL_TEXT} (New York time). To fix them now, ask Mike.`
+      : `Only today's numbers can be typed. To fix ${day < today ? "a past" : "another"} day, ask Mike.` }) : null,
     // the day's totals, counted from the boxes: Incoming calls, Outbound calls (with the goal), Booked appointments
     ofTotsEl({ live: true, max: goal }),
     outs.length ? [h("div", { class: "of-sec-row" }, h("h4", { class: "of-sec", id: "ofRowOut", text: "Outbound calls" }), h("p", { class: "of-sec-n", text: `The calls add up to the ${goal} goal; the booked numbers don't.` })), line(outs)] : null,
@@ -20874,7 +20901,7 @@ function ofRefreshDay(day, p) {
   for (const el of card.querySelectorAll(".of-ratio")) {
     const f = p.fields.find(x => x.id === el.dataset.of), base = p.fields.find(x => x.id === f.of);
     const a = ofNum(e[f.id]), b = ofNum(e[f.of]);
-    el.textContent = a != null && b ? `${ofPct(a / b)} ${/^sched/i.test(f.label) ? "scheduled" : "booked"}` : "";   // it sits beside its calls
+    el.textContent = a != null && b ? `${ofPct(a / b)} ${ofRatioWord(f)}` : "";   // it sits beside its calls
   }
   const mon = lbWeekStart(day), sw = ofSummary(cfg, ofData.months, p, mon, lbAddDays(mon, 6) > lbToday() ? lbToday() : lbAddDays(mon, 6));
   $("ofWeekFoot").textContent = `Week of ${lbWeekText(mon)}: ${fmt(sw.out)} outgoing calls · ${goal} reached on ${sw.hit} of ${sw.worked} day${sw.worked === 1 ? "" : "s"} worked`;
@@ -21022,7 +21049,7 @@ function ofScoreEl() {
       const ratio = ofRatio(s.sums, f), kid = f.of && i > 0 && (row[i - 1].id === f.of || row[i - 1].of === f.of);
       return h("div", { class: "lb-box ro" + (kid ? " kid" : ""), "data-k": f.id }, h("span", { text: ofFieldName(f) }),
         h("div", { class: "of-in" }, h("div", { class: "of-val", text: fmt(s.sums[f.id]) }),
-          ratio != null ? h("small", { class: "of-ratio", text: `${ofPct(ratio)} ${/^sched/i.test(f.label) ? "scheduled" : "booked"}` }) : null));
+          ratio != null ? h("small", { class: "of-ratio", text: `${ofPct(ratio)} ${ofRatioWord(f)}` }) : null));
     };
     const sec = (title, list, id, more) => (list.length || more ? h("div", { class: "of-ssec", "data-sec": id }, h("h5", { text: title }),
       h("div", { class: "of-line", style: `--n:${Math.min(6, Math.max(4, list.length + (more ? more.boxes.length : 0)))}` }, list.map(num), more ? more.boxes : null), more ? more.list : null) : null);
