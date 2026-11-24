@@ -9089,6 +9089,7 @@ async function openUsers() {
     try { const out = await api(action, data); if (okMsg) toast(okMsg); await load(true); return out; }
     catch (e) { err.textContent = e && e.error === "name_taken" ? "Someone else already has that name. Add a last name or an initial." : e && e.error === "bad_name" ? "Type a name (up to 40 letters)."
       : e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
+      : e && e.error === "not_allowed" && action === "setPriceBulk" ? "Only the owner of Settings can switch Check now and Mark all checked."
       : e && e.error === "not_allowed" && action === "setDocs" ? (data && data.flag === "vendors" ? "Only the owner of Settings can switch Vendor costs." : "Only the owner of Settings can switch Documents.")
       : e && e.error === "not_allowed" && !["setPayroll", "setPriceCheck"].includes(action) ? "Only the owner of Settings and the people he picks can change that." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
       : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
@@ -9200,6 +9201,13 @@ async function openUsers() {
           title: hasPc ? "Tap to switch off" : "Tap to switch on",
           onclick: () => call("setPriceCheck", { id: u.id, on: !hasPc }, `${me ? "You" : u.name} ${hasPc ? "no longer check" + (me ? "" : "s") : "now check" + (me ? "" : "s")} price changes`) }, "Checks price changes")
       : h("span", { class: "user-meta", text: hasPc ? "Checks price changes" : "Doesn't check price changes" });
+    // Price changes' Check now and Mark all checked: only the owner of Settings switches them, for himself too
+    const hasPb = Array.isArray(u.access) && u.access.includes("pricebulk");
+    const pb = apiLevel < PRICE_BULK_API || !owner || u.status === "invited" || (u.role !== "admin" && !hasPc) ? null
+      : session.id === owner ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "pricebulk", id: "pb-" + (u.username || u.id), "aria-pressed": String(hasPb),
+          title: hasPb ? "Tap to take Check now and Mark all checked away" : "Tap to give them Check now and Mark all checked (price changes)",
+          onclick: () => call("setPriceBulk", { id: u.id, on: !hasPb }, `${me ? "You" : u.name} ${hasPb ? (me ? "no longer have" : "no longer has") : (me ? "now have" : "now has")} Check now and Mark all checked`) }, "Check now & Mark all")
+      : h("span", { class: "user-meta", text: hasPb ? "Check now & Mark all" : "No Check now / Mark all" });
     const access = (Array.isArray(u.access) ? u.access : []).filter(a => !ACC_EXTRA.includes(a));
     const job = jobOf(u), jobName = k => (USER_JOBS.find(x => x[0] === k) || [, ""])[1];
     const jobSel = h("select", { id: "uJob", "aria-label": `Job for ${u.name}`, disabled: off,
@@ -9243,9 +9251,9 @@ async function openUsers() {
       : h("span", { class: "user-meta", text: hasVen ? "Sees Vendor costs" : "No Vendor costs" });
     const sees = u.role === "admin"
       ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: "Sees" }), h("p", { class: "meta", text: "Admin: sees everything" + (apiLevel >= PAY_API ? `, VODA Payroll${dc ? " and Documents" : ""} only when on.` : ".") }),
-          h("div", { class: "acc" }, can ? pay : null, can ? pc : null, dc, dco, dv))
+          h("div", { class: "acc" }, can ? pay : null, can ? pc : null, pb, dc, dco, dv))
       : apiLevel >= SUP_API ? h("div", { class: "acc-ed", id: "uAcc" }, ...accessEditor(access, save, off, "acc-" + (u.username || u.id)).filter(Boolean),
-          pc ? h("div", { class: "acc acc-pc" }, h("span", { class: "acc-lbl", text: "Price changes:" }), can ? pc : h("span", { class: "user-meta", text: (u.access || []).includes("pricecheck") ? "Checks price changes" : "Doesn't check price changes" }),
+          pc ? h("div", { class: "acc acc-pc" }, h("span", { class: "acc-lbl", text: "Price changes:" }), can ? pc : h("span", { class: "user-meta", text: (u.access || []).includes("pricecheck") ? "Checks price changes" : "Doesn't check price changes" }), pb,
             (u.access || []).includes("pricecheck") && !access.includes("revenue") ? h("span", { class: "user-meta warn", text: "Tick Operations too, so they see them." }) : null) : null) : null;
     const acts = me || !can || isOwner ? null : h("div", { class: "user-acts u-acts" },
       u.status === "invited"
@@ -10367,7 +10375,7 @@ function accessItems() {
    A person's job is the one whose role and ticks are exactly his, else Custom. Checks price changes, VODA Payroll and
    Changes settings are switched on their own (not part of a job). */
 const USER_JOBS = [["tech", "Technician"], ["sup", "Supervisor"], ["csr", "Office / CSR"], ["mgr", "Manager"], ["admin", "Admin"], ["custom", "Custom"]];
-const ACC_EXTRA = ["pricecheck", "payroll", "settings", "documents"];
+const ACC_EXTRA = ["pricecheck", "payroll", "settings", "documents", "documents-own", "vendors", "pricebulk"];
 function jobSet(k) {
   const have = accessItems().map(x => x[0]), lists = (supplies && supplies.lists) || [];
   const like = (re, not) => lists.filter(l => re.test(l.name) && !(not && not.test(l.name))).map(l => l.id), pick = a => have.filter(id => a.includes(id));
@@ -14345,6 +14353,7 @@ const priceMarked = new Set();                          // warnings whose visit 
 function priceForget() { priceDoc = null; priceTried = 0; priceMarked.clear(); }
 const priceOn = () => apiLevel >= PRICE_API && (isAdmin() || userAccess().includes("pricecheck"));
 /** The open warnings and the last ones checked (again after 5 minutes; Check now: scan). */
+const PRICE_BULK_API = 153;                             // the Google script where Check now and Mark all are switched per person
 async function priceLoad(scan) {
   if (!session || !priceOn() || priceBusy) return;
   if (!scan && (Date.now() - priceTried < 5 * 60e3)) return;
@@ -14503,7 +14512,9 @@ function revPriceEl() {
   if (!P) return priceErr ? h("p", { class: "price-ok bad", id: "priceOk", text: `Price changes: ${priceErr}` }) : null;
   const when = P.scanAt ? `Housecall Pro looked at ${priceWhen(new Date(P.scanAt).toISOString())}` : "Not looked at yet";
   const btn = (text, id, f, dis) => h("button", { class: "btn small" + (id === "priceNow" ? "" : " ghost"), type: "button", id, disabled: !!dis, onclick: f }, text);
-  const tools = [btn(priceBusy ? "Checking…" : "Check now", "priceNow", () => priceLoad(true), priceBusy || !P.connected), btn("History", "priceHistBtn", priceHistoryDlg)];
+  // Check now and Mark all checked: only whom the owner of Settings switched on (an older Google script: as before)
+  const bulk = !apiLevel || apiLevel < PRICE_BULK_API || !!P.mayBulk;
+  const tools = [bulk ? btn(priceBusy ? "Checking…" : "Check now", "priceNow", () => priceLoad(true), priceBusy || !P.connected) : null, btn("History", "priceHistBtn", priceHistoryDlg)].filter(Boolean);
   const setup = P.trigger === false ? h("p", { class: "price-sub", text: "The hourly check isn't running: in the Google Sheet, Extensions > Apps Script, pick priceWatchSetup and press Run once." }) : null;
   const err = P.err ? h("p", { class: "price-sub bad", text: `Housecall Pro: ${revErrText({ error: P.err })}` }) : null;
   if (!P.open.length) return h("div", { class: "price-ok", id: "priceOk" }, h("span", { text: `✓ No price changes to check · ${when}` }), ...tools, setup, err);
@@ -14516,7 +14527,7 @@ function revPriceEl() {
         h("span", { class: "price-ic", "aria-hidden": "true", text: "!" }),
         h("span", { class: "price-title" }, h("strong", { text: `${n} price change${n === 1 ? "" : "s"} in Housecall Pro to check` }),
           h("span", { class: "price-show", text: priceOpen ? "Hide ▴" : "Show ▾" }))),
-      h("div", { class: "price-tools" }, ...tools, priceOpen && P.mayCheck && n > 1 ? btn(`Mark all ${n} checked`, "priceAll", () => priceCheckDlg(P.open)) : null)),
+      h("div", { class: "price-tools" }, ...tools, priceOpen && P.mayCheck && bulk && n > 1 ? btn(`Mark all ${n} checked`, "priceAll", () => priceCheckDlg(P.open)) : null)),
     priceOpen ? howFold("priceHow", h("p", { class: "price-sub", text: `Amounts changed on a later day than the job (yesterday's invoice edited today counts; changes on the day of the job, or before it, don't). Housecall Pro doesn't say who: see the Private notes, or the job's Activity feed in Housecall Pro (search the job #). ${when}.` }), "How it's counted") : null,
     setup, err,
     priceOpen ? h("div", { class: "price-list", id: "priceList" }, shown.map(w => priceCard(w, P.mayCheck))) : null,
