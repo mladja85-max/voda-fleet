@@ -5576,8 +5576,8 @@ const OF_TASK_LISTS = {
     { id: "oth", label: "Other outbound calls", kind: "out" },
     { id: "othb", label: "Booked from other outbound calls", kind: "num", of: "oth" }] };
 const OF_RETIRED = ["fu", "fus", "other"];
-/** What a number's % of its calls says: "scheduled", "completed" (Completed by booked: of Total daily booked) or "booked". */
-const ofRatioWord = f => (/^sched/i.test(f.label) ? "scheduled" : /^completed/i.test(f.label) ? "completed" : "booked");
+/** What a number's % of its calls says: "scheduled" or "booked". */
+const ofRatioWord = f => (/^sched/i.test(f.label) ? "scheduled" : "booked");
 /** Does she track exactly the scorecard's numbers (as on the Excel: the 8 of OF_DEFAULT_FIELDS)? */
 const ofHasCard = fields => OF_DEFAULT_FIELDS.every(d => fields.some(f => f.id === d.id && f.label === d.label && f.kind === d.kind && !f.hide))
   && fields.filter(f => !f.hide).length === OF_DEFAULT_FIELDS.length;
@@ -5596,8 +5596,7 @@ const OF_CSR_FIELDS = [
   { id: "sched", label: "Scheduled jobs/estimates", kind: "num", of: "opp", re: /^scheduled jobs(\/estimates)?$/i },
   { id: "gg", label: "Google Guaranteed / Online Booking", kind: "num", re: /^google guaranteed/i },
   { id: "ggs", label: "Booked from Google / Online", kind: "num", of: "gg", re: /^booked from google|^scheduled google/i },   // on screen in full (ofFieldName; a name holds 40 letters)
-  { id: "done", label: "Total daily booked", kind: "admin", re: /^scheduled \/ completed|^total daily booked/i },
-  { id: "compb", label: "Completed by booked", kind: "admin", of: "done", re: /^completed by booked/i }];
+  { id: "done", label: "Scheduled / completed", kind: "admin", re: /^scheduled \/ completed|^total daily booked/i }];
 /** Is she on the CSR numbers (all of them, nothing else)? */
 const ofHasCsr = fields => OF_CSR_FIELDS.every(d => fields.some(f => !f.hide && f.label === d.label && f.kind === d.kind))
   && fields.filter(f => !f.hide).length === OF_CSR_FIELDS.length;
@@ -21502,7 +21501,7 @@ function openOfPeople() {
     if (!need.length) { cardBox.hidden = !cardDone; cardBox.replaceChildren(...(cardDone ? [h("p", { class: "hint ok", id: "ofCardDone", text: cardDone })] : [])); return; }
     cardBox.hidden = false;
     cardBox.replaceChildren(
-      howFold("ofCsrHow", h("p", { class: "hint", text: "The CSR numbers, in Office Calls' rows. Outbound: Feedback calls, Pricing follow-ups and booked, Past clients and booked, Confirmation calls. Inbound: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed / Online Booking and booked. Admins only: Scheduled / completed. What she typed before keeps counting (past only)." }), "How it works"),
+      howFold("ofCsrHow", h("p", { class: "hint", text: "The CSR numbers, in Office Calls' rows. Outbound: Feedback calls, Pricing follow-ups and booked, Past clients and booked, Confirmation calls, Other outbound calls and booked. Inbound: Opportunity calls and Scheduled jobs/estimates, Google Guaranteed / Online Booking and booked. Admins only: Scheduled / completed. What she typed before keeps counting (past only)." }), "How it works"),
       cardDone ? h("p", { class: "hint ok", id: "ofCardDone", text: cardDone }) : null,
       h("div", { class: "of-card-b" }, need.map(el => h("button", { class: "btn small primary", type: "button", "data-csr": nameOf(el), onclick: ev => useCsr(ev.currentTarget, el) }, `Use the CSR numbers for ${nameOf(el)}`))));
   };

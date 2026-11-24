@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 138;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 139;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -9003,8 +9003,7 @@ const OF_TZ = "America/New_York", OF_UNTIL = 18;
 function ofToday_() { return Utilities.formatDate(tmNow_(), OF_TZ, "yyyy-MM-dd"); }
 function ofLate_() { return Number(Utilities.formatDate(tmNow_(), OF_TZ, "HH")) >= OF_UNTIL; }
 /** Once (Nov 2026), for everyone in the office now: Other outbound calls and Booked from other outbound calls (they
- *  show last in Outbound calls); the admins' Scheduled / completed is called Total daily booked (its history kept) and
- *  Completed by booked goes beside it (shown as a % of it). */
+ *  show last in Outbound calls). */
 const OF_OTHER = [{ id: "oth", label: "Other outbound calls", kind: "out", of: "" }, { id: "othb", label: "Booked from other outbound calls", kind: "num", of: "oth" }];
 function ofAddOther_() {
   const P = PropertiesService.getScriptProperties();
@@ -9023,14 +9022,6 @@ function ofAddOther_() {
           OF_OTHER.forEach(function (f) { p.fields.push({ id: f.id, label: f.label, kind: f.kind, of: f.of }); });
           changed = true;
         }
-        const done = p.fields.filter(function (f) { return f.kind === "admin" && !f.hide && (f.id === "done" || /^scheduled \/ completed/i.test(f.label)); })[0];
-        if (done) {
-          if (done.label !== "Total daily booked") { done.label = "Total daily booked"; changed = true; }
-          if (!has("compb", /^completed by booked/i) && p.fields.length + 1 <= OF_MAX_FIELDS) {
-            p.fields.splice(p.fields.indexOf(done) + 1, 0, { id: "compb", label: "Completed by booked", kind: "admin", of: done.id });
-            changed = true;
-          }
-        }
       });
       if (changed) {
         const now = new Date().toISOString(), doc = ofConfig_(cfg);
@@ -9039,6 +9030,39 @@ function ofAddOther_() {
       }
     }
     P.setProperty("OF_NOV24", "1");
+  });
+}
+/** Once (Nov 2026): the admins' one box again. Where the first version of ofAddOther_ ran, Total daily booked is
+ *  Scheduled / completed again (same box, history kept) and Completed by booked goes (past only if a day has a number
+ *  in it, so nothing typed is lost). */
+function ofOneBox_() {
+  const P = PropertiesService.getScriptProperties();
+  if (P.getProperty("OF_NOV24B") === "1") return;
+  withTabLock_(function () {
+    if (P.getProperty("OF_NOV24B") === "1") return;
+    const s = ofSheet_(false), byKey = {};
+    if (s) lbRows_(s).forEach(function (r) { byKey[r.key] = r; });
+    if (byKey.config) {
+      const cfg = ofConfig_(lbParse_(byKey.config.json));
+      const typed = Object.keys(byKey).some(function (k) { return k !== "config" && String(byKey[k].json || "").indexOf('"compb"') !== -1; });
+      let changed = false;
+      cfg.people.forEach(function (p) {
+        p.fields.forEach(function (f) {
+          if (f.kind === "admin" && /^total daily booked$/i.test(f.label)) { f.label = "Scheduled / completed"; changed = true; }
+        });
+        const i = p.fields.findIndex(function (f) { return f.id === "compb" || /^completed by booked$/i.test(f.label); });
+        if (i !== -1) {
+          if (typed) { if (!p.fields[i].hide) { p.fields[i].hide = true; changed = true; } }
+          else { p.fields.splice(i, 1); changed = true; }
+        }
+      });
+      if (changed) {
+        const now = new Date().toISOString(), doc = ofConfig_(cfg);
+        doc.at = now; doc.by = "VODA Hub";
+        lbSaveRow_(s, byKey, "config", JSON.stringify(doc), now, "VODA Hub");
+      }
+    }
+    P.setProperty("OF_NOV24B", "1");
   });
 }
 const OF_KINDS = ["out", "num", "admin"];   // counts toward the outgoing calls goal; any other number; typed by Admins only
@@ -9109,7 +9133,7 @@ function ofMonth_(d, key) {
 }
 function ofRead_(user, year) {
   const y = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
-  try { ofAddOther_(); } catch (e) { /* the next read */ }
+  try { ofAddOther_(); ofOneBox_(); } catch (e) { /* the next read */ }
   let pcAuto = pcAutoFrom_(false);
   if (!pcAuto) { try { withTabLock_(function () { pcAuto = pcAutoFrom_(true); if (pcAuto) ofPcSync_(pcAuto); }); } catch (e) { pcAuto = pcAutoFrom_(false); } }
   const out = { ok: true, config: { people: [], goal: 50 }, months: {}, admin: user.role === "admin", editor: ofEditor_(user), me: user.id, today: ofToday_(),
