@@ -1796,6 +1796,29 @@ dialog#dlg:has(.ven-dlg) { width: min(1240px, calc(100% - 24px)); }   /* Vendor 
 .rev-bk-jt td:nth-child(3) { white-space: normal; } .rev-bk-jt .rev-bk-m { text-align: right; font-weight: 700; }
 .rev-bk-jt thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); position: sticky; top: 0; background: var(--surface-2); }
 .rev-bk-jt tr.later td { color: var(--muted); } .rev-bk-tap { margin: 0; }
+/* Today's revenue › scheduled vs produced */
+.rev-sch { display: grid; gap: 8px; }
+.rev-sch-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rev-sch-card { display: grid; gap: 1px; align-content: start; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.rev-sch-card.on { border-color: transparent; background: var(--accent-soft); }
+.rev-sch-card small { font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.rev-sch-card b { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.rev-sch-card span { font-size: .78rem; color: var(--muted); }
+.rev-sch-eff.pos, .rev-sch-card span.rev-sch-eff.pos { color: var(--ok); } .rev-sch-eff.neg, .rev-sch-card span.rev-sch-eff.neg { color: var(--due); }
+.rev-sch-dt td small { color: var(--muted); font-weight: 600; }
+.rev-sch-chg { display: grid; gap: 6px; } .rev-sch-chg > p { margin: 0; }
+.rev-sch-chg h4 { margin: 4px 0 0; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; }
+.rev-sch-g { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.rev-sch-g summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 9px 12px; cursor: pointer; }
+.rev-sch-gn { font-weight: 700; } .rev-sch-g summary small { color: var(--muted); } .rev-sch-g summary b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.rev-sch-g > p { margin: 0 12px 6px; } .rev-sch-g .lb-scroll { max-height: 42vh; overflow: auto; padding: 0 8px 8px; }
+.rev-sch-t td:nth-child(3) { min-width: 140px; } .rev-sch-t .rev-dot { margin-right: 6px; }
+.rev-bkd[data-sch] { grid-template-columns: minmax(0, 1fr); } .rev-sch-chg { grid-template-columns: minmax(0, 1fr); } .rev-sch-g { min-width: 0; }
+@media (max-width: 560px) {
+  .rev-sch-cards { grid-template-columns: 1fr; } .rev-sch-card b { font-size: 1.35rem; }
+  .rev-sch-dt { font-size: .86rem; } .rev-sch-dt th, .rev-sch-dt td { padding: 7px 3px; } .rev-sch-dt td small { display: block; }
+  .rev-sch-dt thead th { font-size: .62rem; letter-spacing: .03em; }
+}
 .goal-kicker { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .goal-ic { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #3a2400; background: radial-gradient(circle at 35% 30%, #fff1b8, var(--gold) 45%, var(--gold2));
   box-shadow: 0 0 14px rgba(255, 196, 40, .8); } .goal-ic svg { width: 17px; height: 17px; }
@@ -14046,6 +14069,7 @@ function revRedraw() {
   if (mktJobsRedraw && dlg.open) mktJobsRedraw();
   if (estRepRedraw && dlg.open) estRepRedraw();
   if (revUnpaidRedraw && dlg.open) revUnpaidRedraw();
+  if (dlg.open && $("revBkBox") && $("revBkBox").dataset.sch === "past") revBkRedraw();
 }
 /** Every day from..to touches (null while a year is still loading). */
 function revDaysFor(from, to) {
@@ -14662,10 +14686,14 @@ const REV_BOOKED_API = 94;
 const REV_BK_DEPTS = [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["o", "Other"]];
 const revBk = { today: null, future: null, busy: {}, err: {}, open: { today: "", future: "" } };   // open: the department listed ("t": all)
 /** Future revenue's period: Week (Sunday to Saturday) or Month from tomorrow on (› later), All (to the last one booked) or Dates. */
-const REV_BK_PER = { week: "Week", month: "Month", all: "All", dates: "Dates" };
+const REV_BK_PER = { tomorrow: "Tomorrow", week: "Week", month: "Month", all: "All", dates: "Dates" };
 const revBkView = Object.assign({ per: "all", off: 0, from: "", to: "" }, store.get("voda.revBkPer") || {});
 function revBkRange(x) {
   const tom = x.from, last = x.to || tom, per = REV_BK_PER[revBkView.per] ? revBkView.per : "all", off = Math.max(0, Number(revBkView.off) || 0);
+  if (per === "tomorrow") {   // a day: tomorrow, then › the days after it
+    const d = lbAddDays(tom, off);
+    return { per, off, from: d, to: d, label: `${off ? "" : "Tomorrow, "}${lbDayText(d)}${d.slice(0, 4) !== tom.slice(0, 4) ? `, ${d.slice(0, 4)}` : ""}` };
+  }
   if (per === "week") {
     const sun = lbAddDays(lbWeekStart(tom), 7 * off), to = lbAddDays(sun, 6);
     return { per, off, from: sun < tom ? tom : sun, to, label: `Week of ${lbWeekText(sun)}${to.slice(0, 4) !== tom.slice(0, 4) ? `, ${to.slice(0, 4)}` : ""}${off ? "" : " (from tomorrow)"}` };
@@ -14689,7 +14717,10 @@ async function revBkLoad(when, force) {
   if (revBk.busy[when] || (!force && x && Date.now() - x.got < 2 * 60e3) || (!force && !retryDue(`bk:${when}`))) return;
   revBk.busy[when] = true; revBk.err[when] = "";
   revBkDraw(when);
-  try { revBk[when] = Object.assign(await api("revBooked", { when }, 120000), { got: Date.now() }); retryOk(`bk:${when}`); }
+  try {
+    revBk[when] = Object.assign(await api("revBooked", { when }, 120000), { got: Date.now() }); retryOk(`bk:${when}`);
+    if (when === "today" && !revSh.days[revBk.today.from]) delete revSh.seen[revBk.today.from];   // its morning copy may be kept now
+  }
   catch (e) { revBk.err[when] = retryLater(`bk:${when}`, e, () => { if (view.tab === "revenue") revBkLoad(when, false); }) ? "" : revErrText(e); }
   revBk.busy[when] = false;
   revBkDraw(when);
@@ -14713,7 +14744,7 @@ function revBkBtn(when) {
 function revBkDlg(when) {
   openDialog(h("h2", { text: when === "today" ? "Today's revenue" : "Future revenue" }), h("div", { class: "rev-bkd", id: "revBkBox", "data-when": when }),
     h("div", { class: "dlg-foot" }, h("div", { class: "right" },
-      h("button", { class: "btn", type: "button", id: "revBkRead", onclick: () => revBkLoad(when, true) }, "Read again"),
+      h("button", { class: "btn", type: "button", id: "revBkRead", onclick: () => { if (when === "today") revSchReadAgain(); revBkLoad(when, true); } }, "Read again"),
       h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" }))));
   revBkDraw(when);
   revBkLoad(when, false);
@@ -14722,9 +14753,13 @@ function revBkDlg(when) {
 function revBkDraw(when) {
   const box = $("revBkBox");
   if (!box || box.dataset.when !== when) return;
-  const x = revBk[when], busy = revBk.busy[when], rb = $("revBkRead");
+  const x = revBk[when], busy = revBk.busy[when] || (when === "today" && revSh.busy), rb = $("revBkRead");
   if (rb) { rb.disabled = !!busy; rb.textContent = busy ? "Reading…" : "Read again"; }
-  if (!x) { box.replaceChildren(revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : h("p", { class: "loading", text: "Reading Housecall Pro…" })); return; }
+  // Today's revenue: Day, Week, Month or Dates; a day before today or a period: scheduled (each morning) against produced
+  const sch = when === "today" && revSchOk() ? revSchRange() : null;
+  if (sch && !sch.isToday) { box.dataset.sch = "past"; box.replaceChildren(revSchBar(sch), ...revSchPastEl(sch)); return; }
+  if (sch) box.dataset.sch = "today"; else delete box.dataset.sch;
+  if (!x) { box.replaceChildren(...[sch ? revSchBar(sch) : null, revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : h("p", { class: "loading", text: "Reading Housecall Pro…" })].filter(Boolean)); return; }
   // Future revenue: the period picked (Week, Month, All or Dates), worked out from the visits read (no new read)
   const per = when === "future" && Array.isArray(x.jobs) ? revBkRange(x) : null;
   const jobsIn = per ? x.jobs.filter(j => j[5] >= per.from && j[5] <= per.to) : x.jobs;
@@ -14739,6 +14774,7 @@ function revBkDraw(when) {
   const span = when === "today" ? `Every visit scheduled today, ${lbDayText(x.from)}: done, under way or still to come.`
     : !x.to ? `Nothing booked from tomorrow, ${lbDayText(x.from)}, on.`
     : !per || per.per === "all" ? `Every visit booked from tomorrow, ${lbDayText(x.from)}, to the last one, ${lbDayText(x.to)}${yr(x.from, x.to)}.`
+    : per.from === per.to ? `Every visit booked for ${per.from === x.from ? "tomorrow, " : ""}${lbDayText(per.from)}${yr(x.from, per.from)}.`
     : `Every visit booked from ${lbDayText(per.from)} to ${lbDayText(per.to)}${yr(per.from, per.to)}${per.to > x.to ? ` (the last one booked: ${lbDayText(x.to)}${yr(x.from, x.to)})` : ""}.`;
   let bar = null;
   if (per) {
@@ -14785,11 +14821,12 @@ function revBkDraw(when) {
         open === "t" ? h("td", null, h("i", { class: "rev-dot " + (REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o") }), deptName(REV_DEPTS_ALL.includes(j[3]) ? j[3] : "o")) : null,
         h("td", { text: revStatus(j[6]) }),
         h("td", { class: "rev-bk-m", text: lbCash(j[4] / 100) })))))) : h("p", { class: "meta", text: "No jobs here." }));
+  const tsch = sch ? revSchTodayEl(x) : null;
   box.replaceChildren(...[
-    bar,
+    sch ? revSchBar(sch) : bar,
     h("p", { class: "meta", id: "revBkSpan", text: span }),
     per && per.per !== "all" && x.more ? h("p", { class: "dlg-err", text: "Over 1,500 visits are booked: this period counts only the ones listed (All counts every one)." }) : null,
-    h("div", { class: "rev-bk-total" }, h("small", { text: when === "today" ? "Scheduled today" : per && per.per !== "all" ? "Booked in these days" : "On the books" }), h("b", { id: "revBkTotal", text: lbMoney(t.cents / 100) }), h("span", { text: `${revJobs(t.jobs)} · ${fmt(t.visits)} visit${t.visits === 1 ? "" : "s"}` })),
+    tsch ? tsch.top : h("div", { class: "rev-bk-total" }, h("small", { text: when === "today" ? "Scheduled today" : per && per.per !== "all" ? "Booked in these days" : "On the books" }), h("b", { id: "revBkTotal", text: lbMoney(t.cents / 100) }), h("span", { text: `${revJobs(t.jobs)} · ${fmt(t.visits)} visit${t.visits === 1 ? "" : "s"}` })),
     h("table", { class: "rev-bk-t", id: "revBkTable" },
       h("thead", null, h("tr", null, h("th", { text: "Department" }), h("th", { text: "Jobs" }), h("th", { class: "rev-bk-v", text: "Visits" }), h("th", { class: "rev-bk-m", text: "Revenue" }))),
       h("tbody", null, rows),
@@ -14797,11 +14834,274 @@ function revBkDraw(when) {
         h("td", { text: fmt(t.jobs) }), h("td", { class: "rev-bk-v", text: fmt(t.visits) }), h("td", { class: "rev-bk-m", text: lbMoney(t.cents / 100) })))),
     jobsEl,
     canList && !open && t.visits ? h("p", { class: "meta rev-bk-tap", text: "Tap a department (or Total) to see its jobs; each job # opens in Housecall Pro." }) : null,
+    tsch && tsch.chg ? tsch.chg : null,
     h("p", { class: "hint", text: `From Housecall Pro, read ${fmtTime(new Date(x.got))}${busy ? " (reading again…)" : ""}.${x.more ? " Over 3,000 visits: the rest weren't read." : ""}` }),
     howFold("revBkHow", h("p", { class: "hint", text: "As on Operations: money on each visit; a job counts once, on its first visit (later visits, -2 and on, add money, not jobs); canceled ones left out. A job not scheduled yet has no day, so it isn't here." })),
     revBk.err[when] ? h("p", { class: "dlg-err", text: revBk.err[when] }) : null].filter(Boolean));
 }
 
+/* ---- Today's revenue › scheduled vs produced (API 159): Day, Week, Month or Dates. Each day's schedule as it stood in
+   the morning (the script keeps it every day at 6 AM: the "Morning schedule" tab) against what Operations counted for
+   that day (produced), by department, and what changed: visits canceled or taken off, moved to or from another day,
+   added after the morning, a price changed. Today: this morning against the schedule now and what's done so far. A
+   period counts to yesterday (as Operations); a day with no morning copy (before the first one) is left out. ---- */
+const REV_SCH_API = 159;
+const REV_SCH_PER = { day: "Day", week: "Week", month: "Month", dates: "Dates" };
+const REV_SCH_MAX = 366;             // Dates: a year at most (the read adds a month each side, to find where visits moved)
+const revSchView = Object.assign({ per: "day", off: 0, from: "", to: "" }, store.get("voda.revSchPer") || {});
+const revSh = { days: {}, seen: {}, first: "", on: null, busy: false, err: "" };   // the mornings read: day → { at, visits, jobs, cents, list }
+const revSchOpen = new Set();         // the change lists opened
+const revSchOk = () => !(apiLevel && apiLevel < REV_SCH_API);
+/** The period picked: { per, off, from, to, end (the last day compared: yesterday at most), label, isToday, today }. */
+function revSchRange() {
+  const today = lbToday(), yest = lbAddDays(today, -1), per = REV_SCH_PER[revSchView.per] ? revSchView.per : "day";
+  const off = Math.min(0, Math.round(Number(revSchView.off) || 0)), yr = d => (d.slice(0, 4) !== today.slice(0, 4) ? `, ${d.slice(0, 4)}` : "");
+  let from, to, label;
+  if (per === "day") {
+    from = to = lbAddDays(today, off);
+    label = `${off === 0 ? "Today, " : off === -1 ? "Yesterday, " : ""}${lbDayText(from)}${yr(from)}`;
+  } else if (per === "week") {
+    from = lbAddDays(lbWeekStart(today), 7 * off); to = lbAddDays(from, 6);
+    label = `Week of ${lbWeekText(from)}${yr(from)}`;
+  } else if (per === "month") {
+    const t = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7)) - 1 + off, y = Math.floor(t / 12), m = (t % 12) + 1, k = `${y}-${String(m).padStart(2, "0")}`;
+    from = `${k}-01`; to = `${k}-${String(lbDaysIn(k)).padStart(2, "0")}`; label = `${lbMonthLong(m)} ${y}`;
+  } else {
+    from = lbIsDay(revSchView.from) && revSchView.from <= today ? revSchView.from : yest;
+    to = lbIsDay(revSchView.to) && revSchView.to <= today ? revSchView.to : yest;
+    if (to < from) [from, to] = [to, from];
+    if (revLen(from, to) > REV_SCH_MAX) from = lbAddDays(to, 1 - REV_SCH_MAX);
+    label = revSpanText(from, to);
+  }
+  const isToday = from === today && to === today, end = isToday ? today : to < today ? to : yest;
+  if (!isToday && to >= today && end >= from) label += " (to yesterday)";
+  return { per, off, from, to, end, label, isToday, today };
+}
+/** Reads the mornings kept from..to (today at most) not read yet (all of them again: force). */
+async function revShLoad(from, to, force) {
+  const today = lbToday();
+  if (to > today) to = today;
+  if (from > to || revSh.busy || !session || !canSee("revenue") || !revSchOk()) return;
+  let need = !!force;
+  for (let d = from; !need && d <= to; d = lbAddDays(d, 1)) if (!revSh.seen[d]) need = true;
+  if (!need || (!force && (revSh.err || !retryDue("revSched")))) return;
+  revSh.busy = true; revSh.err = "";
+  try {
+    const out = await api("revSched", { from, to });
+    for (let d = from; d <= to; d = lbAddDays(d, 1)) { revSh.seen[d] = true; delete revSh.days[d]; }
+    Object.assign(revSh.days, out.shots || {});
+    revSh.first = out.first || ""; revSh.on = out.on !== false;
+    retryOk("revSched");
+  } catch (e) {
+    if (e && (e.error === "bad_code" || e.error === "signed_out")) { revSh.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
+    revSh.err = retryLater("revSched", e, revBkRedraw) ? "" : revErrText(e);
+  }
+  revSh.busy = false;
+  revBkRedraw();
+}
+/** Read again (Today's revenue): the mornings around the period, and Operations' days in it. */
+function revSchReadAgain() {
+  if (!revSchOk()) return;
+  const r = revSchRange(), wf = lbAddDays(r.from, -31), wt = lbAddDays(r.end, 31) < r.today ? lbAddDays(r.end, 31) : r.today;
+  revSh.err = ""; retryOk("revSched");
+  revShLoad(r.isToday ? lbAddDays(r.today, -31) : wf, r.isToday ? r.today : wt, true);
+  if (!r.isToday && r.end >= r.from) { revSync.err = ""; revEnsure([[r.from, r.end, true]], true); }
+}
+function revBkRedraw() { const b = $("revBkBox"); if (b && dlg.open) revBkDraw(b.dataset.when); }
+/** A visit, the same whichever list it comes from: the morning's, a revenue day's (Jobs) or Housecall Pro's now. */
+const revSchItem = (id, inv, client, dep, c, first) => ({ key: String(id || "") || "#" + String(inv || ""), id: String(id || ""), inv: String(inv || ""), client: String(client || ""),
+  dep: REV_DEPTS_ALL.includes(dep) ? dep : "o", c: Math.round(Number(c) || 0), first: !!Number(first) });
+const revShotItems = sh => (sh && Array.isArray(sh.list) ? sh.list : []).map(x => revSchItem(x[0], x[1], x[2], x[3], x[4], x[5]));
+const revProdItems = v => (v && Array.isArray(v[13]) ? v[13] : []).map(x => revSchItem(x[0], x[1], x[2], x[3], x[4], x[8]));
+const revNowItems = jobs => (jobs || []).map(j => revSchItem(j[0], j[1], j[2], j[3], j[4], j[7]));
+/** Where else a visit is: [[day, items]] (skip: the days compared) → (key, day) → the next day after it that has it, else
+ *  the last before it ("" if none). */
+function revSchWhere(lists, skip) {
+  const m = new Map();
+  for (const [d, items] of lists) {
+    if (skip.has(d)) continue;
+    for (const x of items) { const a = m.get(x.key); if (!a) m.set(x.key, [d]); else if (!a.includes(d)) a.push(d); }
+  }
+  return (k, d) => { const a = (m.get(k) || []).slice().sort(); return a.find(x => x > d) || a.filter(x => x < d).pop() || ""; };
+}
+/** The days compared: what was scheduled (s) and produced (p) by department, and what changed (g), each change's effect
+ *  (produced less scheduled) adding up to the difference. A visit on more than one morning (it slipped a day) is
+ *  scheduled once in the period, on the first. A visit not produced on its day: moved inside the period (on another day
+ *  compared), moved to another day (on one now), else canceled or taken off; one produced that wasn't on its morning:
+ *  moved in (on another day's morning), else added after the morning. */
+function revSchCmp(days, shotOf, prodOf, prodElse, shotElse) {
+  const zero = () => Object.fromEntries(REV_DEPTS_ALL.map(k => [k, { cents: 0, jobs: 0, visits: 0 }]));
+  const s = zero(), p = zero(), g = { gone: [], out: [], within: [], in: [], added: [], price: [] }, outs = new Map(), ins = new Map();
+  const add = (o, x) => { const a = o[x.dep]; a.cents += x.c; a.visits++; if (x.first) a.jobs++; };
+  const byKey = list => { const m = new Map(); for (const x of list) { const y = m.get(x.key); if (y) y.c += x.c; else m.set(x.key, Object.assign({}, x)); } return m; };
+  const put = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+  const had = new Set();   // visits on an earlier morning of the period
+  for (const d of days) {
+    const S = shotOf(d).filter(x => !had.has(x.key)), P = prodOf(d), sm = byKey(S), pm = byKey(P);
+    S.forEach(x => add(s, x)); P.forEach(x => add(p, x));
+    sm.forEach((x, k) => had.add(k));
+    for (const [k, x] of sm) {
+      const y = pm.get(k);
+      if (!y) put(outs, k, { day: d, x });
+      else if (y.c !== x.c) g.price.push({ day: d, x: y, sc: x.c, pc: y.c, eff: y.c - x.c });
+    }
+    for (const [k, y] of pm) if (!sm.has(k)) put(ins, k, { day: d, x: y });
+  }
+  for (const [k, list] of outs) for (const o of list) {
+    const i = (ins.get(k) || []).shift();
+    if (i) { g.within.push({ day: o.day, to: i.day, x: i.x, sc: o.x.c, pc: i.x.c, eff: i.x.c - o.x.c }); continue; }
+    const t = prodElse(k, o.day);
+    g[t ? "out" : "gone"].push({ day: o.day, to: t, x: o.x, sc: o.x.c, pc: 0, eff: -o.x.c });
+  }
+  for (const [k, list] of ins) for (const i of list) {
+    const f = shotElse(k, i.day);
+    g[f ? "in" : "added"].push({ day: i.day, from: f, x: i.x, sc: 0, pc: i.x.c, eff: i.x.c });
+  }
+  for (const k of Object.keys(g)) g[k].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : Math.abs(b.eff) - Math.abs(a.eff)));
+  return { s, p, g };
+}
+const revSchSigned = c => (c < 0 ? "−" : c > 0 ? "+" : "") + lbMoney(Math.abs(c) / 100);
+const revSchPct = (d, base) => (base ? `${d < 0 ? "−" : d > 0 ? "+" : ""}${Math.abs(Math.round((d / base) * 1000) / 10)}%` : "");
+const REV_SCH_GROUPS = [
+  ["gone", "Canceled or taken off", "On the morning's schedule, but not on that day or any other day now."],
+  ["out", "Moved to another day", "On the morning's schedule, done (or booked) on another day."],
+  ["within", "Moved inside the period", "From one day to another, both in this period: only a price change moves the total."],
+  ["in", "Moved in from another day", "Not on that morning's schedule, but on an earlier day's."],
+  ["added", "Added after the morning", "New bookings after the schedule was kept, or visits pulled in from a later day."],
+  ["price", "Price changed", "On the schedule and done that day, for a different amount."]];
+/** What changed, a list for each kind (tap to open), each visit with its job #, client, money and the change. */
+function revSchChanges(g, nowWord) {
+  const any = REV_SCH_GROUPS.some(([k]) => g[k].length);
+  const dayCell = (k, it) => k === "out" || k === "within" ? `${lbDayText(it.day)} → ${lbDayText(it.to)}` : k === "in" ? `${lbDayText(it.from)} → ${lbDayText(it.day)}` : lbDayText(it.day);
+  return h("div", { class: "rev-sch-chg", id: "revSchChg" }, h("h4", { text: "What changed" }),
+    !any ? h("p", { class: "meta", id: "revSchSame", text: `Nothing changed: every visit was ${nowWord === "Now" ? "still on today's schedule" : "produced on its day"}, at the same price.` }) : null,
+    ...REV_SCH_GROUPS.filter(([k]) => g[k].length).map(([k, name, hint]) => {
+      const list = g[k], eff = list.reduce((n, it) => n + it.eff, 0);
+      return h("details", { class: "rev-sch-g", "data-g": k, open: revSchOpen.has(k), ontoggle: ev => { ev.target.open ? revSchOpen.add(k) : revSchOpen.delete(k); } },
+        h("summary", null, h("span", { class: "rev-sch-gn", text: name }), h("small", { text: `${fmt(list.length)} visit${list.length === 1 ? "" : "s"}` }),
+          h("b", { class: "rev-sch-eff " + (eff < 0 ? "neg" : eff > 0 ? "pos" : ""), text: revSchSigned(eff) })),
+        h("p", { class: "meta", text: hint }),
+        h("div", { class: "lb-scroll" }, h("table", { class: "rev-bk-jt rev-sch-t" },
+          h("thead", null, h("tr", null, h("th", { text: "Day" }), h("th", { text: "Job" }), h("th", { text: "Client" }), h("th", { class: "rev-bk-m", text: "Morning" }),
+            h("th", { class: "rev-bk-m", text: nowWord }), h("th", { class: "rev-bk-m", text: "Change" }))),
+          h("tbody", null, list.map(it => h("tr", { "data-job": it.x.id },
+            h("td", { class: "rev-bk-day", text: dayCell(k, it) }),
+            h("td", null, it.x.id ? hcpLink("job", it.x.id, it.x.inv ? `#${it.x.inv}` : "Open") : `#${it.x.inv}`),
+            h("td", null, h("i", { class: "rev-dot " + it.x.dep }), it.x.client || "–", it.x.first ? null : h("small", { class: "rv-sm", text: " (a later visit)" })),
+            h("td", { class: "rev-bk-m", text: k === "in" || k === "added" ? "–" : lbCash(it.sc / 100) }),
+            h("td", { class: "rev-bk-m", text: k === "gone" || k === "out" ? "–" : lbCash(it.pc / 100) }),
+            h("td", { class: "rev-bk-m rev-sch-eff " + (it.eff < 0 ? "neg" : it.eff > 0 ? "pos" : ""), text: revSchSigned(it.eff) })))))));
+    }));
+}
+/** The period bar: Day, Week, Month, Dates and ‹ › (nothing after today). */
+function revSchBar(r) {
+  const redraw = () => { store.set("voda.revSchPer", revSchView); revSchOpen.clear(); revBk.open.today = ""; revBkDraw("today"); };
+  const lo = lbAddDays(r.today, -730), first = revSh.first;
+  const step = n => {
+    if (r.per === "dates") {
+      const len = revLen(r.from, r.to);
+      let a = lbAddDays(r.from, n * len), b = lbAddDays(r.to, n * len);
+      if (b > r.today) { b = r.today; a = lbAddDays(b, 1 - len); }
+      revSchView.from = a; revSchView.to = b;
+    } else revSchView.off = Math.min(0, r.off + n);
+    redraw();
+  };
+  const pick = (a, b) => { if (a > b) [a, b] = [b, a]; revSchView.from = a; revSchView.to = b; redraw(); };
+  const dateBox = (id, value, label, onpick) => h("label", { class: "lb-paydate" }, h("span", { text: label }), lbDateInput({ id, value, min: lo, max: r.today, "aria-label": label }, onpick, lo, r.today));
+  const prev = h("button", { class: "btn small", type: "button", id: "revSchPrev", "aria-label": "Earlier", disabled: !!(first && r.from <= first) || r.from <= lo, onclick: () => step(-1) }, "‹");
+  const next = h("button", { class: "btn small", type: "button", id: "revSchNext", "aria-label": "Later", disabled: r.to >= r.today, onclick: () => step(1) }, "›");
+  return h("div", { class: "rev-bk-bar", id: "revSchBar" },
+    lbSeg(Object.entries(REV_SCH_PER), r.per, k => {
+      if (k === "dates" && r.per !== "dates") { revSchView.from = r.from; revSchView.to = r.to; }   // Dates starts from what's on screen
+      revSchView.per = k; revSchView.off = 0; redraw();
+    }, "Period"),
+    r.per === "dates" ? h("div", { class: "lb-daybar lb-payrange", id: "revSchDates" }, prev,
+      dateBox("revSchFrom", r.from, "From", v => pick(v, v > r.to ? v : r.to)), dateBox("revSchTo", r.to, "To", v => pick(v < r.from ? v : r.from, v)), next)
+      : h("div", { class: "of-step" }, prev, h("strong", { id: "revSchLabel", text: r.label }), next));
+}
+/** Where else each visit is now (revenue days around the period, today's schedule, what's booked from tomorrow) and
+ *  which other mornings had it. */
+function revSchElse(skip, days) {
+  const prod = Object.entries(days || {}).map(([d, v]) => [d, revProdItems(v)]);
+  if (revBk.today && Array.isArray(revBk.today.jobs)) prod.push([revBk.today.from, revNowItems(revBk.today.jobs)]);
+  if (revBk.future && Array.isArray(revBk.future.jobs)) {
+    const by = {};
+    for (const j of revBk.future.jobs) (by[j[5]] = by[j[5]] || []).push(j);
+    for (const [d, list] of Object.entries(by)) prod.push([d, revNowItems(list)]);
+  }
+  return { prodElse: revSchWhere(prod, skip), shotElse: revSchWhere(Object.entries(revSh.days).map(([d, sh]) => [d, revShotItems(sh)]), skip) };
+}
+const revSchKept = sh => (sh && sh.at ? fmtTime(new Date(sh.at)) : "");
+const revSchFirstText = () => revSh.first ? `Morning schedules are kept from ${lbDayText(revSh.first)}${revSh.first.slice(0, 4) !== lbToday().slice(0, 4) ? `, ${revSh.first.slice(0, 4)}` : ""}: what was scheduled on a morning before that wasn't saved.`
+  : "The first morning schedule is kept today, then every morning at 6 AM.";
+const revSchHow = () => howFold("revSchHow", h("p", { class: "hint", text: "Scheduled: every visit on the day's schedule at 6 AM (kept by the app every morning; a day it couldn't, the first time Today's revenue was read that day: its time is shown). Produced: what Operations counts for that day (every visit not canceled, on its day, with its invoice's money now). A visit on more than one morning in a period (it slipped a day) is scheduled once, on the first. As on Operations: a job counts once, on its first visit; later visits add money, not jobs. Each change's amount adds up to the difference." }));
+/** A list of visits' money, jobs and visits. */
+function revSchSum(list) {
+  const t = { cents: 0, jobs: 0, visits: 0 };
+  for (const x of list) { t.cents += x.c; t.visits++; if (x.first) t.jobs++; }
+  return t;
+}
+/** Today: this morning's schedule against the schedule now and what's done so far ({ top }, in place of the total), and
+ *  what changed since ({ chg }, under the jobs). */
+function revSchTodayEl(x) {
+  const r = revSchRange(), sh = revSh.days[r.today];
+  revShLoad(lbAddDays(r.today, -31), r.today);
+  const total = () => { const t = revBkSum(x.depts || {}); return h("div", { class: "rev-bk-total" }, h("small", { text: "Scheduled today" }), h("b", { id: "revBkTotal", text: lbMoney(t.cents / 100) }), h("span", { text: `${revJobs(t.jobs)} · ${fmt(t.visits)} visit${t.visits === 1 ? "" : "s"}` })); };
+  if (!revSh.seen[r.today]) return { top: h("div", { class: "rev-sch", id: "revSchToday" }, total(), h("p", { class: revSh.err ? "dlg-err" : "loading", text: revSh.err || "Reading this morning's schedule…" })) };
+  const now = revSchSum(revNowItems(x.jobs)), doneJobs = (x.jobs || []).filter(j => /^complete/i.test(String(j[6] || ""))), done = doneJobs.reduce((n, j) => n + (Number(j[4]) || 0), 0);
+  if (!sh) return { top: h("div", { class: "rev-sch", id: "revSchToday" }, total(),
+    h("p", { class: "meta", text: revSh.on === false ? "This morning's schedule wasn't kept, and the 6 AM run couldn't be set up: try Read again later." : "This morning's schedule is kept the first time Today's revenue is read each day: Read again." })) };
+  const { prodElse, shotElse } = revSchElse(new Set([r.today]), revDaysFor(lbAddDays(r.today, -31), lbAddDays(r.today, -1)));
+  const c = revSchCmp([r.today], () => revShotItems(sh), () => revNowItems(x.jobs), prodElse, shotElse), m = revBkSum(c.s), d = now.cents - m.cents;
+  return { top: h("div", { class: "rev-sch", id: "revSchToday" },
+    h("div", { class: "rev-sch-cards" },
+      h("div", { class: "rev-sch-card", id: "revSchMorning" }, h("small", { text: `This morning · ${revSchKept(sh)}` }), h("b", { text: lbMoney(m.cents / 100) }), h("span", { text: `${revJobs(m.jobs)} · ${fmt(m.visits)} visits` })),
+      h("div", { class: "rev-sch-card on", id: "revSchNow" }, h("small", { text: "Scheduled now" }), h("b", { id: "revBkTotal", text: lbMoney(now.cents / 100) }),
+        h("span", { class: "rev-sch-eff " + (d < 0 ? "neg" : d > 0 ? "pos" : ""), text: d ? `${revSchSigned(d)} since the morning (${revSchPct(d, m.cents)})` : "Same as the morning" })),
+      h("div", { class: "rev-sch-card", id: "revSchDone" }, h("small", { text: "Done so far" }), h("b", { text: lbMoney(done / 100) }), h("span", { text: `${fmt(doneJobs.length)} of ${fmt(now.visits)} visits marked done` })))),
+    chg: revSchChanges(c.g, "Now") };
+}
+/** A past day or period: what was scheduled each morning against what was produced, by department, and what changed. */
+function revSchPastEl(r) {
+  const wf = lbAddDays(r.from, -31), wt = lbAddDays(r.end, 31) < r.today ? lbAddDays(r.end, 31) : r.today;
+  if (r.end < r.from) return [h("p", { class: "meta", id: "revSchNone", text: "Nothing to compare yet: this period starts today. Day shows today's." })];
+  revShLoad(wf, wt);
+  const days = revDaysFor(wf, wt < r.today ? wt : lbAddDays(r.today, -1));
+  const seen = (() => { for (let d = r.from; d <= r.end; d = lbAddDays(d, 1)) if (!revSh.seen[d]) return false; return true; })();
+  if (!seen || !days) return [h("p", { class: revSh.err ? "dlg-err" : "loading", id: "revSchWait", text: revSh.err || (!seen ? "Reading the morning schedules…" : "Reading Operations' days…") })];
+  const want = [], noShot = [], noProd = [];
+  for (let d = r.from; d <= r.end; d = lbAddDays(d, 1)) {
+    if (!revSh.days[d]) noShot.push(d);
+    else if (!days[d] || !Array.isArray(days[d][13])) noProd.push(d);
+    else want.push(d);
+  }
+  const shotDays = want.concat(noProd);
+  if (shotDays.length && !revSync.busy && !revSync.err) setTimeout(() => revEnsure([[shotDays[0], shotDays[shotDays.length - 1], true]], false), 0);
+  if (!want.length) return [h("p", { class: noProd.length ? "loading" : "meta", id: "revSchNone", text: noProd.length ? (revSync.err || "Reading Operations' days…") : `No morning schedule was kept for ${r.from === r.end ? "this day" : "these days"}. ${revSchFirstText()}` }), revSchHow()];
+  const { prodElse, shotElse } = revSchElse(new Set(want), days);
+  const c = revSchCmp(want, d => revShotItems(revSh.days[d]), d => revProdItems(days[d]), prodElse, shotElse);
+  const S = revBkSum(c.s), P = revBkSum(c.p), D = P.cents - S.cents;
+  const cls = n => "rev-sch-eff " + (n < 0 ? "neg" : n > 0 ? "pos" : "");
+  const row = (k, name, a, b) => h("tr", { "data-k": k }, h("th", { scope: "row" }, k !== "t" ? h("i", { class: "rev-dot " + k }) : null, name),
+    h("td", { text: lbMoney(a.cents / 100) }), h("td", { text: lbMoney(b.cents / 100) }),
+    h("td", { class: cls(b.cents - a.cents) }, revSchSigned(b.cents - a.cents), a.cents ? h("small", { text: ` ${revSchPct(b.cents - a.cents, a.cents)}` }) : null));
+  const left = noShot.length + noProd.length, list = ds => ds.length <= 4 ? ds.map(lbDayText).join(", ") : `${fmt(ds.length)} days`;
+  const kept = want.length === 1 ? revSchKept(revSh.days[want[0]]) : "";
+  return [
+    h("p", { class: "meta", id: "revSchSpan", text: want.length === 1 ? `${lbDayText(want[0])}: the schedule at ${kept}, against what was produced.`
+      : `${fmt(want.length)} day${want.length === 1 ? "" : "s"}: each morning's schedule (6 AM), against what was produced.` }),
+    h("div", { class: "rev-sch-cards" },
+      h("div", { class: "rev-sch-card", id: "revSchS" }, h("small", { text: "Scheduled" }), h("b", { text: lbMoney(S.cents / 100) }), h("span", { text: `${revJobs(S.jobs)} · ${fmt(S.visits)} visits` })),
+      h("div", { class: "rev-sch-card", id: "revSchP" }, h("small", { text: "Produced" }), h("b", { text: lbMoney(P.cents / 100) }), h("span", { text: `${revJobs(P.jobs)} · ${fmt(P.visits)} visits` })),
+      h("div", { class: "rev-sch-card on", id: "revSchD" }, h("small", { text: "Difference" }), h("b", { class: cls(D), text: revSchSigned(D) }), h("span", { text: S.cents ? `${revSchPct(D, S.cents)} of what was scheduled` : "Nothing was scheduled" }))),
+    h("table", { class: "rev-bk-t rev-sch-dt", id: "revSchTable" },
+      h("thead", null, h("tr", null, h("th", { text: "Department" }), h("th", { text: "Scheduled" }), h("th", { text: "Produced" }), h("th", { text: "Difference" }))),
+      h("tbody", null, REV_BK_DEPTS.filter(([k]) => k !== "o" || c.s.o.visits || c.p.o.visits).map(([k, name]) => row(k, name, c.s[k], c.p[k]))),
+      h("tfoot", null, row("t", "Total", S, P))),
+    revSchChanges(c.g, "Produced"),
+    left ? h("p", { class: "hint", id: "revSchLeft", text: `Not compared: ${noShot.length ? `${list(noShot)} (no morning schedule kept)` : ""}${noShot.length && noProd.length ? "; " : ""}${noProd.length ? `${list(noProd)} (Operations' day still being read)` : ""}.${noShot.length && revSh.first && noShot[0] < revSh.first ? ` ${revSchFirstText()}` : ""}` }) : null,
+    revSchHow()].filter(Boolean);
+}
 /* ---- Company goal (Operations, beside Accounts receivable): the year's goal for each department and what's left of it
    (Housecall Pro's revenue since Jan 1), and the month's Super, Minimum and Bonus goals against the month so far (MTD).
    The Bonus goal counts the revenue without what the repair contractors are paid (Monumental's share and specialty
