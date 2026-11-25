@@ -24717,7 +24717,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 331;                   // the same number as sw.js's CACHE ("voda-fleet-v331"): both go up with every change
+const APP_BUILD = 332;                   // the same number as sw.js's CACHE ("voda-fleet-v332"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
