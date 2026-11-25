@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 162;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 163;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -426,7 +426,7 @@ function doPost(e) {
       case "venList": case "venFind": case "venLines": case "venRead": case "venSave": case "venDelete": case "venFile": case "venRecheck": case "venPay":
         if (!canVen_(user)) return json_({ ok: false, error: "not_allowed" });
         if (req.action === "venList") return json_(venList_());
-        if (req.action === "venRecheck") return json_(withTabLock_(function () { return venRecheck_(); }));
+        if (req.action === "venRecheck") return json_(venRecheck_());   // (it takes the tab's lock only to write)
         if (req.action === "venFind") return json_(venFind_(req));
         if (req.action === "venLines") return json_(venLines_(req));
         if (req.action === "venRead") return json_(venRead_(req));
@@ -1912,7 +1912,7 @@ function venAddrJobs_(groups, near) {
   const at = function (st, g) { return venStreet_(st).indexOf(venStreet_(g.key)) === 0 || venStreet_(st).indexOf(" " + venStreet_(g.key)) !== -1; };
   // a Housecall Pro job at the address: tagged, and kept (every visit of it, with its days)
   const keep = function (j, g) {
-    const inv = String(j.invoice_number || ""), base = inv.replace(/-\\d+$/, "");
+    const inv = String(j.invoice_number || ""), base = inv.replace(/-\d+$/, "");
     if (!base) return;
     tag(base, g);
     const t = new Date((j.schedule && j.schedule.scheduled_start) || j.created_at || "");
@@ -2021,22 +2021,33 @@ function venMatchLook_(text) {
 // a job's line that's testing ("Testing", "Lead test fee", "Asbestos survey", "Air sampling"; not "Mold remediation")
 const VEN_TEST_RE = /\btest(s|ing)?\b|sampl|survey|\blab\b|swab|spore|asbestos|clearance|mold (inspection|assessment)/i;
 /** The vendor invoices not billed (nothing charged for them: no Testing line on the job when they were added): each job's
- *  lines read again; one with a Testing line now: charged from it. { ok, invoices (all), fixed: [ids] } (15 at a time). */
+ *  lines read again; one with a Testing line now: charged from it. { ok, invoices (all), fixed: [ids] } (15 at a time).
+ *  Read without the tab's lock (Housecall Pro can take a while, and a save mustn't wait for it: Operations' jobs once,
+ *  each job's lines); only the invoices it fixes are written under it (their rows read again, still not charged). */
 function venRecheck_() {
   const rows = venRows_(), todo = rows.filter(function (v) { return !v.charged; }).slice(0, 15), fixed = [];
   if (!todo.length || !hcpKey_()) return { ok: true, invoices: rows.map(venOut_), fixed: fixed };
-  const s = pcSheet_(VEN_SHEET, VEN_COLS);
+  const want = {}, jobs = {}, found = {};
+  todo.forEach(function (v) { want[v.inv] = true; });
+  venJobsWhere_(function (x, base) { return !!want[base]; }).forEach(function (j) { jobs[j.base] = j; });
   todo.forEach(function (v) {
-    const job = venJobsWhere_(function (x, base) { return base === v.inv; })[0], ids = job ? job.ids : [v.jobId];
-    const r = venLines_({ ids: ids });
+    const r = venLines_({ ids: jobs[v.inv] ? jobs[v.inv].ids : [v.jobId] });
     if (!r.ok) return;
     const picked = r.lines.filter(function (l) { return VEN_TEST_RE.test(l[0] + " " + l[1]); });
-    if (!picked.length) return;
-    v.lines = picked; v.charged = picked.reduce(function (n, l) { return n + l[2]; }, 0); v.from = "hcp";
-    s.getRange(v.row, 12, 1, 3).setNumberFormat("@").setValues([[String(v.charged), "hcp", JSON.stringify(v.lines)]]);
-    fixed.push(v.id);
+    if (picked.length) found[v.id] = { lines: picked, charged: picked.reduce(function (n, l) { return n + l[2]; }, 0) };
   });
-  return { ok: true, invoices: rows.map(venOut_), fixed: fixed };
+  if (!Object.keys(found).length) return { ok: true, invoices: rows.map(venOut_), fixed: fixed };
+  return withTabLock_(function () {
+    const s = pcSheet_(VEN_SHEET, VEN_COLS), now = venRows_();
+    now.forEach(function (v) {
+      const f = found[v.id];
+      if (!f || v.charged) return;
+      v.lines = f.lines; v.charged = f.charged; v.from = "hcp";
+      s.getRange(v.row, 12, 1, 3).setNumberFormat("@").setValues([[String(v.charged), "hcp", JSON.stringify(v.lines)]]);
+      fixed.push(v.id);
+    });
+    return { ok: true, invoices: now.map(venOut_), fixed: fixed };
+  });
 }
 /** A job's lines from Housecall Pro (every visit's): [[name, description, cents]] (a line of $0 left out). */
 function venLines_(req) {
