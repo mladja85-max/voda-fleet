@@ -1,11 +1,12 @@
 // VODA Hub offline support: keeps a copy of the app on the phone so it opens without signal.
 // Truck data is not cached here; the app keeps its own last-known copy.
-const CACHE = "voda-fleet-v326";
+const CACHE = "voda-fleet-v327";   // the same number as APP_BUILD in index.html: the app updates itself when this one is newer
 const SHELL = ["./", "./index.html", "./config.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./favicon-32.png"];
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // straight from the site (not the browser's copy, which can be up to 10 minutes old): a new version opens new
+  event.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", event => {
@@ -42,6 +43,7 @@ self.addEventListener("fetch", event => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+  if (url.origin === self.location.origin && /\/sw\.js$/.test(url.pathname)) return;   // the app asking which version is out: the site answers
   if (url.origin === self.location.origin) event.respondWith(networkFirst(req));
   else if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") event.respondWith(cacheFirst(req));
   // Everything else (the Google Sheet) goes straight to the network.
