@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 161;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 162;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -1874,11 +1874,6 @@ function venAddrGroups_(text) {
 function venStreet_(st) {
   return String(st || "").toLowerCase().replace(/[.,#]/g, " ").replace(/\b(n|s|e|w|north|south|east|west)\b/g, " ").replace(/\s+/g, " ").trim();
 }
-/** The jobs at these addresses: { why: { base: ["address …"] }, jobs: { base: a job built from Housecall Pro (not read in
- *  Operations yet) }, look: { cust: customers at the address, jobs: jobs found there } }. Housecall Pro's customers at
- *  each address (its search, as written and by number and street name; one whose addresses don't include it left out);
- *  then their jobs: the ones Operations has read (by the client's name; each one's own address checked in Housecall Pro,
- *  the 8 latest), and the newest in Housecall Pro (its list for the customer, each job's customer and address checked). */
 /** The invoice's day ("DATE 08/12/2026", not the due date), "" if it doesn't say. */
 function venInvDay_(text) {
   const re = /(?:^|[^a-z])(?:invoice\s+)?date[\s:]*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/gi, raw = String(text || "");
@@ -1903,11 +1898,39 @@ function venAway_(j, near) {
 function venOrder_(list, near) {
   return list.sort(function (a, b) { return near ? venAway_(a, near) - venAway_(b, near) || (a.day < b.day ? 1 : -1) : a.day < b.day ? 1 : a.day > b.day ? -1 : 0; });
 }
+/** The jobs at these addresses: { why: { base: ["address …"] }, jobs: { base: a job built from Housecall Pro }, look:
+ *  { from, to (the days read), cust (customers found at it), jobs (jobs found there) } }. First every job Housecall Pro
+ *  has scheduled around the invoice's day (60 days before it to a week after; no day: the last 4 months), each one's own
+ *  address (the list by day: the one Operations reads every day). None there (an older job): Housecall Pro's customers at
+ *  the address (its search; it may not search addresses), their jobs Operations has read (by the client's name; each
+ *  one's own address checked, 20 at a time, the visit nearest the invoice's day first), and its list of the customer's
+ *  jobs (each one checked to be theirs and there). */
 function venAddrJobs_(groups, near) {
-  const why = {}, jobs = {}, look = { cust: 0, jobs: 0 }, tz = Session.getScriptTimeZone();
+  const why = {}, jobs = {}, look = { from: "", to: "", cust: 0, jobs: 0 }, tz = Session.getScriptTimeZone();
   if (!hcpKey_()) return { why: why, jobs: jobs, look: look, error: "no_key" };
   const tag = function (base, g) { (why[base] || (why[base] = [])).indexOf("address " + g.a) === -1 && why[base].push("address " + g.a); };
   const at = function (st, g) { return venStreet_(st).indexOf(venStreet_(g.key)) === 0 || venStreet_(st).indexOf(" " + venStreet_(g.key)) !== -1; };
+  // a Housecall Pro job at the address: tagged, and kept (every visit of it, with its days)
+  const keep = function (j, g) {
+    const inv = String(j.invoice_number || ""), base = inv.replace(/-\\d+$/, "");
+    if (!base) return;
+    tag(base, g);
+    const t = new Date((j.schedule && j.schedule.scheduled_start) || j.created_at || "");
+    const day = isNaN(t.getTime()) ? "" : Utilities.formatDate(t, tz, "yyyy-MM-dd"), y = jobs[base];
+    if (!y) jobs[base] = { base: base, ids: [String(j.id)], day: day, days: day ? [day] : [], client: hcpClient_(j), dept: revDept_(hcpJobType_(j)), proj: String(j.description || "").slice(0, 80) || hcpJobType_(j), c: Math.round(Number(j.total_amount) || 0) };
+    else if (y.ids.indexOf(String(j.id)) === -1) { y.ids.push(String(j.id)); y.c += Math.round(Number(j.total_amount) || 0); if (day && y.days.indexOf(day) === -1) y.days.push(day); if (day && (!y.day || day < y.day)) y.day = day; }
+  };
+  // 1. the jobs scheduled around the invoice's day
+  const mid = near || Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
+  look.from = tmAddDays_(mid, near ? -60 : -120); look.to = tmAddDays_(mid, 7);
+  const win = hcpJobsIn_(look.from, look.to);
+  if (!win.error) (win.jobs || []).forEach(function (j) {
+    if (!j || /cancel/i.test(String(j.work_status || ""))) return;
+    const g = groups.filter(function (g) { return at(j.address && j.address.street, g); })[0];
+    if (g) keep(j, g);
+  });
+  if (Object.keys(why).length) { look.jobs = Object.keys(why).length; return { why: why, jobs: jobs, look: look }; }
+  // 2. none there: Housecall Pro's customers at the address, and their jobs
   const custs = [], had = {};
   groups.forEach(function (g) {
     [g.a, g.key].filter(function (q, i, a) { return a.indexOf(q) === i; }).forEach(function (q) {
@@ -1943,13 +1966,7 @@ function venAddrJobs_(groups, near) {
     (Array.isArray(jd.jobs) ? jd.jobs : []).forEach(function (j) {
       const cid = (j.customer && j.customer.id) || j.customer_id || "";
       if ((cid && cid !== x.c.id) || !at(j.address && j.address.street, x.g) || /cancel/i.test(String(j.work_status || ""))) return;   // another customer's (a list that isn't theirs only)
-      const inv = String(j.invoice_number || ""), base = inv.replace(/-\d+$/, "");
-      if (!base) return;
-      tag(base, x.g);
-      const t = new Date((j.schedule && j.schedule.scheduled_start) || j.created_at || "");
-      const day = isNaN(t.getTime()) ? "" : Utilities.formatDate(t, tz, "yyyy-MM-dd"), y = jobs[base];
-      if (!y) jobs[base] = { base: base, ids: [String(j.id)], day: day, days: day ? [day] : [], client: hcpClient_(j), dept: revDept_(hcpJobType_(j)), proj: String(j.description || "").slice(0, 80) || hcpJobType_(j), c: Math.round(Number(j.total_amount) || 0) };
-      else { if (y.ids.indexOf(String(j.id)) === -1) y.ids.push(String(j.id)); y.c += Math.round(Number(j.total_amount) || 0); if (day && y.days.indexOf(day) === -1) y.days.push(day); if (day && (!y.day || day < y.day)) y.day = day; }
+      keep(j, x.g);
     });
   });
   look.jobs = Object.keys(why).length;
