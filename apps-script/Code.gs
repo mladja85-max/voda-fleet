@@ -452,7 +452,7 @@ function doPost(e) {
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         const out = revBooked_(req);
         // the day's schedule as it started: kept by the 6 AM run, else by the day's first read of Today's revenue
-        if (out.ok && out.when === "today") { out.shot = shotTrigger_(); if (!shotHave_(out.from)) withTabLock_(function () { shotKeep_(out); }); }
+        if (out.ok && out.when === "today") { out.shot = shotTrigger_(); if (!shotHave_(out.from)) try { withTabLock_(function () { shotKeep_(out); }); } catch (e) { /* kept on the next read */ } }
         return json_(out);
       }
       case "revSched":
