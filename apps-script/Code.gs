@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 156;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 157;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -7085,6 +7085,7 @@ function pcSync_(req, pages) {
     custs.forEach(function (c) { if (c && c.id) cr.push(c); });
     const wroteJobs = pcUpsert_(PC_JOBS, PC_JOB_COLS, jr);
     const wroteCust = pcUpsert_(PC_CUST, PC_CUST_COLS, cr.map(function (c) { return [String(c.id), c]; }), function (row, old) { return pcCustRow_(row[1], old); });
+    if (wroteJobs || wroteCust) pcTouch_();   // the clients' history is built again (Past clients' cache)
     return { jobs: wroteJobs, customers: wroteCust };
   });
   if (backDone) {
@@ -7110,9 +7111,23 @@ function pcCount_(name) { const s = SpreadsheetApp.getActive().getSheetByName(na
 /** What the tabs know: each client's jobs summed up (by: customer id → { last finished day, its type and address, jobs,
  *  first, com (a Commercial job type), open: [[day, created]] }), the customers (cust: id → row), the marks (key →
  *  latest) and who's marked Don't call again (never: id → that mark). */
-function pcKnown_(tz) {
-  const jr = pcRows_(PC_JOBS, PC_JOB_COLS.length), cr = pcRows_(PC_CUST, PC_CUST_COLS.length), mr = pcRows_(PC_CALLS, PC_CALL_COLS.length);
-  const by = {};
+/* ---- Past clients and Commercial clients: each client's history (built from every job and client read from Housecall
+   Pro: tens of thousands of rows) kept in Google's cache, so a look doesn't read and build it all again (it took 7 to 9
+   seconds each time). Built again once the tabs change: a read from Housecall Pro that wrote jobs or clients marks it
+   (pcTouch_), and the tabs' row counts are part of its name too. The calls (marks) are read every time. ---- */
+const PC_K_STAMP = "PC_K_STAMP", PC_K_KEY = "PCK1", PC_K_PART = 90 * 1024, PC_K_MAX_PARTS = 60, PC_K_SECS = 6 * 3600;
+function pcTouch_() { PropertiesService.getScriptProperties().setProperty(PC_K_STAMP, String(Date.now())); }
+function pcBaseKey_(tz) {
+  const ss = SpreadsheetApp.getActive(), j = ss.getSheetByName(PC_JOBS), c = ss.getSheetByName(PC_CUST);
+  return [PC_K_KEY, PropertiesService.getScriptProperties().getProperty(PC_K_STAMP) || "0", j ? j.getLastRow() : 0, c ? c.getLastRow() : 0, tz].join(":");
+}
+/** From the tabs: { by: { customer id: { last, lastJob, lastInv, type, addr, jobs, first, com, open, all, tags } }, cust:
+ *  { customer id: its row }, ex: { customer id: { years: { "2024": true }, spent } } (the jobs done), from (the first job
+ *  done) }. */
+function pcBaseBuild_(tz) {
+  const jr = pcRows_(PC_JOBS, PC_JOB_COLS.length), cr = pcRows_(PC_CUST, PC_CUST_COLS.length);
+  const by = {}, ex = {};
+  let from = "";
   jr.forEach(function (r) {
     const c = String(r[1] || ""), st = String(r[3] || ""), d = pcDay_(r[4], tz), made = pcDay_(r[5], tz), type = String(r[6] || "");
     if (!c) return;
@@ -7124,10 +7139,50 @@ function pcKnown_(tz) {
       if (d > s.last || (d === s.last && !s.addr)) { s.last = d; s.lastJob = String(r[0] || ""); s.lastInv = String(r[2] || ""); s.type = type; s.addr = String(r[7] || ""); }
       if (!s.first || d < s.first) s.first = d;
       if (hcpFirstVisit_({ invoice_number: String(r[2] || "") })) s.jobs++;
+      // each client's years with a job done, and what those jobs came to (Commercial clients)
+      const e = ex[c] || (ex[c] = { years: {}, spent: 0 });
+      e.years[d.slice(0, 4)] = true; e.spent += Number(r[10]) || 0;
+      if (!from || d < from) from = d;
     } else if (st === "open") s.open.push([d, made]);
   });
   const cust = {};
-  cr.forEach(function (r) { cust[String(r[0])] = r; });
+  cr.forEach(function (r) { cust[String(r[0])] = r.map(function (v) { return v instanceof Date ? v.toISOString() : v; }); });
+  return { by: by, cust: cust, ex: ex, from: from };
+}
+/** The history: from the cache when the tabs haven't changed since it was kept; else built (and kept, in parts of 90 KB,
+ *  zipped, 6 hours). Too big for the cache: built each time, as before. */
+function pcBase_(tz) {
+  const key = pcBaseKey_(tz), C = CacheService.getScriptCache();
+  try {
+    const n = Number(C.get(key + ":n")) || 0;
+    if (n > 0 && n <= PC_K_MAX_PARTS) {
+      const ks = [];
+      for (let i = 0; i < n; i++) ks.push(key + ":" + i);
+      const got = C.getAll(ks) || {};
+      if (ks.every(function (k) { return typeof got[k] === "string"; })) {
+        const zipped = Utilities.newBlob(Utilities.base64Decode(ks.map(function (k) { return got[k]; }).join("")), "application/x-gzip");
+        const B = JSON.parse(Utilities.ungzip(zipped).getDataAsString());
+        if (B && B.by && B.cust) { B.cached = true; return B; }
+      }
+    }
+  } catch (e) { /* built again */ }
+  const B = pcBaseBuild_(tz);
+  try {
+    const b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(B), "application/json")).getBytes());
+    const parts = Math.ceil(b64.length / PC_K_PART);
+    if (parts <= PC_K_MAX_PARTS) {
+      const o = {};
+      for (let i = 0; i < parts; i++) o[key + ":" + i] = b64.slice(i * PC_K_PART, (i + 1) * PC_K_PART);
+      C.putAll(o, PC_K_SECS);
+      C.put(key + ":n", String(parts), PC_K_SECS);   // last: the parts are all there before it says how many
+    }
+  } catch (e) { /* not kept: built again the next time */ }
+  return B;
+}
+/** Everything Past clients and Commercial clients go by: the history (pcBase_) and the calls (marks; never: Don't call
+ *  again). */
+function pcKnown_(tz) {
+  const B = pcBase_(tz), mr = pcRows_(PC_CALLS, PC_CALL_COLS.length);
   const marks = {}, never = {};
   mr.forEach(function (r) {   // in the order made: the last one of each counts
     const k = String(r[2]) + "|" + Number(r[3]) + "|" + pcDay_(r[4], tz);
@@ -7135,7 +7190,7 @@ function pcKnown_(tz) {
     if (marks[k].r === "cb") { marks[k].cb = pcDay_(r[7], tz); marks[k].note = String(r[8] || ""); marks[k].day = pcDay_(r[1], tz); }
   });
   Object.keys(marks).forEach(function (k) { if (marks[k].r === "dnc") never[k.split("|")[0]] = marks[k]; });
-  return { by: by, cust: cust, marks: marks, never: never };
+  return { by: B.by, cust: B.cust, ex: B.ex, from: B.from, marks: marks, never: never, cached: !!B.cached };
 }
 /** A client's name as Housecall Pro shows it (the company when there is one: "Redfin"), and the person ("Amanda Maron"). */
 function pcName_(cu) {
@@ -7176,15 +7231,7 @@ function comClients_(user) {
   const P = PropertiesService.getScriptProperties(), tz = Session.getScriptTimeZone(), today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
   const year = today.slice(0, 4), y0 = year + "-01-01", admin = user.role === "admin";
   if (P.getProperty(PC_DONE) !== "yes") return { ok: true, ready: false, admin: admin, year: Number(year) };
-  const K = pcKnown_(tz), jr = pcRows_(PC_JOBS, PC_JOB_COLS.length), ex = {};
-  let from = "";
-  jr.forEach(function (r) {   // each client's years with a job done, and what those jobs came to
-    const c = String(r[1] || ""), d = pcDay_(r[4], tz);
-    if (!c || String(r[3]) !== "done" || !d) return;
-    const e = ex[c] || (ex[c] = { years: {}, spent: 0 });
-    e.years[d.slice(0, 4)] = true; e.spent += Number(r[10]) || 0;
-    if (!from || d < from) from = d;
-  });
+  const K = pcKnown_(tz), ex = K.ex, from = K.from;   // each client's years with a job done, and what those jobs came to
   const n = { com: 0, back: 0, dnc: 0, away: 0 }, list = [];
   Object.keys(K.by).forEach(function (c) {
     const s = K.by[c], cu = K.cust[c] || [];
@@ -7446,8 +7493,7 @@ function pcDayMarks_(req, user) {
     if (pcDay_(x[1], tz) !== day) return;
     last[x[2] + "|" + x[3] + "|" + pcDay_(x[4], tz)] = x;   // in the order made: the day's last mark counts
   });
-  const cust = {};
-  pcRows_(PC_CUST, PC_CUST_COLS.length).forEach(function (r) { cust[String(r[0])] = r; });
+  const cust = pcBase_(tz).cust;
   const list = [];
   Object.keys(last).forEach(function (k) {
     const x = last[k], r = String(x[5] || "");
