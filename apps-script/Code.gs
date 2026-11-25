@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 155;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 156;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -517,9 +517,12 @@ function doPost(e) {
       case "bkPick":
         if (user.role !== "admin") return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return bkPick_(req, user); }));
-      case "estimates":
+      case "estimates": {
         if (!canEst_(user)) return json_({ ok: false, error: "not_allowed" });
-        return json_(estRead_(req.year, user));
+        const out = estRead_(req.year, user);
+        if (out && out.ok !== false) out.bg = estBgTrigger_();   // Housecall Pro read in the background (set up the first time)
+        return json_(out);
+      }
       case "estReportPdf":
         if (!estAll_(user)) return json_({ ok: false, error: "not_allowed" });
         return json_(estReportPdf_(req));
@@ -533,7 +536,7 @@ function doPost(e) {
       case "ofEstimates": {
         if (!canOffice_(user) || !ofEstOk_(user)) return json_({ ok: false, error: "not_allowed" });
         const out = estReadDept_(req.year, "c");
-        if (out.ok) ofEstMarksOn_(out.estimates);
+        if (out.ok) { ofEstMarksOn_(out.estimates); out.bg = estBgTrigger_(); }   // Housecall Pro read in the background
         return json_(out);
       }
       case "ofEstMark":
@@ -8552,6 +8555,35 @@ function setPriceCheck_(req) {
   if (req.on) access.push(PRICE_CHECK);
   if (accessText_(access) !== accessText_(parseAccess_(x.u.access))) { x.u.access = accessText_(access); writeUser_(s, x.rowIndex, x.u); }
   return { ok: true, user: publicUser_(x.u) };
+}
+/* ---- Estimates: Housecall Pro read in the background every 10 minutes (6 AM to 10 PM), what changed since the last
+   read (as Read again does), so nobody opening Estimates waits on it; the app then only loads the saved list. Set up
+   the first time someone opens Estimates. At night, or before the first full read (done from the app), it waits. ---- */
+const EST_BG_MIN = 10, EST_BG_HOURS = [6, 22], EST_BG_BUDGET_MS = 4 * 60e3;
+function estBgTrigger_() {
+  try {
+    if (ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "estBgRead"; })) return true;
+    ScriptApp.newTrigger("estBgRead").timeBased().everyMinutes(EST_BG_MIN).create();
+    return true;
+  } catch (e) { return false; }
+}
+/** The timed job: what changed in Housecall Pro's estimates, a few pages at a time, until done or 4 minutes. */
+function estBgRead() {
+  const P = PropertiesService.getScriptProperties();
+  const hr = Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "HH"));
+  if (hr < EST_BG_HOURS[0] || hr >= EST_BG_HOURS[1]) return { ok: true, skipped: "night" };
+  if (!hcpKey_() || P.getProperty(EST_DONE) !== "yes" || P.getProperty(EST_SCHEMA) !== EST_V) return { ok: true, skipped: "not_ready" };
+  if (P.getProperty("MOVED")) return { ok: true, skipped: "moved" };
+  const t0 = Date.now();
+  let page = 1, sort = "", out = null, read = 0;
+  for (let i = 0; i < 20 && Date.now() - t0 < EST_BG_BUDGET_MS; i++) {
+    out = estSync_(Object.assign({ page: page }, sort ? { sort: sort } : {}), null);
+    if (!out || !out.ok) break;
+    read += Number(out.read) || 0;
+    if (!out.next) break;
+    page = out.next; sort = out.by || "";
+  }
+  return { ok: !!(out && out.ok), read: read, error: out && !out.ok ? out.error : "" };
 }
 /** Run once from the script editor if the app says the hourly check isn't set up: Run > priceWatchSetup. */
 function priceWatchSetup() {
