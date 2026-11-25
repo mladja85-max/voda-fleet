@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 163;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 164;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -1727,9 +1727,15 @@ function docFile_(req) {
 const VEN = "vendors";
 const VEN_SHEET = "Vendor invoices";
 // "Paid (cents)": the vendor's invoice total (what it charged us); "Paid with" … "Payment marked": we paid it (how, when, a
-// note, who marked it: "name|time"); none: not paid yet. 26 columns (A to Z: a new tab's width).
+// note, who marked it: "name|time"); none: not paid yet. "Other jobs": one vendor's bill for several jobs (units at one
+// address): the jobs after the first, [{ jobId, inv, day, client, dept, charged }]; the bill isn't split (it counts on
+// the first job's day and department), "Charged" is every job's together, each line says its job (a 4th item).
 const VEN_COLS = ["Id", "Job id", "Job #", "Job day", "Client", "Department", "Service", "Vendor", "Vendor invoice #", "Invoice day", "Paid (cents)", "Charged (cents)",
-  "Charged from", "Lines", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at", "Paid with", "Paid on", "Payment note", "Payment marked"];
+  "Charged from", "Lines", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at", "Paid with", "Paid on", "Payment note", "Payment marked",
+  "Other jobs"];
+const VEN_MORE_MAX = 9;
+/** The tab (pcSheet_ widens it: a new tab is 26 columns, A to Z). */
+function venSheet_() { return pcSheet_(VEN_SHEET, VEN_COLS); }
 const VEN_SVC = ["al", "mold", "other"], VEN_MAX_C = 1e9;
 const VEN_PAY = ["account", "card", "other"];   // paid from the bank account, with a credit card, some other way
 function canVen_(user) {
@@ -1742,20 +1748,23 @@ function venFolder_() { return hubSub_("VEN_FOLDER_ID"); }
  *  lines: [[name, description, cents]], fileId, file, type, notes, by, at, chBy, chAt }. */
 function venRows_() {
   const tz = Session.getScriptTimeZone(), iso = function (v) { return v instanceof Date ? v.toISOString() : String(v || ""); };
-  return pcRows_(VEN_SHEET, VEN_COLS.length).map(function (r, i) {
-    let lines = [];
+  const sh = SpreadsheetApp.getActive().getSheetByName(VEN_SHEET), W = sh && typeof sh.getMaxColumns === "function" ? Math.min(VEN_COLS.length, sh.getMaxColumns()) : VEN_COLS.length;
+  return pcRows_(VEN_SHEET, W).map(function (r, i) {
+    let lines = [], more = [];
     try { lines = JSON.parse(String(r[13] || "[]")) || []; } catch (e) { lines = []; }
+    try { more = JSON.parse(String(r[26] || "[]")) || []; } catch (e) { more = []; }
     return { row: i + 2, id: String(r[0] || ""), jobId: String(r[1] || ""), inv: String(r[2] || ""), day: pcDay_(r[3], tz) || "", client: String(r[4] || ""),
       dept: REV_DEPTS.indexOf(String(r[5])) === -1 ? "o" : String(r[5]), svc: VEN_SVC.indexOf(String(r[6])) === -1 ? "other" : String(r[6]), vendor: String(r[7] || ""),
       vinv: String(r[8] || ""), vday: pcDay_(r[9], tz) || "", paid: Math.round(Number(r[10]) || 0), charged: Math.round(Number(r[11]) || 0), from: String(r[12]) === "hcp" ? "hcp" : "typed",
       lines: Array.isArray(lines) ? lines : [], fileId: String(r[14] || ""), file: String(r[15] || ""), type: String(r[16] || ""), notes: String(r[17] || ""),
       by: String(r[18] || ""), at: iso(r[19]), chBy: String(r[20] || ""), chAt: iso(r[21]),
-      payHow: VEN_PAY.indexOf(String(r[22])) === -1 ? "" : String(r[22]), payDay: pcDay_(r[23], tz) || "", payNote: String(r[24] || ""), payMark: String(r[25] || "") };
+      payHow: VEN_PAY.indexOf(String(r[22])) === -1 ? "" : String(r[22]), payDay: pcDay_(r[23], tz) || "", payNote: String(r[24] || ""), payMark: String(r[25] || ""),
+      more: Array.isArray(more) ? more.filter(function (j) { return j && j.inv; }) : [] };
   }).filter(function (v) { return v.id; });
 }
 function venOut_(v) {
   return { id: v.id, jobId: v.jobId, inv: v.inv, day: v.day, client: v.client, dept: v.dept, svc: v.svc, vendor: v.vendor, vinv: v.vinv, vday: v.vday, paid: v.paid,
-    charged: v.charged, from: v.from, lines: v.lines, file: v.fileId ? { name: v.file, type: v.type } : null, notes: v.notes, by: v.by, at: v.at, chBy: v.chBy, chAt: v.chAt,
+    charged: v.charged, from: v.from, lines: v.lines, more: v.more || [], file: v.fileId ? { name: v.file, type: v.type } : null, notes: v.notes, by: v.by, at: v.at, chBy: v.chBy, chAt: v.chAt,
     pay: v.payHow ? { how: v.payHow, day: v.payDay, note: v.payNote, by: String(v.payMark).split("|")[0] || "", at: String(v.payMark).split("|")[1] || "" } : null };
 }
 /** A payment to the vendor ({ how: account | card | other, day, note }) checked: { how, day, note } or { error }. A note
@@ -2028,17 +2037,21 @@ function venRecheck_() {
   const rows = venRows_(), todo = rows.filter(function (v) { return !v.charged; }).slice(0, 15), fixed = [];
   if (!todo.length || !hcpKey_()) return { ok: true, invoices: rows.map(venOut_), fixed: fixed };
   const want = {}, jobs = {}, found = {};
-  todo.forEach(function (v) { want[v.inv] = true; });
+  const jobsOf = function (v) { return [{ inv: v.inv, jobId: v.jobId }].concat((v.more || []).map(function (j) { return { inv: j.inv, jobId: j.jobId }; })); };   // every job on the bill
+  todo.forEach(function (v) { jobsOf(v).forEach(function (j) { want[j.inv] = true; }); });
   venJobsWhere_(function (x, base) { return !!want[base]; }).forEach(function (j) { jobs[j.base] = j; });
   todo.forEach(function (v) {
-    const r = venLines_({ ids: jobs[v.inv] ? jobs[v.inv].ids : [v.jobId] });
-    if (!r.ok) return;
-    const picked = r.lines.filter(function (l) { return VEN_TEST_RE.test(l[0] + " " + l[1]); });
+    const several = (v.more || []).length > 0, picked = [];
+    for (const j of jobsOf(v)) {
+      const r = venLines_({ ids: jobs[j.inv] ? jobs[j.inv].ids : [j.jobId] });
+      if (!r.ok) return;
+      r.lines.forEach(function (l) { if (VEN_TEST_RE.test(l[0] + " " + l[1])) picked.push(several ? [l[0], l[1], l[2], j.inv] : l); });
+    }
     if (picked.length) found[v.id] = { lines: picked, charged: picked.reduce(function (n, l) { return n + l[2]; }, 0) };
   });
   if (!Object.keys(found).length) return { ok: true, invoices: rows.map(venOut_), fixed: fixed };
   return withTabLock_(function () {
-    const s = pcSheet_(VEN_SHEET, VEN_COLS), now = venRows_();
+    const s = venSheet_(), now = venRows_();
     now.forEach(function (v) {
       const f = found[v.id];
       if (!f || v.charged) return;
@@ -2262,7 +2275,22 @@ function venSave_(req, user) {
   if (v.vday && !DOC_DAY.test(v.vday)) return { ok: false, error: "bad_value", field: "vday" };
   if (!Number.isFinite(v.paid) || v.paid <= 0) return { ok: false, error: "bad_value", field: "paid" };
   if (!Number.isFinite(v.charged)) return { ok: false, error: "bad_value", field: "charged" };
-  v.lines = (Array.isArray(x.lines) ? x.lines : []).slice(0, 30).map(function (l) { return Array.isArray(l) ? [t(l[0], 80), t(l[1], 160), Math.round(Number(l[2]) || 0)] : null; }).filter(Boolean);
+  v.lines = (Array.isArray(x.lines) ? x.lines : []).slice(0, 60).map(function (l) {
+    if (!Array.isArray(l)) return null;
+    const out = [t(l[0], 80), t(l[1], 160), Math.round(Number(l[2]) || 0)];
+    if (l[3]) out.push(t(l[3], 30).replace(/^#/, ""));   // its job (one bill for several jobs)
+    return out;
+  }).filter(Boolean);
+  // the other jobs on the same bill (not split: each with what we charged on it)
+  const seenInv = {}; seenInv[v.inv] = true;
+  v.more = [];
+  for (const j of (Array.isArray(x.more) ? x.more : []).slice(0, VEN_MORE_MAX)) {
+    if (!j || typeof j !== "object") return { ok: false, error: "bad_value", field: "job" };
+    const m = { jobId: t(j.jobId, 80), inv: t(j.inv, 30).replace(/^#/, ""), day: String(j.day || ""), client: t(j.client, 120), dept: REV_DEPTS.indexOf(String(j.dept)) === -1 ? "o" : String(j.dept), charged: cents(j.charged || 0) };
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(m.jobId) || !m.inv || !DOC_DAY.test(m.day) || !Number.isFinite(m.charged)) return { ok: false, error: "bad_value", field: "job" };
+    if (seenInv[m.inv]) continue;
+    seenInv[m.inv] = true; v.more.push(m);
+  }
   if (v.from === "hcp" && !v.lines.length) v.from = "typed";
   let file = null;
   if (req.fileId) {
@@ -2290,10 +2318,10 @@ function venSave_(req, user) {
     if (was && was.fileId && was.fileId !== file.getId()) { try { DriveApp.getFileById(was.fileId).setTrashed(true); } catch (e) { /* gone already */ } }
     out.fileId = file.getId(); out.file = name; out.type = type;
   }
-  const s = pcSheet_(VEN_SHEET, VEN_COLS), at = was ? was.row : Math.max(2, s.getLastRow() + 1);
+  const s = venSheet_(), at = was ? was.row : Math.max(2, s.getLastRow() + 1);
   s.getRange(at, 1, 1, VEN_COLS.length).setNumberFormat("@").setValues([[out.id, out.jobId, out.inv, out.day, out.client, out.dept, out.svc, out.vendor, out.vinv, out.vday,
     String(out.paid), String(out.charged), out.from, JSON.stringify(out.lines), out.fileId, out.file, out.type, out.notes, out.by, out.at, out.chBy, out.chAt,
-    pay.how, pay.day, pay.note, pay.how ? pay.mark : ""]]);
+    pay.how, pay.day, pay.note, pay.how ? pay.mark : "", out.more.length ? JSON.stringify(out.more) : ""]]);
   out.payHow = pay.how; out.payDay = pay.how ? pay.day : ""; out.payNote = pay.how ? pay.note : ""; out.payMark = pay.how ? pay.mark : "";
   return { ok: true, inv: venOut_(out) };
 }
@@ -7242,11 +7270,13 @@ function pcCustRow_(cu, old) {
 function pcSheet_(name, cols) {
   const ss = SpreadsheetApp.getActive();
   let s = ss.getSheetByName(name);
+  const wide = function () { if (typeof s.getMaxColumns === "function" && s.getMaxColumns() < cols.length) s.insertColumnsAfter(s.getMaxColumns(), cols.length - s.getMaxColumns()); };   // (a new tab: 26 columns)
   if (!s) {
     s = ss.insertSheet(name);
+    wide();
     s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
     if (typeof s.setFrozenRows === "function") s.setFrozenRows(1);
-  } else if (typeof s.getLastColumn === "function" && s.getLastColumn() < cols.length) s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");   // a column added since
+  } else if (typeof s.getLastColumn === "function" && s.getLastColumn() < cols.length) { wide(); s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold"); }   // a column added since
   return s;
 }
 function pcRows_(name, W) {
