@@ -15973,11 +15973,12 @@ async function venOpen(v) {
     if (w) w.location.href = url; else window.open(url, "_blank");
   } catch (e) { if (w) w.close(); toast(e && e.error === "file_gone" ? "That file isn't in Drive any more (VODA Hub › Vendor invoices)." : errText(e, "The file")); }
 }
-/** Why no job at an address: Housecall Pro has no customer there, or none of their jobs is there. */
+/** Why no job at an address: none in the days read around the invoice's day (Housecall Pro's jobs by day), and its
+ *  customer search: no customer there, or none of their jobs there. */
 function venLookText(look, addr) {
   if (!look) return "";
-  return !look.cust ? `Housecall Pro has no customer at ${addr}: find the job by its #, the client's name or the address as Housecall Pro has it.`
-    : `Housecall Pro has ${look.cust === 1 ? "a customer" : `${look.cust} customers`} at ${addr}, but no job of theirs there was found: find it by its #.`;
+  const days = look.from && look.to ? ` scheduled ${lbDayText(look.from)}${look.from.slice(0, 4) !== look.to.slice(0, 4) ? `, ${look.from.slice(0, 4)}` : ""} – ${lbDayText(look.to)}, ${look.to.slice(0, 4)}` : "";
+  return `No job at ${addr} in Housecall Pro${days}${look.cust ? ` (it has ${look.cust === 1 ? "a customer" : `${look.cust} customers`} there, but no job of theirs there)` : ""}: find the job by its #, the client's name, or set the invoice's day and look again.`;
 }
 /** What a vendor's invoice says (Google read it): { paid (dollars), day, vinv, vendor (one used before, if it names it), svc }. */
 function venParse(text, today) {
@@ -24716,7 +24717,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 330;                   // the same number as sw.js's CACHE ("voda-fleet-v330"): both go up with every change
+const APP_BUILD = 331;                   // the same number as sw.js's CACHE ("voda-fleet-v331"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
