@@ -1796,6 +1796,12 @@ dialog#dlg:has(.ven-dlg) { width: min(1240px, calc(100% - 24px)); }   /* Vendor 
 .rev-bk-jt td:nth-child(3) { white-space: normal; } .rev-bk-jt .rev-bk-m { text-align: right; font-weight: 700; }
 .rev-bk-jt thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); position: sticky; top: 0; background: var(--surface-2); }
 .rev-bk-jt tr.later td { color: var(--muted); } .rev-bk-tap { margin: 0; }
+/* Updates: the bar and the cover while it reloads */
+.upd-bar { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9000; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  max-width: calc(100vw - 24px); padding: 10px 14px; border-radius: 14px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow); font-size: .9rem; font-weight: 600; }
+.upd-cover { position: fixed; inset: 0; z-index: 9500; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(3px); }
+.upd-cover > div { display: grid; gap: 4px; padding: 18px 22px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); text-align: center; }
+.upd-cover b { font-family: var(--font-display); font-size: 1.3rem; } .upd-cover span { color: var(--muted); font-size: .9rem; }
 /* Today's revenue › scheduled vs produced */
 .rev-sch { display: grid; gap: 8px; }
 .rev-sch-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -24677,11 +24683,78 @@ function docAddMany() {
   draw();
 }
 
+/* ---------- updates: the first time the app is opened each day (or comes back on screen), it asks the site which
+   version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
+   is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
+   time the app comes back on screen). Each phone and computer, once a day. ---------- */
+const APP_BUILD = 327;                   // the same number as sw.js's CACHE ("voda-fleet-v327"): both go up with every change
+const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
+let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
+["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
+/** Nothing typed, open or on its way to the sheet that a reload would lose. */
+function updSafe() {
+  const a = document.activeElement, typing = !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+  return !dlg.open && !typing && !sending && !lbSaving && !ofSaving && !Object.keys(lbPending).length && !Object.keys(ofPending).length;
+}
+/** Once a day: is a newer version published? (Another window of the app that already asked today has said.) */
+async function updCheck() {
+  if (updBusy || updWant) return;
+  const today = lbToday(), u = store.get("voda.upd") || {};
+  if (u.day === today) { if (u.live > APP_BUILD) updApply(u.live); return; }
+  if (!navigator.onLine) return;
+  updBusy = true;
+  try {
+    const r = await fetch(`sw.js?u=${Date.now()}`, { cache: "no-store" }), m = r.ok ? /voda-fleet-v(\d+)/.exec(await r.text()) : null;
+    if (m) { const live = Number(m[1]); store.set("voda.upd", { day: today, live }); if (live > APP_BUILD) updApply(live); }
+  } catch (e) { /* no signal: asked again when the app comes back on screen */ }
+  updBusy = false;
+}
+/** Reloads onto version live: now if it's safe, else once it is and nobody has touched the screen for a few seconds.
+ *  Twice a day at most (10 minutes apart): a slow signal can bring the old copy back, and it mustn't go round in circles. */
+function updApply(live) {
+  const t = store.get("voda.updTry") || {}, tries = t.live === live && t.day === lbToday() ? t.n || 0 : 0;
+  if (tries >= 2 || (tries && Date.now() - t.at < UPD.again)) return;
+  updWant = live; updTries = tries;
+  const t0 = Date.now();
+  const tick = first => {
+    if (updWant !== live) return;
+    if (updSafe() && (first || Date.now() - updInputAt > UPD.idle)) { updGo(live, tries); return; }
+    if (Date.now() - t0 < UPD.give) setTimeout(() => tick(false), UPD.poll); else updBar(live, tries);
+  };
+  tick(true);
+}
+function updBar(live, tries) {
+  if ($("updBar")) return;
+  document.body.append(h("div", { class: "upd-bar", id: "updBar", role: "status" }, h("span", { text: "A new version of VODA Hub is ready." }),
+    h("button", { class: "btn small primary", type: "button", id: "updNow", onclick: () => updGo(live, tries) }, "Update now")));
+}
+async function updGo(live, tries) {
+  updWant = 0;
+  store.set("voda.updTry", { live, day: lbToday(), n: (tries || 0) + 1, at: Date.now() });
+  const bar = $("updBar"); if (bar) bar.remove();
+  document.body.append(h("div", { class: "upd-cover", id: "updCover", role: "status" }, h("div", null, h("b", { text: "Updating VODA Hub…" }), h("span", { text: "A new version is out. One moment." }))));
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  try {   // the new offline copy first, so the reload opens it even on a slow signal
+    const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    if (reg) {
+      const changed = new Promise(r => navigator.serviceWorker.addEventListener("controllerchange", r, { once: true }));
+      await Promise.race([reg.update(), wait(5000)]);
+      if (reg.installing || reg.waiting) await Promise.race([changed, wait(6000)]);
+    }
+  } catch (e) { /* the page itself is read fresh anyway */ }
+  location.reload();
+}
+
 /* ---------- start ---------- */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && session && CONFIGURED) refresh(true, true); });
+updCheck();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (updWant && updSafe()) updGo(updWant, updTries); else updCheck();
+  if (session && CONFIGURED) refresh(true, true);
+});
 window.addEventListener("online", () => { if (session && CONFIGURED) { refresh(true); pump(); } });
 setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true, true); }, 90000);
 
