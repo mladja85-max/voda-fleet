@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 157;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 158;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -423,7 +423,7 @@ function doPost(e) {
       case "atPut":
         if (!canSee_(user, "attendance")) return json_({ ok: false, error: "not_allowed" });
         return json_(withTabLock_(function () { return atPut_(req); }));
-      case "venList": case "venFind": case "venLines": case "venRead": case "venSave": case "venDelete": case "venFile": case "venRecheck":
+      case "venList": case "venFind": case "venLines": case "venRead": case "venSave": case "venDelete": case "venFile": case "venRecheck": case "venPay":
         if (!canVen_(user)) return json_({ ok: false, error: "not_allowed" });
         if (req.action === "venList") return json_(venList_());
         if (req.action === "venRecheck") return json_(withTabLock_(function () { return venRecheck_(); }));
@@ -431,6 +431,7 @@ function doPost(e) {
         if (req.action === "venLines") return json_(venLines_(req));
         if (req.action === "venRead") return json_(venRead_(req));
         if (req.action === "venFile") return json_(venFile_(req));
+        if (req.action === "venPay") return json_(withTabLock_(function () { return venPay_(req, user); }));
         return json_(withTabLock_(function () { return req.action === "venSave" ? venSave_(req, user) : venDelete_(req); }));
       case "docList": case "docSave": case "docDelete": case "docFile":
         if (!canDocs_(user) && !canDocsOwn_(user)) return json_({ ok: false, error: "not_allowed" });
@@ -1718,9 +1719,12 @@ function docFile_(req) {
    the revenue without what's paid to them, on the job's day, from its department. ---- */
 const VEN = "vendors";
 const VEN_SHEET = "Vendor invoices";
+// "Paid (cents)": the vendor's invoice total (what it charged us); "Paid with" … "Payment marked": we paid it (how, when, a
+// note, who marked it: "name|time"); none: not paid yet. 26 columns (A to Z: a new tab's width).
 const VEN_COLS = ["Id", "Job id", "Job #", "Job day", "Client", "Department", "Service", "Vendor", "Vendor invoice #", "Invoice day", "Paid (cents)", "Charged (cents)",
-  "Charged from", "Lines", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at"];
+  "Charged from", "Lines", "File id", "File name", "File type", "Notes", "Added by", "Added at", "Changed by", "Changed at", "Paid with", "Paid on", "Payment note", "Payment marked"];
 const VEN_SVC = ["al", "mold", "other"], VEN_MAX_C = 1e9;
+const VEN_PAY = ["account", "card", "other"];   // paid from the bank account, with a credit card, some other way
 function canVen_(user) {
   if (!user || user.role !== "admin") return false;
   const owner = settingsOwner_();
@@ -1738,12 +1742,38 @@ function venRows_() {
       dept: REV_DEPTS.indexOf(String(r[5])) === -1 ? "o" : String(r[5]), svc: VEN_SVC.indexOf(String(r[6])) === -1 ? "other" : String(r[6]), vendor: String(r[7] || ""),
       vinv: String(r[8] || ""), vday: pcDay_(r[9], tz) || "", paid: Math.round(Number(r[10]) || 0), charged: Math.round(Number(r[11]) || 0), from: String(r[12]) === "hcp" ? "hcp" : "typed",
       lines: Array.isArray(lines) ? lines : [], fileId: String(r[14] || ""), file: String(r[15] || ""), type: String(r[16] || ""), notes: String(r[17] || ""),
-      by: String(r[18] || ""), at: iso(r[19]), chBy: String(r[20] || ""), chAt: iso(r[21]) };
+      by: String(r[18] || ""), at: iso(r[19]), chBy: String(r[20] || ""), chAt: iso(r[21]),
+      payHow: VEN_PAY.indexOf(String(r[22])) === -1 ? "" : String(r[22]), payDay: pcDay_(r[23], tz) || "", payNote: String(r[24] || ""), payMark: String(r[25] || "") };
   }).filter(function (v) { return v.id; });
 }
 function venOut_(v) {
   return { id: v.id, jobId: v.jobId, inv: v.inv, day: v.day, client: v.client, dept: v.dept, svc: v.svc, vendor: v.vendor, vinv: v.vinv, vday: v.vday, paid: v.paid,
-    charged: v.charged, from: v.from, lines: v.lines, file: v.fileId ? { name: v.file, type: v.type } : null, notes: v.notes, by: v.by, at: v.at, chBy: v.chBy, chAt: v.chAt };
+    charged: v.charged, from: v.from, lines: v.lines, file: v.fileId ? { name: v.file, type: v.type } : null, notes: v.notes, by: v.by, at: v.at, chBy: v.chBy, chAt: v.chAt,
+    pay: v.payHow ? { how: v.payHow, day: v.payDay, note: v.payNote, by: String(v.payMark).split("|")[0] || "", at: String(v.payMark).split("|")[1] || "" } : null };
+}
+/** A payment to the vendor ({ how: account | card | other, day, note }) checked: { how, day, note } or { error }. A note
+ *  with a card or account number in it (12 digits or more) isn't kept. */
+function venPayOk_(p) {
+  if (!p || typeof p !== "object") return { error: "pay" };
+  const how = String(p.how || ""), day = String(p.day || ""), note = String(p.note == null ? "" : p.note).replace(/\s+/g, " ").trim().slice(0, 120);
+  if (VEN_PAY.indexOf(how) === -1) return { error: "pay" };
+  if (!DOC_DAY.test(day) || day > tmAddDays_(Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd"), 1)) return { error: "pay_day" };
+  if (/\d{12,}/.test(note.replace(/[\s-]/g, ""))) return { error: "pay_number" };
+  return { how: how, day: day, note: note };
+}
+/** We paid a vendor's invoice ({ id, how, day, note }), or it isn't paid after all (how: ""). */
+function venPay_(req, user) {
+  const id = String(req.id || ""), v = venRows_().filter(function (x) { return x.id === id; })[0];
+  if (!v) return { ok: false, error: "not_found" };
+  let pay = { how: "", day: "", note: "" }, mark = "";
+  if (req.how) {
+    pay = venPayOk_(req);
+    if (pay.error) return { ok: false, error: "bad_value", field: pay.error };
+    mark = String(user.name || "Admin").slice(0, 60) + "|" + tmNow_().toISOString();
+  }
+  SpreadsheetApp.getActive().getSheetByName(VEN_SHEET).getRange(v.row, 23, 1, 4).setNumberFormat("@").setValues([[pay.how, pay.day, pay.note, mark]]);
+  v.payHow = pay.how; v.payDay = pay.day; v.payNote = pay.note; v.payMark = mark;
+  return { ok: true, inv: venOut_(v) };
 }
 function venList_() { return { ok: true, invoices: venRows_().map(venOut_) }; }
 /** The Revenue tab's jobs whose visits `hit` (a visit: [job id, invoice #, client, department, charged ¢, owes ¢, project,
@@ -2078,6 +2108,14 @@ function venSave_(req, user) {
   }
   if (!was && !file) return { ok: false, error: "no_file" };
   const now = tmNow_().toISOString(), who = t(user.name || "Admin", 60);
+  let pay = was ? { how: was.payHow, day: was.payDay, note: was.payNote, mark: was.payMark } : { how: "", day: "", note: "", mark: "" };
+  if (x.pay === null) pay = { how: "", day: "", note: "", mark: "" };
+  else if (x.pay && typeof x.pay === "object") {
+    const p = venPayOk_(x.pay);
+    if (p.error) return { ok: false, error: "bad_value", field: p.error };
+    const same = was && was.payHow === p.how && was.payDay === p.day && was.payNote === p.note;
+    pay = { how: p.how, day: p.day, note: p.note, mark: same ? was.payMark : who + "|" + now };
+  }
   const out = { id: was ? was.id : "v" + Utilities.getUuid().replace(/-/g, "").slice(0, 12), fileId: was ? was.fileId : "", file: was ? was.file : "", type: was ? was.type : "",
     by: was ? was.by : who, at: was ? was.at : now, chBy: was ? who : "", chAt: was ? now : "" };
   Object.keys(v).forEach(function (k) { out[k] = v[k]; });
@@ -2090,7 +2128,9 @@ function venSave_(req, user) {
   }
   const s = pcSheet_(VEN_SHEET, VEN_COLS), at = was ? was.row : Math.max(2, s.getLastRow() + 1);
   s.getRange(at, 1, 1, VEN_COLS.length).setNumberFormat("@").setValues([[out.id, out.jobId, out.inv, out.day, out.client, out.dept, out.svc, out.vendor, out.vinv, out.vday,
-    String(out.paid), String(out.charged), out.from, JSON.stringify(out.lines), out.fileId, out.file, out.type, out.notes, out.by, out.at, out.chBy, out.chAt]]);
+    String(out.paid), String(out.charged), out.from, JSON.stringify(out.lines), out.fileId, out.file, out.type, out.notes, out.by, out.at, out.chBy, out.chAt,
+    pay.how, pay.day, pay.note, pay.how ? pay.mark : ""]]);
+  out.payHow = pay.how; out.payDay = pay.how ? pay.day : ""; out.payNote = pay.how ? pay.note : ""; out.payMark = pay.how ? pay.mark : "";
   return { ok: true, inv: venOut_(out) };
 }
 /** Takes a vendor's invoice off (its file goes in Drive's trash); a file read but never saved ({ fileId }) too. */
