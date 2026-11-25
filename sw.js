@@ -1,6 +1,6 @@
 // VODA Hub offline support: keeps a copy of the app on the phone so it opens without signal.
 // Truck data is not cached here; the app keeps its own last-known copy.
-const CACHE = "voda-fleet-v327";   // the same number as APP_BUILD in index.html: the app updates itself when this one is newer
+const CACHE = "voda-fleet-v328";   // the same number as APP_BUILD in index.html: the app updates itself when this one is newer
 const SHELL = ["./", "./index.html", "./config.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./favicon-32.png"];
 

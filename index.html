@@ -1433,9 +1433,6 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .rev-kpis .pay-kpi[data-k=w], .rev-kpis .pay-kpi[data-k=m], .rev-kpis .pay-kpi[data-k=f], .rev-avg.w, .rev-avg.m, .rev-avg.f { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
 .rev-kpis.jk-on .pay-kpi[data-k=total] { --tint: var(--accent); background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
 .rev-focus .seg-btn { white-space: nowrap; }
-.rev-avg-kinds { display: grid; gap: 2px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--line)); font-size: .8rem; }
-.rev-avg-kinds div { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
-.rev-avg-kinds b { color: var(--ink); font-weight: 600; }
 .jk-tag { display: inline-block; margin-left: 6px; font-size: .72rem; padding: 1px 6px; border-radius: 9px; background: color-mix(in srgb, var(--jk-u) 18%, var(--surface)); color: var(--ink); white-space: nowrap; }
 .jk-tag.w, .jk-sel.w { background: color-mix(in srgb, var(--jk-w) 16%, var(--surface)); } .jk-tag.m, .jk-sel.m { background: color-mix(in srgb, var(--jk-m) 16%, var(--surface)); }
 .jk-tag.f, .jk-sel.f { background: color-mix(in srgb, var(--jk-f) 16%, var(--surface)); }
@@ -1446,8 +1443,27 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .spd-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .jk-both-line { margin: 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--soon) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--soon) 30%, var(--line)); }
 #jkBoth, .rev-avg-kinds .jk-both { color: color-mix(in srgb, var(--soon) 75%, var(--ink)); }
-.rev-avg-kinds .jk-both { justify-content: flex-start; gap: 6px; font-weight: 600; }
 .rev-strip { display: none; }
+.rev-avg-pill { display: inline-flex; align-items: center; gap: 3px; justify-self: start; width: fit-content; margin-top: 6px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); border-radius: 999px;
+  background: var(--surface); color: var(--ink); font: 700 .76rem var(--font-body); font-variant-numeric: tabular-nums; cursor: pointer; }
+.rev-avg-pill:hover, .rev-avg-pill:focus-visible { border-color: var(--accent); outline: none; } .rev-avg-pill.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rev-avg-pill.sm { margin-top: 3px; padding: 1px 6px; font-size: .64rem; }
+.rev-avg-strip { --tint: var(--accent); display: grid; gap: 6px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--tint) 30%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--tint) 8%, var(--surface)); }
+.rev-avg-strip.c { --tint: var(--clean); } .rev-avg-strip.p { --tint: var(--soon); } .rev-avg-strip.o { --tint: var(--muted); }
+.rev-avg-strip.w { --tint: var(--jk-w); } .rev-avg-strip.m { --tint: var(--jk-m); } .rev-avg-strip.f { --tint: var(--jk-f); }
+.rev-avg-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 14px; }
+.rev-avg-cell { display: grid; gap: 1px; min-width: 0; align-content: start; }
+.rev-avg-cell + .rev-avg-cell { border-left: 1px solid color-mix(in srgb, var(--tint) 22%, var(--line)); padding-left: 14px; }
+.rev-avg-cell small { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rev-avg-cell small .rev-dot { margin-right: 6px; }
+.rev-avg-cell > b { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rev-avg-cell > span { font-size: .78rem; color: var(--muted); } .rev-avg-cell .rev-was { font-weight: 600; } .rev-avg-cell .rev-ytag { margin-right: 5px; }
+.rev-avg-foot { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; font-size: .76rem; color: var(--muted); }
+@media (max-width: 760px) {
+  .rev-avg-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rev-avg-cell + .rev-avg-cell { border-left: 0; padding-left: 0; }
+  .rev-avg-cell > b { font-size: 1.2rem; }
+}
 #revTable .col-r, .rev-strip [data-k=r], .rev-kpis .pay-kpi[data-k=r] { --tint: var(--accent); }
 #revTable .col-c, .rev-strip [data-k=c], .rev-kpis .pay-kpi[data-k=c] { --tint: var(--clean); }
 #revTable .col-p, .rev-strip [data-k=p], .rev-kpis .pay-kpi[data-k=p] { --tint: var(--soon); }
@@ -1663,16 +1679,7 @@ dialog#dlg:has(.ven-dlg) { width: min(1240px, calc(100% - 24px)); }   /* Vendor 
 .rev-aside-head h3 { margin: 0; font-family: var(--font-display); font-size: 1.3rem; text-transform: uppercase; letter-spacing: .04em; }
 .rev-aside-head p { margin: 2px 0 0; color: var(--muted); font-size: .84rem; }
 .rev-aside-head p.vs .rev-ytag { margin: 0 2px; }
-.rev-avg { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 15px; display: grid; gap: 1px; }
-.rev-avg small { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.rev-avg > b { font-family: var(--font-display); font-size: 1.75rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.rev-avg-n { color: var(--muted); font-size: .8rem; }
-.rev-avg .rev-was { margin-top: 5px; padding: 4px 8px 5px; border-radius: 7px; width: fit-content; max-width: 100%; box-sizing: border-box; font-size: .86rem; font-weight: 600; color: var(--muted);
   background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent); }
-.rev-avg .rev-was small { display: block; font-size: .74rem; text-transform: none; letter-spacing: 0; font-weight: 600; }
-.rev-avg .rev-ytag { margin-right: 6px; }
-.rev-avg.r { --tint: var(--accent); } .rev-avg.c { --tint: var(--clean); } .rev-avg.p { --tint: var(--soon); }
-.rev-avg.r, .rev-avg.c, .rev-avg.p { background: color-mix(in srgb, var(--tint) 8%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 30%, var(--line)); }
 @media (max-width: 1399px) { .rev-aside { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); } .rev-aside-head { grid-column: 1 / -1; } }
 @media (min-width: 1400px) {
   body[data-tab="revenue"] #revView { max-width: 1400px; grid-template-columns: minmax(0, 1000px) minmax(280px, 360px); align-items: start; column-gap: 24px; }
@@ -14255,6 +14262,7 @@ function revChange(now, then) {
 }
 
 /* ---- the screen ---- */
+let revAvgOpen = store.get("voda.revAvgOpen") || "";   // the department (or kind) whose average job is open under the tiles
 function renderRevenue() {
   if (view.tab === "repairs") { if (session && !lbHoldForDate($("repView"), renderRevenue)) renderRepairs($("repView")); return; }   // Repairs Payroll's screen
   const box = $("revView");
@@ -14353,6 +14361,13 @@ function renderRevenue() {
   // (Restoration on its own: the jobs of Restoration, of the kind tapped)
   const goJobs = (k, a, b) => (focus ? revJobsDlg("r", a, b, k === "total" ? "" : k) : revJobsDlg(k === "total" ? "all" : k, a, b));
   const opener = (k, a, b) => ({ role: "button", tabindex: "0", title: "See the jobs", onclick: () => goJobs(k, a, b), onkeydown: e => { if (e.key === "Enter") goJobs(k, a, b); } });
+  // Average job: a badge on each department's tile (Restoration on its own: each kind's); tapped, the strip under the
+  // tiles opens with its average job (Restoration's kinds too), the average of every job, and the year compared
+  const avgOf = v => (v && v[1] ? v[0] / v[1] : 0);
+  const avgPill = (k, x, small) => h("button", { class: "rev-avg-pill" + (small ? " sm" : "") + (revAvgOpen === k ? " on" : ""), type: "button", "data-avg": k, "aria-expanded": String(revAvgOpen === k),
+    title: revAvgOpen === k ? "Hide the average job" : "Average job", onkeydown: e => e.stopPropagation(),
+    onclick: e => { e.stopPropagation(); revAvgOpen = revAvgOpen === k ? "" : k; store.set("voda.revAvgOpen", revAvgOpen); renderRevenue(); } },
+    `${small ? "" : "avg "}${x[k][1] ? lbMoney(avgOf(x[k]) / 100) : "–"} ${revAvgOpen === k ? "▾" : "▸"}`);
   const tileRow = (x, yName, id, chg, a, b) => h("div", { class: "pay-kpis rev-kpis" + (chg ? "" : " rev-kpis-was") + (focus ? " jk-on" : ""), id, style: `--n:${shown.length}` },
     h("div", Object.assign({ class: "pay-kpi rev-open", "data-k": "total" }, opener("total", a, b)), h("small", null, focus ? [h("i", { class: "rev-dot r" }), "Restoration"] : "Total revenue", h("b", { class: "rev-ytag rev-tyear", text: yName })), h("b", { text: lbMoney(x.cents / 100) }),
       h("span", { text: `${revJobs(x.jobs)}${x.jobs ? ` · ${lbMoney(x.cents / 100 / x.jobs)} a job` : ""}` }),
@@ -14360,12 +14375,35 @@ function renderRevenue() {
       h("div", { class: "rev-bar", "aria-hidden": "true" }, shown.map(([k]) => h("i", { class: k, style: `width:${x.cents > 0 ? Math.max(0, x[k][0]) / x.cents * 100 : 0}%` })))),
     shown.map(([k, name]) => h("div", Object.assign({ class: "pay-kpi rev-open", "data-k": k }, opener(k, a, b)), h("small", null, h("i", { class: "rev-dot " + k }), name, h("b", { class: "rev-ytag rev-tyear", text: yName })), h("b", { text: lbMoney(x[k][0] / 100) }),
       h("span", { text: `${revJobs(x[k][1])} · ${revPct(x[k][0], x.cents)}` }),
-      chg ? h("span", { class: "rev-chg" }, vs(x[k][0], C[k][0]), ` vs ${cmpName}`) : null)));
+      chg ? h("span", { class: "rev-chg" }, vs(x[k][0], C[k][0]), ` vs ${cmpName}`) : null,
+      id === "revTiles" ? avgPill(k, x) : null)));
   const tiles = tileRow(S, nowName, "revTiles", !!C, r.from, to), tilesWas = C ? tileRow(C, cmpName, "revTilesWas", false, cf, ct) : null;
   const strip = h("div", { class: "rev-strip", id: "revStrip" },
     [["total", focus ? "Rest." : "Total", S.cents, S.jobs, C && C.cents]].concat((focus ? JK_KINDS : REV_DEPTS.slice(0, 3)).map(([k, , short]) => [k, short, S[k][0], S[k][1], C && C[k][0]])).map(([k, t, cents, j, was]) =>
       h("div", Object.assign({ "data-k": k, class: "rev-open" }, opener(k, r.from, to)), h("small", null, k !== "total" ? h("i", { class: "rev-dot " + k }) : null, t), h("b", { text: revShort(cents) }),
-        c ? h("span", null, h("b", { class: "rev-ytag", text: cmpShort }), vs(cents, was)) : h("span", { text: revJobs(j) }))));
+        c ? h("span", null, h("b", { class: "rev-ytag", text: cmpShort }), vs(cents, was)) : h("span", { text: revJobs(j) }),
+        k !== "total" ? avgPill(k, S, true) : null)));
+  // the open strip: [the department's (or kind's) average, Restoration's kinds, every job's], each with the year compared
+  const avgKeys = shown.map(([k]) => k);
+  if (revAvgOpen && !avgKeys.includes(revAvgOpen)) revAvgOpen = "";
+  let avgStrip = null;
+  // Restoration's kinds (the usual view, when some are sorted): in its strip; the jobs of more than one kind to check, under the tiles
+  const xk = !focus && jkOn() && r.from <= last ? jkSum(days, r.from, to) : null, xkOn = !!xk && xk.w[1] + xk.m[1] + xk.f[1] > 0;
+  if (revAvgOpen && r.from <= last) {
+    const k = revAvgOpen, nameOf = kk => (shown.find(([x]) => x === kk) || [, kk])[1];
+    const cell = (key, name, now, was, dot) => h("div", { class: "rev-avg-cell", "data-k": key },
+      h("small", null, dot ? h("i", { class: "rev-dot " + dot }) : null, name),
+      h("b", { text: now[1] ? lbMoney(avgOf(now) / 100) : "–" }),
+      h("span", { text: `${revJobs(now[1])} · ${lbMoney(now[0] / 100)}` }),
+      was ? h("span", { class: "rev-was" }, revYearTag(), was[1] ? lbMoney(avgOf(was) / 100) : "–", " ", now[1] && was[1] ? vs(Math.round(avgOf(now)), Math.round(avgOf(was))) : null) : null);
+    const cells = [cell(k, `${nameOf(k)} · average job`, S[k], C ? C[k] : null, k)];
+    if (k === "r" && xkOn) { const ck = C ? jkSum(old, cf, ct) : null; JK_KINDS.forEach(([kk, name]) => cells.push(cell(kk, name, xk[kk], ck ? ck[kk] : null, kk))); }
+    cells.push(cell("t", focus ? "All Restoration" : "All jobs", [S.cents, S.jobs], C ? [C.cents, C.jobs] : null, focus ? "r" : ""));
+    avgStrip = h("div", { class: "rev-avg-strip " + k, id: "revAvgStrip", "data-k": k },
+      h("div", { class: "rev-avg-cells" }, cells),
+      h("p", { class: "rev-avg-foot" }, `${revSpanText(r.from, to)}${C ? ` · vs ${revSpanText(cf, ct)}` : " · pick a year in Compare to see it against another year"}`,
+        h("button", { class: "linkish", type: "button", id: "revAvgHide", onclick: () => { revAvgOpen = ""; store.set("voda.revAvgOpen", ""); renderRevenue(); } }, "Hide")));
+  }
   // the table: each line's own days, and (comparing) the same days before
   const lines = r.from > last ? [] : revLines(per, r, to, last);
   const lineOld = L => (C && !L.future ? sumOf(old, revShift(L.a, cmp, per), revShift(L.b, cmp, per)) : null);
@@ -14434,34 +14472,14 @@ function renderRevenue() {
       h("span", { class: "l col" }, h("small", { text: "Collected" }), h("b", null, colText("t"), colPct ? h("em", { class: "pct", text: colPct }) : null)),
       h("span", { class: "r", text: busy ? "Reading…" : ar.t[1] ? `${revJobs(ar.t[1])} · ${revShort(ar.age["60"][0] + ar.age["90"][0] + ar.age["91"][0])} over 30 days` : "Nobody owes" }), h("span", { class: "go", text: "›" }));
   }
-  let aside = arCard ? h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable and average job" }, arCard) : null;
-  // beside the table (under it on a smaller screen): each department's average job for the period on screen (Week,
-  // Month, Year or the dates picked), and for the days it's compared with
-  if (r.from <= last) {
-    const avg = (x, k) => { const v = k === "t" ? [x.cents, x.jobs] : x[k]; return { cents: v[0], jobs: v[1], avg: v[1] ? v[0] / v[1] : 0 }; };
-    const ayName = cmpName, ayShort = cf.slice(0, 4) === ct.slice(0, 4) ? `’${cf.slice(2, 4)}` : `’${cf.slice(2, 4)}–’${ct.slice(2, 4)}`;
-    aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable and average job" }, arCard,
-      h("div", { class: "rev-aside-head" }, h("h3", { text: "Average job" }),
-        h("p", { id: "revAvgSpan", text: `${per === "dates" ? "" : `${r.label}${to < r.to ? " (so far)" : ""} · `}${revSpanText(r.from, to)}` }),
-        cmp ? h("p", { class: "vs" }, "vs ", h("b", { class: "rev-ytag", text: ayName }), ` ${revSpanText(cf, ct)}`) : h("p", { class: "vs", text: "Pick a year in Compare to see it here too." })),
-      (focus ? [["t", "Restoration"]].concat(JK_KINDS.map(([k, name]) => [k, name])) : [["r", "Restoration"], ["c", "Cleaning"], ["p", "Repairs"], ["t", "All jobs"]]).map(([k, name]) => {
-        const a = avg(S, k), b = C ? avg(C, k) : null;
-        return h("div", { class: "rev-avg " + (focus && k === "t" ? "r" : k), "data-k": focus && k === "t" ? "r" : k },
-          h("small", null, k !== "t" ? h("i", { class: "rev-dot " + k }) : null, name),
-          h("b", { text: a.jobs ? lbMoney(a.avg / 100) : "–" }),
-          h("span", { class: "rev-avg-n", text: `${revJobs(a.jobs)} · ${lbMoney(a.cents / 100)}` }),
-          b ? h("span", { class: "rev-was" }, h("b", { class: "rev-ytag" }, h("span", { class: "t-long", text: ayName }), h("span", { class: "t-short", text: ayShort })),
-            b.jobs ? lbMoney(b.avg / 100) : "–", " ", a.jobs && b.jobs ? vs(Math.round(a.avg), Math.round(b.avg)) : null, h("small", { text: `${revJobs(b.jobs)} · ${lbMoney(b.cents / 100)}` })) : null,
-          !focus && k === "r" ? jkAvgLines(days, r.from, to) : null);
-      }));
-  }
+  let aside = arCard ? h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Accounts receivable" }, arCard) : null;
   // Money in, inside Accounts receivable (the card, and its bar on a smaller screen): tapped, the Money in view; with no
   // Accounts receivable (a period not started), a tile of its own
   if (cashCan()) {
     const jt = r.from > last ? null : to;
     if (arCard) arCard.append(cashArRow(r, today, jt, "revCashAr", cash));
     if (arBar) arBar = h("div", { class: "rev-ar-barbox", id: "revArBarBox" }, arBar, cashArRow(r, today, jt, "revCashArBar", cash));
-    if (!arCard && aside) aside.prepend(cashTileEl(r, today, jt));
+    if (!arCard && r.from <= last) aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Money in" }, cashTileEl(r, today, jt));
   }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
@@ -14472,7 +14490,7 @@ function renderRevenue() {
   if (slot === "side") { if (aside) aside.prepend(gbox); else aside = h("aside", { class: "rev-aside", id: "revAvg", "aria-label": "Company goal" }, gbox); }
   box.classList.toggle("goal3", slot === "wide");
   const cashParts = cash ? [cashHeadEl()].concat(cashEl(per, r, today, r.from > last ? null : to)) : null;
-  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, cash ? null : status, err, revPriceEl(), slot === "top" ? gbox : null, cash ? cashParts : r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip, focus ? jkBothEl(S, r.from, to) : null], canSee("revenue") ? unsentEl() : null, arBar, cash || r.from > today ? null : table, ...(cash ? [] : notes)].flat().filter(Boolean)),
+  box.replaceChildren(h("div", { class: "rev-main" }, ...[top, bar, cash ? null : status, err, revPriceEl(), slot === "top" ? gbox : null, cash ? cashParts : r.from > last ? (r.from <= today ? h("div", { class: "panel lb-empty", id: "revNone" }, h("p", { class: "meta", text: `Nothing counted yet: ${r.label} counts up to yesterday, so its first day shows tomorrow. For today, pick Dates.` })) : null) : [tiles, tilesWas, strip, avgStrip, focus ? jkBothEl(S, r.from, to) : xkOn ? jkBothEl(xk, r.from, to) : null], canSee("revenue") ? unsentEl() : null, arBar, cash || r.from > today ? null : table, ...(cash ? [] : notes)].flat().filter(Boolean)),
     ...(aside ? [aside] : []), ...(slot === "wide" ? [gbox] : []));
   if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
   // Restoration's kinds: sorted now when the days on screen have jobs never sorted (else every 10 minutes)
@@ -15741,16 +15759,6 @@ function jkSum(days, from, to) {
     s.cents += rc; s.jobs += rj;
   }
   return s;
-}
-/** Under Restoration's average job (the usual view): each kind's average, when some are sorted. */
-function jkAvgLines(days, from, to) {
-  if (!jkOn()) return null;
-  const x = jkSum(days, from, to);
-  if (!(x.w[1] + x.m[1] + x.f[1])) return null;
-  return h("div", { class: "rev-avg-kinds", id: "revAvgKinds" }, JK_KINDS.map(([k, name, short]) =>
-    h("div", { "data-k": k, title: name }, h("span", null, h("i", { class: "rev-dot " + k }), `${short} · ${revJobs(x[k][1])}`), h("b", { text: x[k][1] ? lbMoney(x[k][0] / 100 / x[k][1]) : "–" }))),
-    x.both ? h("div", { class: "jk-both", id: "revAvgBoth" }, "⚑", h("button", { class: "linkish", type: "button", onclick: () => revJobsDlg("r", from, to, "b") },
-      `${revJobs(x.both)} with more than one kind: check ${x.both === 1 ? "its invoice" : "their invoices"}`)) : null);
 }
 /** Restoration on its own: what's not sorted, the sorting, and how it's sorted. */
 /** Restoration on its own, under its tiles: the jobs of more than one kind to check, and a button to them. */
@@ -24687,7 +24695,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 327;                   // the same number as sw.js's CACHE ("voda-fleet-v327"): both go up with every change
+const APP_BUILD = 328;                   // the same number as sw.js's CACHE ("voda-fleet-v328"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
