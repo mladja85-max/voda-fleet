@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 158;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 159;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -448,9 +448,16 @@ function doPost(e) {
       case "revenue":
         if (!canSee_(user, "revenue") && !canSee_(user, "marketing")) return json_({ ok: false, error: "not_allowed" });
         return json_(revPrivate_(revRead_(req.year), user));
-      case "revBooked":
+      case "revBooked": {
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
-        return json_(revBooked_(req));
+        const out = revBooked_(req);
+        // the day's schedule as it started: kept by the 6 AM run, else by the day's first read of Today's revenue
+        if (out.ok && out.when === "today") { out.shot = shotTrigger_(); if (!shotHave_(out.from)) withTabLock_(function () { shotKeep_(out); }); }
+        return json_(out);
+      }
+      case "revSched":
+        if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
+        return json_(revSched_(req));
       case "jobKinds":
         if (!canSee_(user, "revenue")) return json_({ ok: false, error: "not_allowed" });
         return json_(jobKinds_(req));
@@ -5850,6 +5857,67 @@ function revBooked_(req) {
   });
   list.sort(function (a, b) { return a[5] < b[5] ? -1 : a[5] > b[5] ? 1 : b[4] - a[4]; });
   return { ok: true, when: future ? "future" : "today", from: from, to: future ? last : today, depts: depts, jobs: list.slice(0, REV_BOOKED_MAX), more: more || list.length > REV_BOOKED_MAX, at: new Date().toISOString() };
+}
+/* ---- Today's revenue › scheduled vs produced. Every morning at 6 AM (a timed job, set up the first time Today's revenue
+   is opened) the script keeps the day's schedule as it started: each visit [job id, invoice #, client, department,
+   cents, first visit] on the "Morning schedule" tab, one row a day. A day no 6 AM run kept (it wasn't set up yet, or
+   Housecall Pro didn't answer) is kept the first time Today's revenue is read that day; its time says when. The app
+   compares each day's with what Operations counted for it (produced): what wasn't done, moved, was added, or changed
+   price. ---- */
+const SHOT_SHEET = "Morning schedule", SHOT_COLS = ["Day", "Kept at", "Visits", "Jobs", "Cents", "Visits list"];
+const SHOT_HOUR = 6, SHOT_LIST_MAX = 400, SHOT_RANGE_MAX = 430, SHOT_DAY = "SHOT_DAY";
+function shotTrigger_() {
+  try {
+    if (ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "revMorningShot"; })) return true;
+    ScriptApp.newTrigger("revMorningShot").timeBased().everyDays(1).atHour(SHOT_HOUR).create();
+    return true;
+  } catch (e) { return false; }
+}
+/** { day: { at, visits, jobs, cents, list } } from the tab. */
+function shotRows_() {
+  const out = {}, tz = Session.getScriptTimeZone();
+  pcRows_(SHOT_SHEET, SHOT_COLS.length).forEach(function (r) {
+    const d = pcDay_(r[0], tz);
+    if (!d) return;
+    let list = [];
+    try { list = JSON.parse(String(r[5] || "[]")) || []; } catch (e) { list = []; }
+    out[d] = { at: r[1] instanceof Date ? r[1].toISOString() : String(r[1] || ""), visits: Number(r[2]) || 0, jobs: Number(r[3]) || 0, cents: Number(r[4]) || 0, list: Array.isArray(list) ? list : [] };
+  });
+  return out;
+}
+/** Is the day's kept already (a property: no read of the tab each time)? */
+function shotHave_(day) { return PropertiesService.getScriptProperties().getProperty(SHOT_DAY) === day; }
+/** Keeps today's schedule from Today's revenue's answer (revBooked_ "today"), once a day: the first. */
+function shotKeep_(b) {
+  const day = String(b.from || ""), P = PropertiesService.getScriptProperties();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || shotHave_(day)) return false;
+  if (shotRows_()[day]) { P.setProperty(SHOT_DAY, day); return false; }
+  const all = (b.jobs || []).map(function (j) { return [String(j[0]), String(j[1]), String(j[2]).slice(0, 60), String(j[3]), Math.round(Number(j[4]) || 0), j[7] ? 1 : 0]; });
+  let jobs = 0, cents = 0;
+  REV_DEPTS.forEach(function (k) { const a = (b.depts || {})[k] || {}; jobs += Number(a.jobs) || 0; cents += Number(a.cents) || 0; });
+  const visits = REV_DEPTS.reduce(function (n, k) { return n + (Number(((b.depts || {})[k] || {}).visits) || 0); }, 0);
+  pcUpsert_(SHOT_SHEET, SHOT_COLS, [[day, tmNow_().toISOString(), String(visits), String(jobs), String(cents), JSON.stringify(all.slice(0, SHOT_LIST_MAX))]]);
+  P.setProperty(SHOT_DAY, day);
+  return true;
+}
+/** The 6 AM run: today's schedule from Housecall Pro, kept (unless it's kept already). */
+function revMorningShot() {
+  const today = Utilities.formatDate(tmNow_(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  if (shotHave_(today) || !hcpKey_()) return { ok: true, kept: false };
+  const b = revBooked_({ when: "today" });
+  if (!b.ok) return b;
+  return { ok: true, kept: withTabLock_(function () { return shotKeep_(b); }) };
+}
+/** Everyone with Operations: the mornings kept from..to ({ shots: { day: { at, visits, jobs, cents, list } }, first: the
+ *  first day kept }). */
+function revSched_(req) {
+  const isDay = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : ""; };
+  const from = isDay(req.from), to = isDay(req.to);
+  if (!from || !to || to < from || to > tmAddDays_(from, SHOT_RANGE_MAX)) return { ok: false, error: "bad_request" };
+  const rows = shotRows_(), out = {};
+  let first = "";
+  Object.keys(rows).forEach(function (d) { if (!first || d < first) first = d; if (d >= from && d <= to) out[d] = rows[d]; });
+  return { ok: true, shots: out, first: first, on: shotTrigger_() };
 }
 /** A client's name as Housecall Pro has it: the company, else first and last name. */
 function hcpClient_(job) {
