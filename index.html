@@ -6338,7 +6338,9 @@ function errText(e, what) {
 
 const LIST_EVERY = 10 * 60e3;   // trucks and checklists, away from Warehouse
 let listAt = 0;
-async function refresh(quiet) {
+/** quiet: by itself (no banner when it fails); timed: the 90-second timer or coming back to the app (trucks and
+ *  checklists only on Warehouse); any other refresh (after a change, Update) reads them too. */
+async function refresh(quiet, timed) {
   if (refreshing || !session) return;
   refreshing = true;
   $("syncText").textContent = "Updating…";
@@ -6356,7 +6358,7 @@ async function refresh(quiet) {
   // Trucks and checklists (with who you are, the badges and the GPS warning): every 90 seconds on Warehouse; elsewhere
   // every 10 minutes (a tap on Update, the first time, or a truck's window open: now). Waiting after a failure: not yet.
   const wh = view.tab === "trucks" || view.tab === "supplies" || (typeof openId !== "undefined" && openId && drawer.open);
-  if (loaded && quiet && ((!wh && Date.now() - listAt < LIST_EVERY) || !retryDue("list"))) { refreshing = false; renderSync(); return; }
+  if (loaded && timed && ((!wh && Date.now() - listAt < LIST_EVERY) || !retryDue("list"))) { refreshing = false; renderSync(); return; }
   try {
     const out = await api("list");
     listAt = Date.now(); retryOk("list");
@@ -18528,7 +18530,7 @@ async function estRun(full) {
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { estSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
     estSync.at = { page, sort, full: from.full };   // what was read so far is saved: it picks up from here
-    estSync.err = retryLater("estSync", e, () => { if (view.tab === "estimates") estAuto(); }) ? "" : revErrText(e);
+    estSync.err = retryLater("estSync", e, () => { estSync.tried = 0; if (view.tab === "estimates") estAuto(); }) ? "" : revErrText(e);
   }
   estSync.busy = false;
   await Promise.all([revThisYear()].concat(Object.keys(estOther).map(Number)).map(y => estLoad(y)));
@@ -24313,9 +24315,9 @@ function docAddMany() {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && session && CONFIGURED) refresh(true); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && session && CONFIGURED) refresh(true, true); });
 window.addEventListener("online", () => { if (session && CONFIGURED) { refresh(true); pump(); } });
-setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true); }, 90000);
+setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true, true); }, 90000);
 
 renderInstall();
 if (/^#order-list(\/|$)/.test(location.hash)) {   // the link in the checklist email
