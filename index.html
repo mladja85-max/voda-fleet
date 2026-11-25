@@ -15973,6 +15973,12 @@ async function venOpen(v) {
     if (w) w.location.href = url; else window.open(url, "_blank");
   } catch (e) { if (w) w.close(); toast(e && e.error === "file_gone" ? "That file isn't in Drive any more (VODA Hub › Vendor invoices)." : errText(e, "The file")); }
 }
+/** Why no job at an address: Housecall Pro has no customer there, or none of their jobs is there. */
+function venLookText(look, addr) {
+  if (!look) return "";
+  return !look.cust ? `Housecall Pro has no customer at ${addr}: find the job by its #, the client's name or the address as Housecall Pro has it.`
+    : `Housecall Pro has ${look.cust === 1 ? "a customer" : `${look.cust} customers`} at ${addr}, but no job of theirs there was found: find it by its #.`;
+}
 /** What a vendor's invoice says (Google read it): { paid (dollars), day, vinv, vendor (one used before, if it names it), svc }. */
 function venParse(text, today) {
   const p = rcptParse(text, today), raw = String(text || "");
@@ -16008,7 +16014,7 @@ function venEdit(v, job, q) {
   // did we pay the vendor: not yet (""), the bank account, a credit card, another way; the day, a note
   Object.assign(f, v && v.pay ? { payHow: v.pay.how, payDay: v.pay.day || today, payNote: v.pay.note || "" } : { payHow: "", payDay: today, payNote: "" });
   Object.assign(f, { fileId: "", fileName: "", reading: false, q: "", found: null, finding: false, linesBusy: false, linesErr: "", err: "", busy: false, sure: false, saved: false,
-    matches: null, matchedBy: null, addrs: [], foundAddr: "" });
+    matches: null, matchedBy: null, addrs: [], foundAddr: "", look: null, foundLook: null, foundNear: "" });
   const vendors = [...new Set(((venData && venData.invoices) || []).map(x => x.vendor).filter(Boolean))].sort();
   const body = h("div", { class: "ven-form", id: "venForm" });
   const set = (k, val) => { f[k] = val; f.err = ""; };
@@ -16034,7 +16040,7 @@ function venEdit(v, job, q) {
     const q = String(f.q || "").trim();
     if (q.length < 2) { f.err = "Type the job # (26482), part of the client's name or the address."; draw(); return; }
     f.finding = true; f.err = ""; draw();
-    try { const o = await api("venFind", { q }, 60000); f.found = o.jobs || []; f.foundAddr = o.addr || ""; }
+    try { const o = await api("venFind", Object.assign({ q }, f.vday ? { near: f.vday } : {}), 90000); f.found = o.jobs || []; f.foundAddr = o.addr || ""; f.foundLook = o.look || null; f.foundNear = o.near || ""; }
     catch (e) { f.err = e && e.error === "no_key" ? "Housecall Pro isn't connected: find the job by its # or the client's name." : errText(e, "The search"); }
     f.finding = false; draw();
   };
@@ -16044,7 +16050,7 @@ function venEdit(v, job, q) {
     try {
       if (f.fileId && !f.saved) api("venDelete", { fileId: f.fileId }).catch(() => {});
       const o = await api("venRead", await rcptPrep(file), 120000), p = venParse(o.text, today);
-      Object.assign(f, { fileId: o.fileId, fileName: file.name || o.name, readOk: !!o.text, matches: o.matches || [], addrs: o.addrs || [] });
+      Object.assign(f, { fileId: o.fileId, fileName: file.name || o.name, readOk: !!o.text, matches: o.matches || [], addrs: o.addrs || [], look: o.look || null });
       // the job, from the address and the client on it: the surest one picked (checked by whoever adds it)
       const best = (o.matches || [])[0];
       if (!f.job && best && (best.why.some(w => /^address/.test(w)) || o.matches.length === 1)) { f.job = best; f.matchedBy = best.why; setTimeout(loadLines, 0); }
@@ -16108,18 +16114,18 @@ function venEdit(v, job, q) {
         // the address the invoice gives (the likeliest first): what the app looked for, and a search for its jobs
         f.addrs && f.addrs.length ? h("p", { class: "ven-addr", id: "venAddr" }, h("span", { text: "Address on the invoice: " }), h("b", { text: f.addrs[0].full || f.addrs[0].a }),
           f.job ? null : h("button", { class: "linkish", type: "button", id: "venAddrFind", onclick: () => { f.q = f.addrs[0].a; find(); } }, "Find the jobs there")) : null,
-        !f.job && f.found ? (f.found.length ? h("div", { class: "ven-found", id: "venFound" }, f.foundAddr ? h("span", { class: "ec-lbl", text: `Jobs at ${f.foundAddr}, the latest first` }) : null,
+        !f.job && f.found ? (f.found.length ? h("div", { class: "ven-found", id: "venFound" }, f.foundAddr ? h("span", { class: "ec-lbl", text: `Jobs at ${f.foundAddr}, ${f.foundNear ? "the visit nearest the invoice's day first" : "the latest first"}` }) : null,
             f.found.map((j, i) => h("button", { class: "ven-jobpick", type: "button", "data-base": j.base,
-            onclick: () => { Object.assign(f, { job: j, found: null, matchedBy: j.why && j.why.length ? j.why : null }); loadLines(); } }, h("b", { text: `#${j.base} · ${j.client || "–"}${f.foundAddr && !i ? " · latest" : ""}` }),
+            onclick: () => { Object.assign(f, { job: j, found: null, matchedBy: j.why && j.why.length ? j.why : null }); loadLines(); } }, h("b", { text: `#${j.base} · ${j.client || "–"}${f.foundAddr && !i ? (f.foundNear ? " · nearest the invoice" : " · latest") : ""}` }),
             h("small", { text: `${j.day ? lbDayText(j.day) : "No day yet"} · ${(REV_DEPTS.find(([k]) => k === j.dept) || [, "Other"])[1]} · ${lbMoney(j.c / 100)}${j.proj ? ` · ${j.proj}` : ""}` }))))
-          : h("p", { class: "meta", id: "venNoJob", text: f.foundAddr ? `No job at ${f.foundAddr} in Housecall Pro: try the job's # or the client's name.` : "No job found (jobs read in Operations): try its #, another part of the name or the address." })) : null,
+          : h("p", { class: "meta", id: "venNoJob", text: f.foundAddr ? venLookText(f.foundLook, f.foundAddr) || `No job at ${f.foundAddr} in Housecall Pro: try the job's # or the client's name.` : "No job found (jobs read in Operations): try its #, another part of the name or the address." })) : null,
         // what the invoice named: the jobs it could be (another one than the one picked; or none picked yet)
         f.matches && f.matches.filter(j => !f.job || j.base !== f.job.base).length ? h("div", { class: "ven-found ven-matches", id: "venMatches" },
           h("span", { class: "ec-lbl", text: f.job ? "Other jobs the invoice could be" : "Jobs the invoice names" }),
           f.matches.filter(j => !f.job || j.base !== f.job.base).map(j => h("button", { class: "ven-jobpick", type: "button", "data-base": j.base,
             onclick: () => { Object.assign(f, { job: j, matchedBy: j.why, lines: null, picked: new Set(), found: null }); loadLines(); } },
             h("b", { text: `#${j.base} · ${j.client || "–"}` }), h("small", { text: `${j.day ? lbDayText(j.day) : "No day yet"} · ${j.why.join(" · ")}` })))) : null,
-        f.matches && !f.matches.length && !f.job ? h("p", { class: "meta", id: "venNoMatch", text: f.addrs && f.addrs.length ? "No job found at that address in Housecall Pro: find it by its #, the client's name or another address." : "The invoice doesn't name a job the app knows (its address or client): find it by its #, the client's name or the address." }) : null),
+        f.matches && !f.matches.length && !f.job && !f.found ? h("p", { class: "meta", id: "venNoMatch", text: f.addrs && f.addrs.length ? venLookText(f.look, f.addrs[0].full || f.addrs[0].a) || "No job found at that address in Housecall Pro: find it by its #, the client's name or another address." : "The invoice doesn't name a job the app knows (its address or client): find it by its #, the client's name or the address." }) : null),
       // what was charged
       f.job ? h("div", { class: "field" }, h("span", { class: "ec-lbl", text: "How much did we charge the client for it?" }),
         f.linesBusy ? h("p", { class: "loading", text: "Reading the job's lines from Housecall Pro…" }) : null,
@@ -24710,7 +24716,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 329;                   // the same number as sw.js's CACHE ("voda-fleet-v329"): both go up with every change
+const APP_BUILD = 330;                   // the same number as sw.js's CACHE ("voda-fleet-v330"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
