@@ -1444,6 +1444,13 @@ dialog#dlg:has(.at-rep-dlg) { width: min(760px, calc(100% - 24px)); }
 .jk-both-line { margin: 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--soon) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--soon) 30%, var(--line)); }
 #jkBoth, .rev-avg-kinds .jk-both { color: color-mix(in srgb, var(--soon) 75%, var(--ink)); }
 .rev-strip { display: none; }
+.ven-more { flex: 1 0 100%; display: grid; gap: 4px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--line); }   /* its own row in the job's box */
+.ven-job #venAddJob { flex: 1 0 100%; text-align: left; }
+.ven-more-job { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; } .ven-more-job small { color: var(--muted); }
+.ven-match { display: flex; gap: 8px; align-items: stretch; } .ven-match .ven-jobpick { flex: 1 1 auto; min-width: 0; } .ven-match > .btn { align-self: center; white-space: nowrap; }
+.ven-line span .ven-ljob { justify-self: start; width: fit-content; }
+.ven-ljob { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font: 700 .72rem var(--font-body); font-style: normal; }
+.ven-also { white-space: nowrap; }
 .ven-addr { margin: 6px 0 0; font-size: .86rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; } .ven-addr b { color: var(--ink); }
 .rev-avg-pill { display: inline-flex; align-items: center; gap: 3px; justify-self: start; width: fit-content; margin-top: 6px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); border-radius: 999px;
   background: var(--surface); color: var(--ink); font: 700 .76rem var(--font-body); font-variant-numeric: tabular-nums; cursor: pointer; }
@@ -15935,8 +15942,8 @@ function venDlg() {
       venData ? (list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table ven-list", id: "venList" },
         h("thead", null, h("tr", null, ["Job", "Client", "Service", "Vendor", "Vendor charged us", "We charged", "Return", "Payment", ""].map(t => h("th", { text: t })))),
         h("tbody", null, list.map(v => h("tr", { "data-id": v.id, class: [venNotBilled(v) ? "nb" : "", v.pay ? "paid" : ""].filter(Boolean).join(" ") },
-          h("td", { class: "ven-day" }, hcpLink("job", v.jobId, `#${v.inv}`), h("small", { text: lbDayText(v.day) })),
-          h("th", null, v.client || "–", h("small", { text: (REV_DEPTS.find(([k]) => k === v.dept) || [, "Other"])[1] })),
+          h("td", { class: "ven-day" }, hcpLink("job", v.jobId, `#${v.inv}`), (v.more || []).map(j => h("span", { class: "ven-also" }, " + ", hcpLink("job", j.jobId, `#${j.inv}`))), h("small", { text: lbDayText(v.day) + ((v.more || []).length ? ` · ${(v.more || []).length + 1} jobs, one bill` : "") })),
+          h("th", null, v.client || "–", [...new Set((v.more || []).map(j => j.client).filter(c => c && c !== v.client))].map(c => h("small", { text: c })), h("small", { text: (REV_DEPTS.find(([k]) => k === v.dept) || [, "Other"])[1] })),
           h("td", { text: VEN_SVC_SHORT[v.svc] || v.svc }), h("td", null, v.vendor, v.vinv || v.vday ? h("small", { text: [v.vinv ? `#${v.vinv}` : "", v.vday ? lbDayText(v.vday) : ""].filter(Boolean).join(" · ") }) : null),
           h("td", { text: lbMoney(v.paid / 100) }), venNotBilled(v) ? h("td", { class: "neg" }, h("b", { class: "ven-nbt", text: "Not billed" }), h("small", { text: "no testing charge" }))
             : h("td", null, lbMoney(v.charged / 100), h("small", { text: v.from === "hcp" ? "from the job" : "typed" })),
@@ -16009,13 +16016,14 @@ function venEdit(v, job, q) {
   // done (saved, removed, Cancel or Skip): the next invoice picked (several uploaded at once); else back to Vendor invoices
   const more = !!(q && q.next && q.n < q.of);
   const done = () => { dlgDirty = false; if (more) { q.next(); return; } if (dlgStack.length) { dlgBack(); if (venRedraw) venRedraw(); if (revUnpaidRedraw) revUnpaidRedraw(); } else closeDialog(); };
-  const f = v ? { job: { base: v.inv, ids: [v.jobId], day: v.day, client: v.client, dept: v.dept, proj: "" }, lines: v.lines.slice(), picked: new Set(v.lines.map((l, i) => i)),
+  const f = v ? { job: { base: v.inv, ids: [v.jobId], day: v.day, client: v.client, dept: v.dept, proj: "" }, lines: v.lines.map(l => (l.length > 3 ? l.slice() : l.concat(v.inv))), picked: new Set(v.lines.map((l, i) => i)),
+      more: (v.more || []).map(j => ({ base: j.inv, ids: [j.jobId], day: j.day, client: j.client, dept: j.dept, proj: "" })),
       typed: v.from === "typed" && v.charged ? String(v.charged / 100) : "", from: v.from, nb: v.charged ? "typed" : "no", svc: v.svc, vendor: v.vendor, vinv: v.vinv, vday: v.vday, paid: String(v.paid / 100), notes: v.notes }
-    : { job: job || null, lines: null, picked: new Set(), typed: "", from: "hcp", nb: "no", svc: "", vendor: "", vinv: "", vday: "", paid: "", notes: "" };
+    : { job: job || null, more: [], lines: null, picked: new Set(), typed: "", from: "hcp", nb: "no", svc: "", vendor: "", vinv: "", vday: "", paid: "", notes: "" };
   // did we pay the vendor: not yet (""), the bank account, a credit card, another way; the day, a note
   Object.assign(f, v && v.pay ? { payHow: v.pay.how, payDay: v.pay.day || today, payNote: v.pay.note || "" } : { payHow: "", payDay: today, payNote: "" });
   Object.assign(f, { fileId: "", fileName: "", reading: false, q: "", found: null, finding: false, linesBusy: false, linesErr: "", err: "", busy: false, sure: false, saved: false,
-    matches: null, matchedBy: null, addrs: [], foundAddr: "", look: null, foundLook: null, foundNear: "" });
+    matches: null, matchedBy: null, addrs: [], foundAddr: "", look: null, foundLook: null, foundNear: "", adding: false });
   const vendors = [...new Set(((venData && venData.invoices) || []).map(x => x.vendor).filter(Boolean))].sort();
   const body = h("div", { class: "ven-form", id: "venForm" });
   const set = (k, val) => { f[k] = val; f.err = ""; };
@@ -16023,20 +16031,35 @@ function venEdit(v, job, q) {
   const fromLines = () => f.from === "hcp" && !!f.lines && f.picked.size > 0;
   const charged = () => (fromLines() ? [...f.picked].reduce((n, i) => n + (f.lines[i] ? f.lines[i][2] : 0), 0)
     : f.nb === "no" ? 0 : Math.round((Number(String(f.typed).replace(/[$,\s]/g, "")) || 0) * 100));
+  const lineKey = l => `${l[3]}|${l[0]}|${l[1]}|${l[2]}`;
   const loadLines = async () => {
     if (!f.job) return;
+    const kept = f.lines ? new Set([...f.picked].map(i => f.lines[i] && lineKey(f.lines[i]))) : null, had = new Set((f.lines || []).map(l => l[3]));
     f.linesBusy = true; f.linesErr = ""; draw();
     try {
-      let ids = f.job.ids || [];
-      if (v && ids.length <= 1) { const o = await api("venFind", { q: f.job.base }); const m = (o.jobs || []).find(j => j.base === f.job.base); if (m) ids = m.ids; }
-      const o = await api("venLines", { ids }, 60000);
-      f.lines = o.lines || []; f.picked = new Set(f.lines.map((l, i) => (VEN_LINE_RE.test(`${l[0]} ${l[1]}`) ? i : -1)).filter(i => i >= 0));
+      const got = await Promise.all([f.job].concat(f.more).map(async j => {
+        let ids = j.ids || [];
+        if (v && ids.length <= 1) { const o = await api("venFind", { q: j.base }); const m = (o.jobs || []).find(x => x.base === j.base); if (m) ids = m.ids; }
+        const o = await api("venLines", { ids }, 60000);
+        return (o.lines || []).map(l => [l[0], l[1], l[2], j.base]);
+      }));
+      f.lines = got.flat();
+      f.picked = new Set(f.lines.map((l, i) => ((kept && had.has(l[3]) ? kept.has(lineKey(l)) : VEN_LINE_RE.test(`${l[0]} ${l[1]}`)) ? i : -1)).filter(i => i >= 0));
       f.from = f.picked.size ? "hcp" : "typed";
       if (!f.picked.size && !f.typed) f.nb = "no";   // no Testing line: not billed, unless typed
       if (!f.svc) { const t = [...f.picked].map(i => `${f.lines[i][0]} ${f.lines[i][1]}`).join(" "); f.svc = /asbestos|\blead\b/i.test(t) ? "al" : /mold|spore|air ?sampl/i.test(t) ? "mold" : f.svc; }
     } catch (e) { f.linesErr = e && e.error === "no_key" ? "Housecall Pro isn't connected: type what was charged." : errText(e, "The job's lines"); f.from = "typed"; }
     f.linesBusy = false; draw();
   };
+  // one vendor's bill for several jobs (units at one address): another job added (its lines read), or taken off
+  const addJob = j => {
+    if (!f.job) { Object.assign(f, { job: j, found: null, matchedBy: j.why && j.why.length ? j.why : null }); loadLines(); return; }
+    if (j.base === f.job.base || f.more.some(x => x.base === j.base)) return;
+    if (f.more.length >= 9) { f.err = "Ten jobs on one bill at most."; draw(); return; }
+    f.more.push(j); f.adding = false; f.found = null; f.q = ""; loadLines();
+  };
+  const dropJob = base => { f.more = f.more.filter(x => x.base !== base); if (f.lines) { const keep = f.lines.map((l, i) => [l, i]).filter(([l]) => l[3] !== base); f.picked = new Set(keep.map(([, i], n) => (f.picked.has(i) ? n : -1)).filter(n => n >= 0)); f.lines = keep.map(([l]) => l); } draw(); };
+  const jobText = j => [j.day ? lbDayText(j.day) : "", (REV_DEPTS.find(([k]) => k === j.dept) || [, "Other"])[1], j.proj].filter(Boolean).join(" · ");
   const find = async () => {
     const q = String(f.q || "").trim();
     if (q.length < 2) { f.err = "Type the job # (26482), part of the client's name or the address."; draw(); return; }
@@ -16075,6 +16098,8 @@ function venEdit(v, job, q) {
     const inv = { jobId: (f.job.ids || [])[0] || (v && v.jobId), inv: f.job.base, day: f.job.day, client: f.job.client, dept: f.job.dept, svc: f.svc, vendor: String(f.vendor).trim(),
       vinv: String(f.vinv).trim(), vday: f.vday, paid, charged: ch, from: fromLines() ? "hcp" : "typed",
       lines: fromLines() ? [...f.picked].map(i => f.lines[i]).filter(Boolean) : [], notes: String(f.notes).trim(),
+      more: f.more.map(j => ({ jobId: (j.ids || [])[0], inv: j.base, day: j.day, client: j.client, dept: j.dept,
+        charged: fromLines() ? [...f.picked].map(i => f.lines[i]).filter(l => l && l[3] === j.base).reduce((n, l) => n + l[2], 0) : 0 })),
       pay: f.payHow ? { how: f.payHow, day: f.payDay || today, note: String(f.payNote).trim() } : null };
     if (v && v.jobId && f.job.base === v.inv) inv.jobId = v.jobId;
     try {
@@ -16108,24 +16133,33 @@ function venEdit(v, job, q) {
         f.job ? h("div", { class: "ven-job", id: "venJob" }, h("b", { text: `#${f.job.base} · ${f.job.client || "–"}` }),
             h("small", { text: [f.job.day ? lbDayText(f.job.day) : "", (REV_DEPTS.find(([k]) => k === f.job.dept) || [, "Other"])[1], f.job.proj].filter(Boolean).join(" · ") }),
             f.matchedBy ? h("span", { class: "ven-why", id: "venWhy", text: `Matched by the invoice: ${f.matchedBy.join(" · ")}. Check it's the right job.` }) : null,
-            h("button", { class: "linkish", type: "button", id: "venJobChange", onclick: () => { Object.assign(f, { job: null, lines: null, picked: new Set(), found: null, matchedBy: null }); draw(); } }, "Change"))
-          : h("div", { class: "ven-find" }, h("input", { id: "venQ", type: "search", value: f.q, placeholder: "Job # (26482), the client's name or the address", autocomplete: "off",
+            h("button", { class: "linkish", type: "button", id: "venJobChange", onclick: () => { Object.assign(f, { job: null, more: [], lines: null, picked: new Set(), found: null, matchedBy: null, adding: false }); draw(); } }, "Change"),
+            // the other jobs on this bill (one bill for several units)
+            f.more.length ? h("div", { class: "ven-more", id: "venMore" }, h("span", { class: "ec-lbl", text: `Also on this bill (${fmt(f.more.length + 1)} jobs)` }),
+              f.more.map(j => h("div", { class: "ven-more-job", "data-base": j.base }, h("b", { text: `#${j.base} · ${j.client || "–"}` }), h("small", { text: jobText(j) }),
+                h("button", { class: "linkish", type: "button", "data-drop": j.base, onclick: () => dropJob(j.base) }, "Remove")))) : null,
+            f.adding ? null : h("button", { class: "linkish", type: "button", id: "venAddJob", onclick: () => { f.adding = true; f.found = null; f.q = ""; draw(); setTimeout(() => { const q = $("venQ"); if (q) q.focus(); }, 0); } }, "+ Add another job on this bill"))
+          : null,
+        !f.job || f.adding ? h("div", { class: "ven-find" }, h("input", { id: "venQ", type: "search", value: f.q, placeholder: f.adding ? "Another job on this bill: its #, the client or the address" : "Job # (26482), the client's name or the address", autocomplete: "off",
               oninput: ev => set("q", ev.target.value), onkeydown: ev => { if (ev.key === "Enter") { ev.preventDefault(); find(); } } }),
-            h("button", { class: "btn small", type: "button", id: "venFind", disabled: f.finding, onclick: find }, f.finding ? "Finding…" : "Find")),
+            h("button", { class: "btn small", type: "button", id: "venFind", disabled: f.finding, onclick: find }, f.finding ? "Finding…" : "Find"),
+            f.adding ? h("button", { class: "linkish", type: "button", id: "venAddCancel", onclick: () => { f.adding = false; f.found = null; draw(); } }, "Cancel") : null) : null,
         // the address the invoice gives (the likeliest first): what the app looked for, and a search for its jobs
         f.addrs && f.addrs.length ? h("p", { class: "ven-addr", id: "venAddr" }, h("span", { text: "Address on the invoice: " }), h("b", { text: f.addrs[0].full || f.addrs[0].a }),
           f.job ? null : h("button", { class: "linkish", type: "button", id: "venAddrFind", onclick: () => { f.q = f.addrs[0].a; find(); } }, "Find the jobs there")) : null,
-        !f.job && f.found ? (f.found.length ? h("div", { class: "ven-found", id: "venFound" }, f.foundAddr ? h("span", { class: "ec-lbl", text: `Jobs at ${f.foundAddr}, ${f.foundNear ? "the visit nearest the invoice's day first" : "the latest first"}` }) : null,
-            f.found.map((j, i) => h("button", { class: "ven-jobpick", type: "button", "data-base": j.base,
-            onclick: () => { Object.assign(f, { job: j, found: null, matchedBy: j.why && j.why.length ? j.why : null }); loadLines(); } }, h("b", { text: `#${j.base} · ${j.client || "–"}${f.foundAddr && !i ? (f.foundNear ? " · nearest the invoice" : " · latest") : ""}` }),
+        (!f.job || f.adding) && f.found ? (f.found.length ? h("div", { class: "ven-found", id: "venFound" }, f.foundAddr ? h("span", { class: "ec-lbl", text: `Jobs at ${f.foundAddr}, ${f.foundNear ? "the visit nearest the invoice's day first" : "the latest first"}` }) : null,
+            f.found.filter(j => !f.job || (j.base !== f.job.base && !f.more.some(x => x.base === j.base))).map((j, i) => h("button", { class: "ven-jobpick", type: "button", "data-base": j.base,
+            onclick: () => addJob(j) }, h("b", { text: `#${j.base} · ${j.client || "–"}${f.foundAddr && !i ? (f.foundNear ? " · nearest the invoice" : " · latest") : ""}` }),
             h("small", { text: `${j.day ? lbDayText(j.day) : "No day yet"} · ${(REV_DEPTS.find(([k]) => k === j.dept) || [, "Other"])[1]} · ${lbMoney(j.c / 100)}${j.proj ? ` · ${j.proj}` : ""}` }))))
           : h("p", { class: "meta", id: "venNoJob", text: f.foundAddr ? venLookText(f.foundLook, f.foundAddr) || `No job at ${f.foundAddr} in Housecall Pro: try the job's # or the client's name.` : "No job found (jobs read in Operations): try its #, another part of the name or the address." })) : null,
         // what the invoice named: the jobs it could be (another one than the one picked; or none picked yet)
-        f.matches && f.matches.filter(j => !f.job || j.base !== f.job.base).length ? h("div", { class: "ven-found ven-matches", id: "venMatches" },
-          h("span", { class: "ec-lbl", text: f.job ? "Other jobs the invoice could be" : "Jobs the invoice names" }),
-          f.matches.filter(j => !f.job || j.base !== f.job.base).map(j => h("button", { class: "ven-jobpick", type: "button", "data-base": j.base,
-            onclick: () => { Object.assign(f, { job: j, matchedBy: j.why, lines: null, picked: new Set(), found: null }); loadLines(); } },
-            h("b", { text: `#${j.base} · ${j.client || "–"}` }), h("small", { text: `${j.day ? lbDayText(j.day) : "No day yet"} · ${j.why.join(" · ")}` })))) : null,
+        f.matches && f.matches.filter(j => !f.job || (j.base !== f.job.base && !f.more.some(x => x.base === j.base))).length ? h("div", { class: "ven-found ven-matches", id: "venMatches" },
+          h("span", { class: "ec-lbl", text: f.job ? "Other jobs the invoice could be (or on the same bill)" : "Jobs the invoice names" }),
+          f.matches.filter(j => !f.job || (j.base !== f.job.base && !f.more.some(x => x.base === j.base))).map(j => h("div", { class: "ven-match", "data-base": j.base },
+            h("button", { class: "ven-jobpick", type: "button", "data-base": j.base, title: f.job ? "This job instead" : "This job",
+              onclick: () => { Object.assign(f, { job: j, more: f.more.filter(x => x.base !== j.base), matchedBy: j.why, lines: null, picked: new Set(), found: null }); loadLines(); } },
+              h("b", { text: `#${j.base} · ${j.client || "–"}` }), h("small", { text: `${j.day ? lbDayText(j.day) : "No day yet"} · ${j.why.join(" · ")}` })),
+            f.job ? h("button", { class: "btn small", type: "button", "data-add": j.base, onclick: () => addJob(j) }, "+ Add to this bill") : null))) : null,
         f.matches && !f.matches.length && !f.job && !f.found ? h("p", { class: "meta", id: "venNoMatch", text: f.addrs && f.addrs.length ? venLookText(f.look, f.addrs[0].full || f.addrs[0].a) || "No job found at that address in Housecall Pro: find it by its #, the client's name or another address." : "The invoice doesn't name a job the app knows (its address or client): find it by its #, the client's name or the address." }) : null),
       // what was charged
       f.job ? h("div", { class: "field" }, h("span", { class: "ec-lbl", text: "How much did we charge the client for it?" }),
@@ -16133,13 +16167,13 @@ function venEdit(v, job, q) {
         f.linesErr ? h("p", { class: "dlg-err", text: f.linesErr }) : null,
         !f.linesBusy && f.lines && f.lines.length ? h("div", { class: "ven-lines", id: "venLines" }, f.lines.map((l, i) => h("label", { class: "ven-line" + (f.picked.has(i) ? " on" : "") },
             h("input", { type: "checkbox", checked: f.picked.has(i), "data-i": i, onchange: ev => { if (ev.target.checked) f.picked.add(i); else f.picked.delete(i); f.from = f.picked.size ? "hcp" : "typed"; draw(); } }),
-            h("span", null, h("b", { text: l[0] }), l[1] ? h("small", { text: l[1] }) : null), h("em", { text: lbMoney(l[2] / 100) })))) : null,
+            h("span", null, f.more.length ? h("i", { class: "ven-ljob", text: `#${l[3] || f.job.base}` }) : null, h("b", { text: l[0] }), l[1] ? h("small", { text: l[1] }) : null), h("em", { text: lbMoney(l[2] / 100) })))) : null,
         !f.linesBusy && f.lines && !f.lines.length ? h("p", { class: "meta", text: "The job has no lines in Housecall Pro: type what we charged." }) : null,
         !f.linesBusy && !f.lines && !v ? h("button", { class: "linkish", type: "button", onclick: loadLines }, "Read the job's lines") : null,
         v && !f.linesBusy && f.lines === v.lines ? h("button", { class: "linkish", type: "button", id: "venRelines", onclick: loadLines }, "Read the job's lines again") : null,
         // no Testing line picked: not billed (the reminder), or billed another way (typed)
         !f.linesBusy && (f.lines || v) && !fromLines() ? h("div", { class: "ven-nobill", id: "venNoBill" },
-          h("b", { text: f.lines && f.lines.length && !f.lines.some(l => VEN_LINE_RE.test(`${l[0]} ${l[1]}`)) || (f.lines && !f.lines.length) ? "⚠ No testing charge on this job's invoice in Housecall Pro. Did we forget to bill it?" : "No line picked: what we charged" }),
+          h("b", { text: f.lines && f.lines.length && !f.lines.some(l => VEN_LINE_RE.test(`${l[0]} ${l[1]}`)) || (f.lines && !f.lines.length) ? `⚠ No testing charge on ${f.more.length ? "these jobs' invoices" : "this job's invoice"} in Housecall Pro. Did we forget to bill it?` : "No line picked: what we charged" }),
           h("label", { class: "doc-chk" }, h("input", { type: "radio", name: "venNb", id: "venNbNo", checked: f.nb === "no", onchange: () => { f.nb = "no"; f.from = "typed"; draw(); } }),
             " Not billed yet: remind me (it shows under Vendor invoices until the job's invoice has it)"),
           h("label", { class: "doc-chk" }, h("input", { type: "radio", name: "venNb", id: "venNbTyped", checked: f.nb === "typed", onchange: () => { f.nb = "typed"; f.from = "typed"; draw(); } }),
@@ -24717,7 +24751,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 332;                   // the same number as sw.js's CACHE ("voda-fleet-v332"): both go up with every change
+const APP_BUILD = 333;                   // the same number as sw.js's CACHE ("voda-fleet-v333"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
