@@ -1643,7 +1643,7 @@ dialog#dlg:has(.spd-dlg) { width: min(860px, calc(100% - 24px)); }   /* every co
 .rp-hcp { background: var(--bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; font-size: .88rem; }
 .rp-dlg h3 { font-size: 1.25rem; } .rp-dlg > h3:first-child { padding-right: 40px; }
 dialog#dlg:has(.rp-dlg) { width: min(780px, calc(100% - 24px)); }
-dialog#dlg:has(.ven-dlg) { width: min(1120px, calc(100% - 24px)); }   /* Vendor costs: its tables without sliding sideways */
+dialog#dlg:has(.ven-dlg) { width: min(1240px, calc(100% - 24px)); }   /* Vendor costs: its tables without sliding sideways */
 @media (max-width: 760px) {
   .pay-kpis.rp-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .rp-kpis .pay-kpi { padding: 8px 10px; } .rp-kpis .pay-kpi b { font-size: 1.1rem; }
@@ -1875,7 +1875,22 @@ dialog#dlg:has(.ven-dlg) { width: min(1120px, calc(100% - 24px)); }   /* Vendor 
 .rev-ar-cash:hover, .rev-ar-cash:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .rev-ar-cash.on { border-color: var(--accent); border-width: 2px; } .rev-ar-cash.on .go { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
 .rev-ar-barbox { display: none; gap: 6px; }
-/* Operations › Vendor costs: its card under Accounts receivable, its window, an invoice's form, the Jobs list's tag */
+/* Operations › Vendor invoices: its button, its window (upload and history), an invoice's form */
+.rev-bar-top .rev-tools:has(.rev-ven-btn) { flex: 1 1 auto; } .rev-tools .rev-ven-btn { margin-left: auto; }   /* Vendor invoices: at the row's right end */
+.ven-up { border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; background: var(--surface-2); }
+.ven-up h4 { margin: 0 0 6px; }
+.ven-tots { flex-wrap: wrap; }
+.ven-tots span i { display: block; font-style: normal; font-size: .75rem; color: var(--due); }
+.ven-pay { min-width: 120px; } .ven-pay b { display: block; color: var(--ok); } .ven-pay small { display: block; }
+.ven-paying { display: grid; gap: 6px; min-width: 260px; } .ven-paying input { width: 100%; box-sizing: border-box; }
+.ven-payacts { display: flex; gap: 6px; }
+.ven-list tr.paid td, .ven-list tr.paid th { background: color-mix(in srgb, var(--ok) 4%, var(--surface)); }
+.ven-paid { margin-top: 6px; }
+.ven-list .ven-day small { display: block; white-space: nowrap; }
+.ven-body { grid-template-columns: minmax(0, 1fr); }   /* a wide table scrolls in its own box; the window stays the screen's width */
+.ven-top .seg, #venPayHow, .ven-paying .seg { flex-wrap: wrap; width: fit-content; max-width: 100%; box-sizing: border-box; }
+.ven-top .seg .seg-btn, #venPayHow .seg-btn, .ven-paying .seg .seg-btn { flex: 1 1 auto; white-space: normal; }
+@media (max-width: 560px) { .ven-tots { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ven-tots b { font-size: 1.25rem; } }
 .rev-ven { cursor: pointer; position: relative; display: grid; gap: 6px; padding: 12px 34px 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
 .rev-ven:hover, .rev-ven:focus-visible { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 .rev-ven > small { font-size: .7rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
@@ -1893,7 +1908,7 @@ dialog#dlg:has(.ven-dlg) { width: min(1120px, calc(100% - 24px)); }   /* Vendor 
 .ven-nobill > b { color: var(--due); font-size: .88rem; } .ven-nobill input[type="radio"] { width: auto; } .ven-nobill #venTyped { width: 160px; }
 .ven-why { flex-basis: 100%; font-size: .76rem; font-weight: 600; color: var(--accent); }
 .ven-body { display: grid; gap: 12px; } .ven-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.ven-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.ven-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 620px), 1fr)); gap: 12px; }
 .ven-list td small, .ven-list th small, .ven-sum td small { display: block; color: var(--muted); font-size: .72rem; } .ven-sum td small { display: inline; }
 .ven-acts { white-space: nowrap; } .ven-acts .btn + .btn { margin-left: 4px; }
 .ven-form { display: grid; gap: 8px; min-width: 0; } .ven-form > * { min-width: 0; }
@@ -9171,7 +9186,7 @@ async function openUsers() {
     catch (e) { err.textContent = e && e.error === "name_taken" ? "Someone else already has that name. Add a last name or an initial." : e && e.error === "bad_name" ? "Type a name (up to 40 letters)."
       : e && e.error === "self" ? "You can't change your own account here." : e && e.error === "owner" ? "Only the owner of Settings changes his own account."
       : e && e.error === "not_allowed" && action === "setPriceBulk" ? "Only the owner of Settings can switch Check now and Mark all checked."
-      : e && e.error === "not_allowed" && action === "setDocs" ? (data && data.flag === "vendors" ? "Only the owner of Settings can switch Vendor costs." : "Only the owner of Settings can switch Documents.")
+      : e && e.error === "not_allowed" && action === "setDocs" ? (data && data.flag === "vendors" ? "Only the owner of Settings can switch Vendor invoices." : "Only the owner of Settings can switch Documents.")
       : e && e.error === "not_allowed" && !["setPayroll", "setPriceCheck"].includes(action) ? "Only the owner of Settings and the people he picks can change that." : e && e.error === "not_allowed" && action === "setPayroll" ? "Only an admin who sees Payroll can switch it."
       : e && e.error === "not_allowed" && action === "setPriceCheck" ? "Only an admin who sees VODA Payroll or checks price changes can switch it." : errText(e, "Nothing"); return null; }
   };
@@ -9325,11 +9340,11 @@ async function openUsers() {
     // Vendor costs (Operations): the owner of Settings always; the admins he switches on (only he can)
     const hasVen = Array.isArray(u.access) && u.access.includes("vendors");
     const dv = u.role !== "admin" || apiLevel < VEN_API || !owner || u.status === "invited" ? null
-      : isOwner ? h("span", { class: "user-meta", id: "ven-owner", text: "Sees Vendor costs (owns Settings)" })
+      : isOwner ? h("span", { class: "user-meta", id: "ven-owner", text: "Sees Vendor invoices (owns Settings)" })
       : session.id === owner ? h("button", { class: "chip-btn sm", type: "button", "data-acc": "vendors", id: "ven-" + (u.username || u.id), "aria-pressed": String(hasVen),
-          title: hasVen ? "Tap to take Vendor costs away" : "Tap to let them see Vendor costs (what the testing vendors cost and the margin)",
-          onclick: () => call("setDocs", { id: u.id, flag: "vendors", on: !hasVen }, `${u.name} ${hasVen ? "no longer sees" : "now sees"} Vendor costs`) }, "Vendor costs")
-      : h("span", { class: "user-meta", text: hasVen ? "Sees Vendor costs" : "No Vendor costs" });
+          title: hasVen ? "Tap to take Vendor invoices away" : "Tap to let them see Vendor invoices (the testing vendors' invoices, what we charged and what's paid)",
+          onclick: () => call("setDocs", { id: u.id, flag: "vendors", on: !hasVen }, `${u.name} ${hasVen ? "no longer sees" : "now sees"} Vendor invoices`) }, "Vendor invoices")
+      : h("span", { class: "user-meta", text: hasVen ? "Sees Vendor invoices" : "No Vendor invoices" });
     const sees = u.role === "admin"
       ? h("div", { class: "acc-sec" }, h("p", { class: "acc-h", text: "Sees" }), h("p", { class: "meta", text: "Admin: sees everything" + (apiLevel >= PAY_API ? `, VODA Payroll${dc ? " and Documents" : ""} only when on.` : ".") }),
           h("div", { class: "acc" }, can ? pay : null, can ? pc : null, pb, dc, dco, dv))
@@ -14260,7 +14275,10 @@ function renderRevenue() {
   const focus = revView.focus === "r" && jkOn() && !cash;
   const focusSeg = jkOn() && !cash ? h("div", { class: "rev-focus", id: "revFocus" },
     lbSeg([["", [h("span", { class: "t-long", text: "All departments" }), h("span", { class: "t-short", text: "All" })]], ["r", "Restoration"]], focus ? "r" : "", k => { revView.focus = k; revSaveView(); renderRevenue(); }, "Show")) : null;
-  const tools = h("div", { class: "rev-tools" }, readBtn, cash ? null : cmpSel, focusSeg);   // Compare: for the jobs
+  // Vendor invoices (the testing vendors'): whoever the owner of Settings switched on
+  const venBtn = venCan() ? h("button", { class: "btn small rev-ven-btn", type: "button", id: "revVenBtn", title: "Upload the testing vendors' invoices; what they charged us, what we charged, what's paid",
+    onclick: () => venDlg() }, "Vendor invoices") : null;
+  const tools = h("div", { class: "rev-tools" }, readBtn, cash ? null : cmpSel, focusSeg, venBtn);   // Compare: for the jobs
   // Money in (each payment on the day it came in) opens from Accounts receivable; on it, a bar on top goes back to Jobs
   const bar = h("div", { class: "lb-bar rev-bar-top" },
     lbSeg(Object.entries(REV_PER), per, k => {
@@ -14415,8 +14433,6 @@ function renderRevenue() {
     if (arBar) arBar = h("div", { class: "rev-ar-barbox", id: "revArBarBox" }, arBar, cashArRow(r, today, jt, "revCashArBar", cash));
     if (!arCard && aside) aside.prepend(cashTileEl(r, today, jt));
   }
-  // Vendor costs (the testing vendors' invoices), under Accounts receivable: whoever the owner of Settings switched on
-  if (venCan() && aside && r.from <= last) { const vt = venTileEl(r.from, to); if (arCard && arCard.parentNode === aside) arCard.after(vt); else aside.prepend(vt); }
   // the company goal: its own column (a wide screen), on top of the panel on the right (a PC), or under the period (smaller)
   // a Week or Dates: the goal also gets the days picked (their goals, shrunk to their working days, against what they produced)
   const goalDays = (per === "week" || per === "dates") && r.from <= last ? { per, from: r.from, to: r.to, upto: to, label: per === "week" ? r.label : revSpanText(r.from, r.to) } : null;
@@ -15288,17 +15304,6 @@ const rvSmall = (id, inv, parts) => { const out = []; parts.filter(Boolean).forE
 /** A tile's jobs: every visit of from..to (canceled left out) for a department or all of them, by day: client, project,
  *  job, day, department, charged, paid, owes, status. Read from Housecall Pro with each day (the Jobs column). */
 const revStatus = ws => { const t = String(ws || "").replace(/\s*(un)?rated$/i, "").trim(); return t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : "–"; };
-/** The Jobs list, a job's first visit: its vendor invoices (paid · charged · margin; tapped: Vendor costs) and + Vendor
- *  invoice (the job filled in). */
-function venJobTag(x) {
-  if (!venData && !venLoading && !venErr) setTimeout(() => venLoad(), 0);
-  const base = String(x.inv || "").replace(/-\d+$/, ""), mine = ((venData && venData.invoices) || []).filter(v => v.inv === base), s = venSum(mine);
-  const add = () => venEdit(null, { base, ids: [x.id], day: x.day, client: x.client, dept: x.dep === "o" ? "o" : x.dep, proj: x.proj });
-  return h("span", { class: "rv-ven", "data-base": base },
-    s.n ? h("span", { class: "rv-ven-t" + (s.charged - s.paid < 0 || mine.some(venNotBilled) ? " neg" : ""), title: mine.map(v => `${VEN_SVC_SHORT[v.svc]}: ${v.vendor} ${lbMoney(v.paid / 100)}`).join(" · ") },
-      mine.some(venNotBilled) ? `Vendor ${lbMoney(s.paid / 100)} · NOT BILLED` : `Vendor ${lbMoney(s.paid / 100)} · charged ${lbMoney(s.charged / 100)} · margin ${lbMoney((s.charged - s.paid) / 100)}`) : null,
-    h("button", { class: "linkish rv-ven-add", type: "button", onclick: add }, "+ Vendor invoice"));
-}
 function revJobsDlg(dep, from, to0, kind) {
   const st = { dep: dep || "all", kind: kind || "" };
   const box = h("div", { class: "rv-unpaid-body" });
@@ -15342,7 +15347,7 @@ function revJobsDlg(dep, from, to0, kind) {
           h("th", { class: "rv-ch", text: "Charged" }), h("th", { class: "rv-pd", text: "Paid" }), h("th", { text: "Owes" }), h("th", { class: "rv-st", text: "Status" }))),
         h("tbody", null, shown.map(x => h("tr", { "data-job": x.id, "data-dep": x.dep, class: x.first ? "" : "later" },
           h("th", null, x.client || "–", h("small", { class: "rv-sm" }, rvSmall(x.id, x.inv, [x.proj, x.inv && "#", revStatus(x.ws)]))),
-          h("td", { class: "rv-proj" }, (x.proj || "–") + (x.first ? "" : " (a later visit)"), venCan() && x.first ? venJobTag(x) : null, x.dep === "r" && x.first && jkOn() ? jkJobTag(x) : null), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
+          h("td", { class: "rv-proj" }, (x.proj || "–") + (x.first ? "" : " (a later visit)"), x.dep === "r" && x.first && jkOn() ? jkJobTag(x) : null), h("td", { class: "rv-inv" }, x.inv ? hcpLink("job", x.id, `#${x.inv}`) : "–"), h("td", { class: "rv-day" }, dayText(x.day)),
           h("td", { class: "rv-dep" }, h("i", { class: "rev-dot " + x.dep }), (REV_DEPTS.find(([k]) => k === x.dep) || [, "Other"])[1]),
           h("td", { class: "rv-ch", text: lbCash(x.c / 100) }), h("td", { class: "rv-pd", text: lbCash(paid(x) / 100) }),
           h("td", { class: "rv-owes" + (x.owes ? "" : " zero"), text: lbCash(x.owes / 100) }), h("td", { class: "rv-st", text: revStatus(x.ws) })))),
@@ -15503,7 +15508,7 @@ async function venLoad(force) {
   if (venLoading || !venCan() || (venData && !force) || (!force && !retryDue("ven"))) return;
   venLoading = true;
   try { venData = await api("venList"); venErr = ""; retryOk("ven"); }
-  catch (e) { venErr = retryLater("ven", e, () => { if (view.tab === "revenue" && !dlg.open) renderRevenue(); if (venRedraw) venRedraw(); }) ? "" : errText(e, "Vendor costs"); }
+  catch (e) { venErr = retryLater("ven", e, () => { if (view.tab === "revenue" && !dlg.open) renderRevenue(); if (venRedraw) venRedraw(); }) ? "" : errText(e, "Vendor invoices"); }
   venLoading = false;
   if (view.tab === "revenue" && !dlg.open) renderRevenue();
   if (venRedraw) venRedraw();
@@ -15528,78 +15533,121 @@ async function venRecheck(quiet) {
   if (venRedraw) venRedraw();
   if (view.tab === "revenue" && !dlg.open) renderRevenue();
 }
-/** The card under Accounts receivable: the period's charged, paid and margin; tapped, the invoices. */
-function venTileEl(from, to) {
-  if (!venData && !venLoading && !venErr) setTimeout(() => venLoad(), 0);
-  const s = venSum(venIn(from, to)), m = s.charged - s.paid, go = () => venDlg(from, to);
-  const nb = ((venData && venData.invoices) || []).filter(venNotBilled).length;   // any day: not to forget them
-  return h("div", { class: "rev-ven", id: "revVen", role: "button", tabindex: "0", title: "Vendor costs: the testing vendors' invoices, what we charged and the margin",
-      onclick: go, onkeydown: e => { if (e.key === "Enter") go(); } },
-    h("small", { text: `Vendor costs · ${revSpanText(from, to)}` }),
-    !venData ? h("span", { class: "rev-ven-n", text: venErr || "Loading…" })
-      : s.n ? h("div", { class: "rev-ven-nums" },
-        h("span", null, h("em", { text: "Charged" }), h("b", { id: "revVenCh", text: lbMoney(s.charged / 100) })),
-        h("span", null, h("em", { text: "Paid vendors" }), h("b", { id: "revVenPd", text: lbMoney(s.paid / 100) })),
-        h("span", { class: "m" + (m < 0 ? " neg" : "") }, h("em", { text: "Margin" }), h("b", { id: "revVenM", text: lbMoney(m / 100) }), h("i", { text: venPct(m, s.charged) })))
-      : null,
-    venData ? h("span", { class: "rev-ven-n", text: s.n ? `${s.n} invoice${s.n === 1 ? "" : "s"} on these days' jobs` : "No vendor invoices on these days' jobs: tap to add one" }) : null,
-    nb ? h("span", { class: "rev-ven-nb", id: "revVenNb", text: `⚠ ${nb} not billed yet: no testing charge on ${nb === 1 ? "its job's invoice" : "their jobs' invoices"}` }) : null,
-    h("span", { class: "go", "aria-hidden": "true", text: "›" }));
-}
-/** Every invoice of the period (or every one): the totals, by service and by vendor, each invoice; + Vendor invoice. */
-function venDlg(from, to) {
-  const st = { all: false };
+const VEN_PAY = [["account", "Bank account"], ["card", "Credit card"], ["other", "Other"]];
+const VEN_PAY_SHORT = { account: "Account", card: "Card", other: "Other" };
+/** The return on what the vendor charged us: what we made on it (charged less the vendor's invoice) over the invoice. */
+const venRet = (charged, vend) => (vend > 0 ? `${charged - vend >= 0 ? "+" : "−"}${Math.round(Math.abs(charged - vend) / vend * 100)}%` : "–");
+/** Operations › Vendor invoices (the button): upload the vendors' invoices (one or more PDFs or photos: each found on its
+ *  job by the address and the client's name, checked, and what we charged for it asked), and the history: what the
+ *  vendors charged us and what we charged the clients, the margin and the return, how many are paid and what's still to
+ *  pay; by service and by vendor; each invoice (mark it paid: the bank account, a credit card, or another way). Nothing
+ *  goes to accounting: they stay here. */
+function venDlg() {
+  const today = lbToday(), y = today.slice(0, 4);
+  const PERS = [["month", "This month"], ["year", "This year"], ["last", "Last year"], ["all", "Every one"]];
+  const st = { per: "year", vendor: "", svc: "", pay: "all", paying: "", how: "card", day: today, note: "", busy: false, err: "" };
   const box = h("div", { class: "ven-body", id: "venBody" });
+  const span = () => st.per === "month" ? [`${today.slice(0, 7)}-01`, today] : st.per === "year" ? [`${y}-01-01`, today]
+    : st.per === "last" ? [`${Number(y) - 1}-01-01`, `${Number(y) - 1}-12-31`] : ["", ""];
+  const pay = async (v, how) => {
+    st.busy = true; st.err = ""; draw();
+    try {
+      const o = await api("venPay", how ? { id: v.id, how, day: st.day, note: st.note } : { id: v.id, how: "" });
+      const i = venData.invoices.findIndex(x => x.id === v.id); if (i !== -1) venData.invoices[i] = o.inv;
+      st.paying = ""; st.note = "";
+      toast(how ? `Marked paid: ${v.vendor}, ${lbMoney(v.paid / 100)}` : "Marked not paid");
+    } catch (e) { st.err = e && e.field === "pay_number" ? "No card or account numbers in the note (the last 4 digits are fine)." : e && e.field === "pay_day" ? "Pick the day it was paid (not ahead)." : errText(e, "The payment"); }
+    st.busy = false; draw();
+  };
   const draw = () => {
     if (!box.isConnected && venRedraw === draw && box.dataset.drawn) { venRedraw = null; return; }
     box.dataset.drawn = "1";
-    const list = venIn(st.all ? "" : from, to).slice().sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.paid - a.paid));
-    const s = venSum(list), m = s.charged - s.paid;
+    const [from, to] = span(), every = (venData && venData.invoices) || [];
+    const inPer = every.filter(v => !from || (v.day >= from && v.day <= to));
+    const list = inPer.filter(v => (!st.vendor || v.vendor === st.vendor) && (!st.svc || v.svc === st.svc) && (st.pay === "all" || (st.pay === "paid" ? !!v.pay : !v.pay)))
+      .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.paid - a.paid));
+    const s = venSum(list), m = s.charged - s.paid, paidN = list.filter(v => v.pay).length, due = list.filter(v => !v.pay), dueC = due.reduce((n, v) => n + v.paid, 0);
+    const vendors = [...new Set(every.map(v => v.vendor).filter(Boolean))].sort();
     const groups = (key, name) => { const g = new Map(); list.forEach(v => { const k = key(v); if (!g.has(k)) g.set(k, []); g.get(k).push(v); });
-      return [...g.entries()].map(([k, xs]) => [name(k), venSum(xs)]).sort((a, b) => b[1].paid - a[1].paid); };
-    const sumTable = (id, head, rows) => h("table", { class: "lb-table ven-sum", id }, h("thead", null, h("tr", null, h("th", { text: head }), h("th", { text: "Invoices" }), h("th", { text: "Charged" }), h("th", { text: "Paid" }), h("th", { text: "Margin" }))),
-      h("tbody", null, rows.map(([n, x]) => h("tr", null, h("th", { text: n }), h("td", { text: fmt(x.n) }), h("td", { text: lbMoney(x.charged / 100) }), h("td", { text: lbMoney(x.paid / 100) }),
-        h("td", { class: x.charged - x.paid < 0 ? "neg" : "" }, lbMoney((x.charged - x.paid) / 100), h("small", { text: ` ${venPct(x.charged - x.paid, x.charged)}` }))))));
-    const nbs = ((venData && venData.invoices) || []).filter(venNotBilled);
+      return [...g.entries()].map(([k, xs]) => [name(k), venSum(xs), xs.filter(v => v.pay).length]).sort((a, b) => b[1].paid - a[1].paid); };
+    const sumTable = (id, head, rows) => h("table", { class: "lb-table ven-sum", id }, h("thead", null, h("tr", null, [head, "Invoices", "Paid", "Vendors charged us", "We charged", "Margin", "Return"].map(t => h("th", { text: t })))),
+      h("tbody", null, rows.map(([n, x, pd]) => h("tr", null, h("th", { text: n }), h("td", { text: fmt(x.n) }), h("td", { text: `${fmt(pd)} of ${fmt(x.n)}` }), h("td", { text: lbMoney(x.paid / 100) }),
+        h("td", { text: lbMoney(x.charged / 100) }), h("td", { class: x.charged - x.paid < 0 ? "neg" : "" }, lbMoney((x.charged - x.paid) / 100)), h("td", { class: x.charged - x.paid < 0 ? "neg" : "", text: venRet(x.charged, x.paid) })))));
+    const nbs = every.filter(venNotBilled);
+    const seg = (id, label, items, cur, onpick) => h("div", { class: "seg", role: "tablist", "aria-label": label, id }, items.map(([k, t]) => h("button", { class: "seg-btn", type: "button", "data-k": k,
+      "aria-pressed": String(cur === k), onclick: () => onpick(k) }, t)));
+    const payCell = v => {
+      if (st.paying === v.id) return h("td", { class: "ven-pay ven-paying" },
+        h("div", { class: "seg", role: "radiogroup", "aria-label": "Paid with" }, VEN_PAY.map(([k, t]) => h("button", { class: "seg-btn", type: "button", "data-how": k, "aria-pressed": String(st.how === k), onclick: () => { st.how = k; draw(); } }, t))),
+        h("input", { type: "date", id: "venPayDay", value: st.day, max: today, "aria-label": "Paid on", onchange: ev => { st.day = ev.target.value || today; } }),
+        h("input", { id: "venPayNote", value: st.note, maxlength: "120", placeholder: "Note: check #, last 4 of the card", "aria-label": "Note", oninput: ev => { st.note = ev.target.value; } }),
+        h("div", { class: "ven-payacts" }, h("button", { class: "btn small primary", type: "button", id: "venPayGo", disabled: st.busy, onclick: () => pay(v, st.how) }, st.busy ? "Saving…" : "Paid"),
+          h("button", { class: "btn small ghost", type: "button", onclick: () => { st.paying = ""; st.err = ""; draw(); } }, "Cancel")));
+      if (v.pay) return h("td", { class: "ven-pay ok" }, h("b", { text: `Paid · ${VEN_PAY_SHORT[v.pay.how] || v.pay.how}` }),
+        h("small", { text: [lbDayText(v.pay.day), v.pay.note].filter(Boolean).join(" · ") }),
+        h("button", { class: "linkish", type: "button", "data-act": "unpay", title: `Marked by ${v.pay.by || "an admin"}`, onclick: () => pay(v, "") }, "Not paid"));
+      return h("td", { class: "ven-pay" }, h("button", { class: "btn small", type: "button", "data-act": "pay", onclick: () => { st.paying = v.id; st.how = "card"; st.day = today; st.note = ""; st.err = ""; draw(); } }, "Mark paid"));
+    };
     box.replaceChildren(...[
+      // upload: one or more of the vendors' invoices
+      h("div", { class: "ven-up", id: "venUp" }, h("h4", { text: "Upload vendor invoices" }),
+        h("input", { type: "file", id: "venUpFile", multiple: true, "data-drop": "the vendors' invoices (PDFs or photos)", accept: "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
+          onchange: ev => { const fs = [...(ev.target.files || [])]; ev.target.value = ""; if (fs.length) venUpload(fs); } }),
+        h("p", { class: "hint", text: "Each one is read, found on its job by the address and the client's name (you check it), and you're asked what we charged the client for it before it's saved. Nothing goes to accounting." })),
+      // the history
+      h("h4", { text: "History" }),
       nbs.length ? h("div", { class: "ven-nb", id: "venNb" }, h("b", { text: `⚠ ${nbs.length} not billed yet` }),
         h("span", { text: `No testing charge on ${nbs.length === 1 ? "its job's invoice" : "their jobs' invoices"} in Housecall Pro: ${nbs.map(v => `#${v.inv} ${v.client}`).join(", ")}. Add it to the invoice; the app finds it there.` }),
         h("button", { class: "btn small", type: "button", id: "venRecheck", onclick: () => venRecheck(false) }, "Check again")) : null,
       h("div", { class: "ven-top" },
-        h("div", { class: "seg", role: "tablist", "aria-label": "Which" }, [[false, revSpanText(from, to)], [true, "Every invoice"]].map(([k, t]) => h("button", { class: "seg-btn", type: "button", "data-all": String(k),
-          "aria-pressed": String(st.all === k), onclick: () => { st.all = k; draw(); } }, t))),
-        h("button", { class: "btn small primary", type: "button", id: "venAdd", onclick: () => venEdit(null, null) }, "+ Vendor invoice")),
+        seg("venPer", "Which", PERS, st.per, k => { st.per = k; draw(); }),
+        seg("venSvcF", "Service", [["", "Every service"]].concat(VEN_SVC.map(([k]) => [k, VEN_SVC_SHORT[k]])), st.svc, k => { st.svc = k; draw(); }),
+        seg("venPayF", "Payment", [["all", "All"], ["due", "To pay"], ["paid", "Paid"]], st.pay, k => { st.pay = k; draw(); }),
+        vendors.length > 1 ? h("select", { id: "venVendorF", "aria-label": "Vendor", onchange: ev => { st.vendor = ev.target.value; draw(); } },
+          h("option", { value: "", text: "Every vendor" }), vendors.map(n => h("option", { value: n, text: n, selected: st.vendor === n }))) : null),
       !venData ? h("p", { class: venErr ? "dlg-err" : "loading", text: venErr || "Loading…" }) : null,
       venData && list.length ? h("div", { class: "ven-tots", id: "venTots" },
-        h("span", null, h("em", { text: "Charged for these" }), h("b", { text: lbMoney(s.charged / 100) })),
-        h("span", null, h("em", { text: "Paid the vendors" }), h("b", { text: lbMoney(s.paid / 100) })),
-        h("span", { class: "m" + (m < 0 ? " neg" : "") }, h("em", { text: "Margin" }), h("b", { text: lbMoney(m / 100) }), h("i", { text: venPct(m, s.charged) }))) : null,
+        h("span", null, h("em", { text: "Invoices" }), h("b", { id: "venTotN", text: fmt(s.n) })),
+        h("span", null, h("em", { text: "Paid so far" }), h("b", { id: "venTotPaid", text: `${fmt(paidN)} of ${fmt(s.n)}` }), dueC ? h("i", { text: `${lbMoney(dueC / 100)} to pay` }) : null),
+        h("span", null, h("em", { text: "Vendors charged us" }), h("b", { id: "venTotV", text: lbMoney(s.paid / 100) })),
+        h("span", null, h("em", { text: "We charged the clients" }), h("b", { id: "venTotC", text: lbMoney(s.charged / 100) })),
+        h("span", { class: "m" + (m < 0 ? " neg" : "") }, h("em", { text: "Margin" }), h("b", { id: "venTotM", text: lbMoney(m / 100) })),
+        h("span", { class: "m" + (m < 0 ? " neg" : "") }, h("em", { text: "Return" }), h("b", { id: "venTotR", text: venRet(s.charged, s.paid) }))) : null,
       venData && list.length ? h("div", { class: "ven-groups" },
         h("div", { class: "lb-scroll" }, sumTable("venBySvc", "Service", groups(v => v.svc, k => VEN_SVC_SHORT[k] || k))),
         h("div", { class: "lb-scroll" }, sumTable("venByVendor", "Vendor", groups(v => v.vendor, k => k)))) : null,
+      st.err ? h("p", { class: "dlg-err", id: "venPayErr", role: "alert", text: st.err }) : null,
       venData ? (list.length ? h("div", { class: "lb-scroll" }, h("table", { class: "lb-table ven-list", id: "venList" },
-        h("thead", null, h("tr", null, ["Job day", "Job", "Client", "Service", "Vendor", "Paid", "Charged", "Margin", ""].map(t => h("th", { text: t })))),
-        h("tbody", null, list.map(v => h("tr", { "data-id": v.id, class: venNotBilled(v) ? "nb" : "" },
-          h("td", { class: "ven-day", text: lbDayText(v.day) }), h("td", null, hcpLink("job", v.jobId, `#${v.inv}`)),
+        h("thead", null, h("tr", null, ["Job", "Client", "Service", "Vendor", "Vendor charged us", "We charged", "Return", "Payment", ""].map(t => h("th", { text: t })))),
+        h("tbody", null, list.map(v => h("tr", { "data-id": v.id, class: [venNotBilled(v) ? "nb" : "", v.pay ? "paid" : ""].filter(Boolean).join(" ") },
+          h("td", { class: "ven-day" }, hcpLink("job", v.jobId, `#${v.inv}`), h("small", { text: lbDayText(v.day) })),
           h("th", null, v.client || "–", h("small", { text: (REV_DEPTS.find(([k]) => k === v.dept) || [, "Other"])[1] })),
-          h("td", { text: VEN_SVC_SHORT[v.svc] || v.svc }), h("td", null, v.vendor, v.vinv ? h("small", { text: `#${v.vinv}${v.vday ? ` · ${lbDayText(v.vday)}` : ""}` }) : null),
+          h("td", { text: VEN_SVC_SHORT[v.svc] || v.svc }), h("td", null, v.vendor, v.vinv || v.vday ? h("small", { text: [v.vinv ? `#${v.vinv}` : "", v.vday ? lbDayText(v.vday) : ""].filter(Boolean).join(" · ") }) : null),
           h("td", { text: lbMoney(v.paid / 100) }), venNotBilled(v) ? h("td", { class: "neg" }, h("b", { class: "ven-nbt", text: "Not billed" }), h("small", { text: "no testing charge" }))
             : h("td", null, lbMoney(v.charged / 100), h("small", { text: v.from === "hcp" ? "from the job" : "typed" })),
-          h("td", { class: v.charged - v.paid < 0 ? "neg" : "" }, lbMoney((v.charged - v.paid) / 100)),
+          h("td", { class: v.charged - v.paid < 0 ? "neg" : "", text: venRet(v.charged, v.paid) }),
+          payCell(v),
           h("td", { class: "ven-acts" }, v.file ? h("button", { class: "btn small", type: "button", "data-act": "view", onclick: () => venOpen(v) }, "View") : null,
             h("button", { class: "btn small ghost", type: "button", "data-act": "edit", onclick: () => venEdit(v, null) }, "Edit")))))))
-        : h("p", { class: "meta", id: "venNone", text: st.all ? "No vendor invoices yet." : "No vendor invoices on these days' jobs yet." })) : null,
-      howFold("venHow", h("p", { class: "hint", text: "Each vendor's invoice counts on its job's day (the day the job is counted in Operations). Paid: the invoice's total (Google reads it; you check it). Charged: the job's Testing lines in Housecall Pro you picked, or what you typed. Not billed: no testing charge on the job's invoice (and none typed): it stays on top here, and on the card, until the job's invoice has one (the app looks again each time this opens). The Bonus goal counts the revenue less what the testing vendors were paid, each from its job's department. The files are in your Google Drive (VODA Hub › Vendor invoices)." }), "How it's counted")].filter(Boolean));
+        : h("p", { class: "meta", id: "venNone", text: every.length ? "None here: pick another period or filter." : "No vendor invoices yet: upload one above." })) : null,
+      howFold("venHow", h("p", { class: "hint", text: "Each vendor's invoice counts on its job's day (the day the job is counted in Operations). Vendors charged us: the invoice's total (Google reads it; you check it). We charged: the job's testing lines in Housecall Pro (picked when it's uploaded), or typed when it's billed another way (like the Xactimate). Margin: what we charged less what the vendor charged us; Return: the margin over what the vendor charged us. Paid: marked here when we pay the vendor (the bank account, a credit card, or another way); no card or account numbers are kept. The Bonus goal counts the revenue without what the vendors charged us." }))].filter(Boolean));
+    upgradeFiles(box);   // the upload: a box to drop the invoices on, or tap to choose
   };
   venRedraw = draw;
   if (!venData) venLoad();
   else if (Date.now() - venCheckedAt > 5 * 60e3) setTimeout(() => venRecheck(true), 0);   // the ones not billed: looked at again
   openDialog(h("div", { class: "rp-dlg ven-dlg" },
-    h("h3", { id: "dlgTitle", text: "Vendor costs" }),
-    h("p", { class: "hint", text: "The testing vendors' invoices (asbestos and lead, mold) on each job: what we paid them, what we charged for it, and the margin." }),
+    h("h3", { id: "dlgTitle", text: "Vendor invoices" }),
+    h("p", { class: "hint", text: "The testing vendors' invoices (asbestos and lead, mold): what they charged us, what we charged the clients, and what's paid." }),
     box,
     h("div", { class: "dlg-foot" }, h("div", { class: "right" }, h("button", { class: "btn", type: "button", onclick: () => closeDialog(), text: "Close" })))));
   draw();
+}
+/** Several invoices picked: each one in turn (read, its job checked, what we charged asked), then back to the history. */
+function venUpload(files) {
+  const queue = files.slice(0, 20);
+  const next = i => { if (i < queue.length) venEdit(null, null, { file: queue[i], n: i + 1, of: queue.length, next: () => next(i + 1) }); };
+  next(0);
 }
 /** An invoice's file in a new tab. */
 async function venOpen(v) {
@@ -15615,20 +15663,26 @@ function venParse(text, today) {
   const p = rcptParse(text, today), raw = String(text || "");
   const num = raw.match(/\binv(?:oice)?\.?\s*(?:#|no\.?|number|num\.?)?\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{2,19})\b/i);
   const known = [...new Set(((venData && venData.invoices) || []).map(v => v.vendor))].find(n => n && raw.toLowerCase().includes(n.toLowerCase())) || "";
-  return { paid: p.total, day: p.date, vinv: num && /\d/.test(num[1]) ? num[1] : "", vendor: known,
+  // a vendor not used before: most invoices start with its name (the first line with words, not "Invoice", "Date"…)
+  const head = known ? "" : (raw.split(/\r?\n/).map(l => l.replace(/\s+/g, " ").trim())
+    .find(l => /[A-Za-z]{3}/.test(l) && l.length <= 60 && !/invoice|date|total|amount|due|bill|page|statement|remit|phone|email|www\.|@|^%/i.test(l) && (l.match(/\d/g) || []).length <= 4) || "");
+  return { paid: p.total, day: p.date, vinv: num && /\d/.test(num[1]) ? num[1] : "", vendor: known || head,
     svc: /asbestos|\blead\b/i.test(raw) ? "al" : /mold|spore|air ?sampl/i.test(raw) ? "mold" : "" };
 }
 /** Adding a vendor's invoice (v: null) or changing one: the file (Google reads it), the job (its # or the client; its
  *  lines from Housecall Pro, the Testing ones picked: what was charged, or typed), the service, the vendor, its invoice
  *  # and day, what was paid, a note; Remove (a second tap). job: a job to start from ({ base, ids, day, client, dept,
  *  proj }, from the Jobs list). Done: back to the window it was opened from. */
-function venEdit(v, job) {
+function venEdit(v, job, q) {
   const today = lbToday();
-  // done (saved, removed, or Cancel): back to the window it came from (Vendor costs, the Jobs list), drawn again
-  const done = () => { dlgDirty = false; if (dlgStack.length) { dlgBack(); if (venRedraw) venRedraw(); if (revUnpaidRedraw) revUnpaidRedraw(); } else closeDialog(); };
+  // done (saved, removed, Cancel or Skip): the next invoice picked (several uploaded at once); else back to Vendor invoices
+  const more = !!(q && q.next && q.n < q.of);
+  const done = () => { dlgDirty = false; if (more) { q.next(); return; } if (dlgStack.length) { dlgBack(); if (venRedraw) venRedraw(); if (revUnpaidRedraw) revUnpaidRedraw(); } else closeDialog(); };
   const f = v ? { job: { base: v.inv, ids: [v.jobId], day: v.day, client: v.client, dept: v.dept, proj: "" }, lines: v.lines.slice(), picked: new Set(v.lines.map((l, i) => i)),
       typed: v.from === "typed" && v.charged ? String(v.charged / 100) : "", from: v.from, nb: v.charged ? "typed" : "no", svc: v.svc, vendor: v.vendor, vinv: v.vinv, vday: v.vday, paid: String(v.paid / 100), notes: v.notes }
     : { job: job || null, lines: null, picked: new Set(), typed: "", from: "hcp", nb: "no", svc: "", vendor: "", vinv: "", vday: "", paid: "", notes: "" };
+  // did we pay the vendor: not yet (""), the bank account, a credit card, another way; the day, a note
+  Object.assign(f, v && v.pay ? { payHow: v.pay.how, payDay: v.pay.day || today, payNote: v.pay.note || "" } : { payHow: "", payDay: today, payNote: "" });
   Object.assign(f, { fileId: "", fileName: "", reading: false, q: "", found: null, finding: false, linesBusy: false, linesErr: "", err: "", busy: false, sure: false, saved: false,
     matches: null, matchedBy: null });
   const vendors = [...new Set(((venData && venData.invoices) || []).map(x => x.vendor).filter(Boolean))].sort();
@@ -15683,21 +15737,22 @@ function venEdit(v, job) {
     if (!f.job) { f.err = "Pick the job: its # or the client's name, then Find."; draw(); return; }
     if (!f.svc) { f.err = "Pick the service: asbestos & lead, mold, or other."; draw(); return; }
     if (!String(f.vendor).trim()) { f.err = "Type the vendor's name."; draw(); return; }
-    if (!(paid > 0)) { f.err = "Type what the vendor's invoice comes to (Paid)."; draw(); return; }
+    if (!(paid > 0)) { f.err = "Type what the vendor charged us (the invoice's total)."; draw(); return; }
     if (!fromLines() && f.nb === "typed" && String(f.typed).trim() === "") { f.err = "Type what we charged for it (billed another way), or pick Not billed yet."; draw(); return; }
     f.busy = true; f.err = ""; draw();
     const inv = { jobId: (f.job.ids || [])[0] || (v && v.jobId), inv: f.job.base, day: f.job.day, client: f.job.client, dept: f.job.dept, svc: f.svc, vendor: String(f.vendor).trim(),
       vinv: String(f.vinv).trim(), vday: f.vday, paid, charged: ch, from: fromLines() ? "hcp" : "typed",
-      lines: fromLines() ? [...f.picked].map(i => f.lines[i]).filter(Boolean) : [], notes: String(f.notes).trim() };
+      lines: fromLines() ? [...f.picked].map(i => f.lines[i]).filter(Boolean) : [], notes: String(f.notes).trim(),
+      pay: f.payHow ? { how: f.payHow, day: f.payDay || today, note: String(f.payNote).trim() } : null };
     if (v && v.jobId && f.job.base === v.inv) inv.jobId = v.jobId;
     try {
       const o = await api("venSave", Object.assign({ inv }, v ? { id: v.id } : {}, f.fileId ? { fileId: f.fileId } : {}), 60000);
       f.saved = true;
       if (venData) { const i = venData.invoices.findIndex(x => x.id === o.inv.id); if (i === -1) venData.invoices.push(o.inv); else venData.invoices[i] = o.inv; }
       goalsLoad(Number(String(inv.day).slice(0, 4)), true);
-      toast(!ch ? "Saved: Not billed yet (you'll see it on Vendor costs until the job's invoice has it)" : v ? "Saved" : "Vendor invoice added"); done();
+      toast(!ch ? "Saved: Not billed yet (you'll see it on Vendor invoices until the job's invoice has it)" : v ? "Saved" : more ? `Vendor invoice ${q.n} of ${q.of} added` : "Vendor invoice added"); done();
       if (view.tab === "revenue") renderRevenue();
-    } catch (e) { f.busy = false; f.err = e && e.error === "bad_value" ? `Check ${({ vendor: "the vendor", svc: "the service", paid: "what was paid", charged: "what was charged", job: "the job", vday: "the invoice's day" })[e.field] || "what you typed"}.` : e && e.error === "no_file" ? "Add the vendor's invoice again (a PDF or a photo)." : errText(e, "The invoice"); draw(); }
+    } catch (e) { f.busy = false; f.err = e && e.error === "bad_value" && e.field === "pay_number" ? "No card or account numbers in the payment's note (the last 4 digits are fine)." : e && e.error === "bad_value" ? `Check ${({ vendor: "the vendor", svc: "the service", paid: "what the vendor charged us", charged: "what we charged", job: "the job", vday: "the invoice's day", pay: "how it was paid", pay_day: "the day it was paid" })[e.field] || "what you typed"}.` : e && e.error === "no_file" ? "Add the vendor's invoice again (a PDF or a photo)." : errText(e, "The invoice"); draw(); }
   };
   const remove = async () => {
     if (!f.sure) { f.sure = true; draw(); return; }
@@ -15737,7 +15792,7 @@ function venEdit(v, job) {
             h("b", { text: `#${j.base} · ${j.client || "–"}` }), h("small", { text: `${lbDayText(j.day)} · ${j.why.join(" · ")}` })))) : null,
         f.matches && !f.matches.length && !f.job ? h("p", { class: "meta", id: "venNoMatch", text: "The invoice doesn't name a job the app knows (its address or client): find it by its # or the client's name." }) : null),
       // what was charged
-      f.job ? h("div", { class: "field" }, h("span", { class: "ec-lbl", text: "What we charged for it" }),
+      f.job ? h("div", { class: "field" }, h("span", { class: "ec-lbl", text: "How much did we charge the client for it?" }),
         f.linesBusy ? h("p", { class: "loading", text: "Reading the job's lines from Housecall Pro…" }) : null,
         f.linesErr ? h("p", { class: "dlg-err", text: f.linesErr }) : null,
         !f.linesBusy && f.lines && f.lines.length ? h("div", { class: "ven-lines", id: "venLines" }, f.lines.map((l, i) => h("label", { class: "ven-line" + (f.picked.has(i) ? " on" : "") },
@@ -15750,7 +15805,7 @@ function venEdit(v, job) {
         !f.linesBusy && (f.lines || v) && !fromLines() ? h("div", { class: "ven-nobill", id: "venNoBill" },
           h("b", { text: f.lines && f.lines.length && !f.lines.some(l => VEN_LINE_RE.test(`${l[0]} ${l[1]}`)) || (f.lines && !f.lines.length) ? "⚠ No testing charge on this job's invoice in Housecall Pro. Did we forget to bill it?" : "No line picked: what we charged" }),
           h("label", { class: "doc-chk" }, h("input", { type: "radio", name: "venNb", id: "venNbNo", checked: f.nb === "no", onchange: () => { f.nb = "no"; f.from = "typed"; draw(); } }),
-            " Not billed yet: remind me (it stays on Vendor costs until the job's invoice has it)"),
+            " Not billed yet: remind me (it shows under Vendor invoices until the job's invoice has it)"),
           h("label", { class: "doc-chk" }, h("input", { type: "radio", name: "venNb", id: "venNbTyped", checked: f.nb === "typed", onchange: () => { f.nb = "typed"; f.from = "typed"; draw(); } }),
             " Billed another way (like the Xactimate): what we charged"),
           f.nb === "typed" ? h("input", { id: "venTyped", inputmode: "decimal", value: f.typed, placeholder: "$ charged", "aria-label": "What we charged", oninput: ev => { set("typed", ev.target.value); } }) : null) : null,
@@ -15761,23 +15816,31 @@ function venEdit(v, job) {
         h("div", { class: "seg", role: "radiogroup", "aria-label": "Service", id: "venSvc" }, VEN_SVC.map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "radio", "data-k": k,
           "aria-checked": String(f.svc === k), "aria-pressed": String(f.svc === k), onclick: () => { set("svc", k); draw(); } }, t)))),
       h("div", { class: "grid2" }, inp("venVendor", "Vendor", "vendor", { list: "venVendors", maxlength: "80", placeholder: "The testing company" }),
-        inp("venPaid", "Paid (the invoice's total, $)", "paid", { inputmode: "decimal", placeholder: "650.00" })),
+        inp("venPaid", "What the vendor charged us ($, the invoice's total)", "paid", { inputmode: "decimal", placeholder: "650.00" })),
       vendors.length ? h("datalist", { id: "venVendors" }, vendors.map(n => h("option", { value: n }))) : null,
       h("div", { class: "grid2" }, inp("venVinv", "Vendor's invoice # (optional)", "vinv", { maxlength: "40" }), inp("venVday", "Invoice day (optional)", "vday", { type: "date", max: today })),
       inp("venNotes", "Notes (optional)", "notes", { maxlength: "300" }),
+      // did we pay the vendor
+      h("div", { class: "field" }, h("span", { class: "ec-lbl", text: "Did we pay the vendor?" }),
+        h("div", { class: "seg", role: "radiogroup", "aria-label": "Paid", id: "venPayHow" }, [["", "Not yet"]].concat(VEN_PAY).map(([k, t]) => h("button", { class: "seg-btn", type: "button", role: "radio", "data-how": k,
+          "aria-checked": String(f.payHow === k), "aria-pressed": String(f.payHow === k), onclick: () => { set("payHow", k); draw(); } }, t))),
+        f.payHow ? h("div", { class: "grid2 ven-paid" }, inp("venPaidDay", "Paid on", "payDay", { type: "date", max: today }),
+          inp("venPaidNote", "Note (optional)", "payNote", { maxlength: "120", placeholder: "Check #, last 4 of the card" })) : null),
       // the margin, as it stands
-      paid > 0 || ch > 0 ? h("p", { class: "ven-margin" + (ch - paid < 0 ? " neg" : ""), id: "venMargin" }, "Charged ", h("b", { text: f.job && !ch ? "nothing (not billed)" : lbMoney(ch / 100) }), " · paid ", h("b", { text: lbMoney(paid / 100) }),
-        " · margin ", h("b", { text: lbMoney((ch - paid) / 100) }), ch > 0 ? ` (${venPct(ch - paid, ch)})` : "") : null,
+      paid > 0 || ch > 0 ? h("p", { class: "ven-margin" + (ch - paid < 0 ? " neg" : ""), id: "venMargin" }, "We charged ", h("b", { text: f.job && !ch ? "nothing (not billed)" : lbMoney(ch / 100) }), " · the vendor charged us ", h("b", { text: lbMoney(paid / 100) }),
+        " · margin ", h("b", { text: lbMoney((ch - paid) / 100) }), paid > 0 && ch > 0 ? ` (return ${venRet(ch, paid)})` : "") : null,
       f.err ? h("p", { class: "dlg-err", id: "venErr", role: "alert", text: f.err }) : null,
       h("div", { class: "dlg-foot" }, v ? h("button", { class: "btn ghost" + (f.sure ? " danger" : ""), type: "button", id: "venRemove", onclick: remove }, f.sure ? "Sure? Tap again" : "Remove") : null,
-        h("div", { class: "right" }, h("button", { class: "btn", type: "button", id: "venCancel", onclick: () => { if (f.fileId && !f.saved) api("venDelete", { fileId: f.fileId }).catch(() => {}); done(); } }, "Cancel"),
+        h("div", { class: "right" }, h("button", { class: "btn", type: "button", id: "venCancel", onclick: () => { if (f.fileId && !f.saved) api("venDelete", { fileId: f.fileId }).catch(() => {}); done(); } }, more ? "Skip this one" : "Cancel"),
           h("button", { class: "btn primary", type: "button", id: "venSave", disabled: f.busy || f.reading, onclick: save }, f.busy ? "Saving…" : "Save")))].filter(Boolean));
     upgradeFiles(body);   // the file picker: a box to drop the invoice on, or tap to choose
   };
   openDialog(h("h3", { id: "dlgTitle", text: v ? "Vendor invoice" : "Add a vendor invoice" }),
-    h("p", { class: "hint", text: "Asbestos and lead testing, mold testing: the vendor's invoice on its job, and what we charged for it." }), body);
+    h("p", { class: "hint", id: "venOf" }, q && q.of > 1 ? h("b", { text: `Invoice ${q.n} of ${q.of} · ${q.file.name || ""} · ` }) : null,
+      "Asbestos and lead testing, mold testing: the vendor's invoice on its job, and what we charged the client for it."), body);
   draw();
   if (f.job && !f.lines) loadLines();
+  if (q && q.file) readFile(q.file);   // picked on Vendor invoices: read at once
 }
 
 /* ======================= Repairs split: each repair job, its client payments, and Monumental's and VODA's share ======================= */
