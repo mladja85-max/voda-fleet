@@ -2064,8 +2064,11 @@ dialog#dlg:has(.cash-cmp-dlg) { width: min(1120px, calc(100% - 24px)); }
 .ru-d b { font-family: var(--font-display); font-size: 1.15rem; color: var(--due); font-variant-numeric: tabular-nums; } .ru-d.zero b { color: var(--ok); } .ru-d .amt { font-size: .8rem; font-weight: 500; color: var(--muted); }
 .ru-at { display: grid; justify-items: start; } .ru-again { all: unset; cursor: pointer; font-style: normal; font-weight: 700; color: var(--accent); } .ru-again:hover, .ru-again:focus-visible { text-decoration: underline; } .ru-err { color: var(--due); }
 .ru-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; } .ru-top p { margin: 0; }
-@media (max-width: 760px) { .rev-unsent { display: grid; grid-template-columns: 1fr 1fr; } .rev-unsent .ru-h { grid-column: 1 / -1; }
-  .ru-d { min-width: 0; padding: 6px 8px; flex-wrap: wrap; gap: 2px 6px; } .ru-d .amt { flex-basis: 100%; padding-left: 15px; } }
+/* a phone: every department side by side in one row, the same height: its name, then how many (or ✓), then the amount */
+@media (max-width: 760px) { .rev-unsent { display: grid; grid-template-columns: repeat(var(--ru-n, 3), minmax(0, 1fr)); align-items: stretch; } .rev-unsent .ru-h { grid-column: 1 / -1; }
+  .ru-d { min-width: 0; padding: 8px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "dot nm" "n n" "amt amt"; align-content: start; gap: 2px 6px; }
+  .ru-d .rev-dot { grid-area: dot; align-self: center; margin: 0; } .ru-d .nm { grid-area: nm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ru-d b { grid-area: n; line-height: 1.1; } .ru-d .amt { grid-area: amt; padding-left: 0; white-space: nowrap; } }
 .rv-seg { flex-wrap: wrap; width: fit-content; max-width: 100%; }
 .rv-seg .seg-btn em { font-style: normal; font-weight: 600; opacity: .8; }
 #rvUnpaidTable td.rv-owes { font-weight: 700; color: color-mix(in srgb, var(--soon) 72%, var(--ink)); }
@@ -15220,7 +15223,7 @@ function unsentEl() {
   if (apiLevel && apiLevel < UNSENT_API) return isAdmin() ? h("p", { class: "rev-unsent-old meta", id: "revUnsent", text: "Invoices not sent: update the Google script (paste the latest Code.gs, then Deploy › Manage deployments › New version)." }) : h("span", { id: "revUnsent", hidden: true });
   const have = !!unsentDoc;
   const deps = REV_DEPTS.filter(([k]) => k !== "o" || unsentOf("o").length);
-  return h("div", { class: "rev-unsent", id: "revUnsent" },
+  return h("div", { class: "rev-unsent", id: "revUnsent", style: `--ru-n:${deps.length > 3 ? 2 : deps.length}` },   // a phone: one row of 3; 4 (Other too): 2 by 2
     h("span", { class: "ru-h" }, h("small", { text: "Invoices not sent" }),
       h("em", { class: "ru-at" }, unsentSt.busy ? "Checking Housecall Pro…" : unsentSt.err ? h("span", { class: "ru-err", text: unsentSt.err }) : have ? `Finished jobs · checked ${revReadText(unsentDoc.at)}` : "Finished jobs",
         !unsentSt.busy ? h("button", { class: "ru-again", type: "button", id: "revUnsentAgain", onclick: () => unsentLoad(true) }, unsentSt.err ? "Try again" : "Check now") : null)),
