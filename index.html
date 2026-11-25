@@ -6228,6 +6228,33 @@ addEventListener("pointerdown", () => { pressedAt = performance.now(); }, true);
 for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { setTimeout(() => { pressedAt = 0; }, 80); }, true);
 addEventListener("blur", () => { pressedAt = 0; });
 
+/* ---- Automatic retries: a screen whose read fails for a passing reason (no connection, timed out, the Google script or
+   Housecall Pro busy) keeps what it had, says nothing in red, and tries again by itself: after 30 seconds, 1 minute, 2
+   minutes, then every 5 minutes. A tap (any button or link) tries at once. Red only when someone has to act: signed out,
+   the Google script to update, not allowed, Housecall Pro not connected. Each failure is still on Settings › Speed. ---- */
+const RETRY_MS = [30e3, 60e3, 120e3, 300e3];
+let apiOkAt = 0;                                         // the last answer from the Google script (any screen): "Updated"
+const RETRY_NO = ["signed_out", "bad_code", "not_allowed", "moved", "not_set_up", "bad_request", "no_key", "hcp_key", "hcp_forbidden", "needs_permission", "not_found", "too_long", "too_big"];
+const autoWait = {};                                    // key → { n (failures in a row), at (next try), t (its timer) }
+/** A passing failure (tried again by itself), not one someone has to act on. */
+const retryable = e => !(e && RETRY_NO.includes(e.error));
+/** May `key` be read now (not waiting after a failure)? */
+const retryDue = key => !autoWait[key] || Date.now() >= autoWait[key].at;
+/** It worked: no more waiting. */
+function retryOk(key) { const w = autoWait[key]; if (w) { clearTimeout(w.t); delete autoWait[key]; } }
+/** It failed: a passing reason → true (wait, then `again()` draws the screen, which reads it again); else false (say it). */
+function retryLater(key, e, again) {
+  if (!retryable(e)) { retryOk(key); return false; }
+  const w = autoWait[key] || (autoWait[key] = { n: 0, at: 0, t: 0 });
+  const ms = RETRY_MS[Math.min(w.n, RETRY_MS.length - 1)];
+  w.n++; w.at = Date.now() + ms;
+  clearTimeout(w.t);
+  w.t = setTimeout(() => { w.t = 0; try { if (again) again(); } catch (x) { /* the next draw tries */ } }, ms + 100);
+  return true;
+}
+// a tap tries at once (the waits keep growing if it fails again)
+addEventListener("click", ev => { if (ev.target && ev.target.closest && ev.target.closest("button, a, [role=button], [role=tab]")) Object.values(autoWait).forEach(w => { w.at = 0; }); }, true);
+
 async function api(action, data, ms) {
   for (let attempt = 0; ; attempt++) {
     try { const out = await apiOnce(action, data, ms); tellSaved(action, data, out); return out; }
@@ -6253,6 +6280,7 @@ async function apiOnce(action, data, ms) {
     });
     try { const text = await res.text(); size = text.length; out = JSON.parse(text); } catch (e) { why = ctrl.signal.aborted ? "timeout" : res.ok ? "bad_answer" : `http_${res.status}`; throw { error: "network" }; }
     if (!out || !out.ok) { why = (out && out.error) || "bad_answer"; throw out || { error: "network" }; }
+    apiOkAt = Date.now();
     return out;
   } catch (e) {
     if (!why) why = ctrl.signal.aborted ? "timeout" : (e && e.error) || "network";
@@ -6308,7 +6336,11 @@ function errText(e, what) {
   return "Couldn't reach the Google Sheet. Check the connection and try again.";
 }
 
-async function refresh(quiet) {
+const LIST_EVERY = 10 * 60e3;   // trucks and checklists, away from Warehouse
+let listAt = 0;
+/** quiet: by itself (no banner when it fails); timed: the 90-second timer or coming back to the app (trucks and
+ *  checklists only on Warehouse); any other refresh (after a change, Update) reads them too. */
+async function refresh(quiet, timed) {
   if (refreshing || !session) return;
   refreshing = true;
   $("syncText").textContent = "Updating…";
@@ -6323,8 +6355,13 @@ async function refresh(quiet) {
   if (view.tab === "attendance" && loaded && !dlg.open && !atLoading) atLoad();
   if (view.tab === "estimates" && loaded && !dlg.open) estAuto();
   if (view.tab === "documents" && loaded && !dlg.open) docLoad();
+  // Trucks and checklists (with who you are, the badges and the GPS warning): every 90 seconds on Warehouse; elsewhere
+  // every 10 minutes (a tap on Update, the first time, or a truck's window open: now). Waiting after a failure: not yet.
+  const wh = view.tab === "trucks" || view.tab === "supplies" || (typeof openId !== "undefined" && openId && drawer.open);
+  if (loaded && timed && ((!wh && Date.now() - listAt < LIST_EVERY) || !retryDue("list"))) { refreshing = false; renderSync(); return; }
   try {
     const out = await api("list");
+    listAt = Date.now(); retryOk("list");
     let roleChanged = false;
     if (out.me) {
       const access = Array.isArray(out.me.access) ? out.me.access : ["trucks"];
@@ -6350,13 +6387,16 @@ async function refresh(quiet) {
     setBanner(scriptOld(out) ? SCRIPT_OLD : "");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { refreshing = false; signOut("Your sign-in ended. Please sign in again."); return; }
-    offline = true;
+    // a passing failure with a connection: nothing in red, "Updated" stays at its time, asked again by itself
+    const passing = navigator.onLine && retryLater("list", e, () => { if (document.visibilityState === "visible") refresh(true); });
+    if (!passing) offline = true;
     if (!loaded) {
       const cache = store.get(K_CACHE);
       if (cache && Array.isArray(cache.trucks)) { trucks = sortTrucks(cache.trucks); lastSync = new Date(cache.at); loaded = true; }
     }
     if (e && e.error === "moved") setBanner(MOVED_TEXT);
-    else if (!quiet || !loaded) setBanner(loaded ? errText(e, "Your numbers") + " Showing the last saved data." : errText(e));
+    else if (!passing && (!quiet || !loaded)) setBanner(loaded ? errText(e, "Your numbers") + " Showing the last saved data." : errText(e));
+    else if (passing && !loaded) setBanner("The Google Sheet is slow to answer. Trying again by itself…");
   } finally {
     refreshing = false;
     renderSync();
@@ -6376,7 +6416,8 @@ function renderSync() {
     : "";
   const idle = !waiting && !n && !offline;
   bar.classList.toggle("idle", idle);
-  if (idle && lastSync) $("syncText").replaceChildren(h("span", { class: "upd-lbl", text: "Updated " }), fmtTime(lastSync));
+  const upd = Math.max(lastSync ? lastSync.getTime() : 0, apiOkAt);   // the last answer from any screen
+  if (idle && upd) $("syncText").replaceChildren(h("span", { class: "upd-lbl", text: "Updated " }), fmtTime(new Date(upd)));
   $("gpsWarn").hidden = offline || !gpsProblem();
   const me = session ? `${session.name || "Me"} · Settings` : "";
   const ico = h("span", { class: "me-ico", "aria-hidden": "true" });
@@ -7361,14 +7402,19 @@ function stopsLoad(id, force) {
   const key = stopsKey(id), [from, to] = stopsRange();
   const c = stopsCache[key] || (stopsCache[key] = {});
   if (c.p && !force) return;
-  c.error = null;
+  c.error = null; c.waiting = false;
+  // a passing failure: still "Reading…", and asked again by itself (30 seconds, 1 minute…) while the truck is open
   const p = c.p = api("gpsStops", { truck: id, from, to, force: !!force }, 120000)
-    .then(d => { if (c.p === p) { c.data = d; c.p = null; } }, e => { if (c.p === p) { c.error = e; c.p = null; } })
+    .then(d => { if (c.p === p) { c.data = d; c.p = null; retryOk(`stops:${key}`); } }, e => {
+      if (c.p !== p) return;
+      c.p = null;
+      if (retryLater(`stops:${key}`, e, () => { if (drawer.open && openId === id && stopsKey(id) === key) stopsLoad(id); })) c.waiting = true; else c.error = e;
+    })
     .then(() => stopsDraw(id));
   stopsDraw(id);
 }
 /** The tab was opened (or drawn again while open): read what isn't here yet. */
-function stopsShown(id) { const c = stopsCache[stopsKey(id)]; if (!c || (!c.data && !c.p && !c.error)) stopsLoad(id); }
+function stopsShown(id) { const c = stopsCache[stopsKey(id)]; if (!c || (!c.data && !c.p && !c.error && (!c.waiting || retryDue(`stops:${stopsKey(id)}`)))) stopsLoad(id); }
 function stopsSection(t) {
   if (!stopsTabOn(t)) return null;
   const el = h("div", { class: "dr-section stp", id: "d-stops" });
@@ -7449,7 +7495,7 @@ function stopsDraw(id) {
       lbSeg([["day", "Day"], ["week", "Week"]], stopsView.week ? "week" : "day", k => { stopsView.week = k === "week"; stopsKeep(); stopsLoad(id); }, "Day or week")),
     h("label", { class: "stp-who" }, h("span", { text: "Whose schedule" }), sel, typed));
   const out = [head, bar];
-  if (c.p && !d) { out.push(h("p", { class: "meta", id: "stpLoading", text: "Reading One Step GPS and the schedule… (a few seconds)" })); el.replaceChildren(...out); return; }
+  if ((c.p || c.waiting) && !d) { out.push(h("p", { class: "meta", id: "stpLoading", text: "Reading One Step GPS and the schedule… (a few seconds)" })); el.replaceChildren(...out); return; }
   if (c.error) {
     const e = c.error;
     out.push(h("p", { class: "warn", id: "stpErr", text: e.error === "no_gps" ? "This truck isn't linked to a GPS tracker (column C of the GPS tab)."
@@ -9784,6 +9830,8 @@ function setTab(tab, sub) {
   saveView();
   applyTab();
   window.scrollTo(0, 0);
+  // Warehouse after a while elsewhere: trucks and checklists now (away from it they're read every 10 minutes)
+  if ((view.tab === "trucks" || view.tab === "supplies") && loaded && Date.now() - listAt > 90e3) setTimeout(() => refresh(true), 0);
 }
 function applyTab() {
   const tabs = allowedTabs();
@@ -10674,7 +10722,7 @@ const lbCanAskSince = () => apiLevel >= LB_FAST_API && lbFresh && !!lbData && lb
 /** Load the Leaderboard. whole: everything for the year (Update, the first load); otherwise only what changed since
  *  the last answer when the sheet can say so, which is small and quick enough to ask every few seconds. */
 async function lbLoad(whole) {
-  if (lbLoading || !session || !canSeeLb()) return;
+  if (lbLoading || !session || !canSeeLb() || !retryDue("lb")) return;
   const want = lbYear(), kept = lbYearCache[want];
   if (kept && lbData !== kept) { lbData = kept; lbCache = null; if (view.tab === "leaderboard" && !lbTyping()) renderLeaderboard(); }
   if (kept && want < lbNowYear()) return;   // this year is shown at once and then loaded fresh
@@ -10711,10 +10759,12 @@ async function lbLoad(whole) {
       lbTouch();
       changed = true;
     }
-    lbErr = ""; lbOld = false;
+    lbErr = ""; lbOld = false; retryOk("lb");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { lbLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
-    if (!since) {   // a quick check that failed says nothing: the numbers on screen stay, and it's asked again
+    // a passing failure says nothing: the numbers on screen stay, and it's asked again by itself
+    const quiet = retryLater("lb", e, () => { if (view.tab === "leaderboard") lbLoad(!lbData); });
+    if (!since && !quiet) {
       lbOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < LB_API);
       lbErr = lbOld ? "" : errText(e, "Nothing");
       changed = true;
@@ -13223,7 +13273,7 @@ const cashCan = () => canSee("revenue") && (!apiLevel || apiLevel >= CASH_API);
  *  jobs Collected counts (from..jt), to set Money in next to it; null: none (the period hasn't started for Collected). */
 function cashFor(from, to, jt) {
   const key = `${from}|${to}|${jt || ""}`, fresh = cashDoc && cashDoc.key === key && Date.now() - cashDoc.t < 180000;
-  if (!fresh && cashSt.loading !== key && !offline) cashLoad(from, to, jt);
+  if (!fresh && cashSt.loading !== key && !offline && retryDue("cash")) cashLoad(from, to, jt);
   return cashDoc && cashDoc.key === key ? cashDoc : null;
 }
 async function cashLoad(from, to, jt) {
@@ -13233,15 +13283,15 @@ async function cashLoad(from, to, jt) {
     const out = await api("cashRead", Object.assign({ from, to }, jt ? { jf: from, jt } : {}));
     const cmp = out.cmp && typeof out.cmp === "object" && Array.isArray(out.cmp.diff) ? out.cmp : null;
     cashDoc = { key, items: Array.isArray(out.items) ? out.items : [], cmp, left: Number(out.left) || 0, at: out.at || "", t: Date.now() };
-    cashSt.left = cashDoc.left; cashSt.err = "";
+    cashSt.left = cashDoc.left; cashSt.err = ""; retryOk("cash");
     if (cashDoc.left && !cashSt.syncing) cashSync(false);
-  } catch (e) { cashSt.err = revErrText(e); }
+  } catch (e) { cashSt.err = retryLater("cash", e, () => { if (view.tab === "revenue") renderRevenue(); }) ? "" : revErrText(e); }
   finally { if (cashSt.loading === key) cashSt.loading = ""; }
   if (view.tab === "revenue") renderRevenue();
 }
 /** Reads payments from Housecall Pro in turns until every job is read (force: the jobs still owing, now: Read again). */
 async function cashSync(force) {
-  if (cashSt.syncing) return;
+  if (cashSt.syncing || (!force && !retryDue("cashSync"))) return;
   cashSt.syncing = true; cashSt.err = ""; cashPaintStatus();
   try {
     for (let n = 0, first = !!force; n < 400; n++, first = false) {
@@ -13249,7 +13299,8 @@ async function cashSync(force) {
       cashSt.left = Number(out.left) || 0; cashPaintStatus();
       if (out.done || (!out.read && !first)) break;
     }
-  } catch (e) { cashSt.err = revErrText(e); }
+    retryOk("cashSync");
+  } catch (e) { cashSt.err = retryLater("cashSync", e, () => { if (view.tab === "revenue") cashSync(false); }) ? "" : revErrText(e); }
   finally { cashSt.syncing = false; }
   if (cashDoc) cashDoc.t = 0;   // read again with what came in
   if (view.tab === "revenue") renderRevenue();
@@ -13539,7 +13590,7 @@ const srvCan = () => canSee("revenue") && (!apiLevel || apiLevel >= SRV_API);
  *  while they load (asked for here; again after 3 minutes). */
 function srvFor(from, to, n) {
   const key = `${from}|${to}|${n}`, fresh = srvDoc && srvDoc.key === key && Date.now() - srvDoc.t < 180000;
-  if (!fresh && srvSt.loading !== key && !offline) srvLoad(from, to, key);
+  if (!fresh && srvSt.loading !== key && !offline && retryDue("srv")) srvLoad(from, to, key);
   return srvDoc && srvDoc.key.startsWith(`${from}|${to}|`) ? srvDoc : null;
 }
 async function srvLoad(from, to, key) {
@@ -13547,10 +13598,10 @@ async function srvLoad(from, to, key) {
   try {
     const out = await api("srvRead", { from, to, byJob: true });
     srvDoc = { key, from, to, items: Array.isArray(out.items) ? out.items : [], map: out.map && typeof out.map === "object" ? out.map : {}, left: Number(out.left) || 0, at: out.at || "", t: Date.now() };
-    srvSt.left = srvDoc.left; srvSt.err = "";
+    srvSt.left = srvDoc.left; srvSt.err = ""; retryOk("srv");
     if (!out.fixJob && isAdmin() && apiLevel >= SRV_JOB_API) srvFixJob();
     if (srvDoc.left && !srvSt.syncing) srvSync(from, to, false);
-  } catch (e) { srvSt.err = revErrText(e); }
+  } catch (e) { srvSt.err = retryLater("srv", e, srvRedraw) ? "" : revErrText(e); }
   finally { if (srvSt.loading === key) srvSt.loading = ""; }
   srvRedraw();
 }
@@ -13575,7 +13626,7 @@ async function srvFixJob() {
 }
 /** Reads the jobs' service lines from Housecall Pro in turns until they're all read (force: all again: Read again). */
 async function srvSync(from, to, force) {
-  if (srvSt.syncing) return;
+  if (srvSt.syncing || (!force && !retryDue("srvSync"))) return;
   srvSt.syncing = true; srvSt.err = ""; srvPaint();
   try {
     for (let n = 0, first = !!force; n < 400; n++) {
@@ -13584,7 +13635,8 @@ async function srvSync(from, to, force) {
       if (out.done || (!out.read && !first)) break;
       first = false;
     }
-  } catch (e) { srvSt.err = revErrText(e); }
+    retryOk("srvSync");
+  } catch (e) { srvSt.err = retryLater("srvSync", e, () => srvSync(from, to, false)) ? "" : revErrText(e); }
   finally { srvSt.syncing = false; }
   if (srvDoc) srvDoc.t = 0;
   srvRedraw();
@@ -13932,7 +13984,7 @@ function revForget() { revData = null; revOther = {}; store.del(K_REV); if (type
 const revDoc = y => (y === revThisYear() ? revData : revOther[y]) || null;
 async function revLoad(y) {
   y = y || revThisYear();
-  if (!session || !(canSee("revenue") || canSee("marketing")) || revLoading[y]) return;
+  if (!session || !(canSee("revenue") || canSee("marketing")) || revLoading[y] || !retryDue(`rev:${y}`)) return;
   revLoading[y] = true;
   try {
     const out = await api("revenue", { year: y });
@@ -13941,11 +13993,11 @@ async function revLoad(y) {
     const had = revDoc(y);
     if (had && had.year === y) for (const [d, v] of Object.entries(had.days || {})) if (!doc.days[d] || (Number(v[9]) || 0) > (Number(doc.days[d][9]) || 0)) doc.days[d] = v;
     if (y === revThisYear()) { revData = doc; store.set(K_REV, revData); } else revOther[y] = doc;
-    revErr = ""; revOld = false;
+    revErr = ""; revOld = false; retryOk(`rev:${y}`);
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { revLoading[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
     revOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < REV_API);
-    revErr = revOld ? "" : errText(e, "Nothing");
+    revErr = revOld || retryLater(`rev:${y}`, e, revRedraw) ? "" : errText(e, "Nothing");
   } finally {
     revLoading[y] = false;
     revRedraw();
@@ -14016,7 +14068,7 @@ const revMonthText = day => `${lbMonthLong(Number(day.slice(5, 7)))} ${day.slice
  *  (Marketing): days read before their sources were kept are read again too. */
 async function revEnsure(ranges, force, src) {
   const today = lbToday();
-  if (revSync.busy || (!force && revSync.err) || !session || !(canSee("revenue") || canSee("marketing"))) return;
+  if (revSync.busy || (!force && (revSync.err || !retryDue("revSync"))) || !session || !(canSee("revenue") || canSee("marketing"))) return;
   if (!navigator.onLine) return;
   const now = Date.now(), months = {};
   // a day read before the script kept sources and unpaid visits is read again when they're needed (src, or a range's third item)
@@ -14037,9 +14089,9 @@ async function revEnsure(ranges, force, src) {
   if (!chunks.length) return;
   revSync = { busy: true, what: "", err: "", n: chunks.length, done: 0 };
   // two months at a time, the newest first (the screen fills in as each one comes back)
-  let next = 0, out401 = false;
+  let next = 0, out401 = false, paused = false;   // paused: a passing failure (read again by itself in a while)
   const one = async () => {
-    while (next < chunks.length && !revSync.err && !out401) {
+    while (next < chunks.length && !revSync.err && !out401 && !paused) {
       const c = chunks[next++];
       revSync.what = revMonthText(c.from);
       for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) revAsked[d] = performance.now();
@@ -14051,13 +14103,14 @@ async function revEnsure(ranges, force, src) {
         revRedraw();
       } catch (e) {
         if (e && (e.error === "bad_code" || e.error === "signed_out")) { out401 = true; return; }
-        revSync.err = revErrText(e);
-        for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) delete revAsked[d];   // not read: Try again asks for them
+        if (retryLater("revSync", e, revRedraw)) paused = true; else revSync.err = revErrText(e);
+        for (let d = c.from; d <= c.to; d = lbAddDays(d, 1)) delete revAsked[d];   // not read: asked for again
       }
     }
   };
   await Promise.all([one(), one()]);
   revSync.busy = false;
+  if (!paused && !revSync.err && !out401) retryOk("revSync");
   if (out401) { signOut("Your sign-in ended. Please sign in again."); return; }
   revRedraw();
 }
@@ -14374,7 +14427,7 @@ function renderRevenue() {
     ...(aside ? [aside] : []), ...(slot === "wide" ? [gbox] : []));
   if (r.from <= last && !revSync.busy && !revSync.err) setTimeout(() => revEnsure(ranges().concat(goal ? revUnread(`${to.slice(0, 4)}-01-01`, to) : []), false), 0);
   // Restoration's kinds: sorted now when the days on screen have jobs never sorted (else every 10 minutes)
-  if (jkOn() && !jk.busy) {
+  if (jkOn() && !jk.busy && retryDue("jk")) {
     const wait = Date.now() - jk.tried, unk = r.from <= last ? jkSum(days, r.from, to).unk : 0;
     if (wait > JK_EVERY || (unk && !jk.err && wait > 8e3)) setTimeout(jkLoad, 0);
     else if (unk && !jk.err && !jk.timer) jk.timer = setTimeout(() => { jk.timer = 0; if (view.tab === "revenue") renderRevenue(); }, 8e3 - wait + 50);
@@ -14405,12 +14458,12 @@ const priceOn = () => apiLevel >= PRICE_API && (isAdmin() || userAccess().includ
 const PRICE_BULK_API = 153;                             // the Google script where Check now and Mark all are switched per person
 async function priceLoad(scan) {
   if (!session || !priceOn() || priceBusy) return;
-  if (!scan && (Date.now() - priceTried < 5 * 60e3)) return;
+  if (!scan && (Date.now() - priceTried < 5 * 60e3 || !retryDue("price"))) return;
   priceBusy = true; priceTried = Date.now();
   if (scan && view.tab === "revenue") renderRevenue();
   try {
     const out = await api(scan ? "priceScan" : "priceList", {}, 170000);
-    priceDoc = out; priceErr = "";
+    priceDoc = out; priceErr = ""; retryOk("price");
     // a changed job's visit day: read again here too (Operations' totals, the goal)
     for (const w of out.open || []) {
       if (priceMarked.has(w.id) || !w.day) continue;
@@ -14420,7 +14473,7 @@ async function priceLoad(scan) {
     }
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { priceBusy = false; signOut("Your sign-in ended. Please sign in again."); return; }
-    priceErr = errText(e, "The price check");
+    priceErr = retryLater("price", e, () => { priceTried = 0; if (view.tab === "revenue") renderRevenue(); }) ? "" : errText(e, "The price check");
   } finally {
     priceBusy = false;
     if (view.tab === "revenue") renderRevenue();
@@ -14614,11 +14667,11 @@ const REV_DEPTS_ALL = ["r", "c", "p", "o"];
 const revBkSum = d => REV_DEPTS_ALL.reduce((t, k) => ({ cents: t.cents + ((d[k] || {}).cents || 0), jobs: t.jobs + ((d[k] || {}).jobs || 0), visits: t.visits + ((d[k] || {}).visits || 0) }), { cents: 0, jobs: 0, visits: 0 });
 async function revBkLoad(when, force) {
   const x = revBk[when];
-  if (revBk.busy[when] || (!force && x && Date.now() - x.got < 2 * 60e3)) return;
+  if (revBk.busy[when] || (!force && x && Date.now() - x.got < 2 * 60e3) || (!force && !retryDue(`bk:${when}`))) return;
   revBk.busy[when] = true; revBk.err[when] = "";
   revBkDraw(when);
-  try { revBk[when] = Object.assign(await api("revBooked", { when }, 120000), { got: Date.now() }); }
-  catch (e) { revBk.err[when] = revErrText(e); }
+  try { revBk[when] = Object.assign(await api("revBooked", { when }, 120000), { got: Date.now() }); retryOk(`bk:${when}`); }
+  catch (e) { revBk.err[when] = retryLater(`bk:${when}`, e, () => { if (view.tab === "revenue") revBkLoad(when, false); }) ? "" : revErrText(e); }
   revBk.busy[when] = false;
   revBkDraw(when);
   const b = $(when === "today" ? "revBkToday" : "revBkFuture");
@@ -15152,14 +15205,14 @@ function unsentPaint() {
 }
 async function unsentLoad(force) {
   if (!session || !canSee("revenue") || unsentSt.busy || (apiLevel && apiLevel < UNSENT_API)) return;
-  if (!force && Date.now() - unsentSt.t < 5 * 60 * 1000) return;
+  if (!force && (Date.now() - unsentSt.t < 5 * 60 * 1000 || !retryDue("unsent"))) return;
   if (!navigator.onLine) return;
   unsentSt.busy = true; unsentSt.err = ""; unsentPaint();
   try {
     const out = await api("unsentRead", { force: !!force }, 170000);
     unsentDoc = { items: Array.isArray(out.items) ? out.items : [], at: out.at || new Date().toISOString(), src: out.src || "", more: !!out.more };
-    store.set("voda.unsent", unsentDoc);
-  } catch (e) { unsentSt.err = revErrText(e); }
+    store.set("voda.unsent", unsentDoc); retryOk("unsent");
+  } catch (e) { unsentSt.err = retryLater("unsent", e, () => { unsentSt.t = 0; if (view.tab === "revenue") unsentLoad(false); }) ? "" : revErrText(e); }
   finally { unsentSt.busy = false; unsentSt.t = Date.now(); unsentPaint(); }
 }
 /** The row under the tiles. */
@@ -15341,6 +15394,9 @@ async function jkLoad() {
       if (!out.sorted || !jk.left || view.tab !== "revenue") break;
     }
   } catch (e) { jk.err = (e && e.error) || "failed"; }
+  // Housecall Pro or the script didn't answer: quietly again in a while (only "not connected" is said)
+  if (jk.err && retryLater("jk", { error: jk.err }, () => { jk.tried = 0; if (view.tab === "revenue") renderRevenue(); })) jk.err = "";
+  else if (!jk.err) retryOk("jk");
   jk.busy = false;
   redraw();
 }
@@ -15441,9 +15497,10 @@ let venData = null, venErr = "", venLoading = false, venRedraw = null;
 /** Sees Vendor costs: an admin who owns Settings, or one he switched on (no owner yet: every admin). */
 const venCan = () => isAdmin() && !!apiLevel && apiLevel >= VEN_API && !!session && (!session.owner || session.id === session.owner || userAccess().includes("vendors"));
 async function venLoad(force) {
-  if (venLoading || !venCan() || (venData && !force)) return;
+  if (venLoading || !venCan() || (venData && !force) || (!force && !retryDue("ven"))) return;
   venLoading = true;
-  try { venData = await api("venList"); venErr = ""; } catch (e) { venErr = errText(e, "Vendor costs"); }
+  try { venData = await api("venList"); venErr = ""; retryOk("ven"); }
+  catch (e) { venErr = retryLater("ven", e, () => { if (view.tab === "revenue" && !dlg.open) renderRevenue(); if (venRedraw) venRedraw(); }) ? "" : errText(e, "Vendor costs"); }
   venLoading = false;
   if (view.tab === "revenue" && !dlg.open) renderRevenue();
   if (venRedraw) venRedraw();
@@ -15745,7 +15802,7 @@ const repDoc = y => repDocs[y] || null;
 function repKeep(y) { if (y === revThisYear() && repDocs[y]) store.set(K_REP, repDocs[y]); }
 async function repLoad(y) {
   y = y || revThisYear();
-  if (!session || !canSee("repairs") || repLoading[y]) return;
+  if (!session || !canSee("repairs") || repLoading[y] || !retryDue(`rep:${y}`)) return;
   repLoading[y] = true;
   try {
     const out = await api("repairs", { year: y });
@@ -15755,11 +15812,11 @@ async function repLoad(y) {
     const dv = d => Number(d && d.dv) || (Number(d && d.api) >= 45 ? 1 : 0);
     repDocs[y] = { year: y, jobs: out.jobs || [], years: out.years || [], read: had && dv(had) === dv(out) ? had.read || {} : {}, api: ver, dv: dv(out) };
     repKeep(y);
-    repErr = ""; repOld = false;
+    repErr = ""; repOld = false; retryOk(`rep:${y}`);
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { repLoading[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
     repOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < REP_API);
-    repErr = repOld ? "" : errText(e, "Nothing");
+    repErr = repOld || retryLater(`rep:${y}`, e, () => { if (view.tab === "repairs" || view.tab === "revenue") renderRevenue(); }) ? "" : errText(e, "Nothing");
   } finally {
     repLoading[y] = false;
     if (view.tab === "repairs") renderRevenue();
@@ -15780,7 +15837,7 @@ function repSplit(j, t) {
 /** Read again what may have changed, a month at a time, the newest first: the last two weeks after 10 minutes, the last
  *  two months after 20 hours (payments come in), older months once. */
 async function repEnsure(months, force) {
-  if (repSync.busy || (!force && repSync.err) || !session || !canSee("repairs") || !navigator.onLine) return;
+  if (repSync.busy || (!force && (repSync.err || !retryDue("repSync"))) || !session || !canSee("repairs") || !navigator.onLine) return;
   const today = lbToday(), now = Date.now(), todo = [];
   for (const m of months) {
     const y = Number(m.slice(0, 4)), doc = repDoc(y);
@@ -15795,9 +15852,9 @@ async function repEnsure(months, force) {
   todo.sort((a, b) => (a.m < b.m ? 1 : -1));
   repSync = { busy: true, what: "", err: "", n: todo.length, done: 0 };
   // two months at a time, the newest first (the screen fills in as each one comes back)
-  let next = 0, out401 = false;
+  let next = 0, out401 = false, paused = false;   // paused: a passing failure (read again by itself in a while)
   const one = async () => {
-    while (next < todo.length && !repSync.err && !out401) {
+    while (next < todo.length && !repSync.err && !out401 && !paused) {
       const c = todo[next++];
       repSync.what = revMonthText(c.from);
       repAsked[c.m] = performance.now();
@@ -15812,13 +15869,14 @@ async function repEnsure(months, force) {
         if (view.tab === "repairs") renderRevenue();
       } catch (e) {
         if (e && (e.error === "bad_code" || e.error === "signed_out")) { out401 = true; return; }
-        repSync.err = revErrText(e);
+        if (retryLater("repSync", e, () => { if (view.tab === "repairs") renderRevenue(); })) paused = true; else repSync.err = revErrText(e);
         delete repAsked[c.m];
       }
     }
   };
   await Promise.all([one(), one()]);
   repSync.busy = false;
+  if (!paused && !repSync.err && !out401) retryOk("repSync");
   if (out401) { signOut("Your sign-in ended. Please sign in again."); return; }
   if (view.tab === "repairs") renderRevenue();
 }
@@ -16464,16 +16522,17 @@ function cpLoad() {
   return cpLoadP;
 }
 async function cpLoad1() {
+  if (!retryDue("cp")) return;
   cpLoading = true;
   if (view.tab === "contractors") renderContractors();
   try {
     const o = await api("cpRead", {});
     cpData = { batches: o.batches || [], parties: o.parties || [], replyTo: o.replyTo || "", at: Date.now() };
-    cpErr = ""; cpOld = false;
+    cpErr = ""; cpOld = false; retryOk("cp");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { cpLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
     cpOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < CP_API);
-    cpErr = cpOld ? "" : errText(e, "Nothing");
+    cpErr = cpOld || retryLater("cp", e, cpRedraw) ? "" : errText(e, "Nothing");
   }
   cpLoading = false;
   cpRedraw();   // the page behind an open window too (it isn't left saying "Loading")
@@ -17774,16 +17833,16 @@ function mktMerge(cpm, sa) {
 
 function mktForget() { mktData = null; store.del(K_MKT); }
 async function mktLoad() {
-  if (!session || !canSee("marketing") || mktLoading) return;
+  if (!session || !canSee("marketing") || mktLoading || !retryDue("mkt")) return;
   mktLoading = true; mktAsked = true;
   try {
     const out = await api("marketing", {});
     mktSet(out);
-    mktErr = ""; mktOld = false;
+    mktErr = ""; mktOld = false; retryOk("mkt");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { mktLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
     mktOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < MKT_API);
-    mktErr = mktOld ? "" : errText(e, "Marketing");
+    mktErr = mktOld || retryLater("mkt", e, () => { if (view.tab === "marketing") mktLoad(); }) ? "" : errText(e, "Marketing");
   } finally {
     mktLoading = false;
     if (view.tab === "marketing") renderMarketing();
@@ -18418,18 +18477,19 @@ function estForget() { estData = null; estOther = {}; store.del(K_EST); }
 const estDoc = y => (y === revThisYear() ? estData : estOther[y]) || null;
 async function estLoad(y) {
   y = y || revThisYear();
-  if (!session || !estCanSee() || estLoading[y]) return;
+  if (!session || !estCanSee() || estLoading[y] || !retryDue(`est:${y}`)) return;
   estLoading[y] = true;
   try {
     const out = await api("estimates", { year: y }, 90000);
     const doc = { year: y, estimates: out.estimates || [], years: out.years || [], all: !!out.all, me: out.me || "", reports: out.reports || {}, readAt: Number(out.readAt) || 0, done: !!out.done, connected: out.connected !== false,
-      sentFrom: out.sentFrom || "", callDays: Array.isArray(out.callDays) ? out.callDays : null };
+      sentFrom: out.sentFrom || "", callDays: Array.isArray(out.callDays) ? out.callDays : null,
+      bg: out.bg === true, loadedAt: Date.now() };   // bg: Housecall Pro is read in the background (the Google script's timed job)
     if (y === revThisYear()) { estData = doc; store.set(K_EST, doc); } else estOther[y] = doc;
-    estErr = ""; estOld = false;
+    estErr = ""; estOld = false; retryOk(`est:${y}`);
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { estLoading[y] = false; signOut("Your sign-in ended. Please sign in again."); return; }
     estOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < EST_API);
-    estErr = estOld ? "" : errText(e, "Nothing");
+    estErr = estOld || retryLater(`est:${y}`, e, () => { if (view.tab === "estimates") renderEstimates(); if (estRepRedraw) estRepRedraw(); }) ? "" : errText(e, "Nothing");
   } finally {
     estLoading[y] = false;
     if (view.tab === "estimates") renderEstimates();
@@ -18466,21 +18526,28 @@ async function estRun(full) {
       estSync.at = { page, sort, full: from.full };
       if (view.tab === "estimates") renderEstimates();
     }
+    retryOk("estSync");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { estSync.busy = false; signOut("Your sign-in ended. Please sign in again."); return; }
-    estSync.at = { page, sort, full: from.full };
-    estSync.err = e && (e.error === "network" || e.error === "busy" || e.error === "offline")
-      ? "Housecall Pro or the Google Sheet was slow to answer. What was read so far is saved; the app tries again by itself in a couple of minutes."
-      : revErrText(e);
+    estSync.at = { page, sort, full: from.full };   // what was read so far is saved: it picks up from here
+    estSync.err = retryLater("estSync", e, () => { estSync.tried = 0; if (view.tab === "estimates") estAuto(); }) ? "" : revErrText(e);
   }
   estSync.busy = false;
   await Promise.all([revThisYear()].concat(Object.keys(estOther).map(Number)).map(y => estLoad(y)));
   if (view.tab === "estimates") renderEstimates();
 }
-/** Opening the tab (or coming back to it): read Housecall Pro again when the last read is 10 minutes old. */
+/** Opening the tab (or coming back to it). With the Google script reading Housecall Pro in the background (every 10
+ *  minutes by day): the saved list loaded again when it's 10 minutes old; read here only when the background hasn't
+ *  read for 25 minutes (at night, or it isn't running), or a read that stopped is to pick up. Otherwise (an older
+ *  script): read Housecall Pro again when the last read is 10 minutes old. */
 function estAuto() {
   const d = estData;
-  if (!d || !d.connected || estSync.busy || Date.now() - estSync.tried < (estSync.err ? 120e3 : 60e3)) return;
+  if (!d || !d.connected || estSync.busy) return;
+  if (d.bg && d.done && !estSync.at && Date.now() - (Number(d.readAt) || 0) < 25 * 60e3) {
+    if (Date.now() - (d.loadedAt || 0) > 10 * 60e3) estLoad();
+    return;
+  }
+  if (!retryDue("estSync") || Date.now() - estSync.tried < (estSync.err ? 120e3 : 60e3)) return;
   // a read that stopped: picks up again by itself after 2 minutes; otherwise when the last read is 10 minutes old
   if (estSync.at || !d.done || Date.now() - d.readAt > 10 * 60e3) setTimeout(() => estRun(), 0);
 }
@@ -19461,7 +19528,7 @@ const ofLate = () => Number(ofNyParts(clockNow()).hour) >= OF_UNTIL;
 async function ofLoad(year) {
   if (!session || !ofCan()) return;
   const y = year || ofThisYear();
-  if (ofLoading) return;
+  if (ofLoading || !retryDue(`of:${y}`)) return;
   ofLoading = true;
   try {
     const out = await api("office", { year: y });
@@ -19475,11 +19542,11 @@ async function ofLoad(year) {
         trcOk: out.trcOk === true, trcWho: Array.isArray(out.trcWho) ? out.trcWho : [] };   // Tech Report Cards: may she, and (admins) who
       store.set(K_OF, ofData);
     } else ofYears[y] = { months: out.months || {} };
-    ofErr = ""; ofOld = false;
+    ofErr = ""; ofOld = false; retryOk(`of:${y}`);
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { ofLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
     ofOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < OF_API);
-    ofErr = ofOld ? "" : errText(e, "Nothing");
+    ofErr = ofOld || retryLater(`of:${y}`, e, () => { if (view.tab === "office" && !ofTypingNow()) ofLoad(y); }) ? "" : errText(e, "Nothing");
   } finally {
     ofLoading = false;
     if (view.tab === "office" && !ofTypingNow()) renderOffice();
@@ -19732,12 +19799,12 @@ function cpmReadXlsx(tabs) {
   return out;
 }
 async function cpmLoad() {
-  if (!session || !cpmCan() || cpmLoading) return;
+  if (!session || !cpmCan() || cpmLoading || !retryDue("cpm")) return;
   cpmLoading = true;
-  try { const out = await api("cpmRead", {}); cpmData = { months: out.months || {}, map: out.map || {} }; cpmErr = ""; cpmOld = false; }
+  try { const out = await api("cpmRead", {}); cpmData = { months: out.months || {}, map: out.map || {} }; cpmErr = ""; cpmOld = false; retryOk("cpm"); }
   catch (e) {
     cpmOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < CPM_API);
-    cpmErr = cpmOld ? "" : errText(e, "Clients Per Month");
+    cpmErr = cpmOld || retryLater("cpm", e, () => { if (view.tab === "office" && ofView.tab === "cpm") renderOffice(); }) ? "" : errText(e, "Clients Per Month");
   }
   cpmLoading = false;
   if (view.tab === "office" && ofView.tab === "cpm") renderOffice();
@@ -20010,10 +20077,10 @@ const rpClean = n => String(n || "").replace(/^\s*\d+\)\s*/, "").replace(/^\s*(?
 /** ... and to match the Excel's with the tags': no "The", LLC, Inc, punctuation; lower case. */
 const rpKey = n => rpClean(n).toLowerCase().replace(/^the\s+/, "").replace(/\b(l\.?l\.?c\.?|inc\.?|corp\.?|co\.?|ltd\.?|llp|pllc)(?=\W|$)/g, "").replace(/[^a-z0-9&]+/g, " ").trim();
 async function rpLoad(force) {
-  if (!session || !rpCan() || rpLoading) return;
+  if (!session || !rpCan() || rpLoading || (!force && !retryDue("rp"))) return;
   rpLoading = true;
-  try { rpSet(await api("rpRead", force ? { force: true } : {}, 170000)); rpErr = ""; rpOld = false; }
-  catch (e) { rpOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < RP_API); rpErr = rpOld ? "" : errText(e, "Referral Partners"); }
+  try { rpSet(await api("rpRead", force ? { force: true } : {}, 170000)); rpErr = ""; rpOld = false; retryOk("rp"); }
+  catch (e) { rpOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < RP_API); rpErr = rpOld || retryLater("rp", e, () => { if (view.tab === "office" && ofView.tab === "rp") renderOffice(); }) ? "" : errText(e, "Referral Partners"); }
   rpLoading = false;
   if (view.tab === "office" && ofView.tab === "rp") renderOffice();
 }
@@ -20437,20 +20504,22 @@ function trcPrevOpen() { let d = lbAddDays(lbToday(), -1); for (let i = 0; i < 7
 const trcKey = n => String(n || "").trim().split(/\s+/)[0].toLowerCase();   // a tech across Housecall Pro ("Fred Lane") and the Excel ("FRED")
 const trcNice = n => String(n || "").trim().replace(/\s+/g, " ").replace(/\b([A-Za-z])([A-Za-z']*)/g, (_, a, b) => a.toUpperCase() + b.toLowerCase());
 async function trcLoadDay(day, force) {
-  if (trcBusy[day]) return;
+  if (trcBusy[day] || (!force && !retryDue(`trc:${day}`))) return;   // after a failure: not again at once (it was asked every few seconds)
   trcBusy[day] = true;
-  try { const out = await api("trcDay", { day }, 120000); trcDays[day] = { jobs: out.jobs || [], at: Date.now(), today: out.today }; trcErr = ""; trcOld = false; }
-  catch (e) { trcOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < TRC_API); trcErr = trcOld ? "" : e && e.error ? (HCP_ERRORS[e.error] || errText(e, "The jobs")) : errText(e, "The jobs"); if (force) toast(trcErr || "The Google script needs its new version"); }
+  try { const out = await api("trcDay", { day }, 120000); trcDays[day] = { jobs: out.jobs || [], at: Date.now(), today: out.today }; trcErr = ""; trcOld = false; retryOk(`trc:${day}`); }
+  catch (e) { trcOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < TRC_API);
+    trcErr = trcOld || retryLater(`trc:${day}`, e, () => { if (view.tab === "office" && ofView.tab === "trc") renderOffice(); }) ? "" : e && e.error ? (HCP_ERRORS[e.error] || errText(e, "The jobs")) : errText(e, "The jobs"); if (force) toast(trcErr || "The Google script needs its new version"); }
   trcBusy[day] = false;
   if (view.tab === "office" && ofView.tab === "trc") renderOffice();
 }
 async function trcLoadRep(y) {
   const k = `y${y}`;
-  if (trcBusy[k]) return;
+  if (trcBusy[k] || !retryDue(`trc:${k}`)) return;
   trcBusy[k] = true;
   const today = lbToday(), to = `${y}-12-31` > today ? today : `${y}-12-31`;
-  try { const out = await api("trcReport", { from: `${y}-01-01`, to }, 120000); trcRep[y] = Object.assign(out, { at: Date.now() }); trcErr = ""; trcOld = false; }
-  catch (e) { trcOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < TRC_API); trcErr = trcOld ? "" : errText(e, "The report cards"); }
+  try { const out = await api("trcReport", { from: `${y}-01-01`, to }, 120000); trcRep[y] = Object.assign(out, { at: Date.now() }); trcErr = ""; trcOld = false; retryOk(`trc:${k}`); }
+  catch (e) { trcOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < TRC_API);
+    trcErr = trcOld || retryLater(`trc:${k}`, e, () => { if (view.tab === "office" && ofView.tab === "trc") renderOffice(); }) ? "" : errText(e, "The report cards"); }
   trcBusy[k] = false;
   if (view.tab === "office" && ofView.tab === "trc") renderOffice();
 }
@@ -20733,11 +20802,12 @@ function kpiAsk(r) {
 }
 const kpiKeyOf = a => [a.from, a.to, a.lf || "", a.lt || ""].join("|");
 async function kpiLoad() {
-  if (kpiLoading || !session || !kpiCan()) return;
+  if (kpiLoading || !session || !kpiCan() || !retryDue("kpi")) return;
   const ask = kpiAsk(kpiRange()), key = kpiKeyOf(ask);
   kpiLoading = true;
-  try { const o = await api("kpiRead", ask); kpiData = o; kpiKey = key; kpiErr = ""; }
-  catch (e) { kpiErr = e && e.error === "not_allowed" ? "KPI isn't switched on for you. An admin ticks KPI for you in Settings › Users and invites." : errText(e, "The KPI"); }
+  try { const o = await api("kpiRead", ask); kpiData = o; kpiKey = key; kpiErr = ""; retryOk("kpi"); }
+  catch (e) { kpiErr = e && e.error === "not_allowed" ? "KPI isn't switched on for you. An admin ticks KPI for you in Settings › Users and invites."
+    : retryLater("kpi", e, () => { if (view.tab === "office" && ofView.tab === "kpi" && !ofTypingNow()) renderOffice(); }) ? "" : errText(e, "The KPI"); }
   kpiLoading = false;
   if (view.tab === "office" && ofView.tab === "kpi" && !ofTypingNow()) renderOffice();
 }
@@ -21235,7 +21305,7 @@ const pcWhen = at => { const d = new Date(at); if (isNaN(d.getTime())) return ""
 function pcNextOpen(day) { let d = day; for (let i = 0; i < 7 && (lbDate(d).getDay() === 0 || lbHoliday(d)); i++) d = lbAddDays(d, 1); return d; }
 
 async function pcLoad(force) {
-  if (pcLoading || !session || !ofCan()) return;
+  if (pcLoading || !session || !ofCan() || (force !== true && !retryDue("pc"))) return;
   const day = pcDay(), rg = pcRange(), key = pcRangeKey();
   pcLoading = true;
   try {
@@ -21243,10 +21313,10 @@ async function pcLoad(force) {
     if (force === true) q.force = true;   // Read again: Housecall Pro now, not up to 15 minutes later
     const out = await api("pcRead", q, 120000);
     for (const G of Object.values(out.groups || {})) for (const r of G.callbacks || []) r.cbAt = r.m && r.m.at;   // the call-back that brought them back
-    pcData = Object.assign(out, { key }); pcErr = ""; pcMarksAt = out.now || 0; pcPolledAt = pcLoadedAt = performance.now();
+    pcData = Object.assign(out, { key }); pcErr = ""; pcMarksAt = out.now || 0; pcPolledAt = pcLoadedAt = performance.now(); retryOk("pc");
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { pcLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
-    pcErr = e && e.error === "bad_request" && (Number(e.api) || 0) < PC_API ? "old" : revErrText(e);
+    pcErr = e && e.error === "bad_request" && (Number(e.api) || 0) < PC_API ? "old" : retryLater("pc", e, () => { if (pcShowing()) renderOffice(); }) ? "" : revErrText(e);
   } finally {
     pcLoading = false;
     if (pcShowing()) renderOffice();
@@ -21872,7 +21942,7 @@ const ofBk = { docs: {}, loading: {}, err: "", old: false, after: 0, open: "" };
 /** Those days' booked jobs (kept 5 minutes; Update reads them again); null the first time, while they load. */
 function ofBkFor(from, to) {
   const k = `${from}|${to}`, d = ofBk.docs[k];
-  if (!(d && d.t >= ofBk.after && Date.now() - d.t < 5 * 60e3) && !ofBk.loading[k]) ofBkLoad(from, to);
+  if (!((d && d.t >= ofBk.after && Date.now() - d.t < 5 * 60e3) || (d && d.failed && !retryDue(`bk:${k}`))) && !ofBk.loading[k]) ofBkLoad(from, to);
   return d || null;
 }
 async function ofBkLoad(from, to) {
@@ -21880,11 +21950,13 @@ async function ofBkLoad(from, to) {
   ofBk.loading[k] = true;
   try {
     const out = await api("ofBooked", { from, to });
-    ofBk.docs[k] = Object.assign(out, { t: Date.now() }); ofBk.err = ""; ofBk.old = false;
+    ofBk.docs[k] = Object.assign(out, { t: Date.now() }); ofBk.err = ""; ofBk.old = false; retryOk(`bk:${k}`);
   } catch (e) {
     ofBk.old = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < OF_BK_API);
-    ofBk.err = ofBk.old ? "" : errText(e, "The booked jobs");
-    ofBk.docs[k] = Object.assign(ofBk.docs[k] || { jobs: [] }, { t: Date.now(), failed: true });
+    const quiet = !ofBk.old && retryLater(`bk:${k}`, e, () => { if (view.tab === "office" && ofView.tab === "score" && !ofTypingNow()) renderOffice(); });
+    ofBk.err = ofBk.old || quiet ? "" : errText(e, "The booked jobs");
+    // kept as it was (what it had stays on screen); a passing failure is asked again by itself
+    ofBk.docs[k] = Object.assign(ofBk.docs[k] || { jobs: [] }, quiet ? { failed: true } : { t: Date.now(), failed: true });
   }
   ofBk.loading[k] = false;
   if (view.tab === "office" && ofView.tab === "score" && !ofTypingNow()) renderOffice();
@@ -22067,10 +22139,10 @@ const ofEstDocs = {}, ofEstLoading = {};
 let ofEstErr = "", ofEstShown = 100;
 const ofEstSync = { busy: false, tried: 0, err: "" };
 async function ofEstLoad(y) {
-  if (ofEstLoading[y] || !session || !ofCan()) return;
+  if (ofEstLoading[y] || !session || !ofCan() || !retryDue(`ofEst:${y}`)) return;
   ofEstLoading[y] = true;
-  try { ofEstDocs[y] = await api("ofEstimates", { year: y }); ofEstErr = ""; }
-  catch (e) { ofEstErr = errText(e, "The estimates"); }
+  try { ofEstDocs[y] = Object.assign(await api("ofEstimates", { year: y }), { loadedAt: Date.now() }); ofEstErr = ""; retryOk(`ofEst:${y}`); }
+  catch (e) { ofEstErr = retryLater(`ofEst:${y}`, e, () => { if (view.tab === "office" && ofView.tab === "est" && !ofTypingNow()) renderOffice(); }) ? "" : errText(e, "The estimates"); }
   ofEstLoading[y] = false;
   if (view.tab === "office" && ofView.tab === "est" && !ofTypingNow()) renderOffice();
 }
@@ -22096,7 +22168,8 @@ async function ofEstRun() {
       if (!out.next) break;
       page = out.next; sort = out.by || "";
     }
-  } catch (e) { ofEstSync.err = revErrText(e); }
+    retryOk("ofEstSync");
+  } catch (e) { ofEstSync.err = retryLater("ofEstSync", e, () => { if (view.tab === "office" && ofView.tab === "est" && !ofTypingNow()) renderOffice(); }) ? "" : revErrText(e); }
   ofEstSync.busy = false;
   await Promise.all(Object.keys(ofEstDocs).map(y => { delete ofEstDocs[y]; return ofEstLoad(Number(y)); }));
   if (view.tab === "office" && ofView.tab === "est") renderOffice();
@@ -22110,8 +22183,12 @@ function ofEstEl() {
     return [ofEstErr ? h("p", { class: "dlg-err" }, ofEstErr, " ", h("button", { class: "btn small", type: "button", onclick: () => { ofEstErr = ""; ofEstLoad(y); renderOffice(); } }, "Try again"))
       : h("p", { class: "loading", text: "Loading the Cleaning estimates…" })];
   }
-  // read what changed when the last read is 10 minutes old (a minute between tries)
-  if (doc.connected && !ofEstSync.busy && Date.now() - ofEstSync.tried > 60e3 && (!doc.done || Date.now() - doc.readAt > 10 * 60e3)) setTimeout(() => ofEstRun(), 0);
+  // the Google script reads Housecall Pro in the background (every 10 minutes by day): the saved list loaded again when
+  // it's 10 minutes old. Otherwise (at night, it isn't running, an older script): read what changed when the last read
+  // is 10 minutes old (a minute between tries; after a failure, quietly later)
+  const bgOn = doc.bg === true && doc.done && Date.now() - (Number(doc.readAt) || 0) < 25 * 60e3;
+  if (bgOn) { if (Date.now() - (doc.loadedAt || 0) > 10 * 60e3 && !ofEstLoading[y]) setTimeout(() => { delete ofEstDocs[y].loadedAt; ofEstLoad(y); }, 0); }
+  else if (doc.connected && !ofEstSync.busy && retryDue("ofEstSync") && Date.now() - ofEstSync.tried > 60e3 && (!doc.done || Date.now() - doc.readAt > 10 * 60e3)) setTimeout(() => ofEstRun(), 0);
   const per = EST_PER[ofEstView.per] ? ofEstView.per : "month", off = Math.min(0, Number(ofEstView.off) || 0);
   let r;
   if (per === "dates") {
@@ -22216,9 +22293,10 @@ let comDoc = null, comErr = "", comLoading = false;
 const comView = Object.assign({ y: "all", q: "" }, store.get("voda.com") || {});
 let comShown = 60;
 async function comLoad() {
+  if (comLoading || !retryDue("com")) return;
   comLoading = true;
-  try { const out = await api("comClients", {}); comDoc = Object.assign(out, { t: Date.now() }); comErr = ""; }
-  catch (e) { comErr = errText(e, "The commercial clients"); }
+  try { const out = await api("comClients", {}); comDoc = Object.assign(out, { t: Date.now() }); comErr = ""; retryOk("com"); }
+  catch (e) { comErr = retryLater("com", e, () => { if (view.tab === "office") renderOffice(); }) ? "" : errText(e, "The commercial clients"); }
   finally { comLoading = false; }
   if (view.tab === "office") renderOffice();
 }
@@ -22789,25 +22867,25 @@ async function atLoad(year) {
   if (!session || !canSee("attendance")) return;
   const y = year || atThisYear();
   if (y !== atThisYear()) {
-    if (atAsked[y]) return;
+    if (atAsked[y] || !retryDue(`at:${y}`)) return;
     atAsked[y] = true;
-    try { const out = await api("attendance", { year: y }); atYears[y] = { months: out.months || {} }; atReapply(); }
-    catch (e) { atAsked[y] = false; atErr = errText(e, "Attendance"); }
+    try { const out = await api("attendance", { year: y }); atYears[y] = { months: out.months || {} }; atReapply(); retryOk(`at:${y}`); }
+    catch (e) { atAsked[y] = false; atErr = retryLater(`at:${y}`, e, () => { if (view.tab === "attendance") renderAttendance(); }) ? "" : errText(e, "Attendance"); }
     if (view.tab === "attendance") renderAttendance();
     return;
   }
-  if (atLoading) return;
+  if (atLoading || !retryDue(`at:${y}`)) return;
   atLoading = true;
   try {
     const out = await api("attendance", { year: y });
     atData = { year: y, config: out.config || { people: [] }, months: out.months || {}, years: out.years || [], admin: !!out.admin, at: new Date().toISOString() };
     atReapply();
     store.set(K_AT, atData);
-    atErr = ""; atOld = false;
+    atErr = ""; atOld = false; retryOk(`at:${y}`);
   } catch (e) {
     if (e && (e.error === "bad_code" || e.error === "signed_out")) { atLoading = false; signOut("Your sign-in ended. Please sign in again."); return; }
     atOld = !!(e && e.error === "bad_request" && (Number(e.api) || 0) < AT_API);
-    atErr = atOld ? "" : errText(e, "Attendance");
+    atErr = atOld || retryLater(`at:${y}`, e, () => { if (view.tab === "attendance") atLoad(y); }) ? "" : errText(e, "Attendance");
   }
   atLoading = false;
   if (view.tab === "attendance" && !dlg.open) renderAttendance();
@@ -23942,10 +24020,10 @@ function renderDocBadge() {
   $("viewDocuments").setAttribute("aria-label", n ? `Documents, ${b.title}` : "Documents");
 }
 async function docLoad() {
-  if (docLoading || !session || !docCan()) return;
+  if (docLoading || !session || !docCan() || !retryDue("doc")) return;
   docLoading = true;
-  try { docData = await api("docList"); docErr = ""; noteDocs({ expired: docCounts().expired, soon: docCounts().soon }); }
-  catch (e) { docErr = errText(e, "The documents"); }
+  try { docData = await api("docList"); docErr = ""; retryOk("doc"); noteDocs({ expired: docCounts().expired, soon: docCounts().soon }); }
+  catch (e) { docErr = retryLater("doc", e, () => { if (view.tab === "documents" && !dlg.open) renderDocuments(); }) ? "" : errText(e, "The documents"); }
   docLoading = false;
   if (view.tab === "documents" && !dlg.open) renderDocuments();
   renderDocBadge();
@@ -24237,9 +24315,9 @@ function docAddMany() {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && session && CONFIGURED) refresh(true); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && session && CONFIGURED) refresh(true, true); });
 window.addEventListener("online", () => { if (session && CONFIGURED) { refresh(true); pump(); } });
-setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true); }, 90000);
+setInterval(() => { if (document.visibilityState === "visible" && session && CONFIGURED && !dlg.open) refresh(true, true); }, 90000);
 
 renderInstall();
 if (/^#order-list(\/|$)/.test(location.hash)) {   // the link in the checklist email
