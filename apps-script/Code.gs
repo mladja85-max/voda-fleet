@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 159;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 160;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -1812,65 +1812,134 @@ function venJobsWhere_(hit) {
     return { base: base, ids: ids, day: first.day, client: first.client, dept: first.dept, proj: first.proj, c: vs.reduce(function (n, v) { return n + v.c; }, 0) };
   }).sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : 0; });
 }
-/** The jobs a search finds (a job #, "#26482-1" or "26482", or part of the client's name), 12 at most. */
+/** The jobs a search finds (a job #, "#26482-1" or "26482", part of the client's name, or an address: "1405 Bluemont Ct"
+ *  asks Housecall Pro for the jobs there, the latest first), 12 at most. */
 function venFind_(req) {
   const q = String(req.q || "").replace(/\s+/g, " ").trim().toLowerCase(), num = q.replace(/^#/, "").replace(/-\d+$/, "");
   if (q.length < 2) return { ok: false, error: "bad_request" };
-  const isNum = /^\d{3,10}$/.test(num);
+  const isNum = /^\d{3,10}$/.test(num), groups = isNum ? [] : venAddrGroups_(String(req.q || "").replace(/\s+/g, " ").trim());
+  if (groups.length && /^\d{1,6}\s+\S/.test(q)) {
+    const at = venAddrJobs_(groups.slice(0, 1));
+    if (at.error) return { ok: false, error: at.error };
+    return { ok: true, jobs: venJobsAt_(at).slice(0, 12), addr: groups[0].full };
+  }
   return { ok: true, jobs: venJobsWhere_(function (x, base) { return isNum ? base === num : String(x[2] || "").toLowerCase().indexOf(q) !== -1; }).slice(0, 12) };
 }
-/** Street addresses in a text ("1405 Bluemont Ct"), 3 at most. */
-const VEN_ADDR_RE = /\b(\d{1,6})\s+((?:[NSEW]\.?\s+)?[A-Za-z0-9'.-]+(?:\s+[A-Za-z0-9'.-]+){0,3}?)\s+(st|street|ave|avenue|rd|road|dr|drive|ct|court|ln|lane|blvd|boulevard|way|pl|place|cir|circle|ter|terrace|pkwy|parkway|hwy|highway|sq|square|trl|trail|loop|run|pike|landing|row|crossing)\b\.?/gi;
-function venAddrs_(text) {
-  const out = [];
-  let m;
-  VEN_ADDR_RE.lastIndex = 0;
-  while ((m = VEN_ADDR_RE.exec(String(text || ""))) && out.length < 3) {
-    const a = (m[1] + " " + m[2] + " " + m[3]).replace(/\s+/g, " ").trim();
-    if (out.map(function (x) { return x.toLowerCase(); }).indexOf(a.toLowerCase()) === -1) out.push(a);
-  }
+/** Street addresses in a text ("1405 Bluemont Ct"), the likeliest first, 3 at most (venAddrGroups_). */
+const VEN_ADDR_RE = /(?<![\d.,#$-])\b(\d{1,6})\s+((?:[NSEW]\.?\s+)?(?!\d+\b)[A-Za-z0-9'.-]+(?:\s+[A-Za-z0-9'.-]+){0,3}?)\s+(st|street|ave|avenue|rd|road|dr|drive|ct|court|ln|lane|blvd|boulevard|way|pl|place|cir|circle|ter|terrace|pkwy|parkway|hwy|highway|sq|square|trl|trail|loop|run|pike|landing|row|crossing)\b\.?/gi;
+function venAddrs_(text) { return venAddrGroups_(text).slice(0, 3).map(function (g) { return g.a; }); }
+/** A vendor's invoice's lines, each with where it is: 0 the body, 1 the letterhead (the vendor's own, before "Bill to"),
+ *  2 the Bill to / Remit to block (that's us, or where to pay: never the job). */
+function venZones_(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n"), out = [];
+  const head = lines.findIndex(function (l) { return /\b(bill(ed)?|invoice|sold)\s*to\b|\binvoice\s*(#|no\b|number|\d)/i.test(l); });
+  let block = 0;
+  lines.forEach(function (l, i) {
+    if (/\b(bill(ed)?\s*to|remit\s*(payment\s*)?to|pay\s*to)\b/i.test(l)) block = 4;   // the line and up to 3 after it, to a blank line
+    else if (block && (!l.trim() || /^\s*(property|project|site|job|location|ship\s*to|service|re\b|po\b)/i.test(l))) block = 0;   // or to a line about the job
+    out.push({ t: l, z: block ? 2 : head > 0 && i < head ? 1 : 0 });
+    if (block) block--;
+  });
   return out;
 }
-/** Is this client's name in the text (a name of 2 words or more: each word there; one word: itself, 5 letters or more)? */
-function venNameIn_(client, low) {
-  const name = String(client || "").toLowerCase().replace(/[^a-z0-9&' ]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!name) return false;
-  const words = name.split(" ").filter(function (w) { return w.length >= 2 && ["llc", "inc", "the", "and", "co", "corp", "ltd"].indexOf(w) === -1; });
-  const has = function (w) { return new RegExp("(^|[^a-z0-9])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z0-9]|$)").test(low); };
-  return words.length >= 2 ? words.every(has) : words.length === 1 && words[0].length >= 5 && has(words[0]);
+/** The addresses on a vendor's invoice, the same house written two ways ("5 Elm Street", "5 Elm St N") once: [{ key
+ *  ("5 elm"), a (to search: "5 Elm St"), full (with its city, state and ZIP when it says them), n (times named) }], the
+ *  body's before the letterhead's (the Bill to's left out), then the most named, then one said to be the site. */
+function venAddrGroups_(text) {
+  const by = {}, order = [];
+  venZones_(text).forEach(function (ln, i) {
+    if (ln.z === 2) return;
+    let m;
+    VEN_ADDR_RE.lastIndex = 0;
+    while ((m = VEN_ADDR_RE.exec(ln.t))) {
+      const street = m[2].replace(/^[NSEW]\.?\s+/i, ""), key = (m[1] + " " + street.split(/\s+/)[0]).toLowerCase();
+      const a = (m[1] + " " + m[2] + " " + m[3].replace(/\.$/, "")).replace(/\s+/g, " ").trim();
+      // its city, state and ZIP after it ("N. Arlington, VA 22207")
+      const rest = ln.t.slice(m.index + m[0].length), c = /^\s*(?:([NSEW])\.?(?=[\s,]))?[\s,]*(?:(?:apt|unit|suite|ste|#)\.?\s*[\w-]+[\s,]*)?([A-Za-z][A-Za-z .'-]{1,28}?),\s*([A-Z]{2})\b\.?,?\s*(\d{5})?/.exec(rest);
+      const full = c ? (a + (c[1] ? " " + c[1].toUpperCase() : "") + ", " + c[2].trim() + ", " + c[3] + (c[4] ? " " + c[4] : "")) : a;
+      const site = /project|property|site|job|location|address|\bpo\b|\bre\b/i.test(ln.t) ? 1 : 0;
+      let g = by[key];
+      if (!g) { g = by[key] = { key: key, a: a, full: full, n: 0, z: ln.z, site: 0, at: i }; order.push(g); }
+      g.n++; g.site = Math.max(g.site, site); g.z = Math.min(g.z, ln.z);
+      if (full.length > g.full.length) g.full = full;
+      if (a.length < g.a.length || (/street|avenue|road|drive|court|lane|boulevard|place|circle|terrace|parkway|highway|square/i.test(g.a) && !/street|avenue|road|drive|court|lane|boulevard|place|circle|terrace|parkway|highway|square/i.test(m[3]))) g.a = a;   // the short form searches best
+    }
+  });
+  return order.sort(function (x, y) { return x.z - y.z || y.n - x.n || y.site - x.site || x.at - y.at; })
+    .map(function (g) { return { key: g.key, a: g.a, full: g.full, n: g.n }; });
 }
-/** The jobs a vendor's invoice is about, from what it says: the property's address (Housecall Pro's customers there, and
- *  their jobs) and the client's name (the Revenue tab's clients): [{ job…, why: ["address 1405 Bluemont Ct", "client
- *  Pat Lee"] }], the surest first (an address before a name), 6 at most. */
-function venMatch_(text) {
-  const raw = String(text || ""), low = raw.toLowerCase().replace(/[^a-z0-9&' ]+/g, " ").replace(/\s+/g, " ");
-  if (raw.length < 10) return [];
-  const why = {}, add = function (base, w) { (why[base] || (why[base] = [])).indexOf(w) === -1 && why[base].push(w); };
-  // the property's address: Housecall Pro's customers at it, and their jobs' #s
-  const bases = {};
-  if (hcpKey_()) venAddrs_(raw).forEach(function (a) {
-    const r = hcpGet_("/customers", { q: a, page_size: 5 }), d = r && !r.error ? r.data || {} : {}, cs = Array.isArray(d.customers) ? d.customers : [];
-    cs.slice(0, 3).forEach(function (c) {
+/** Housecall Pro's jobs at these addresses: { why: { base: ["address …"] }, jobs: { base: job built from Housecall Pro } }
+ *  (each address asked as written, then by its number and street name). */
+function venAddrJobs_(groups) {
+  const why = {}, jobs = {}, tz = Session.getScriptTimeZone();
+  if (!hcpKey_()) return { why: why, jobs: jobs, error: "no_key" };
+  groups.forEach(function (g) {
+    const cs = [], had = {};
+    // asked as written ("5 Elm St") and by its number and street name ("5 elm"): "Street" or "St", either finds it
+    [g.a, g.key].filter(function (q, i, a) { return a.indexOf(q) === i; }).forEach(function (q) {
+      const r = hcpGet_("/customers", { q: q, page_size: 5 }), d = r && !r.error ? r.data || {} : {};
+      (Array.isArray(d.customers) ? d.customers : []).forEach(function (c) { if (c && c.id && !had[c.id]) { had[c.id] = true; cs.push(c); } });
+    });
+    cs.slice(0, 5).forEach(function (c) {
       if (!c || !c.id) return;
       const jr = hcpGet_("/jobs", { customer_id: c.id, page_size: 100, sort_by: "created_at", sort_direction: "desc" }), jd = jr && !jr.error ? jr.data || {} : {};
       (Array.isArray(jd.jobs) ? jd.jobs : []).forEach(function (j) {
-        const st = String((j.address && j.address.street) || "").toLowerCase();
-        // the job at that address (a customer can have more than one)
-        if (st && st.indexOf(a.toLowerCase().split(" ").slice(0, 2).join(" ")) === -1) return;
-        const base = String(j.invoice_number || "").replace(/-\d+$/, "");
-        if (base) { bases[base] = true; add(base, "address " + a); }
+        const st = String((j.address && j.address.street) || "").toLowerCase().replace(/\s+/g, " ");
+        // the job at that address (a customer can have more than one); not canceled
+        if (!st || st.indexOf(g.key) === -1 || /cancel/i.test(String(j.work_status || ""))) return;
+        const inv = String(j.invoice_number || ""), base = inv.replace(/-\d+$/, "");
+        if (!base) return;
+        (why[base] || (why[base] = [])).indexOf("address " + g.a) === -1 && why[base].push("address " + g.a);
+        const at = new Date((j.schedule && j.schedule.scheduled_start) || j.created_at || "");
+        const day = isNaN(at.getTime()) ? "" : Utilities.formatDate(at, tz, "yyyy-MM-dd"), x = jobs[base];
+        if (!x) jobs[base] = { base: base, ids: [String(j.id)], day: day, client: hcpClient_(j), dept: revDept_(hcpJobType_(j)), proj: String(j.description || "").slice(0, 80) || hcpJobType_(j), c: Math.round(Number(j.total_amount) || 0) };
+        else { if (x.ids.indexOf(String(j.id)) === -1) x.ids.push(String(j.id)); x.c += Math.round(Number(j.total_amount) || 0); if (day && (!x.day || day < x.day)) x.day = day; }
       });
     });
   });
+  return { why: why, jobs: jobs };
+}
+/** The jobs at the addresses (venAddrJobs_): as Operations has them (every visit), else as Housecall Pro does (a job not
+ *  read in Operations yet), each with why; the latest first. */
+function venJobsAt_(at) {
+  const got = venJobsWhere_(function (x, base) { return !!at.why[base]; }), have = {};
+  got.forEach(function (j) { have[j.base] = true; });
+  Object.keys(at.jobs).forEach(function (b) { if (!have[b]) got.push(at.jobs[b]); });
+  got.forEach(function (j) { j.why = (at.why[j.base] || []).slice(); });
+  return got.sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : 0; });
+}
+/** Is this client's name in the text (a name of 2 words or more: each word there; one word: itself, 5 letters or more)? */
+const VEN_SELF_RE = /\bvoda\b/i;   // our own company: on every vendor's invoice (Bill to), never the client
+const VEN_TRADE = ["restoration", "cleaning", "services", "service", "property", "properties", "management", "construction", "consulting", "consultants",
+  "testing", "survey", "water", "mold", "lead", "asbestos", "environmental", "group", "home", "homes", "realty", "company", "solutions", "repairs", "contractors"];
+function venNameIn_(client, low) {
+  const name = String(client || "").toLowerCase().replace(/[^a-z0-9&' ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!name || VEN_SELF_RE.test(name)) return false;
+  const words = name.split(" ").filter(function (w) { return w.length >= 2 && ["llc", "inc", "the", "and", "co", "corp", "ltd"].indexOf(w) === -1; });
+  const has = function (w) { return new RegExp("(^|[^a-z0-9])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z0-9]|$)").test(low); };
+  return words.length >= 2 ? words.every(has) : words.length === 1 && words[0].length >= 5 && VEN_TRADE.indexOf(words[0]) === -1 && has(words[0]);
+}
+/** The jobs a vendor's invoice is about, from what it says: the property's address (Housecall Pro's jobs there, the
+ *  latest first, read in Operations or not) and the client's name (the Revenue tab's clients; not ours, nor in the Bill
+ *  to block): [{ job…, why: ["address 1405 Bluemont Ct", "client Pat Lee"] }], an address before a name, 6 at most. */
+function venMatch_(text) {
+  const raw = String(text || "");
+  if (raw.length < 10) return [];
+  const body = venZones_(raw).filter(function (l) { return l.z !== 2; }).map(function (l) { return l.t; }).join("\n");
+  const low = body.toLowerCase().replace(/[^a-z0-9&' ]+/g, " ").replace(/\s+/g, " ");
+  const groups = venAddrGroups_(raw).slice(0, 2), at = groups.length ? venAddrJobs_(groups) : { why: {}, jobs: {} };
   const named = {}, seen = {};   // (each client's name looked for once)
   const jobs = venJobsWhere_(function (x, base) {
-    if (bases[base]) return true;
+    if (at.why[base]) return true;
     const c = String(x[2] || "");
     if (!(c in seen)) seen[c] = venNameIn_(c, low);
     if (seen[c]) { named[base] = c; return true; }
     return false;
   });
-  jobs.forEach(function (j) { if (named[j.base]) add(j.base, "client " + named[j.base]); j.why = why[j.base] || []; });
+  const have = {};
+  jobs.forEach(function (j) { have[j.base] = true; });
+  Object.keys(at.jobs).forEach(function (b) { if (!have[b]) jobs.push(at.jobs[b]); });   // at the address, not read in Operations yet
+  jobs.forEach(function (j) { j.why = (at.why[j.base] || []).slice(); if (named[j.base]) j.why.push("client " + named[j.base]); });
   const score = function (j) { return j.why.reduce(function (n, w) { return n + (/^address/.test(w) ? 2 : 1); }, 0); };
   return jobs.sort(function (a, b) { return score(b) - score(a) || (a.day < b.day ? 1 : a.day > b.day ? -1 : 0); }).slice(0, 6);
 }
@@ -2075,7 +2144,9 @@ function venRead_(req) {
   let text = "", matches = [];
   try { text = String(rcptOcr_(f.getBlob()) || "").replace(/\ufeff/g, ""); } catch (e) { text = ""; }
   try { matches = venMatch_(text); } catch (e) { matches = []; }   // the job, from the address and the client on it
-  return { ok: true, fileId: f.getId(), name: name, type: type, text: text.slice(0, 20000), matches: matches };
+  let addrs = [];
+  try { addrs = venAddrGroups_(text).slice(0, 3).map(function (g) { return { a: g.a, full: g.full }; }); } catch (e) { addrs = []; }
+  return { ok: true, fileId: f.getId(), name: name, type: type, text: text.slice(0, 20000), matches: matches, addrs: addrs };
 }
 /** Is this file one of the folder's (one just read, or the invoice's own)? */
 function venFileOk_(id) {
