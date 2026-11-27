@@ -7493,6 +7493,7 @@ const stopsFirst = name => String(name || "").trim().split(/\s+/)[0] || "";
 function stopsWhy(s, who) {
   const a = s.appt, his = who ? `${stopsFirst(who)}'s` : "his", what = a ? (a.kind === "est" ? "estimate" : "job") : "";
   const ref = a ? [`${a.kind === "est" ? "Estimate" : "Job"} #${a.n}`, a.client, a.time ? stopsHm(a.time) : "", a.st && !/^(scheduled|open|needs scheduling)$/i.test(a.st) ? a.st : ""].filter(Boolean).join(" · ") : "";
+  if (s.kind === "his" && s.how === "client") return ["ok", `${his.charAt(0).toUpperCase() + his.slice(1)} ${what} (another address of the client)`, [ref, `the ${what} in Housecall Pro: ${a.addr}`].filter(Boolean).join(" · ")];
   if (s.kind === "his") return ["ok", s.how === "street" ? `Same street as ${his} ${what} (another number)` : s.how === "near" ? `Next to ${his} ${what}` : `${his.charAt(0).toUpperCase() + his.slice(1)} ${what}`, ref];
   if (s.kind === "other") return ["warn", `${a.who || "Someone else"}'s ${what}, not ${who ? stopsFirst(who) + "'s" : "his"}`, ref];
   if (s.kind === "zip") return ["warn", `Same zip code as ${his} ${what}, another street`, [ref, a.addr].filter(Boolean).join(" · ")];
@@ -7636,7 +7637,7 @@ function stopsDraw(id) {
   (d.note || []).forEach(n => out.push(h("p", { class: "meta", text: n })));
   if (d.dbg) out.push(h("details", { class: "stp-shape", id: "stpDbg" }, h("summary", { text: "Details (for Claude)" }), h("pre", { text: stopsDbgText(d) })));
   out.push(h("p", { class: "hint", text: "A side trip: from leaving the stop before a flagged stop (or a few in a row) to reaching the stop after it, the drive there, the time there and the drive on; less how long driving straight between those two takes (Google Maps, without traffic), that's what it cost. Stops under 5 minutes count as driving." }));
-  out.push(h("p", { class: "hint", text: "Same street as one of his jobs or estimates that day (any house number), or right next to it, counts as that appointment. Someone else's job that day, or the exact address of a VODA job or estimate on another day, is worth a look. A canceled job or estimate isn't on anyone's schedule; a stop there says it was canceled. Stops of 5 minutes and longer, as One Step GPS records them." }));
+  out.push(h("p", { class: "hint", text: "Same street as one of his jobs or estimates that day (any house number), or right next to it, counts as that appointment; so does another address Housecall Pro has for that client. Someone else's job that day, or the exact address of a VODA job or estimate on another day, is worth a look. A canceled job or estimate isn't on anyone's schedule; a stop there says it was canceled. Stops of 5 minutes and longer, as One Step GPS records them." }));
   el.replaceChildren(...out);
 }
 /** What was read, to check a day against One Step and Housecall Pro: the script's version, One Step's items (type, start,
@@ -7649,6 +7650,10 @@ function stopsDbgText(d) {
     L.push(`One Step sent ${g.os.length} item${g.os.length === 1 ? "" : "s"}${g.window ? ` for ${t(g.window[0])} – ${t(g.window[1])}` : ""}:`);
     g.os.forEach(r => L.push(`  ${r[0] || "(no type)"} · ${t(r[1])} – ${r[2] ? t(r[2]) : "no end"}`));
   } else L.push("One Step wasn't read (every day from the saved copy).");
+  if (g.cust && g.cust.length) {
+    L.push("His clients' addresses (Housecall Pro):");
+    g.cust.forEach(c => L.push(`  ${c.kind === "est" ? "Estimate" : "Job"} #${c.n} · ${c.client}: ${c.addrs.join(" | ") || "none"}`));
+  }
   L.push(`Estimates around these days (the Estimates tab → Housecall Pro now): ${(g.est || []).length ? "" : "none"}`);
   (g.est || []).forEach(e => L.push(`  #${e.n || "?"}${e.st ? ` (${e.st})` : ""} · tab ${e.tabDay}: ${e.tab || "—"} → ${e.err ? e.err : `${t(e.nowAt)}: ${e.now || "no address"}${e.gone ? " · canceled" : ""}`}${e.who ? ` · ${e.who}` : ""}`));
   return L.join("\n");
@@ -24814,7 +24819,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 337;                   // the same number as sw.js's CACHE ("voda-fleet-v337"): both go up with every change
+const APP_BUILD = 338;                   // the same number as sw.js's CACHE ("voda-fleet-v338"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));

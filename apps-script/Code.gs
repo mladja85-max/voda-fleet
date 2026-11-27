@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 169;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 170;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -3729,7 +3729,7 @@ function stopJobsByStart_(from, to, tz, note, force) {
     const lat = stopCoord_(a.latitude), lng = stopCoord_(a.longitude);
     out[first].push({ id: String(j.id || ""), n: String(j.invoice_number || ""), client: hcpClient_(j), addr: estAddress_(a), who: who,
       time: Utilities.formatDate(s, tz, "HH:mm"), st: String(j.work_status || "").replace(/_/g, " ").slice(0, 30),
-      lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null, street: String(a.street || ""), zip: String(a.zip || ""), last: last });
+      lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null, street: String(a.street || ""), zip: String(a.zip || ""), last: last, cust: String((j.customer && j.customer.id) || "") });
   });
   if (r.more) return out;   // more than Housecall Pro sends at once: not kept
   try {
@@ -3749,7 +3749,7 @@ function stopAppts_(from, to, tz, rows, force) {
     Object.keys(byStart).sort().forEach(function (first) {
       byStart[first].forEach(function (c) {
         const ap = { kind: "job", id: c.id, n: c.n, client: c.client, addr: c.addr, who: c.who, time: c.time, st: c.st,
-          lat: c.lat === null ? NaN : Number(c.lat), lng: c.lng === null ? NaN : Number(c.lng), k: stopAddrKey_(c.street, c.zip), gone: /cancel/i.test(c.st) };
+          lat: c.lat === null ? NaN : Number(c.lat), lng: c.lng === null ? NaN : Number(c.lng), k: stopAddrKey_(c.street, c.zip), gone: /cancel/i.test(c.st), cust: c.cust || "" };
         for (let d = first < from ? from : first; d <= c.last && d <= to; d = tmAddDays_(d, 1)) put(d, ap);
       });
     });
@@ -3786,11 +3786,35 @@ function stopAppts_(from, to, tz, rows, force) {
     if (day < from || day > to) return;
     who = who.concat([String(r[21] || "")]).map(function (w) { return String(w).trim(); }).filter(function (w, i, a) { return w && a.indexOf(w) === i; });
     put(day, { kind: "est", id: x.id, n: String(r[1] || ""), client: String(r[4] || ""), addr: full || street, who: who,
-      time: Utilities.formatDate(at, tz, "HH:mm"), st: gone && !/cancel|delet/i.test(st) ? "canceled" : st, lat: lat, lng: lng, k: stopAddrKey_(street, full), gone: gone });
+      time: Utilities.formatDate(at, tz, "HH:mm"), st: gone && !/cancel|delet/i.test(st) ? "canceled" : st, lat: lat, lng: lng, k: stopAddrKey_(street, full), gone: gone, cust: e && e.cust || "" });
   });
   return { days: days, note: note, dbg: dbg };
 }
-const STOP_EST_AROUND = 14, STOP_EST_READS = 40;   // estimates read again: scheduled within 2 weeks of the days shown, 40 at most
+const STOP_EST_AROUND = 14, STOP_EST_READS = 40, STOP_CUST_READS = 25;   // clients whose addresses are read: 25 at most
+/** Every address Housecall Pro has for each client (by id): { id: [{ addr, street, zip, lat, lng }] }. Kept 6 hours. */
+function stopCustAddrs_(ids, force) {
+  const out = {}, cache = CacheService.getScriptCache();
+  ids = ids.filter(function (id, i, a) { return id && a.indexOf(id) === i; }).slice(0, STOP_CUST_READS);
+  const got = force ? {} : stopCacheAll_(ids.map(function (id) { return "stopcust:" + id; }));
+  const miss = ids.filter(function (id) {
+    const v = got["stopcust:" + id];
+    if (v) { try { out[id] = JSON.parse(v); return false; } catch (e) { /* read it again */ } }
+    return true;
+  });
+  if (!miss.length) return out;
+  hcpGetAll_(miss.map(function (id) { return { path: "/customers/" + encodeURIComponent(id) }; })).forEach(function (r, i) {
+    const c = r && !r.error ? r.data : null;
+    if (!c || !c.id) return;
+    const list = (Array.isArray(c.addresses) ? c.addresses : []).map(function (a) {
+      a = a || {};
+      const lat = stopCoord_(a.latitude), lng = stopCoord_(a.longitude);
+      return { addr: estAddress_(a), street: String(a.street || ""), zip: String(a.zip || ""), lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null };
+    }).filter(function (a) { return a.street; }).slice(0, 12);
+    out[miss[i]] = list;
+    try { cache.put("stopcust:" + miss[i], JSON.stringify(list), 21600); } catch (e) { /* too big to keep */ }
+  });
+  return out;
+}   // estimates read again: scheduled within 2 weeks of the days shown, 40 at most
 /** Estimates as they are in Housecall Pro now ({ id: { sched, street, full, lat, lng, who } }), read together and kept a
  *  while (one scheduled before today 6 hours, else 5 minutes; all read again with force). One not read: not in it. */
 function stopEstNow_(ids, tz, force) {
@@ -3808,7 +3832,7 @@ function stopEstNow_(ids, tz, force) {
     if (!e || !e.id) { out._err[miss[i]] = r && r.error ? String(r.error) + (r.status ? " " + r.status : "") : "no estimate in the answer"; return; }
     const a = e.address || {}, num = function (v) { const n = v === "" || v === null || v === undefined ? NaN : Number(v); return isFinite(n) ? n : null; };
     const x = { sched: estSched_(e), street: [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), full: estAddress_(a), lat: num(a.latitude), lng: num(a.longitude),
-      gone: /cancel|delet/i.test(String(e.work_status || "")) || !!e.deleted_at,
+      gone: /cancel|delet/i.test(String(e.work_status || "")) || !!e.deleted_at, cust: String((e.customer && e.customer.id) || e.customer_id || ""),
       who: (Array.isArray(e.assigned_employees) ? e.assigned_employees : []).map(function (w) { return [w.first_name, w.last_name].filter(Boolean).join(" "); }).filter(Boolean) };
     if (x.lat === null || x.lng === null) { x.lat = null; x.lng = null; }
     out[miss[i]] = x;
@@ -3991,6 +4015,14 @@ function gpsStops_(req) {
   const ap = stopAppts_(from, end, tz, estAll, req.force === true);
   ap.note.forEach(function (n) { note.push(n); });
   dbg.est = ap.dbg || [];
+  // every address Housecall Pro has for the clients of his appointments: a job or estimate can carry the client's main
+  // address while he goes to another of theirs
+  const hisAll = [];
+  Object.keys(ap.days).forEach(function (d) { (ap.days[d] || []).forEach(function (x) {
+    if (!x.gone && x.cust && person && x.who.some(function (w) { return stopNameHit_(w, person); })) hisAll.push(x); }); });
+  const custAddr = hcpKey_() && hisAll.length ? stopCustAddrs_(hisAll.map(function (x) { return x.cust; }), req.force === true) : {};
+  dbg.cust = hisAll.filter(function (x, i, a) { return custAddr[x.cust] && a.map(function (y) { return y.cust; }).indexOf(x.cust) === i; })
+    .map(function (x) { return { client: x.client, n: x.n, kind: x.kind, addrs: custAddr[x.cust].map(function (a) { return a.addr; }) }; }).slice(0, STOP_CUST_READS);
   const shop = shopAt_(), people = {};
   const days = [];
   for (let d = from; d <= end; d = tmAddDays_(d, 1)) {
@@ -4027,6 +4059,16 @@ function gpsStops_(req) {
       const appt = function (x) { return { kind: x.kind, n: x.n, client: x.client, addr: x.addr, who: x.who.join(", "), time: x.time, st: x.st }; };
       const m = best(mine);
       if (m && m.how !== "zip") { out.kind = "his"; out.how = m.how; out.appt = appt(m.x); seen[m.x.kind + m.x.id] = true; return out; }
+      // at another address of one of his clients (that address exactly, or within 150 m of it)
+      let cx = null;
+      mine.forEach(function (x) {
+        (custAddr[x.cust] || []).forEach(function (a) {
+          if (cx) return;
+          const f = stopFit_(k, s.lat, s.lng, { lat: a.lat === null ? NaN : a.lat, lng: a.lng === null ? NaN : a.lng, k: stopAddrKey_(a.street, a.zip) });
+          if (f === "exact" || f === "near") cx = { x: x, a: a.addr };
+        });
+      });
+      if (cx) { out.kind = "his"; out.how = "client"; out.appt = appt(cx.x); out.at = cx.a; seen[cx.x.kind + cx.x.id] = true; return out; }
       const o = best(list.filter(function (x) { return mine.indexOf(x) === -1; }));
       if (o && o.how !== "zip") { out.kind = "other"; out.how = o.how; out.appt = appt(o.x); return out; }
       const g = best(gone);   // a canceled one here: he went anyway (or before it was canceled)
