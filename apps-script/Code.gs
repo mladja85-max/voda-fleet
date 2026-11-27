@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 168;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 169;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -3605,12 +3605,24 @@ function stopFetch_(device, from, to) {
     const lat = Number(r.lat !== undefined ? r.lat : r.latitude), lng = Number(r.lng !== undefined ? r.lng : r.longitude);
     return isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0) ? [lat, lng] : null;
   };
-  const out = [], skipped = {};
+  const out = [], skipped = {}, drives = [];
   const skip = function (why) { skipped[why] = (skipped[why] || 0) + 1; };
+  const posEnd = function (r) {   // where a drive ended
+    const keys = ["lat_lng_to", "last_valid_lat_lng", "lat_lng_best_last"];
+    for (let i = 0; i < keys.length; i++) { const p = r[keys[i]]; if (p && typeof p === "object") { const lat = Number(p.lat !== undefined ? p.lat : p.latitude), lng = Number(p.lng !== undefined ? p.lng : p.lon !== undefined ? p.lon : p.longitude);
+      if (isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0)) return [lat, lng]; } }
+    return null;
+  };
   list.forEach(function (r) {
     if (!r || typeof r !== "object") return;
     const type = String(r.type || r.event_type || "").toLowerCase();
-    if (type && type.indexOf("stop") === -1 && type.indexOf("park") === -1) { if (!/drive|moving|trip/.test(type)) skip(type.slice(0, 30)); return; }   // drives (and idles) aren't stops
+    if (type && type.indexOf("stop") === -1 && type.indexOf("park") === -1) {   // drives (and idles) aren't stops
+      if (/drive|moving|trip/.test(type)) {
+        const df = new Date(r.time_from || r.dt_from || r.start_time || "").getTime(), dt = new Date(r.time_to || r.dt_to || r.end_time || "").getTime();
+        if (isFinite(df) && isFinite(dt)) drives.push({ f: df, t: dt, end: posEnd(r) });
+      } else skip(type.slice(0, 30));
+      return;
+    }
     const f = new Date(r.time_from || r.dt_from || r.start_time || r.from || "").getTime();
     let t = new Date(r.time_to || r.dt_to || r.end_time || r.to || "").getTime(), open = false;
     if (!isFinite(f)) { skip("no start time"); return; }
@@ -3623,7 +3635,21 @@ function stopFetch_(device, from, to) {
     out.push(x);
   });
   out.sort(function (x, y) { return x.f - y.f; });
-  return { stops: out, skipped: skipped, shape: out.length ? null : { keys: Object.keys(json || {}).slice(0, 20), rows: list.length,
+  // a stop with no end sent, with a drive or a stop after it: it ended when that one started
+  out.forEach(function (x) {
+    if (!x.open) return;
+    const next = drives.map(function (d) { return d.f; }).concat(out.map(function (y) { return y.f; })).filter(function (v) { return v > x.f + 60000; }).sort(function (a, b) { return a - b; })[0];
+    if (next !== undefined) { x.t = next; delete x.open; }
+  });
+  // after the last drive, parked where it ended, if One Step doesn't list that stop (the last one of a day, still going)
+  drives.sort(function (x, y) { return x.t - y.t; });
+  const last = drives[drives.length - 1], end = to.getTime();
+  if (last && end - last.t >= STOP_MIN * 60000 && !out.some(function (x) { return x.t > last.t + 60000 && x.f >= last.f; })) {
+    out.push({ f: last.t, t: end, lat: last.end ? last.end[0] : NaN, lng: last.end ? last.end[1] : NaN, a: "", open: true, made: true });
+  }
+  // what One Step sent (no places: its types and times), for Details
+  const raw = list.slice(0, 80).map(function (r) { return r && typeof r === "object" ? [String(r.type || r.event_type || "").slice(0, 20), String(r.time_from || r.dt_from || r.start_time || ""), String(r.time_to || r.dt_to || r.end_time || "")] : ["?", "", ""]; });
+  return { stops: out, skipped: skipped, raw: raw, shape: out.length ? null : { keys: Object.keys(json || {}).slice(0, 20), rows: list.length,
     first: list[0] && typeof list[0] === "object" ? Object.keys(list[0]).slice(0, 30) : [] } };
 }
 
@@ -3723,7 +3749,7 @@ function stopAppts_(from, to, tz, rows, force) {
     Object.keys(byStart).sort().forEach(function (first) {
       byStart[first].forEach(function (c) {
         const ap = { kind: "job", id: c.id, n: c.n, client: c.client, addr: c.addr, who: c.who, time: c.time, st: c.st,
-          lat: c.lat === null ? NaN : Number(c.lat), lng: c.lng === null ? NaN : Number(c.lng), k: stopAddrKey_(c.street, c.zip) };
+          lat: c.lat === null ? NaN : Number(c.lat), lng: c.lng === null ? NaN : Number(c.lng), k: stopAddrKey_(c.street, c.zip), gone: /cancel/i.test(c.st) };
         for (let d = first < from ? from : first; d <= c.last && d <= to; d = tmAddDays_(d, 1)) put(d, ap);
       });
     });
@@ -3738,23 +3764,31 @@ function stopAppts_(from, to, tz, rows, force) {
     if (day >= tmAddDays_(from, -STOP_EST_AROUND) && day <= tmAddDays_(to, STOP_EST_AROUND)) near.push({ id: id, day: day, at: at });
   });
   near.sort(function (a, b) { const ia = a.day >= from && a.day <= to ? 0 : 1, ib = b.day >= from && b.day <= to ? 0 : 1; return ia - ib || (a.day < b.day ? -1 : 1); });   // the days shown first
-  const now = hcpKey_() ? stopEstNow_(near.slice(0, STOP_EST_READS).map(function (x) { return x.id; }), tz, force) : {};
+  const asked = near.slice(0, STOP_EST_READS).map(function (x) { return x.id; });
+  const now = hcpKey_() ? stopEstNow_(asked, tz, force) : {};
+  const dbg = near.map(function (x) { const r = rows[x.id], e = now[x.id];
+    return { n: String(r[1] || ""), tab: String(r[29] || r[5] || ""), tabDay: x.day, now: e ? e.full || e.street : "", nowAt: e ? e.sched : "", err: e ? "" : asked.indexOf(x.id) === -1 ? "not asked" : (now._err && now._err[x.id]) || "not read", who: e ? e.who.join(", ") : String(r[16] || ""),
+      st: String(r[9] || "").slice(0, 20), gone: e ? !!e.gone : false }; })
+    .filter(function (x) { return x.tabDay >= from && x.tabDay <= to || (x.nowAt && Utilities.formatDate(new Date(x.nowAt), tz, "yyyy-MM-dd") >= from && Utilities.formatDate(new Date(x.nowAt), tz, "yyyy-MM-dd") <= to); }).slice(0, 30);
+  // "not found" means deleted only when other estimates were read (cached ones were): not when no read works at all
+  const readOk = Object.keys(now).some(function (k) { return k !== "_err"; });
   near.forEach(function (x) {
     const r = rows[x.id], e = now[x.id];
     let at = x.at, street = String(r[5] || ""), full = String(r[29] || ""), lat = NaN, lng = NaN;
-    let who = String(r[16] || "").split(/\s*,\s*/);
+    let who = String(r[16] || "").split(/\s*,\s*/), st = String(r[9] || "").slice(0, 30), gone = /cancel/i.test(st);
     if (e) {
       if (!e.sched) return;   // not scheduled any more
       at = new Date(e.sched); street = e.street; full = e.full; who = e.who.slice();
       if (e.lat !== null) { lat = e.lat; lng = e.lng; }
-    }
+      if (e.gone) { gone = true; st = "canceled"; }
+    } else if (readOk && now._err && /\b404\b/.test(now._err[x.id] || "")) { gone = true; st = "deleted"; }   // Housecall Pro no longer has it
     const day = Utilities.formatDate(at, tz, "yyyy-MM-dd");
     if (day < from || day > to) return;
     who = who.concat([String(r[21] || "")]).map(function (w) { return String(w).trim(); }).filter(function (w, i, a) { return w && a.indexOf(w) === i; });
     put(day, { kind: "est", id: x.id, n: String(r[1] || ""), client: String(r[4] || ""), addr: full || street, who: who,
-      time: Utilities.formatDate(at, tz, "HH:mm"), st: String(r[9] || "").slice(0, 30), lat: lat, lng: lng, k: stopAddrKey_(street, full) });
+      time: Utilities.formatDate(at, tz, "HH:mm"), st: gone && !/cancel|delet/i.test(st) ? "canceled" : st, lat: lat, lng: lng, k: stopAddrKey_(street, full), gone: gone });
   });
-  return { days: days, note: note };
+  return { days: days, note: note, dbg: dbg };
 }
 const STOP_EST_AROUND = 14, STOP_EST_READS = 40;   // estimates read again: scheduled within 2 weeks of the days shown, 40 at most
 /** Estimates as they are in Housecall Pro now ({ id: { sched, street, full, lat, lng, who } }), read together and kept a
@@ -3768,11 +3802,13 @@ function stopEstNow_(ids, tz, force) {
     return true;
   });
   if (!miss.length) return out;
+  out._err = {};
   hcpGetAll_(miss.map(function (id) { return { path: "/estimates/" + encodeURIComponent(id) }; })).forEach(function (r, i) {
     const e = r && !r.error ? r.data : null;
-    if (!e || !e.id) return;
+    if (!e || !e.id) { out._err[miss[i]] = r && r.error ? String(r.error) + (r.status ? " " + r.status : "") : "no estimate in the answer"; return; }
     const a = e.address || {}, num = function (v) { const n = v === "" || v === null || v === undefined ? NaN : Number(v); return isFinite(n) ? n : null; };
     const x = { sched: estSched_(e), street: [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), full: estAddress_(a), lat: num(a.latitude), lng: num(a.longitude),
+      gone: /cancel|delet/i.test(String(e.work_status || "")) || !!e.deleted_at,
       who: (Array.isArray(e.assigned_employees) ? e.assigned_employees : []).map(function (w) { return [w.first_name, w.last_name].filter(Boolean).join(" "); }).filter(Boolean) };
     if (x.lat === null || x.lng === null) { x.lat = null; x.lng = null; }
     out[miss[i]] = x;
@@ -3891,7 +3927,7 @@ function gpsStops_(req) {
   const today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd");
   const end = to > today ? today : to;
   const budget = { geo: STOP_GEO };
-  const note = [];
+  const note = [], dbg = { kept: [], os: null, est: [] };
 
   // 1. the stops, a day at a time: past days from the GPS stops tab, the rest from One Step in one read
   const sheet = stopSheet_(true), kept = {}, keptRow = {};
@@ -3912,7 +3948,7 @@ function gpsStops_(req) {
     let got;
     try { got = stopFetch_(device, a, b > tmNow_() ? tmNow_() : b); }
     catch (e) { return { ok: false, error: "gps", message: String(e && e.message || e).slice(0, 300) }; }
-    shape = got.shape;
+    shape = got.shape; dbg.os = got.raw; dbg.window = [a.toISOString(), (b > tmNow_() ? tmNow_() : b).toISOString()];
     Object.keys(got.skipped || {}).forEach(function (k) { note.push("One Step GPS sent " + got.skipped[k] + " more " + (got.skipped[k] === 1 ? "item" : "items") + " the app didn't count as stops (" + k + ")."); });
     want.forEach(function (d) { byDay[d] = []; });
     got.stops.forEach(function (s) {   // a stop over midnight is cut into each day's part
@@ -3920,7 +3956,7 @@ function gpsStops_(req) {
         const ds = new Date(hcpDayStart_(d)).getTime(), de = new Date(hcpDayStart_(tmAddDays_(d, 1))).getTime();
         if (ds >= s.t) break;
         const f = Math.max(s.f, ds), u = Math.min(s.t, de);
-        if (byDay[d] && u - f >= STOP_MIN * 60000) byDay[d].push({ f: f, t: u, lat: s.lat, lng: s.lng, a: s.a, cut: (s.f < ds ? "a" : "") + (s.t > de ? "b" : ""), open: !!s.open && s.t <= de });
+        if (byDay[d] && u - f >= STOP_MIN * 60000) byDay[d].push({ f: f, t: u, lat: s.lat, lng: s.lng, a: s.a, cut: (s.f < ds ? "a" : "") + (s.t > de ? "b" : ""), open: !!s.open && s.t <= de, made: !!s.made });
       }
     });
   }
@@ -3932,7 +3968,7 @@ function gpsStops_(req) {
     return a;
   }, []).filter(function (k, i, a) { return a.indexOf(k) === i; }));
   for (let d = from; d <= end; d = tmAddDays_(d, 1)) {
-    if (kept[d]) { stopsOf[d] = kept[d].map(function (x) { return { f: x[0], t: x[1], lat: x[2], lng: x[3], a: x[4], n: x[5], s: x[6], z: x[7], cut: x[8] || "" }; }); continue; }
+    if (kept[d]) { dbg.kept.push(d); stopsOf[d] = kept[d].map(function (x) { return { f: x[0], t: x[1], lat: x[2], lng: x[3], a: x[4], n: x[5], s: x[6], z: x[7], cut: x[8] || "" }; }); continue; }
     let all = true;
     stopsOf[d] = (byDay[d] || []).map(function (x) {
       const geo = stopGeo_(x.lat, x.lng, budget, geoHits);
@@ -3940,7 +3976,7 @@ function gpsStops_(req) {
       const k = geo || {};
       const parsed = x.a ? stopAddrKey_(x.a, x.a) : null;
       return { f: x.f, t: x.t, lat: x.lat, lng: x.lng, a: x.a || k.a || "", n: k.n || (parsed ? parsed.n : ""), s: k.s || (x.a ? String(x.a).replace(/,.*$/, "").replace(/^\d+[a-z]?(?:-\d+[a-z]?)?\s+/i, "") : ""),
-        z: k.z || (parsed ? parsed.z : ""), cut: x.cut, wait: !geo, open: !!x.open };
+        z: k.z || (parsed ? parsed.z : ""), cut: x.cut, wait: !geo, open: !!x.open, made: !!x.made };
     });
     const doneAt = new Date(hcpDayStart_(tmAddDays_(d, 1))).getTime() + 2 * 3600000;   // One Step can report a little late
     if (all && tmNow_().getTime() > doneAt && !stopsOf[d].some(function (x) { return x.open; })) {
@@ -3954,14 +3990,17 @@ function gpsStops_(req) {
   const estAll = estRows_(estSheet_(false));
   const ap = stopAppts_(from, end, tz, estAll, req.force === true);
   ap.note.forEach(function (n) { note.push(n); });
+  dbg.est = ap.dbg || [];
   const shop = shopAt_(), people = {};
   const days = [];
   for (let d = from; d <= end; d = tmAddDays_(d, 1)) {
-    const list = ap.days[d] || [];
+    const all = ap.days[d] || [];
+    const list = all.filter(function (x) { return !x.gone; }), gone = all.filter(function (x) { return x.gone; });   // canceled: not on anyone's schedule
     list.forEach(function (x) { x.who.forEach(function (w) { people[w] = true; }); });
-    const mine = list.filter(function (x) { return person && x.who.some(function (w) { return stopNameHit_(w, person); }); });
-    const fwdHits = stopCacheAll_(mine.filter(function (x) { return !isFinite(x.lat) && x.addr; }).map(function (x) { return stopFwdKey_(x.addr); }));
-    mine.forEach(function (x) {
+    const his = function (x) { return person && x.who.some(function (w) { return stopNameHit_(w, person); }); };
+    const mine = list.filter(his), goneMine = gone.filter(his);
+    const fwdHits = stopCacheAll_(mine.concat(goneMine).filter(function (x) { return !isFinite(x.lat) && x.addr; }).map(function (x) { return stopFwdKey_(x.addr); }));
+    mine.concat(goneMine).forEach(function (x) {
       if (!isFinite(x.lat) && x.addr) { const p = stopGeoFwd_(x.addr, budget, fwdHits); if (p) { x.lat = p.lat; x.lng = p.lng; } }
     });
     const seen = {};
@@ -3971,6 +4010,7 @@ function gpsStops_(req) {
         a: s.a || "", cut: s.cut || "", kind: "flag" };
       if (s.wait) out.wait = true;
       if (s.open) out.open = true;   // still there when read (no end yet)
+      if (s.made) out.made = true;   // not listed by One Step: parked since its last drive ended
       if (shop && isFinite(s.lat) && gpsDistM_(s.lat, s.lng, shop.lat, shop.lng) <= shop.radius) { out.kind = "shop"; return out; }
       const place = prefs.places.filter(function (p) { return isFinite(s.lat) && gpsDistM_(s.lat, s.lng, p.lat, p.lng) <= (Number(p.r) || STOP_PLACE_M); })[0];
       if (place) { out.kind = "place"; out.place = String(place.n || "Known place"); return out; }
@@ -3989,6 +4029,8 @@ function gpsStops_(req) {
       if (m && m.how !== "zip") { out.kind = "his"; out.how = m.how; out.appt = appt(m.x); seen[m.x.kind + m.x.id] = true; return out; }
       const o = best(list.filter(function (x) { return mine.indexOf(x) === -1; }));
       if (o && o.how !== "zip") { out.kind = "other"; out.how = o.how; out.appt = appt(o.x); return out; }
+      const g = best(gone);   // a canceled one here: he went anyway (or before it was canceled)
+      if (g && g.how !== "zip") { out.kind = "gone"; out.how = g.how; out.appt = appt(g.x); out.mine = goneMine.indexOf(g.x) !== -1; return out; }
       if (m) { out.kind = "zip"; out.appt = appt(m.x); return out; }
       return out;
     });
@@ -4001,7 +4043,7 @@ function gpsStops_(req) {
   if (to > today) note.push("Days after today have no stops yet.");
   const out = { ok: true, truck: String(t.id), unit: String(t.unit || ""), from: from, to: to, today: today, person: person, driver: String(t.driver || ""),
     people: Object.keys(people).sort(), places: prefs.places.map(function (p) { return { n: String(p.n || ""), a: String(p.a || ""), lat: p.lat, lng: p.lng }; }),
-    days: days, note: note, left: left, shop: !!shop };
+    days: days, note: note, left: left, shop: !!shop, dbg: dbg };
   if (shape && want.length) out.shape = shape;
   return out;
 }
