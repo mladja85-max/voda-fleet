@@ -7525,7 +7525,7 @@ function stopsRow(id, s, who) {
   const where = s.a || (map ? `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}` : "No location sent");
   const from = fmtTime(new Date(s.f)), to = fmtTime(new Date(s.t));
   return h("li", { class: "stp-row k-" + cls },
-    h("div", { class: "stp-time" }, h("span", null, h("span", { class: "nw", text: `${s.cut.includes("a") ? "Before 12 AM" : from} –` }), " ", h("span", { class: "nw", text: s.cut.includes("b") ? "after 12 AM" : to })),
+    h("div", { class: "stp-time" }, h("span", null, h("span", { class: "nw", text: `${s.cut.includes("a") ? "Before 12 AM" : from} –` }), " ", h("span", { class: "nw", text: s.cut.includes("b") ? "after 12 AM" : s.open ? "now" : to })),
       h("small", { text: stopsDur(s.min) })),
     h("div", { class: "stp-main" },
       h("div", { class: "stp-where" }, map ? h("a", { class: "link", href: map, target: "_blank", rel: "noopener", text: where }) : h("span", { text: where }),
@@ -24797,7 +24797,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 335;                   // the same number as sw.js's CACHE ("voda-fleet-v335"): both go up with every change
+const APP_BUILD = 336;                   // the same number as sw.js's CACHE ("voda-fleet-v336"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
