@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 166;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 168;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -3605,19 +3605,25 @@ function stopFetch_(device, from, to) {
     const lat = Number(r.lat !== undefined ? r.lat : r.latitude), lng = Number(r.lng !== undefined ? r.lng : r.longitude);
     return isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0) ? [lat, lng] : null;
   };
-  const out = [];
+  const out = [], skipped = {};
+  const skip = function (why) { skipped[why] = (skipped[why] || 0) + 1; };
   list.forEach(function (r) {
     if (!r || typeof r !== "object") return;
     const type = String(r.type || r.event_type || "").toLowerCase();
-    if (type && type.indexOf("stop") === -1 && type.indexOf("park") === -1) return;   // drives (and idles) aren't stops
-    const f = new Date(r.time_from || r.dt_from || r.start_time || r.from || "").getTime(), t = new Date(r.time_to || r.dt_to || r.end_time || r.to || "").getTime();
-    if (!isFinite(f) || !isFinite(t)) return;
+    if (type && type.indexOf("stop") === -1 && type.indexOf("park") === -1) { if (!/drive|moving|trip/.test(type)) skip(type.slice(0, 30)); return; }   // drives (and idles) aren't stops
+    const f = new Date(r.time_from || r.dt_from || r.start_time || r.from || "").getTime();
+    let t = new Date(r.time_to || r.dt_to || r.end_time || r.to || "").getTime(), open = false;
+    if (!isFinite(f)) { skip("no start time"); return; }
+    // still there (parked at home overnight, or now): no end yet, so to the end of the time asked for
+    if (!isFinite(t)) { t = to.getTime(); open = true; }
     const p = pos(r);
     const a = typeof r.address === "string" ? r.address : typeof r.formatted_address === "string" ? r.formatted_address : "";
-    out.push({ f: Math.min(f, t), t: Math.max(f, t), lat: p ? p[0] : NaN, lng: p ? p[1] : NaN, a: String(a || "").replace(/, USA$/, "").slice(0, 120) });
+    const x = { f: Math.min(f, t), t: Math.max(f, t), lat: p ? p[0] : NaN, lng: p ? p[1] : NaN, a: String(a || "").replace(/, USA$/, "").slice(0, 120) };
+    if (open) x.open = true;
+    out.push(x);
   });
   out.sort(function (x, y) { return x.f - y.f; });
-  return { stops: out, shape: out.length ? null : { keys: Object.keys(json || {}).slice(0, 20), rows: list.length,
+  return { stops: out, skipped: skipped, shape: out.length ? null : { keys: Object.keys(json || {}).slice(0, 20), rows: list.length,
     first: list[0] && typeof list[0] === "object" ? Object.keys(list[0]).slice(0, 30) : [] } };
 }
 
@@ -3722,19 +3728,58 @@ function stopAppts_(from, to, tz, rows, force) {
       });
     });
   } else note.push("Housecall Pro isn't connected, so only the estimates in the Estimates tab are compared.");
+  // the estimates scheduled around these days (the Estimates tab), each as it is in Housecall Pro now: its address and
+  // schedule can have changed since the tab read it (an approved one isn't read again)
+  const near = [];
   Object.keys(rows).forEach(function (id) {
-    const r = rows[id];
-    const at = new Date(r[28] || "");
+    const at = new Date(rows[id][28] || "");
     if (!isFinite(at.getTime())) return;   // not scheduled: no visit to make
     const day = Utilities.formatDate(at, tz, "yyyy-MM-dd");
+    if (day >= tmAddDays_(from, -STOP_EST_AROUND) && day <= tmAddDays_(to, STOP_EST_AROUND)) near.push({ id: id, day: day, at: at });
+  });
+  near.sort(function (a, b) { const ia = a.day >= from && a.day <= to ? 0 : 1, ib = b.day >= from && b.day <= to ? 0 : 1; return ia - ib || (a.day < b.day ? -1 : 1); });   // the days shown first
+  const now = hcpKey_() ? stopEstNow_(near.slice(0, STOP_EST_READS).map(function (x) { return x.id; }), tz, force) : {};
+  near.forEach(function (x) {
+    const r = rows[x.id], e = now[x.id];
+    let at = x.at, street = String(r[5] || ""), full = String(r[29] || ""), lat = NaN, lng = NaN;
+    let who = String(r[16] || "").split(/\s*,\s*/);
+    if (e) {
+      if (!e.sched) return;   // not scheduled any more
+      at = new Date(e.sched); street = e.street; full = e.full; who = e.who.slice();
+      if (e.lat !== null) { lat = e.lat; lng = e.lng; }
+    }
+    const day = Utilities.formatDate(at, tz, "yyyy-MM-dd");
     if (day < from || day > to) return;
-    const who = String(r[16] || "").split(/\s*,\s*/).concat([String(r[21] || "")]).map(function (x) { return x.trim(); })
-      .filter(function (x, i, a) { return x && a.indexOf(x) === i; });
-    put(day, { kind: "est", id: id, n: String(r[1] || ""), client: String(r[4] || ""), addr: String(r[29] || r[5] || ""), who: who,
-      time: Utilities.formatDate(at, tz, "HH:mm"), st: String(r[9] || "").slice(0, 30), lat: NaN, lng: NaN,
-      k: stopAddrKey_(String(r[5] || ""), String(r[29] || "")) });
+    who = who.concat([String(r[21] || "")]).map(function (w) { return String(w).trim(); }).filter(function (w, i, a) { return w && a.indexOf(w) === i; });
+    put(day, { kind: "est", id: x.id, n: String(r[1] || ""), client: String(r[4] || ""), addr: full || street, who: who,
+      time: Utilities.formatDate(at, tz, "HH:mm"), st: String(r[9] || "").slice(0, 30), lat: lat, lng: lng, k: stopAddrKey_(street, full) });
   });
   return { days: days, note: note };
+}
+const STOP_EST_AROUND = 14, STOP_EST_READS = 40;   // estimates read again: scheduled within 2 weeks of the days shown, 40 at most
+/** Estimates as they are in Housecall Pro now ({ id: { sched, street, full, lat, lng, who } }), read together and kept a
+ *  while (one scheduled before today 6 hours, else 5 minutes; all read again with force). One not read: not in it. */
+function stopEstNow_(ids, tz, force) {
+  const out = {}, today = Utilities.formatDate(tmNow_(), tz, "yyyy-MM-dd"), cache = CacheService.getScriptCache();
+  const got = force ? {} : stopCacheAll_(ids.map(function (id) { return "stopest:" + id; }));
+  const miss = ids.filter(function (id) {
+    const v = got["stopest:" + id];
+    if (v) { try { out[id] = JSON.parse(v); return false; } catch (e) { /* read it again */ } }
+    return true;
+  });
+  if (!miss.length) return out;
+  hcpGetAll_(miss.map(function (id) { return { path: "/estimates/" + encodeURIComponent(id) }; })).forEach(function (r, i) {
+    const e = r && !r.error ? r.data : null;
+    if (!e || !e.id) return;
+    const a = e.address || {}, num = function (v) { const n = v === "" || v === null || v === undefined ? NaN : Number(v); return isFinite(n) ? n : null; };
+    const x = { sched: estSched_(e), street: [a.street, a.city].filter(Boolean).join(", ").slice(0, 120), full: estAddress_(a), lat: num(a.latitude), lng: num(a.longitude),
+      who: (Array.isArray(e.assigned_employees) ? e.assigned_employees : []).map(function (w) { return [w.first_name, w.last_name].filter(Boolean).join(" "); }).filter(Boolean) };
+    if (x.lat === null || x.lng === null) { x.lat = null; x.lng = null; }
+    out[miss[i]] = x;
+    const d = x.sched ? Utilities.formatDate(new Date(x.sched), tz, "yyyy-MM-dd") : "";
+    try { cache.put("stopest:" + miss[i], JSON.stringify(x), d && d < today ? 21600 : 300); } catch (err) { /* too big to keep */ }
+  });
+  return out;
 }
 
 function stopSheet_(create) {
@@ -3868,13 +3913,14 @@ function gpsStops_(req) {
     try { got = stopFetch_(device, a, b > tmNow_() ? tmNow_() : b); }
     catch (e) { return { ok: false, error: "gps", message: String(e && e.message || e).slice(0, 300) }; }
     shape = got.shape;
+    Object.keys(got.skipped || {}).forEach(function (k) { note.push("One Step GPS sent " + got.skipped[k] + " more " + (got.skipped[k] === 1 ? "item" : "items") + " the app didn't count as stops (" + k + ")."); });
     want.forEach(function (d) { byDay[d] = []; });
     got.stops.forEach(function (s) {   // a stop over midnight is cut into each day's part
       for (let d = Utilities.formatDate(new Date(s.f), tz, "yyyy-MM-dd"); d <= want[want.length - 1]; d = tmAddDays_(d, 1)) {
         const ds = new Date(hcpDayStart_(d)).getTime(), de = new Date(hcpDayStart_(tmAddDays_(d, 1))).getTime();
         if (ds >= s.t) break;
         const f = Math.max(s.f, ds), u = Math.min(s.t, de);
-        if (byDay[d] && u - f >= STOP_MIN * 60000) byDay[d].push({ f: f, t: u, lat: s.lat, lng: s.lng, a: s.a, cut: (s.f < ds ? "a" : "") + (s.t > de ? "b" : "") });
+        if (byDay[d] && u - f >= STOP_MIN * 60000) byDay[d].push({ f: f, t: u, lat: s.lat, lng: s.lng, a: s.a, cut: (s.f < ds ? "a" : "") + (s.t > de ? "b" : ""), open: !!s.open && s.t <= de });
       }
     });
   }
@@ -3894,10 +3940,10 @@ function gpsStops_(req) {
       const k = geo || {};
       const parsed = x.a ? stopAddrKey_(x.a, x.a) : null;
       return { f: x.f, t: x.t, lat: x.lat, lng: x.lng, a: x.a || k.a || "", n: k.n || (parsed ? parsed.n : ""), s: k.s || (x.a ? String(x.a).replace(/,.*$/, "").replace(/^\d+[a-z]?(?:-\d+[a-z]?)?\s+/i, "") : ""),
-        z: k.z || (parsed ? parsed.z : ""), cut: x.cut, wait: !geo };
+        z: k.z || (parsed ? parsed.z : ""), cut: x.cut, wait: !geo, open: !!x.open };
     });
     const doneAt = new Date(hcpDayStart_(tmAddDays_(d, 1))).getTime() + 2 * 3600000;   // One Step can report a little late
-    if (all && tmNow_().getTime() > doneAt) {
+    if (all && tmNow_().getTime() > doneAt && !stopsOf[d].some(function (x) { return x.open; })) {
       const json = JSON.stringify(stopsOf[d].map(function (x) { return [x.f, x.t, isFinite(x.lat) ? x.lat : null, isFinite(x.lng) ? x.lng : null, x.a, x.n, x.s, x.z, x.cut]; }));
       const row = [String(t.id), d, device, new Date().toISOString(), json.slice(0, 49000)];
       if (keptRow[d]) sheet.getRange(keptRow[d], 1, 1, STOP_COLS.length).setValues([row]);
@@ -3924,6 +3970,7 @@ function gpsStops_(req) {
       const out = { f: s.f, t: s.t, min: Math.round((s.t - s.f) / 60000), lat: isFinite(s.lat) ? s.lat : null, lng: isFinite(s.lng) ? s.lng : null,
         a: s.a || "", cut: s.cut || "", kind: "flag" };
       if (s.wait) out.wait = true;
+      if (s.open) out.open = true;   // still there when read (no end yet)
       if (shop && isFinite(s.lat) && gpsDistM_(s.lat, s.lng, shop.lat, shop.lng) <= shop.radius) { out.kind = "shop"; return out; }
       const place = prefs.places.filter(function (p) { return isFinite(s.lat) && gpsDistM_(s.lat, s.lng, p.lat, p.lng) <= (Number(p.r) || STOP_PLACE_M); })[0];
       if (place) { out.kind = "place"; out.place = String(place.n || "Known place"); return out; }
