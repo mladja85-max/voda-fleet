@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 164;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 165;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -8645,7 +8645,7 @@ function rebuildCalendarSetup() {
    Activity feed isn't in the API). ---- */
 const PRICE_SHEET = "Price changes", WATCH_SHEET = "Price watch";
 const PRICE_COLS = ["ID", "Noticed", "Last noticed", "Changes", "Job id", "Job #", "Client", "Visit day", "Department", "Job type", "Was $", "Now $",
-  "Change $", "Was seen", "Private notes", "New note", "Status", "Checked by", "Checked at", "Check note", "Monumental", "Job status"];
+  "Change $", "Was seen", "Private notes", "New note", "Status", "Checked by", "Checked at", "Check note", "Monumental", "Job status", "Show from"];
 const WATCH_COLS = ["Job id", "Job #", "Amount $", "Notes", "Seen"];
 const PRICE_PAGES = 10, PRICE_AT = "PRICE_SCAN_AT", PRICE_ERR = "PRICE_SCAN_ERR";
 // A job's amount settles at the end of the job's day (its start, end or when it was finished, whichever is latest): a
@@ -8657,6 +8657,16 @@ const PRICE_PAGES = 10, PRICE_AT = "PRICE_SCAN_AT", PRICE_ERR = "PRICE_SCAN_ERR"
 // = the app saw the amount after the job was finished, or the job's last change is more than PRICE_DONE_GRACE after it
 // was finished and isn't a payment taken then (paid after finishing: the amount may well be the crew's sale before).
 const PRICE_DONE_GRACE = 2 * 60e3, PRICE_PAY_NEAR = 3 * 60e3, PRICE_PAY_READS = 30;
+// A change shows 48 hours after the appointment (its start, end or when it was finished, whichever is latest), with
+// where the amount ended up: until then it waits ("wait", hidden; later changes update it), then it's open, or dropped
+// ("same") if the amount is back where it was. A change made after those 48 hours shows at once.
+const PRICE_WAIT_MS = 48 * 3600e3;
+/** When a change to this job shows: 48 hours after its appointment (0: no times, at once). */
+function priceDueMs_(job) {
+  const last = Math.max.apply(null, [job && job.schedule && job.schedule.scheduled_start, job && job.schedule && job.schedule.scheduled_end, job && job.work_timestamps && job.work_timestamps.completed_at]
+    .map(function (v) { return Date.parse(v || "") || 0; }));
+  return last ? last + PRICE_WAIT_MS : 0;
+}
 const priceDoneMs_ = job => Date.parse((job && job.work_timestamps && job.work_timestamps.completed_at) || "") || 0;
 /** The job's last day, yyyy-MM-dd in the script's time zone: its start, end or when it was finished, whichever is
  *  latest; "" when it has none of them. */
@@ -8691,7 +8701,7 @@ function priceSheet_(name, cols) {
     s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
     s.setFrozenRows(1);
     s.getRange("A:A").setNumberFormat("@");
-  }
+  } else if (typeof s.getLastColumn === "function" && s.getLastColumn() < cols.length) s.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");   // a column added since
   return s;
 }
 const priceNotes_ = job => (Array.isArray(job && job.notes) ? job.notes : []).map(function (n) {
@@ -8759,7 +8769,7 @@ function priceCompare_(jobs, now, paid) {
   };
   const ps = priceSheet_(PRICE_SHEET, PRICE_COLS), prows = ps.getLastRow() > 1 ? ps.getRange(2, 1, ps.getLastRow() - 1, PRICE_COLS.length).getValues() : [];
   const openOf = {};
-  prows.forEach(function (r, i) { if (r[0] && String(r[16]) === "open") openOf[String(r[4])] = i; });
+  prows.forEach(function (r, i) { if (r[0] && (String(r[16]) === "open" || String(r[16]) === "wait")) openOf[String(r[4])] = i; });   // one a job: open, or waiting
   const stale = {}, added = [];
   let found = 0;
   const seen = {};
@@ -8792,16 +8802,30 @@ function priceCompare_(jobs, now, paid) {
         r[2] = at; r[3] = (Number(r[3]) || 1) + 1; r[11] = cents / 100; r[12] = Math.round(cents - Math.round((Number(r[10]) || 0) * 100)) / 100;
         r[14] = shown; const n0 = String(r[15] || "");
         r[15] = n0 === "yes" || (fresh && fresh.length) ? "yes" : n0;   // a note since the amount first seen: yes; else as it was r[21] = String(job.work_status || "");
+        if (String(r[16]) === "wait") { const due = priceDueMs_(job); r[22] = due ? new Date(due).toISOString() : ""; }   // (moved: shows 48 hours after its new time)
       } else {
+        // shown 48 hours after the appointment (waiting till then); after them: at once
+        const due = priceDueMs_(job), wait = !!due && now < due;
         const row = [Utilities.getUuid(), at, at, 1, id, String(job.invoice_number || ""), hcpClient_(job), day, revDept_(type), type, was / 100, cents / 100,
-          (cents - was) / 100, wasAt, shown, fresh ? (fresh.length ? "yes" : "no") : "", "open", "", "", "", tags.some(function (t) { return REP_MON_TAG.test(t); }) ? "yes" : "", String(job.work_status || "")];
-        openOf[id] = prows.length; prows.push(row); added.push(row);
+          (cents - was) / 100, wasAt, shown, fresh ? (fresh.length ? "yes" : "no") : "", wait ? "wait" : "open", "", "", "", tags.some(function (t) { return REP_MON_TAG.test(t); }) ? "yes" : "", String(job.work_status || ""),
+          due ? new Date(due).toISOString() : ""];
+        openOf[id] = prows.length; prows.push(row);
+        if (!wait) added.push(row);
       }
       found++;
       if (day) stale[day] = true;
     }
     const keep = [id, String(job.invoice_number || ""), cents / 100, JSON.stringify(notes), at];
     if (w) wrows[w.i] = keep; else { watch[id] = { i: wrows.length }; wrows.push(keep); }
+  });
+  // the changes waiting whose 48 hours are up: shown, with where the amount ended up; back where it was: dropped
+  let shownNow = 0, waiting = 0;
+  prows.forEach(function (r) {
+    if (String(r[16]) !== "wait") return;
+    const due = r[22] instanceof Date ? r[22].getTime() : Date.parse(String(r[22] || "")) || 0;
+    if (due > now) { waiting++; return; }
+    if (Math.round((Number(r[12]) || 0) * 100) === 0) { r[16] = "same"; return; }
+    r[16] = "open"; r[2] = at; shownNow++;
   });
   if (wrows.length) { ws.getRange(2, 1, wrows.length, WATCH_COLS.length).setValues(wrows); ws.getRange(2, 1, wrows.length, 1).setNumberFormat("@"); }
   if (prows.length) { ps.getRange(2, 1, prows.length, PRICE_COLS.length).setValues(prows); ps.getRange(2, 1, prows.length, 1).setNumberFormat("@"); }
@@ -8815,7 +8839,7 @@ function priceCompare_(jobs, now, paid) {
     });
   }
   P.setProperty(PRICE_AT, String(now));
-  return { ok: true, read: jobs.length, found: found, added: added.length };
+  return { ok: true, read: jobs.length, found: found, added: added.length + shownNow, waiting: waiting };
 }
 function priceJson_(v) { try { const x = JSON.parse(String(v || "[]")); return Array.isArray(x) ? x : []; } catch (e) { return []; } }
 /** The warning as the app gets it. */
