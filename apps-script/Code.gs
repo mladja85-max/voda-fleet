@@ -151,7 +151,7 @@ const TRUCK_COLS = ["id", "order", "unit", "driver", "vehicle", "year", "plate",
 // Set only by this script, never taken from what the app sends: when TM hrs were last entered by a person, by whom,
 // and the Monday of a week the truck was marked "not available" for the TM hrs check (a Tuesday before the check moved).
 const SERVER_OWNED = ["hrsAt", "hrsBy", "tmSkip"];
-const API_VERSION = 165;        // the app warns when the deployed web app is older than it expects
+const API_VERSION = 166;        // the app warns when the deployed web app is older than it expects
 const ADDED_COLS_FROM = 28;   // columns after AB were added later (division, vin, color, hrsAt, hrsBy, tmSkip, tier200); older sheets get them automatically
 const CHECK_DAY = 1;          // TM hrs are checked every Monday (0 = Sunday); Tuesday when that Monday is a closed day
 const APP_URL = "https://mladja85-max.github.io/voda-fleet/";
@@ -3539,6 +3539,7 @@ const STOP_MIN = 5;            // One Step reports stops this many minutes and l
 const STOP_NEAR_M = 150;       // a stop this close to an appointment is that appointment
 const STOP_TOWN_M = 3000;      // the same street name farther than this is another street (another town)
 const STOP_GEO = 40;           // street lookups per read (the rest show the next time)
+const STOP_DRIVES = 25;        // Google drive times per read (side trips; the rest the next time)
 const STOP_PLACE_M = 150;
 const STOP_SUF = { street: "st", st: "st", avenue: "ave", ave: "ave", av: "ave", road: "rd", rd: "rd", drive: "dr", dr: "dr", boulevard: "blvd", blvd: "blvd",
   lane: "ln", ln: "ln", court: "ct", ct: "ct", place: "pl", pl: "pl", circle: "cir", cir: "cir", parkway: "pkwy", pkwy: "pkwy", highway: "hwy", hwy: "hwy",
@@ -3949,12 +3950,74 @@ function gpsStops_(req) {
     days.push({ day: d, stops: stops, appts: mine.length, missed: missed });
   }
   stopPast_(days, note, estAll);
+  stopTrips_(days);
   if (to > today) note.push("Days after today have no stops yet.");
   const out = { ok: true, truck: String(t.id), unit: String(t.unit || ""), from: from, to: to, today: today, person: person, driver: String(t.driver || ""),
     people: Object.keys(people).sort(), places: prefs.places.map(function (p) { return { n: String(p.n || ""), a: String(p.a || ""), lat: p.lat, lng: p.lng }; }),
     days: days, note: note, left: left, shop: !!shop };
   if (shape && want.length) out.shape = shape;
   return out;
+}
+
+/* ---- Side trips: the drive to and from the stops not on his schedule (the ones to ask about: "flag"; one worth a look,
+   like someone else's job, may well be his to do and isn't one). Each stop gets the drive before it (from the stop
+   before: drive), and each run of stops to ask about (one, or several in a row) a trip on its last stop: from leaving
+   the stop before it (p) to reaching the stop after it (n): the drive in, the time there, the drive on, all of it
+   (span), how long driving straight from p to n takes (Google Maps: direct), and the extra it cost (span less direct).
+   No stop before or after it that day: only what's known (cost: the time there). ---- */
+const stopFlagged_ = function (x) { return x.kind === "flag"; };
+const stopDirKey_ = function (a, b) { return "stopdir:" + [a.lat, a.lng, b.lat, b.lng].map(function (v) { return Number(v).toFixed(3); }).join(","); };
+/** How many minutes driving from stop a to stop b takes (Google Maps, no traffic; kept 6 hours): a number, or null
+ *  (not looked up: none left this read, or Google didn't say). */
+function stopDrive_(a, b, budget, hits) {
+  if (!a || !b || !isFinite(a.lat) || !isFinite(a.lng) || !isFinite(b.lat) || !isFinite(b.lng) || a.lat === null || b.lat === null) return null;
+  if (gpsDistM_(a.lat, a.lng, b.lat, b.lng) < 150) return 0;   // the same spot
+  const key = stopDirKey_(a, b), cache = CacheService.getScriptCache();
+  const hit = hits ? hits[key] : cache.get(key);
+  if (hit !== undefined && hit !== null && hit !== "") return Number(hit);
+  if (budget.dir <= 0) return null;
+  budget.dir--;
+  let min = null;
+  try {
+    let f = Maps.newDirectionFinder().setOrigin(a.lat, a.lng).setDestination(b.lat, b.lng);
+    if (Maps.DirectionFinder && Maps.DirectionFinder.Mode && typeof f.setMode === "function") f = f.setMode(Maps.DirectionFinder.Mode.DRIVING);
+    const r = f.getDirections(), leg = r && r.routes && r.routes[0] && r.routes[0].legs && r.routes[0].legs[0];
+    const sec = leg && leg.duration ? Number(leg.duration.value) : NaN;
+    if (isFinite(sec)) min = Math.round(sec / 60);
+  } catch (e) { return null; }
+  if (min === null) return null;
+  try { cache.put(key, String(min), 21600); } catch (e) { /* ignore */ }
+  return min;
+}
+function stopTrips_(days) {
+  const budget = { dir: STOP_DRIVES }, runs = [];
+  days.forEach(function (d) {
+    const st = d.stops;
+    st.forEach(function (x, k) { if (k) x.drive = Math.max(0, Math.round((x.f - st[k - 1].t) / 60000)); });
+    for (let i = 0; i < st.length; i++) {
+      if (!stopFlagged_(st[i])) continue;
+      let j = i;
+      while (j + 1 < st.length && stopFlagged_(st[j + 1])) j++;
+      const p = i > 0 ? i - 1 : null, n = j + 1 < st.length ? j + 1 : null;
+      let there = 0, between = 0;
+      for (let k = i; k <= j; k++) { there += st[k].min; if (k > i) between += st[k].drive; }
+      const trip = { i: i, p: p, n: n, there: there, between: between, ask: st.slice(i, j + 1).some(function (x) { return x.kind === "flag"; }),
+        in: p === null ? null : st[i].drive, out: n === null ? null : st[n].drive };
+      if (p !== null && n !== null) trip.span = Math.max(0, Math.round((st[n].f - st[p].t) / 60000));
+      st[j].trip = trip;
+      if (trip.span !== undefined) runs.push({ trip: trip, a: st[p], b: st[n] });
+      i = j;
+    }
+  });
+  const hits = stopCacheAll_(runs.map(function (r) { return stopDirKey_(r.a, r.b); }).filter(function (k, i, a) { return a.indexOf(k) === i; }));
+  days.forEach(function (d) { d.stops.forEach(function (x) { if (x.trip) x.trip.cost = x.trip.there + x.trip.between; }); });   // until the drive is known
+  runs.forEach(function (r) {
+    if (r.a.lat === null || r.b.lat === null) return;
+    const m = stopDrive_(r.a, r.b, budget, hits);
+    if (m === null) { r.trip.wait = true; return; }
+    r.trip.direct = m;
+    r.trip.cost = Math.max(r.trip.there, r.trip.span - m);   // the extra it cost (never less than the time there)
+  });
 }
 
 /** Admin: whose schedule a truck is compared with ({ truck, person }; "" goes back to the truck's driver), and the
