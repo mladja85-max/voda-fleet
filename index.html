@@ -541,6 +541,11 @@ dialog.drawer::backdrop { background: rgba(8, 12, 18, .45); }
 .stp-row.k-ok { border-left-color: var(--ok); }
 .stp-row.k-warn { border-left-color: var(--soon); background: color-mix(in srgb, var(--soon-bg) 45%, var(--surface)); }
 .stp-row.k-bad { border-left-color: var(--due); background: color-mix(in srgb, var(--due-bg) 55%, var(--surface)); }
+.stp-drive { padding: 0 12px 0 22px; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stp-trip { display: grid; gap: 2px; margin: -2px 0 4px 18px; padding: 7px 12px; border: 1px dashed var(--line); border-radius: 10px; font-size: .86rem; }
+.stp-trip.bad { border-color: color-mix(in srgb, var(--due) 45%, var(--line)); background: color-mix(in srgb, var(--due-bg) 30%, var(--surface)); }
+.stp-trip.warn { border-color: color-mix(in srgb, var(--soon) 45%, var(--line)); background: color-mix(in srgb, var(--soon-bg) 30%, var(--surface)); }
+.stp-trip-t { font-size: .9rem; } .stp-trip.bad .stp-trip-t { color: var(--due); } .stp-trip-math { font-variant-numeric: tabular-nums; } .stp-trip small { color: var(--muted); }
 .stp-time { display: grid; font-weight: 700; font-size: .9rem; }
 .stp-time small { font-weight: 600; color: var(--muted); }
 .stp-time .nw { white-space: nowrap; }
@@ -7504,9 +7509,12 @@ const stopsFlagged = s => s.kind === "flag" || s.kind === "zip" || s.kind === "o
 function stopsSum(stops, who) {
   const n = k => stops.filter(s => k.includes(s.kind));
   const bad = n(["flag"]), look = n(["zip", "other", "past"]), mins = bad.reduce((a, s) => a + s.min, 0);
+  // the side trips with a stop to ask about: what they cost with the driving (the extra, Google's direct drive taken off)
+  const trips = stops.filter(s => s.trip && s.trip.ask).map(s => s.trip), extra = trips.reduce((a, t) => a + (t.cost || 0), 0);
+  const drove = trips.some(t => t.direct !== undefined);
   const parts = [`${stops.length} stop${stops.length === 1 ? "" : "s"}`];
   const his = n(["his"]).length; if (his) parts.push(`${his} on ${who ? stopsFirst(who) + "'s" : "his"} schedule`);
-  if (bad.length) parts.push(h("strong", { class: "stp-badtext", text: `${bad.length} to ask about (${stopsDur(mins)})` }));
+  if (bad.length) parts.push(h("strong", { class: "stp-badtext", text: `${bad.length} to ask about (${stopsDur(mins)}${drove ? ` there, about ${stopsDur(extra)} with the driving` : ""})` }));
   if (look.length) parts.push(`${look.length} worth a look`);
   const quiet = n(["shop", "place"]).length; if (quiet) parts.push(`${quiet} at the shop or a known place`);
   return parts.flatMap((p, i) => i ? [" · ", p] : [p]);
@@ -7524,6 +7532,28 @@ function stopsRow(id, s, who) {
         s.wait ? h("small", { class: "meta", text: " Street not looked up yet: Read again in a minute." }) : null),
       h("div", { class: "stp-why" }, h("span", { class: "stp-badge " + cls, text: (cls === "ok" ? "✓ " : cls === "bad" ? "! " : "") + what }), ref ? h("span", { class: "stp-ref", text: ref }) : null,
         stopsFlagged(s) && s.lat !== null ? h("button", { class: "link stp-noflag", type: "button", text: "Don't flag this place", onclick: () => stopsNoFlag(id, s) }) : null)));
+}
+/** The drive from the stop before (All stops). */
+const stopsDriveRow = min => h("li", { class: "stp-drive", "aria-label": `${stopsDur(min)} driving` }, h("span", { text: `↓ ${stopsDur(min)} drive` }));
+/** Under a run of flagged stops: the side trip, from leaving the stop before it to reaching the stop after it: the drive
+ *  there, the time there, the drive on; and what it cost (less Google's drive straight between the two). */
+function stopsTripRow(tr, stops) {
+  const P = tr.p !== null ? stops[tr.p] : null, N = tr.n !== null ? stops[tr.n] : null, last = tr.n !== null ? tr.n - 1 : stops.length - 1, several = last > tr.i;
+  const name = x => (x.kind === "shop" ? "the shop" : x.kind === "place" ? x.place || "a known place" : (x.a || "").split(",")[0]) || "the stop";
+  const parts = [];
+  if (tr.in !== null) parts.push(`${stopsDur(tr.in)} drive there`);
+  parts.push(`${stopsDur(tr.there)} at ${several ? `the ${last - tr.i + 1} stops` : "the stop"}`);
+  if (tr.between) parts.push(`${stopsDur(tr.between)} between ${several ? "them" : "stops"}`);
+  if (tr.out !== null) parts.push(`${stopsDur(tr.out)} drive to the next stop`);
+  const total = tr.span !== undefined ? tr.span : (tr.in || 0) + tr.there + tr.between + (tr.out || 0);
+  const known = tr.direct !== undefined;
+  return h("li", { class: "stp-trip " + (tr.ask ? "bad" : "warn"), "data-trip": tr.i },
+    h("strong", { class: "stp-trip-t", text: known ? `Side trip: about ${stopsDur(tr.cost)} extra` : `Side trip: ${stopsDur(total)}` }),
+    h("span", { class: "stp-trip-math", text: parts.length > 1 ? `${parts.join(" + ")} = ${stopsDur(total)}` : parts[0] }),
+    P && N ? h("small", { text: `From ${name(P)} (left ${fmtTime(new Date(P.t))}) to ${name(N)} (got there ${fmtTime(new Date(N.f))}).${known ? ` Driving straight between them takes about ${stopsDur(tr.direct)} (Google Maps): about ${stopsDur(tr.cost)} more than that.` : ""}` }) : null,
+    tr.wait ? h("small", { class: "meta", text: "Google's drive time not looked up yet: Read again in a minute." }) : null,
+    !P ? h("small", { class: "meta", text: "No stop before it that day: the drive there isn't counted." }) : null,
+    !N ? h("small", { class: "meta", text: "No stop after it that day: the drive on isn't counted." }) : null);
 }
 function stopsDraw(id) {
   const el = $("d-stops");
@@ -7580,11 +7610,19 @@ function stopsDraw(id) {
   if (!who) out.push(h("p", { class: "warn", text: "Pick whose schedule this truck is compared with (the truck has no driver set)." }));
   for (const x of days) {
     const list = x.stops.filter(shown);
+    // each stop (All stops: the drive from the one before it); under a run of flagged ones, its side trip
+    const items = [];
+    x.stops.forEach((s, k) => {
+      if (!shown(s)) return;
+      if (!stopsView.only && k && s.drive >= 1) items.push(stopsDriveRow(s.drive));
+      items.push(stopsRow(id, s, who));
+      if (s.trip) items.push(stopsTripRow(s.trip, x.stops));
+    });
     const sec = [];
     if (stopsView.week) sec.push(h("h4", { class: "stp-day" }, h("span", { text: stopsDayText(x.day) }), x.stops.length ? h("small", null, ...stopsSum(x.stops, who)) : null));
     if (!x.stops.length) sec.push(h("p", { class: "meta stp-none", text: x.day === d.today ? "No stops yet today." : "No stops." }));
     else if (!list.length) sec.push(h("p", { class: "meta stp-none", text: "Nothing flagged." }));
-    else sec.push(h("ol", { class: "stp-list" }, list.map(s => stopsRow(id, s, who))));
+    else sec.push(h("ol", { class: "stp-list" }, items));
     if (x.missed.length) sec.push(h("div", { class: "stp-missed" },
       h("strong", { text: `On ${who ? stopsFirst(who) + "'s" : "his"} schedule, no stop found` }),
       h("ul", null, x.missed.map(m => h("li", { text: [`${m.kind === "est" ? "Estimate" : "Job"} #${m.n}`, m.client, stopsHm(m.time), m.addr].filter(Boolean).join(" · ") })))));
@@ -7594,6 +7632,7 @@ function stopsDraw(id) {
     h("pre", { text: JSON.stringify(d.shape) })));
   if (d.left) out.push(h("p", { class: "meta", text: `${d.left} street${d.left === 1 ? "" : "s"} still to look up (Google allows so many at a time). Tap Read again in a minute.` }));
   (d.note || []).forEach(n => out.push(h("p", { class: "meta", text: n })));
+  out.push(h("p", { class: "hint", text: "A side trip: from leaving the stop before a flagged stop (or a few in a row) to reaching the stop after it, the drive there, the time there and the drive on; less how long driving straight between those two takes (Google Maps, without traffic), that's what it cost. Stops under 5 minutes count as driving." }));
   out.push(h("p", { class: "hint", text: "Same street as one of his jobs or estimates that day (any house number), or right next to it, counts as that appointment. Someone else's job that day, or the exact address of a VODA job or estimate on another day, is worth a look. Stops of 5 minutes and longer, as One Step GPS records them." }));
   el.replaceChildren(...out);
 }
@@ -7610,10 +7649,17 @@ async function stopsSavePlaces(places) {
 }
 function stopsCopy(d) {
   const who = d.person;
-  const lines = d.days.flatMap(x => x.stops.filter(stopsFlagged).map(s => [stopsDayText(x.day), `${fmtTime(new Date(s.f))} – ${fmtTime(new Date(s.t))} (${stopsDur(s.min)})`,
-    s.a || (s.lat !== null ? `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}` : ""), stopsWhy(s, who)[1]].filter(Boolean).join(" · ")));
+  const lines = d.days.flatMap(x => x.stops.filter(stopsFlagged).flatMap(s => {
+    const line = [stopsDayText(x.day), `${fmtTime(new Date(s.f))} – ${fmtTime(new Date(s.t))} (${stopsDur(s.min)})`,
+      s.a || (s.lat !== null ? `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}` : ""), stopsWhy(s, who)[1]].filter(Boolean).join(" · ");
+    const tr = s.trip;
+    if (!tr) return [line];
+    const bits = [tr.in !== null ? `${stopsDur(tr.in)} drive there` : "", `${stopsDur(tr.there + tr.between)} there`, tr.out !== null ? `${stopsDur(tr.out)} drive on` : ""].filter(Boolean).join(" + ");
+    return [line, `   Side trip: ${bits}${tr.direct !== undefined ? ` · straight drive ${stopsDur(tr.direct)} · about ${stopsDur(tr.cost)} extra` : ""}`];
+  }));
   const text = `${d.unit}${who ? " · " + who : ""}\n` + lines.join("\n");
-  const done = () => toast(`Copied ${lines.length} stop${lines.length === 1 ? "" : "s"}`);
+  const nStops = d.days.reduce((a, x) => a + x.stops.filter(stopsFlagged).length, 0);
+  const done = () => toast(`Copied ${nStops} stop${nStops === 1 ? "" : "s"}`);
   try { navigator.clipboard.writeText(text).then(done, () => toast("Couldn't copy here. Long-press the list instead.")); } catch (e) { toast("Couldn't copy here."); }
 }
 /** "Don't flag this place": a name for the spot of a stop; stops there aren't flagged from now on. */
@@ -24751,7 +24797,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 334;                   // the same number as sw.js's CACHE ("voda-fleet-v334"): both go up with every change
+const APP_BUILD = 335;                   // the same number as sw.js's CACHE ("voda-fleet-v335"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
