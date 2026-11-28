@@ -6829,7 +6829,7 @@ function showSignIn(message, mode) {
 
 function signOut(message) {
   session = null; store.del(K_SESSION); loaded = false; trucks = [];
-  lbForget(); revForget(); repForget(); mktForget(); cpForget(); estForget(); mktAsked = false;
+  lbForget(); revForget(); repForget(); mktForget(); cpForget(); estForget(); ofEstForget(); mktAsked = false;
   for (const k of Object.keys(svcCache)) delete svcCache[k];
   for (const k of Object.keys(historyCache)) delete historyCache[k];
   if (drawer.open) drawer.close();
@@ -9996,6 +9996,7 @@ function applyTab() {
   if (!tabs.includes("marketing") && mktData) mktForget();
   if (!tabs.includes("contractors") && cpData) cpForget();
   if (!tabs.includes("estimates") && estData) estForget();
+  if (!canSee("office") && !canSee("office-edit") && store.get("voda.ofEst2")) ofEstForget();
   $("fleetView").hidden = !trk;
   $("suppliesView").hidden = !sup;
   $("lbView").hidden = !lb;
@@ -19554,6 +19555,7 @@ async function estMarkSent(e) {
     const each = list => (list || []).forEach(x => { if (x.id === e.id) { x.sentBy = out.sentBy; x.sent = true; } });
     each([e]); each(estData && estData.estimates); Object.values(estOther || {}).forEach(d => each(d && d.estimates)); Object.values(ofEstDocs || {}).forEach(d => each(d && d.estimates));
     if (estData) store.set(K_EST, estData);
+    ofEstSave(Number(lbToday().slice(0, 4)));
     toast(`#${e.n} marked sent`);
   } catch (x) {
     toast(x && x.error === "not_open" ? "It isn't open any more: read again." : x && x.error === "not_found" ? "That estimate isn't on the app's list yet: read again." : "It wasn't marked. " + errText(x, "The mark"));
@@ -22639,13 +22641,29 @@ const ofEstView = Object.assign({ per: "month", off: 0, from: "", to: "", st: "a
  *  property management (as on Past clients); else Residential. */
 const EST_COM = /commercial|property\s*manag/i;
 const estSegOf = e => (EST_COM.test(String(e.type || "")) || String(e.tags || "").split(/\s*,\s*/).some(t => EST_COM.test(t)) ? "com" : "res");
+// this year's list is kept on the device (whoever is signed in): shown at once when Office › Estimates opens, and read
+// again behind it (once each time the app opens, then as before)
+const K_OF_EST = "voda.ofEst2";
 const ofEstDocs = {}, ofEstLoading = {};
+{ const s = store.get(K_OF_EST);
+  if (s && s.doc && s.y === new Date().getFullYear() && session && s.by === session.id) ofEstDocs[s.y] = Object.assign(s.doc, { saved: true }); }
 let ofEstErr = "", ofEstShown = 100;
 const ofEstSync = { busy: false, tried: 0, err: "" };
+/** This year's list kept on the device (another year's isn't). */
+function ofEstSave(y) {
+  const d = ofEstDocs[y];
+  if (!d || !session || y !== Number(lbToday().slice(0, 4))) return;
+  store.set(K_OF_EST, { y, by: session.id, doc: Object.assign({}, d, { saved: undefined }) });
+}
+function ofEstForget() {   // (can run before this part of the page is set up: the key written out)
+  try { for (const k of Object.keys(ofEstDocs)) delete ofEstDocs[k]; } catch (e) { /* not set up yet */ }
+  store.del("voda.ofEst2");
+}
 async function ofEstLoad(y) {
   if (ofEstLoading[y] || !session || !ofCan() || !retryDue(`ofEst:${y}`)) return;
   ofEstLoading[y] = true;
-  try { ofEstDocs[y] = Object.assign(await api("ofEstimates", { year: y }), { loadedAt: Date.now() }); ofEstErr = ""; retryOk(`ofEst:${y}`); }
+  if (view.tab === "office" && ofView.tab === "est" && ofEstDocs[y] && !ofTypingNow()) ofEstStatusDraw();
+  try { ofEstDocs[y] = Object.assign(await api("ofEstimates", { year: y }), { loadedAt: Date.now() }); ofEstErr = ""; retryOk(`ofEst:${y}`); ofEstSave(y); }
   catch (e) { ofEstErr = retryLater(`ofEst:${y}`, e, () => { if (view.tab === "office" && ofView.tab === "est" && !ofTypingNow()) renderOffice(); }) ? "" : errText(e, "The estimates"); }
   ofEstLoading[y] = false;
   if (view.tab === "office" && ofView.tab === "est" && !ofTypingNow()) renderOffice();
@@ -22675,8 +22693,18 @@ async function ofEstRun() {
     retryOk("ofEstSync");
   } catch (e) { ofEstSync.err = retryLater("ofEstSync", e, () => { if (view.tab === "office" && ofView.tab === "est" && !ofTypingNow()) renderOffice(); }) ? "" : revErrText(e); }
   ofEstSync.busy = false;
-  await Promise.all(Object.keys(ofEstDocs).map(y => { delete ofEstDocs[y]; return ofEstLoad(Number(y)); }));
+  await Promise.all(Object.keys(ofEstDocs).map(y => ofEstLoad(Number(y))));   // the list stays on screen meanwhile
   if (view.tab === "office" && ofView.tab === "est") renderOffice();
+}
+/** The line under the bar: where the list is from, and "updating…" while it's read again behind the screen. */
+function ofEstStatusEl(doc, y) {
+  return h("p", { class: "lb-sub rev-status" + (ofEstSync.busy ? " busy" : ""), id: "ofEstStatus", role: "status" },
+    !doc.connected ? "Housecall Pro isn't connected right now." : ofEstSync.busy ? "Reading estimates from Housecall Pro…"
+      : (doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)} · Cleaning estimates only` : "Not read from Housecall Pro yet.") + (ofEstLoading[y] ? " · updating…" : ""));
+}
+function ofEstStatusDraw() {
+  const el = $("ofEstStatus"), y = Number(lbToday().slice(0, 4)), doc = ofEstDocs[y];
+  if (el && doc) el.replaceWith(ofEstStatusEl(doc, y));
 }
 function ofEstEl() {
   if (apiLevel && apiLevel < OF_EST_API) return [h("div", { class: "panel" }, h("h2", { text: "One more step: update the Google script" }),
@@ -22691,7 +22719,8 @@ function ofEstEl() {
   // it's 10 minutes old. Otherwise (at night, it isn't running, an older script): read what changed when the last read
   // is 10 minutes old (a minute between tries; after a failure, quietly later)
   const bgOn = doc.bg === true && doc.done && Date.now() - (Number(doc.readAt) || 0) < 25 * 60e3;
-  if (bgOn) { if (Date.now() - (doc.loadedAt || 0) > 10 * 60e3 && !ofEstLoading[y]) setTimeout(() => { delete ofEstDocs[y].loadedAt; ofEstLoad(y); }, 0); }
+  if (doc.saved) { doc.saved = false; if (!ofEstLoading[y]) setTimeout(() => ofEstLoad(y), 0); }   // kept from before: read again behind it
+  else if (bgOn) { if (Date.now() - (doc.loadedAt || 0) > 10 * 60e3 && !ofEstLoading[y]) setTimeout(() => { delete ofEstDocs[y].loadedAt; ofEstLoad(y); }, 0); }
   else if (doc.connected && !ofEstSync.busy && retryDue("ofEstSync") && Date.now() - ofEstSync.tried > 60e3 && (!doc.done || Date.now() - doc.readAt > 10 * 60e3)) setTimeout(() => ofEstRun(), 0);
   const per = EST_PER[ofEstView.per] ? ofEstView.per : "month", off = Math.min(0, Number(ofEstView.off) || 0);
   let r;
@@ -22728,9 +22757,7 @@ function ofEstEl() {
     h("div", { class: "rev-tools rev-tools-fit" }, h("button", { class: "btn small", type: "button", id: "ofEstRead", disabled: ofEstSync.busy || !doc.connected,
       title: "Read what changed in Housecall Pro", onclick: () => ofEstRun() }, ofEstSync.busy ? "Reading…" : "Read again"),
       isAdmin() && apiLevel >= OF_EST_FU_API ? h("button", { class: "btn small", type: "button", id: "ofEstWhoBtn", title: "Pick who follows up the estimates", onclick: openOfEstWho }, "Who follows up") : null));
-  const status = h("p", { class: "lb-sub rev-status" + (ofEstSync.busy ? " busy" : ""), id: "ofEstStatus", role: "status" },
-    !doc.connected ? "Housecall Pro isn't connected right now." : ofEstSync.busy ? "Reading estimates from Housecall Pro…"
-      : doc.readAt ? `From Housecall Pro · read ${revReadText(doc.readAt)} · Cleaning estimates only` : "Not read from Housecall Pro yet.");
+  const status = ofEstStatusEl(doc, y);
   const head = [bar, status, ofEstSync.err ? h("p", { class: "dlg-err", text: ofEstSync.err }) : null];
   const list = r.from > today ? [] : ofEstFor(r.from, to);
   if (!list) return head.concat(h("p", { class: "loading", text: `Loading ${r.from.slice(0, 4)}…` }));
@@ -22912,6 +22939,7 @@ async function ofEstMark(e, res, cb) {
   try {
     const out = await api("ofEstMark", Object.assign({ id: e.id, r: res }, cb || {}));
     e.m = out.m && out.m.r ? out.m : null;
+    ofEstSave(Number(lbToday().slice(0, 4)));
     ofPcPatch(out.of);   // her Cleaning estimate follow-ups on Office Calls, counted again
   }
   catch (x) {
@@ -24819,7 +24847,7 @@ function docAddMany() {
    version is published (sw.js, a tiny file). Newer than this copy: the app reloads itself onto it, at once if nothing
    is being typed, open or saved, else as soon as that's done (after 5 minutes a bar offers it, and it updates the next
    time the app comes back on screen). Each phone and computer, once a day. ---------- */
-const APP_BUILD = 338;                   // the same number as sw.js's CACHE ("voda-fleet-v338"): both go up with every change
+const APP_BUILD = 339;                   // the same number as sw.js's CACHE ("voda-fleet-v339"): both go up with every change
 const UPD = { idle: 8000, poll: 3000, give: 5 * 60e3, again: 10 * 60e3 };   // quiet for 8 s; check every 3 s; a bar after 5 min; a 2nd try after 10 min
 let updBusy = false, updWant = 0, updTries = 0, updInputAt = 0;   // updWant: the version waiting to be put on
 ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, () => { updInputAt = Date.now(); }, true));
